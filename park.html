@@ -205,24 +205,236 @@
         color: var(--accent);
       }
 
-      #settings {
-        display: none;
-        flex-shrink: 0;
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--border);
-        background: var(--panel);
+      .btn.danger-ish {
+        color: var(--danger);
+        min-width: 36px;
       }
 
-      #settings.open {
+      /* Floating panels: settings / tags */
+      .float-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 95;
+        background: rgba(2, 6, 23, 0.35);
+      }
+
+      .float-backdrop.open {
         display: block;
       }
 
-      #settings h2 {
+      #settingsBox,
+      #tagsBox,
+      #helpBox {
+        display: none;
+        position: fixed;
+        z-index: 96;
+        width: min(440px, calc(100vw - 32px));
+        max-height: min(72vh, 640px);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--edit-shadow);
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      #helpBox {
+        width: min(520px, calc(100vw - 32px));
+      }
+
+      #settingsBox.open,
+      #tagsBox.open,
+      #helpBox.open {
+        display: flex;
+      }
+
+      .help-section {
+        margin-bottom: 14px;
+      }
+
+      .help-section h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .help-section p,
+      .help-section li {
+        margin: 0 0 6px;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .help-section ul {
+        margin: 0;
+        padding-left: 1.2em;
+      }
+
+      .help-section kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .float-drag {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--border);
+        cursor: grab;
+        user-select: none;
+        flex-shrink: 0;
+      }
+
+      .float-drag:active {
+        cursor: grabbing;
+      }
+
+      .float-drag h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .float-body {
+        padding: 12px 14px 14px;
+        overflow: auto;
+        flex: 1;
+        min-height: 0;
+      }
+
+      #settingsBox h3,
+      #tagsBox h3,
+      .float-body h2 {
         margin: 0 0 8px;
         font-size: 12px;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
+      }
+
+      .tag-manage-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: flex-start;
+      }
+
+      .tag-chip-card {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        padding: 6px 8px 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--chip);
+        color: var(--chip-text);
+        font-size: 12px;
+      }
+
+      .tag-chip-card .name {
+        font-weight: 600;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tag-chip-card .count {
+        font-size: 10px;
+        opacity: 0.85;
+        white-space: nowrap;
+      }
+
+      .tag-chip-card .chip-btn {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 2px 4px;
+        opacity: 0.8;
+      }
+
+      .tag-chip-card .chip-btn:hover {
+        opacity: 1;
+      }
+
+      .tag-manage-empty {
+        font-size: 13px;
+        color: var(--muted);
+        padding: 12px 4px;
+        width: 100%;
+      }
+
+      /* Multi-select */
+      body.select-mode .card {
+        cursor: pointer;
+      }
+
+      .card-check {
+        display: none;
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 3;
+        width: 22px;
+        height: 22px;
+        accent-color: var(--accent);
+      }
+
+      body.select-mode .card-check {
+        display: block;
+      }
+
+      .card.selected {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      #batchBar {
+        display: none;
+        position: fixed;
+        left: 50%;
+        bottom: 56px;
+        transform: translateX(-50%);
+        z-index: 98;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--edit-shadow);
+        max-width: calc(100vw - 24px);
+      }
+
+      #batchBar.open {
+        display: flex;
+      }
+
+      #batchBar .batch-count {
+        font-size: 13px;
+        font-weight: 600;
+        margin-right: 4px;
+        white-space: nowrap;
       }
 
       .settings-block {
@@ -265,7 +477,7 @@
       /* Cards */
       #grid.cards {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
         gap: 16px;
       }
 
@@ -277,12 +489,368 @@
         border-radius: 14px;
         overflow: hidden;
         box-shadow: var(--shadow);
-        transition: transform 0.16s ease, border-color 0.16s ease;
+        transition:
+          transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+          border-color 0.16s ease,
+          box-shadow 0.16s ease;
+        touch-action: none;
+        user-select: none;
+        position: relative;
+      }
+
+      .group-color-bar {
+        height: 4px;
+        width: 100%;
+        flex-shrink: 0;
+      }
+
+      .color-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        flex-shrink: 0;
+      }
+
+      .group-badge {
+        position: absolute;
+        left: 8px;
+        bottom: 8px;
+        z-index: 2;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.75);
+        color: #f8fafc;
+        pointer-events: none;
+      }
+
+      html[data-theme='light'] .group-badge {
+        background: rgba(255, 255, 255, 0.9);
+        color: #0f172a;
+      }
+
+      .group-mosaic {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        gap: 2px;
+        background: var(--bg);
+      }
+
+      .group-mosaic.mosaic-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .group-mosaic.mosaic-3,
+      .group-mosaic.mosaic-4 {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+
+      .group-mosaic img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .empty-cover {
+        width: 100%;
+        height: 100%;
+        background: repeating-linear-gradient(
+          45deg,
+          var(--bg),
+          var(--bg) 8px,
+          var(--panel) 8px,
+          var(--panel) 16px
+        );
+      }
+
+      /* Members floating box */
+      #membersBox {
+        display: none;
+        position: fixed;
+        z-index: 97;
+        width: min(520px, calc(100vw - 32px));
+        max-height: min(70vh, 640px);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--edit-shadow);
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      #membersBox.open {
+        display: flex;
+      }
+
+      .members-drag {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--border);
+        cursor: grab;
+        user-select: none;
+      }
+
+      .members-drag:active {
+        cursor: grabbing;
+      }
+
+      .members-drag h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .members-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .members-list {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 12px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .member-row {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      .member-thumb {
+        width: 72px;
+        height: 46px;
+        object-fit: cover;
+        border-radius: 6px;
+        background: var(--panel);
+        cursor: pointer;
+      }
+
+      .member-body {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .member-title {
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .member-url {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .member-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      .member-actions .btn {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+
+      #grid.cards.is-dragging .card:not(.dragging) {
+        transition:
+          transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+          box-shadow 0.2s ease;
       }
 
       .card:hover {
         transform: translateY(-2px);
         border-color: var(--accent);
+      }
+
+      .card.dragging {
+        opacity: 0.95;
+        z-index: 80;
+        box-shadow: var(--edit-shadow);
+        pointer-events: none;
+        transform: scale(1.03);
+        transition: none;
+      }
+
+      .card-placeholder {
+        border: 2px dashed var(--accent);
+        border-radius: 14px;
+        background: var(--chip);
+        min-height: 120px;
+        box-sizing: border-box;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        animation: phPulse 0.9s ease-in-out infinite alternate;
+      }
+
+      @keyframes phPulse {
+        from { opacity: 0.7; }
+        to { opacity: 1; }
+      }
+
+      .cols-control {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .cols-control.visible {
+        display: inline-flex;
+      }
+
+      .cols-control input[type='range'] {
+        width: 90px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .cols-control #colsValue {
+        min-width: 1.5em;
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      #savedBadge {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 50;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        box-shadow: var(--shadow);
+        pointer-events: none;
+        opacity: 0.92;
+      }
+
+      #versionBadge {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        z-index: 50;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        box-shadow: var(--shadow);
+        pointer-events: none;
+        opacity: 0.9;
+      }
+
+      .tag-input {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--input-bg);
+        min-height: 42px;
+      }
+
+      .tag-input .chips {
+        display: contents;
+      }
+
+      .tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--chip-text);
+        border: 1px solid var(--border);
+        font-size: 12px;
+      }
+
+      .tag-chip button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0 2px;
+        opacity: 0.75;
+      }
+
+      .tag-chip button:hover {
+        opacity: 1;
+      }
+
+      #editTagDraft {
+        flex: 1 1 100px;
+        min-width: 100px;
+        border: 0 !important;
+        background: transparent !important;
+        padding: 4px 2px !important;
+        outline: none;
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .settings-row {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .settings-row label.inline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .settings-row input[type='range'] {
+        width: min(220px, 100%);
+        accent-color: var(--accent);
       }
 
       .thumb-wrap {
@@ -618,6 +1186,22 @@
         display: flex;
         gap: 8px;
         flex-shrink: 0;
+        align-items: center;
+      }
+
+      .lb-nav {
+        font-size: 18px;
+        line-height: 1;
+        min-width: 36px;
+        padding: 6px 10px;
+      }
+
+      .lb-counter {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        min-width: 3.5em;
+        text-align: center;
       }
 
       .lb-image-pane {
@@ -650,7 +1234,7 @@
       #editBox {
         display: none;
         position: fixed;
-        z-index: 90;
+        z-index: 110;
         width: min(400px, calc(100vw - 32px));
         background: var(--panel);
         border: 1px solid var(--border);
@@ -737,7 +1321,7 @@
   <body>
     <header>
       <div class="brand">
-        <h1>TabWall</h1>
+        <h1 data-i18n="appName">TabWall</h1>
         <span id="count">—</span>
       </div>
       <div class="search-wrap">
@@ -745,49 +1329,175 @@
         <input
           id="search"
           type="search"
+          data-i18n-placeholder="searchPh"
           placeholder="搜尋 tab name、URL、domain、note、tag"
           autocomplete="off"
           spellcheck="false"
         />
       </div>
       <div class="toolbar-controls">
-        <div class="seg" role="group" aria-label="檢視模式">
-          <button type="button" id="viewCards" class="active">卡片</button>
-          <button type="button" id="viewList">列表</button>
+        <div class="seg" role="group" data-i18n-aria="viewMode" aria-label="檢視模式">
+          <button type="button" id="viewCards" class="active" data-i18n="cards">卡片</button>
+          <button type="button" id="viewList" data-i18n="list">列表</button>
         </div>
-        <select id="sortBy" aria-label="排序" title="排序">
-          <option value="newest">最新儲存</option>
-          <option value="oldest">最舊儲存</option>
-          <option value="title">名稱 A→Z</option>
-          <option value="title-desc">名稱 Z→A</option>
-          <option value="domain">網域 A→Z</option>
+        <select id="sortBy" data-i18n-aria="sort" aria-label="排序" title="排序">
+          <option value="newest" data-i18n="sortNewest">最新儲存</option>
+          <option value="oldest" data-i18n="sortOldest">最舊儲存</option>
+          <option value="title" data-i18n="sortTitle">名稱 A→Z</option>
+          <option value="title-desc" data-i18n="sortTitleDesc">名稱 Z→A</option>
+          <option value="domain" data-i18n="sortDomain">網域 A→Z</option>
+          <option value="manual" data-i18n="sortManual">手動排列</option>
         </select>
-        <button type="button" class="btn" id="themeBtn" title="切換主題">Light</button>
-        <button type="button" class="btn" id="settingsBtn">設定</button>
-        <button type="button" class="btn" id="closeBtn">關閉</button>
+        <label class="cols-control" id="colsControl" data-i18n-title="colsTitle" title="卡片欄數 4–10">
+          <span data-i18n="cols">欄數</span>
+          <input id="cardCols" type="range" min="4" max="10" step="1" value="4" />
+          <span id="colsValue">4</span>
+        </label>
+        <button type="button" class="btn" id="selectModeBtn" data-i18n="selectMode">選擇</button>
+        <button type="button" class="btn" id="themeBtn" data-i18n-title="themeToggle" title="切換主題">Light</button>
+        <button type="button" class="btn" id="tagsBtn" data-i18n="tagsManage">Tags</button>
+        <button type="button" class="btn" id="settingsBtn" data-i18n="settings">設定</button>
+        <button type="button" class="btn" id="helpBtn" data-i18n="help">說明</button>
+        <button type="button" class="btn" id="closeBtn" data-i18n="close">關閉</button>
       </div>
     </header>
-
-    <section id="settings" aria-label="設定">
-      <div class="settings-block">
-        <h2>儲存分頁後的行為</h2>
-        <div class="radios">
-          <label><input type="radio" name="afterSave" value="close" /> 關閉該分頁</label>
-          <label><input type="radio" name="afterSave" value="keep" /> 不額外執行動作（僅儲存）</label>
-        </div>
-      </div>
-      <div class="settings-block">
-        <h2>主題</h2>
-        <div class="radios">
-          <label><input type="radio" name="theme" value="dark" /> Dark</label>
-          <label><input type="radio" name="theme" value="light" /> Light</label>
-        </div>
-      </div>
-    </section>
 
     <main>
       <div id="grid" class="cards" role="list"></div>
     </main>
+
+    <div id="batchBar" aria-hidden="true">
+      <span class="batch-count" id="batchCount">0</span>
+      <button type="button" class="btn primary" id="batchRestore" data-i18n="batchRestore">還原</button>
+      <button type="button" class="btn" id="batchEdit" data-i18n="batchEdit">Note / Tags</button>
+      <button type="button" class="btn" id="batchDelete" data-i18n="batchDelete">刪除</button>
+      <button type="button" class="btn" id="batchClear" data-i18n="batchClear">取消</button>
+    </div>
+
+    <div id="floatBackdrop" class="float-backdrop" aria-hidden="true"></div>
+
+    <div id="tagsBox" aria-hidden="true">
+      <div class="float-drag" id="tagsDrag">
+        <h2 data-i18n="tagsManageTitle">Tag 管理</h2>
+        <button type="button" class="btn" id="tagsCloseX">×</button>
+      </div>
+      <div class="float-body">
+        <input
+          id="tagSearch"
+          type="search"
+          data-i18n-placeholder="tagSearchPh"
+          placeholder="搜尋 tag…"
+          autocomplete="off"
+          style="width:100%;margin-bottom:10px;border:1px solid var(--border);background:var(--input-bg);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px"
+        />
+        <div id="tagManageList" class="tag-manage-list"></div>
+        <div class="tag-add-row" style="display:flex;gap:8px;margin-top:12px">
+          <input
+            id="tagAddInput"
+            type="text"
+            data-i18n-placeholder="tagAddPh"
+            placeholder="新 tag 名稱"
+            autocomplete="off"
+            style="flex:1;border:1px solid var(--border);background:var(--input-bg);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px"
+          />
+          <button type="button" class="btn primary" id="tagAddBtn" data-i18n="add">新增</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsBox" data-i18n-aria="settings" aria-label="設定" aria-hidden="true">
+      <div class="float-drag" id="settingsDrag">
+        <h2 data-i18n="settings">設定</h2>
+        <button type="button" class="btn" id="settingsCloseX">×</button>
+      </div>
+      <div class="float-body" id="settings">
+        <div class="settings-block">
+          <h2 data-i18n="afterSaveTitle">儲存分頁後的行為</h2>
+          <div class="radios">
+            <label><input type="radio" name="afterSave" value="close" /> <span data-i18n="afterSaveClose">關閉該分頁</span></label>
+            <label><input type="radio" name="afterSave" value="keep" /> <span data-i18n="afterSaveKeep">不額外執行動作（僅儲存）</span></label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="afterSaveGroupTitle">儲存 Group 後</h2>
+          <div class="radios">
+            <label><input type="radio" name="afterSaveGroup" value="close" /> <span data-i18n="afterSaveClose">關閉該分頁</span></label>
+            <label><input type="radio" name="afterSaveGroup" value="keep" /> <span data-i18n="afterSaveKeep">不額外執行動作（僅儲存）</span></label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="saveGroupCaptureTitle">Group 截圖</h2>
+          <div class="radios">
+            <label><input type="radio" name="saveGroupCapture" value="all" /> <span data-i18n="captureAll">全部成員</span></label>
+            <label><input type="radio" name="saveGroupCapture" value="activeOnly" /> <span data-i18n="captureActive">僅目前分頁</span></label>
+            <label><input type="radio" name="saveGroupCapture" value="none" /> <span data-i18n="captureNone">不截圖（僅結構）</span></label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="restoreGroupInTitle">還原 Group 到</h2>
+          <div class="radios">
+            <label><input type="radio" name="restoreGroupIn" value="currentWindow" /> <span data-i18n="restoreCurrentWindow">目前視窗</span></label>
+            <label><input type="radio" name="restoreGroupIn" value="newWindow" /> <span data-i18n="restoreNewWindow">新視窗</span></label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="themeTitle">主題</h2>
+          <div class="radios">
+            <label><input type="radio" name="theme" value="dark" /> Dark</label>
+            <label><input type="radio" name="theme" value="light" /> Light</label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="langTitle">語言 / Language</h2>
+          <div class="radios">
+            <label><input type="radio" name="locale" value="zh" /> 中文</label>
+            <label><input type="radio" name="locale" value="en" /> English</label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="defaultColsTitle">預設欄數</h2>
+          <div class="settings-row">
+            <label class="inline">
+              <span data-i18n="cols">欄數</span>
+              <input id="settingsCardCols" type="range" min="4" max="10" step="1" value="4" />
+              <span id="settingsColsValue">4</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="defaultViewTitle">預設檢視</h2>
+          <div class="radios">
+            <label><input type="radio" name="defaultViewMode" value="cards" /> <span data-i18n="cards">卡片</span></label>
+            <label><input type="radio" name="defaultViewMode" value="list" /> <span data-i18n="list">列表</span></label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="otherTitle">其它</h2>
+          <div class="settings-row">
+            <label class="inline">
+              <input type="checkbox" id="openWithSearchFocus" />
+              <span data-i18n="openWithSearchFocus">開啟時聚焦搜尋框</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-block">
+          <h2 data-i18n="backupTitle">備份與還原</h2>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px">
+            <button type="button" class="btn primary" id="exportLiteBtn" data-i18n="exportLite">匯出精簡</button>
+            <button type="button" class="btn" id="exportFullBtn" data-i18n="exportFull">匯出完整 ZIP</button>
+            <button type="button" class="btn" id="importBackupBtn" data-i18n="importBackup">還原</button>
+            <input id="importBackupFile" type="file" accept="application/json,.json,application/zip,.zip" hidden />
+          </div>
+          <p id="backupStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
+          <p class="hint" style="margin:6px 0 0;font-size:11px;color:var(--muted)" data-i18n="backupHint">
+            精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="versionBadge">v—</div>
+    <div id="savedBadge" aria-live="polite">已存 0 個</div>
 
     <div id="lightbox" aria-hidden="true">
       <div class="lb-toolbar">
@@ -796,34 +1506,94 @@
           <div class="lb-url" id="lbUrl">—</div>
         </div>
         <div class="row-btns">
-          <button type="button" class="btn" id="lbRestore">還原分頁</button>
-          <button type="button" class="btn" id="lbClose">關閉</button>
+          <button type="button" class="btn lb-nav" id="lbPrev" title="←" aria-label="Previous">‹</button>
+          <span class="lb-counter" id="lbCounter">—</span>
+          <button type="button" class="btn lb-nav" id="lbNext" title="→" aria-label="Next">›</button>
+          <button type="button" class="btn" id="lbRestore" data-i18n="restore">還原分頁</button>
+          <button type="button" class="btn" id="lbClose" data-i18n="close">關閉</button>
         </div>
       </div>
       <div class="lb-image-pane">
         <img id="lbImage" alt="Full snapshot" />
       </div>
-      <div class="lb-hint" id="lbSnapHint" hidden>此項目無全尺寸快照，顯示縮圖。</div>
+      <div class="lb-hint" id="lbSnapHint" hidden data-i18n="noSnapshot">此項目無全尺寸快照，顯示縮圖。</div>
+    </div>
+
+    <div id="helpBox" aria-hidden="true">
+      <div class="float-drag" id="helpDrag">
+        <h2 data-i18n="helpTitle">說明</h2>
+        <button type="button" class="btn" id="helpCloseX">×</button>
+      </div>
+      <div class="float-body" id="helpBody">
+        <div class="help-section">
+          <h3 data-i18n="helpShortcutsTitle">快捷鍵</h3>
+          <ul>
+            <li><kbd>Alt</kbd>+<kbd>S</kbd> — <span data-i18n="helpShortcutSave">儲存目前分頁（截圖）</span></li>
+            <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — <span data-i18n="helpShortcutGroup">儲存目前 Tab Group</span></li>
+            <li><kbd>Alt</kbd>+<kbd>O</kbd> — <span data-i18n="helpShortcutWall">開關 TabWall 照片牆</span></li>
+            <li><kbd>/</kbd> — <span data-i18n="helpShortcutSearch">聚焦搜尋</span></li>
+            <li><kbd>Esc</kbd> — <span data-i18n="helpShortcutEsc">關閉浮層／照片牆</span></li>
+            <li><kbd>←</kbd> <kbd>→</kbd> — <span data-i18n="helpShortcutArrows">快照上一張／下一張</span></li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3 data-i18n="helpBasicTitle">基本使用</h3>
+          <p data-i18n="helpBasicBody">點縮圖或標題還原分頁；中央 ✎ 編輯 note／tags；⤢ 放大快照；× 刪除。可拖曳卡片重排（磁吸）。</p>
+        </div>
+        <div class="help-section">
+          <h3 data-i18n="helpGroupTitle">Tab Group</h3>
+          <p data-i18n="helpGroupBody">在 group 內按 Alt+Shift+G 可整組存檔。照片牆中 ▦ 開啟成員面板：可看每位成員快照、編輯 note／tags、還原單一或整個 group。</p>
+        </div>
+        <div class="help-section">
+          <h3 data-i18n="helpSelectTitle">複選</h3>
+          <p data-i18n="helpSelectBody">點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。</p>
+        </div>
+        <div class="help-section">
+          <h3 data-i18n="helpBackupTitle">備份</h3>
+          <p data-i18n="helpBackupBody">精簡 JSON 不含截圖、檔案小；完整 ZIP 含圖片二進位。還原會覆寫現有資料。</p>
+        </div>
+        <div class="help-section">
+          <h3 data-i18n="helpLimitsTitle">限制</h3>
+          <p data-i18n="helpLimitsBody">chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="membersBox" aria-hidden="true">
+      <div class="members-drag" id="membersDrag">
+        <h2 id="membersTitle">Group</h2>
+        <button type="button" class="btn" id="membersCloseX" title="關閉">×</button>
+      </div>
+      <div class="members-toolbar">
+        <button type="button" class="btn primary" id="membersRestoreAll" data-i18n="restoreGroup">還原整個 Group</button>
+        <button type="button" class="btn" id="membersDelete" data-i18n="delete">刪除</button>
+      </div>
+      <div class="members-list" id="membersList"></div>
     </div>
 
     <div id="editBox" aria-hidden="true">
       <div class="edit-drag" id="editDrag">
-        <h2 id="editTitle">編輯 Note / Tags</h2>
+        <h2 id="editHeading" data-i18n="editHeading">編輯 Note / Tags</h2>
         <button type="button" class="btn" id="editCloseX" title="關閉">×</button>
       </div>
       <div class="edit-body">
+        <div id="editItemTitle" style="font-size:13px;font-weight:600;word-break:break-word">—</div>
         <div class="sub" id="editSub">—</div>
         <label>
-          Note
-          <textarea id="editNote" placeholder="加入備註…"></textarea>
+          <span data-i18n="note">Note</span>
+          <textarea id="editNote" data-i18n-placeholder="notePh" placeholder="加入備註…"></textarea>
         </label>
         <label>
-          Tags（逗號分隔）
-          <input id="editTags" type="text" placeholder="work, later, read" />
+          <span data-i18n="tags">Tags</span>
+          <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+          <div class="tag-input" id="tagInput">
+            <div class="chips" id="editChips"></div>
+            <input id="editTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+          </div>
         </label>
         <div class="edit-actions">
-          <button type="button" class="btn" id="editCancel">取消</button>
-          <button type="button" class="btn primary" id="editSave">儲存</button>
+          <button type="button" class="btn" id="editCancel" data-i18n="cancel">取消</button>
+          <button type="button" class="btn primary" id="editSave" data-i18n="save">儲存</button>
         </div>
       </div>
     </div>

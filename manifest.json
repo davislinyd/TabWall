@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "1.5.0",
-  "description": "將暫存分頁視覺化為約 90% 前景照片牆。支援列表/排序、note、tag、全尺寸快照與 light mode。",
+  "version": "2.3.0",
+  "description": "Park tabs and Tab Groups as a photo wall. Snapshot navigation, help, multi-select, backup.",
   "permissions": [
     "activeTab",
     "storage",
     "unlimitedStorage",
     "scripting",
-    "tabs"
+    "tabs",
+    "tabGroups"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -46,14 +47,21 @@
         "default": "Alt+S",
         "mac": "Alt+S"
       },
-      "description": "儲存分頁（截圖寫入 TabWall）"
+      "description": "Park current tab"
+    },
+    "save-group": {
+      "suggested_key": {
+        "default": "Alt+Shift+G",
+        "mac": "Alt+Shift+G"
+      },
+      "description": "Park current Tab Group"
     },
     "toggle-park": {
       "suggested_key": {
         "default": "Alt+O",
         "mac": "Alt+O"
       },
-      "description": "開啟／關閉 TabWall 照片牆"
+      "description": "Toggle TabWall overlay"
     }
   }
 }
