@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TabWall</title>
+    <style>
+      :root,
+      html[data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --bg-header: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        --panel: #111827;
+        --border: rgba(148, 163, 184, 0.22);
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --accent: #60a5fa;
+        --danger: #ef4444;
+        --chip: rgba(96, 165, 250, 0.15);
+        --chip-text: #93c5fd;
+        --input-bg: rgba(15, 23, 42, 0.85);
+        --btn-bg: rgba(15, 23, 42, 0.7);
+        --btn-hover: rgba(51, 65, 85, 0.95);
+        --overlay-actions: rgba(2, 6, 23, 0.45);
+        --action-btn-bg: rgba(15, 23, 42, 0.88);
+        --row-hover: rgba(30, 41, 59, 0.7);
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+        --edit-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      }
+
+      html[data-theme='light'] {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --bg-header: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+        --panel: #ffffff;
+        --border: rgba(15, 23, 42, 0.12);
+        --text: #0f172a;
+        --muted: #64748b;
+        --accent: #2563eb;
+        --danger: #dc2626;
+        --chip: rgba(37, 99, 235, 0.1);
+        --chip-text: #1d4ed8;
+        --input-bg: #ffffff;
+        --btn-bg: #ffffff;
+        --btn-hover: #f1f5f9;
+        --overlay-actions: rgba(15, 23, 42, 0.35);
+        --action-btn-bg: rgba(255, 255, 255, 0.95);
+        --row-hover: rgba(241, 245, 249, 0.95);
+        --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        --edit-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC',
+          'Helvetica Neue', Arial, sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+      }
+
+      header {
+        flex-shrink: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-header);
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      #count {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .search-wrap {
+        flex: 1 1 180px;
+        min-width: 140px;
+        position: relative;
+      }
+
+      #search {
+        width: 100%;
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 9px 12px 9px 34px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      #search:focus {
+        border-color: var(--accent);
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+        font-size: 13px;
+        pointer-events: none;
+      }
+
+      .toolbar-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .seg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        padding: 7px 12px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .seg button.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      select#sortBy {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 7px 28px 7px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+          linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+        background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+        background-size: 5px 5px, 5px 5px;
+        background-repeat: no-repeat;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--btn-bg);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+
+      .btn:hover {
+        background: var(--btn-hover);
+      }
+
+      .btn.primary {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .btn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      #settings {
+        display: none;
+        flex-shrink: 0;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+
+      #settings.open {
+        display: block;
+      }
+
+      #settings h2 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .settings-block {
+        margin-bottom: 12px;
+      }
+
+      .settings-block:last-child {
+        margin-bottom: 0;
+      }
+
+      .radios {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 18px;
+      }
+
+      .radios label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .radios input {
+        accent-color: var(--accent);
+      }
+
+      .radios label:has(input:checked) {
+        color: var(--text);
+      }
+
+      main {
+        flex: 1;
+        overflow: auto;
+        padding: 16px;
+      }
+
+      /* Cards */
+      #grid.cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        transition: transform 0.16s ease, border-color 0.16s ease;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent);
+      }
+
+      .thumb-wrap {
+        position: relative;
+        aspect-ratio: 16 / 10;
+        background: var(--bg);
+        cursor: pointer;
+      }
+
+      .thumb {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .card-actions {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: var(--overlay-actions);
+        opacity: 0;
+        transition: opacity 0.15s;
+        pointer-events: none;
+      }
+
+      .card:hover .card-actions,
+      .card:focus-within .card-actions {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .icon-btn {
+        appearance: none;
+        border: none;
+        border-radius: 14px;
+        background: var(--action-btn-bg);
+        color: var(--text);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        box-shadow: var(--shadow);
+        transition: transform 0.12s, background 0.12s;
+      }
+
+      .icon-btn.lg {
+        width: 56px;
+        height: 56px;
+        font-size: 24px;
+      }
+
+      .icon-btn.sm {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+        border-radius: 999px;
+      }
+
+      .icon-btn:hover {
+        transform: scale(1.06);
+      }
+
+      .icon-btn.danger:hover {
+        background: var(--danger);
+        color: #fff;
+      }
+
+      .delete-corner {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 2;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+
+      .card:hover .delete-corner,
+      .card:focus-within .delete-corner {
+        opacity: 1;
+      }
+
+      .meta {
+        padding: 10px 12px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .favicon,
+      .favicon-fallback {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        border-radius: 2px;
+        background: var(--border);
+        object-fit: contain;
+      }
+
+      .title {
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+
+      .url {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+
+      .note-preview {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 2px;
+      }
+
+      .tag {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--chip-text);
+        border: 1px solid var(--border);
+      }
+
+      /* List */
+      #grid.list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 8px 10px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+      }
+
+      .row:hover {
+        background: var(--row-hover);
+        border-color: var(--accent);
+      }
+
+      .row-thumb {
+        width: 72px;
+        height: 44px;
+        object-fit: cover;
+        border-radius: 8px;
+        background: var(--bg);
+        cursor: pointer;
+      }
+
+      .row-main {
+        min-width: 0;
+      }
+
+      .row-main .title {
+        font-size: 13px;
+      }
+
+      .row-main .url {
+        font-size: 11px;
+      }
+
+      .row-note {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .row-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .row-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .row-actions .icon-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--btn-bg);
+      }
+
+      @media (max-width: 720px) {
+        .row {
+          grid-template-columns: 72px 1fr auto;
+          grid-template-areas:
+            'thumb main actions'
+            'thumb note actions'
+            'thumb tags actions';
+        }
+        .row-thumb {
+          grid-area: thumb;
+        }
+        .row-main {
+          grid-area: main;
+        }
+        .row-note {
+          grid-area: note;
+        }
+        .row-tags {
+          grid-area: tags;
+        }
+        .row-actions {
+          grid-area: actions;
+        }
+      }
+
+      .empty {
+        max-width: 440px;
+        margin: 12vh auto 0;
+        text-align: center;
+        padding: 36px 20px;
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 14px;
+      }
+
+      .empty strong {
+        display: block;
+        color: var(--text);
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+
+      kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+      }
+
+      /* Expand */
+      #lightbox {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(2, 6, 23, 0.92);
+        flex-direction: column;
+      }
+
+      html[data-theme='light'] #lightbox {
+        background: rgba(248, 250, 252, 0.96);
+      }
+
+      #lightbox.open {
+        display: flex;
+      }
+
+      .lb-toolbar {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+
+      .lb-toolbar .info {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .lb-toolbar h2 {
+        margin: 0;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .lb-toolbar .lb-url {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .lb-toolbar .row-btns {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .lb-image-pane {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 24px;
+        text-align: center;
+      }
+
+      .lb-image-pane img {
+        max-width: none;
+        max-height: none;
+        width: auto;
+        height: auto;
+        vertical-align: top;
+        border-radius: 4px;
+        box-shadow: var(--edit-shadow);
+      }
+
+      .lb-hint {
+        flex-shrink: 0;
+        padding: 6px 16px 10px;
+        font-size: 11px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      /* Movable edit floating box — no full-screen dimmer */
+      #editBox {
+        display: none;
+        position: fixed;
+        z-index: 90;
+        width: min(400px, calc(100vw - 32px));
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--edit-shadow);
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      #editBox.open {
+        display: flex;
+      }
+
+      .edit-drag {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--border);
+        cursor: grab;
+        user-select: none;
+      }
+
+      .edit-drag:active {
+        cursor: grabbing;
+      }
+
+      .edit-drag h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .edit-body {
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .edit-body .sub {
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
+      }
+
+      .edit-body label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .edit-body textarea,
+      .edit-body input[type='text'] {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-family: inherit;
+        resize: vertical;
+      }
+
+      .edit-body textarea {
+        min-height: 88px;
+      }
+
+      .edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <h1>TabWall</h1>
+        <span id="count">—</span>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">/</span>
+        <input
+          id="search"
+          type="search"
+          placeholder="搜尋 tab name、URL、domain、note、tag"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <div class="toolbar-controls">
+        <div class="seg" role="group" aria-label="檢視模式">
+          <button type="button" id="viewCards" class="active">卡片</button>
+          <button type="button" id="viewList">列表</button>
+        </div>
+        <select id="sortBy" aria-label="排序" title="排序">
+          <option value="newest">最新儲存</option>
+          <option value="oldest">最舊儲存</option>
+          <option value="title">名稱 A→Z</option>
+          <option value="title-desc">名稱 Z→A</option>
+          <option value="domain">網域 A→Z</option>
+        </select>
+        <button type="button" class="btn" id="themeBtn" title="切換主題">Light</button>
+        <button type="button" class="btn" id="settingsBtn">設定</button>
+        <button type="button" class="btn" id="closeBtn">關閉</button>
+      </div>
+    </header>
+
+    <section id="settings" aria-label="設定">
+      <div class="settings-block">
+        <h2>儲存分頁後的行為</h2>
+        <div class="radios">
+          <label><input type="radio" name="afterSave" value="close" /> 關閉該分頁</label>
+          <label><input type="radio" name="afterSave" value="keep" /> 不額外執行動作（僅儲存）</label>
+        </div>
+      </div>
+      <div class="settings-block">
+        <h2>主題</h2>
+        <div class="radios">
+          <label><input type="radio" name="theme" value="dark" /> Dark</label>
+          <label><input type="radio" name="theme" value="light" /> Light</label>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <div id="grid" class="cards" role="list"></div>
+    </main>
+
+    <div id="lightbox" aria-hidden="true">
+      <div class="lb-toolbar">
+        <div class="info">
+          <h2 id="lbTitle">—</h2>
+          <div class="lb-url" id="lbUrl">—</div>
+        </div>
+        <div class="row-btns">
+          <button type="button" class="btn" id="lbRestore">還原分頁</button>
+          <button type="button" class="btn" id="lbClose">關閉</button>
+        </div>
+      </div>
+      <div class="lb-image-pane">
+        <img id="lbImage" alt="Full snapshot" />
+      </div>
+      <div class="lb-hint" id="lbSnapHint" hidden>此項目無全尺寸快照，顯示縮圖。</div>
+    </div>
+
+    <div id="editBox" aria-hidden="true">
+      <div class="edit-drag" id="editDrag">
+        <h2 id="editTitle">編輯 Note / Tags</h2>
+        <button type="button" class="btn" id="editCloseX" title="關閉">×</button>
+      </div>
+      <div class="edit-body">
+        <div class="sub" id="editSub">—</div>
+        <label>
+          Note
+          <textarea id="editNote" placeholder="加入備註…"></textarea>
+        </label>
+        <label>
+          Tags（逗號分隔）
+          <input id="editTags" type="text" placeholder="work, later, read" />
+        </label>
+        <div class="edit-actions">
+          <button type="button" class="btn" id="editCancel">取消</button>
+          <button type="button" class="btn primary" id="editSave">儲存</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="park.js"></script>
+  </body>
+</html>

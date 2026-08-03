@@ -4,9 +4,10 @@
 
 const STORAGE_KEY = 'parkedTabs';
 const SETTINGS_KEY = 'settings';
-const MAX_THUMB_WIDTH = 360;
-const JPEG_QUALITY = 0.5;
 const DEFAULT_SETTINGS = { afterSave: 'close' }; // 'close' | 'keep'
+
+const THUMB = { maxWidth: 360, quality: 0.5 };
+const SNAPSHOT = { maxWidth: null, quality: 0.85 };
 
 // ─── Storage ───────────────────────────────────────────────────────
 
@@ -26,14 +27,21 @@ async function getSettings() {
 
 // ─── Image compression ─────────────────────────────────────────────
 
-async function compressImage(dataUrl, maxWidth = MAX_THUMB_WIDTH, quality = JPEG_QUALITY) {
+/**
+ * @param {string} dataUrl
+ * @param {{ maxWidth?: number|null, quality?: number }} opts
+ */
+async function compressImage(dataUrl, opts = {}) {
+  const maxWidth = opts.maxWidth ?? null;
+  const quality = opts.quality ?? 0.5;
+
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   const bitmap = await createImageBitmap(blob);
 
   let width = bitmap.width;
   let height = bitmap.height;
-  if (width > maxWidth) {
+  if (maxWidth && width > maxWidth) {
     height = Math.round((height * maxWidth) / width);
     width = maxWidth;
   }
@@ -104,7 +112,7 @@ async function getActiveTab() {
   return tabs[0] || null;
 }
 
-/** 在當前分頁注入／切換前景浮層（不另開視窗） */
+/** 在當前分頁注入前景浮層（不另開視窗／分頁） */
 async function toggleParkOnActiveTab() {
   const tab = await getActiveTab();
   if (!tab?.id || isRestrictedUrl(tab.url)) {
@@ -155,8 +163,10 @@ async function saveCurrentTab(tab) {
   }
 
   let thumbnail;
+  let snapshot;
   try {
-    thumbnail = await compressImage(dataUrl);
+    thumbnail = await compressImage(dataUrl, THUMB);
+    snapshot = await compressImage(dataUrl, SNAPSHOT);
   } catch (err) {
     console.warn('[TabWall] compressImage failed:', err);
     await flashBadge('!');
@@ -169,6 +179,9 @@ async function saveCurrentTab(tab) {
     title: tab.title || tab.url || 'Untitled',
     favIconUrl: tab.favIconUrl || '',
     thumbnail,
+    snapshot,
+    note: '',
+    tags: [],
     savedAt: Date.now(),
   };
 
@@ -188,7 +201,7 @@ async function saveCurrentTab(tab) {
   await flashBadge(String(Math.min(list.length, 99)), '#3b82f6', 1500);
 }
 
-// ─── Messages ──────────────────────────────────────────────────────
+// ─── Mutations ─────────────────────────────────────────────────────
 
 async function restoreTab(id) {
   const list = await getParkedTabs();
@@ -217,6 +230,29 @@ async function deleteTab(id) {
   return { ok: true, remaining: next.length };
 }
 
+async function updateTab(id, patch) {
+  const list = await getParkedTabs();
+  const idx = list.findIndex((t) => t.id === id);
+  if (idx === -1) return { ok: false, error: 'not_found' };
+
+  const item = list[idx];
+  const next = { ...item };
+
+  if (typeof patch.note === 'string') next.note = patch.note;
+  if (Array.isArray(patch.tags)) {
+    next.tags = patch.tags
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .filter((t, i, arr) => arr.indexOf(t) === i);
+  }
+
+  list[idx] = next;
+  await setParkedTabs(list);
+  return { ok: true, tab: next };
+}
+
+// ─── Messages ──────────────────────────────────────────────────────
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handle = async () => {
     switch (message?.type) {
@@ -226,6 +262,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return restoreTab(message.id);
       case 'DELETE_TAB':
         return deleteTab(message.id);
+      case 'UPDATE_TAB':
+        return updateTab(message.id, {
+          note: message.note,
+          tags: message.tags,
+        });
       default:
         return { ok: false, error: 'unknown_type' };
     }
