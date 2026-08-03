@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "TabWall",
+  "version": "1.2.0",
+  "description": "將暫存分頁視覺化為照片牆。在當前頁以前景浮層展示縮圖並一鍵還原。",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "unlimitedStorage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "TabWall",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "save-tab": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
+      "description": "儲存分頁（截圖寫入 TabWall）"
+    },
+    "toggle-park": {
+      "suggested_key": {
+        "default": "Alt+O",
+        "mac": "Alt+O"
+      },
+      "description": "開啟／關閉 TabWall 照片牆"
+    }
+  }
+}
