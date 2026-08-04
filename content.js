@@ -14,6 +14,9 @@
   let messageHandler = null;
   let keyHandler = null;
   let iframeEl = null;
+  /** @type {object|null} */
+  let pendingConflict = null;
+  let iframeReady = false;
 
   function destroy() {
     if (messageHandler) {
@@ -31,6 +34,7 @@
     }
     iframeEl = null;
     isOpen = false;
+    iframeReady = false;
   }
 
   function focusParkSearch() {
@@ -43,9 +47,25 @@
     }
   }
 
+  function postToPark(payload) {
+    if (!iframeEl?.contentWindow) return false;
+    try {
+      iframeEl.contentWindow.postMessage(payload, '*');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function flushPendingConflict() {
+    if (!pendingConflict || !iframeReady) return;
+    postToPark({ type: 'TABWALL_SAVE_CONFLICT', conflict: pendingConflict });
+  }
+
   function open() {
     if (isOpen) return;
     isOpen = true;
+    iframeReady = false;
 
     rootEl = document.createElement('div');
     rootEl.id = ROOT_ID;
@@ -66,11 +86,6 @@
         background: rgba(15, 23, 42, 0.5);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
-        animation: fade 0.07s ease-out;
-      }
-      @keyframes fade {
-        from { opacity: 0; }
-        to { opacity: 1; }
       }
       .panel {
         width: 95vw;
@@ -82,11 +97,6 @@
         border: 1px solid rgba(148, 163, 184, 0.25);
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
         background: #0b1220;
-        animation: panelIn 0.08s ease-out;
-      }
-      @keyframes panelIn {
-        from { opacity: 0; transform: scale(0.97) translateY(8px); }
-        to { opacity: 1; transform: scale(1) translateY(0); }
       }
       iframe {
         width: 100%;
@@ -122,20 +132,21 @@
     });
 
     iframe.addEventListener('load', () => {
+      iframeReady = true;
       try {
         iframe.focus();
       } catch {
         // ignore
       }
+      flushPendingConflict();
     });
 
-    // Esc / / 在宿主頁 focus 時也能作用
     keyHandler = (e) => {
       if (!isOpen) return;
 
       if (e.key === 'Escape') {
         const active = document.activeElement;
-        if (active === iframe) return; // park 內優先處理
+        if (active === iframe) return;
         e.preventDefault();
         e.stopPropagation();
         destroy();
@@ -145,12 +156,10 @@
       if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const active = document.activeElement;
         const tag = active && active.tagName;
-        // 宿主頁輸入中不攔截；iframe 內由 park 處理，但若 focus 不在 iframe 則轉發
         if (tag === 'INPUT' || tag === 'TEXTAREA' || active?.isContentEditable) {
           if (active !== iframe) return;
         }
         if (active === iframe) {
-          // park.js 自己處理；若其未 focus 到 search，仍補送 message
           focusParkSearch();
           e.preventDefault();
           e.stopPropagation();
@@ -166,8 +175,22 @@
     messageHandler = (event) => {
       if (event.source !== iframe.contentWindow) return;
       if (event.data?.type === 'TABWALL_CLOSE') destroy();
+      if (event.data?.type === 'TABWALL_PARK_READY') {
+        iframeReady = true;
+        flushPendingConflict();
+      }
     };
     window.addEventListener('message', messageHandler);
+  }
+
+  function ensureOpen() {
+    if (!isOpen) open();
+  }
+
+  function showSaveConflict(conflict) {
+    pendingConflict = conflict || null;
+    ensureOpen();
+    if (iframeReady) flushPendingConflict();
   }
 
   function toggle() {
@@ -176,10 +199,32 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'PING') {
+      sendResponse({ ok: true });
+      return false;
+    }
     if (message?.type === 'TOGGLE_PARK') {
       try {
         toggle();
         sendResponse({ ok: true, open: isOpen });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+      return false;
+    }
+    if (message?.type === 'OPEN_PARK') {
+      try {
+        ensureOpen();
+        sendResponse({ ok: true, open: isOpen });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+      return false;
+    }
+    if (message?.type === 'SHOW_SAVE_CONFLICT') {
+      try {
+        showSaveConflict(message.conflict);
+        sendResponse({ ok: true });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });
       }

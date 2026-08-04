@@ -12,12 +12,31 @@ const TAG_CATALOG_KEY = 'tagCatalog';
 const DATA_VERSION_KEY = 'dataVersion';
 const DATA_VERSION = 4;
 
+const DEFAULT_SHORTCUTS = {
+  'save-tab': { alt: true, shift: false, ctrl: false, meta: false, key: 's' },
+  'save-group': { alt: true, shift: true, ctrl: false, meta: false, key: 'g' },
+  'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
+  shortcuts: { ...DEFAULT_SHORTCUTS },
 };
+
+/** Prevent double-fire from chrome.commands + page hotkeys */
+const actionLocks = new Map();
+const ACTION_DEBOUNCE_MS = 700;
+
+function beginAction(name) {
+  const now = Date.now();
+  const prev = actionLocks.get(name) || 0;
+  if (now - prev < ACTION_DEBOUNCE_MS) return false;
+  actionLocks.set(name, now);
+  return true;
+}
 
 const THUMB = { maxWidth: 480, quality: 0.6 };
 const TINY = { maxWidth: 180, quality: 0.4 };
@@ -212,7 +231,9 @@ async function ensureMediaMigration() {
 
 async function getSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
-  return { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
+  const merged = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
+  merged.shortcuts = normalizeShortcuts(merged.shortcuts);
+  return merged;
 }
 
 async function getTagCatalog() {
@@ -623,6 +644,31 @@ async function waitTabComplete(tabId, timeoutMs = 8000) {
   }
 }
 
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+    return true;
+  } catch {
+    // inject
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js'],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[TabWall] inject content failed:', err);
+    return false;
+  }
+}
+
+async function sendToTab(tabId, message) {
+  const ok = await ensureContentScript(tabId);
+  if (!ok) throw new Error('inject_failed');
+  return chrome.tabs.sendMessage(tabId, message);
+}
+
 async function toggleParkOnActiveTab() {
   const tab = await getActiveTab();
   if (!tab?.id || isRestrictedUrl(tab.url)) {
@@ -630,20 +676,25 @@ async function toggleParkOnActiveTab() {
     return;
   }
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PARK' });
-    return;
-  } catch {
-    // inject
-  }
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content.js'],
-    });
-    await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PARK' });
+    await sendToTab(tab.id, { type: 'TOGGLE_PARK' });
   } catch (err) {
     console.warn('[TabWall] inject/toggle failed:', err);
     await flashBadge('!');
+  }
+}
+
+async function openParkOnTab(tabId, extraMessage = null) {
+  try {
+    await sendToTab(tabId, { type: 'OPEN_PARK' });
+    if (extraMessage) {
+      // allow iframe to boot
+      await sleep(120);
+      await sendToTab(tabId, extraMessage);
+    }
+    return true;
+  } catch (err) {
+    console.warn('[TabWall] openPark failed:', err);
+    return false;
   }
 }
 
@@ -661,52 +712,182 @@ async function captureTabBlobs(windowId, tabId, { tiny = false } = {}) {
   }
 }
 
+// ─── Dedup helpers ─────────────────────────────────────────────────
+
+const PENDING_CONFLICT_KEY = 'pendingSaveConflict';
+const PENDING_TTL_MS = 10 * 60 * 1000;
+
+/** Exact URL key (full string including query/hash). */
+function normalizeUrlKey(url) {
+  return typeof url === 'string' ? url : '';
+}
+
+function tabMatchSummary(item) {
+  return {
+    id: item.id,
+    kind: 'tab',
+    title: item.title || item.url || 'Untitled',
+    url: item.url || '',
+    savedAt: item.savedAt || 0,
+    hasThumb: Boolean(item.hasThumb),
+    hasSnap: Boolean(item.hasSnap),
+    note: item.note || '',
+    tags: Array.isArray(item.tags) ? item.tags : [],
+  };
+}
+
+function findTabDuplicates(url, items) {
+  const key = normalizeUrlKey(url);
+  if (!key) return [];
+  return (items || [])
+    .filter((i) => i && i.kind === 'tab' && normalizeUrlKey(i.url) === key)
+    .map(tabMatchSummary);
+}
+
+function scanDuplicateClusters(items) {
+  const map = new Map();
+  for (const item of items || []) {
+    if (!item || item.kind !== 'tab') continue;
+    const key = normalizeUrlKey(item.url);
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(tabMatchSummary(item));
+  }
+  const clusters = [];
+  for (const [url, list] of map.entries()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    clusters.push({ url, items: list });
+  }
+  clusters.sort((a, b) => b.items.length - a.items.length);
+  return clusters;
+}
+
+async function setPendingConflict(pending) {
+  const payload = { ...pending, createdAt: Date.now() };
+  try {
+    if (chrome.storage.session) {
+      await chrome.storage.session.set({ [PENDING_CONFLICT_KEY]: payload });
+    } else {
+      await chrome.storage.local.set({ [PENDING_CONFLICT_KEY]: payload });
+    }
+  } catch {
+    await chrome.storage.local.set({ [PENDING_CONFLICT_KEY]: payload });
+  }
+  return payload;
+}
+
+async function getPendingConflict() {
+  let data = {};
+  try {
+    if (chrome.storage.session) {
+      data = await chrome.storage.session.get(PENDING_CONFLICT_KEY);
+    }
+  } catch {
+    data = {};
+  }
+  if (!data[PENDING_CONFLICT_KEY]) {
+    data = await chrome.storage.local.get(PENDING_CONFLICT_KEY);
+  }
+  const pending = data[PENDING_CONFLICT_KEY];
+  if (!pending || typeof pending !== 'object') return null;
+  if (Date.now() - (pending.createdAt || 0) > PENDING_TTL_MS) {
+    await clearPendingConflict();
+    return null;
+  }
+  return pending;
+}
+
+async function clearPendingConflict() {
+  try {
+    if (chrome.storage.session) {
+      await chrome.storage.session.remove(PENDING_CONFLICT_KEY);
+    }
+  } catch {
+    // ignore
+  }
+  await chrome.storage.local.remove(PENDING_CONFLICT_KEY);
+}
+
+async function deleteTabItemsByIds(ids) {
+  if (!ids?.length) return 0;
+  const idSet = new Set(ids);
+  const list = await getParkedItems();
+  const removed = list.filter((i) => idSet.has(i.id) && i.kind === 'tab');
+  for (const item of removed) {
+    try {
+      await Media.removeMany(Media.keysForItem(item));
+    } catch (err) {
+      console.warn('[TabWall] media remove failed:', err);
+    }
+  }
+  const next = list.filter((i) => !idSet.has(i.id));
+  await setParkedItems(next);
+  return removed.length;
+}
+
 // ─── Save tab ──────────────────────────────────────────────────────
 
-async function saveCurrentTab(tab) {
-  if (!tab || tab.id == null) {
-    await flashBadge('!');
-    return;
-  }
-  if (isRestrictedUrl(tab.url)) {
-    await flashBadge('!');
-    return;
-  }
-
-  let dataUrl;
-  try {
-    dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-  } catch (err) {
-    console.warn('[TabWall] captureVisibleTab failed:', err);
-    await flashBadge('!');
-    return;
+/**
+ * Commit a parked tab from a live chrome.tabs Tab (or pending snapshot fields).
+ * @param {object} tabLike - { id?, windowId?, url, title, favIconUrl }
+ * @param {{ replaceMatchIds?: string[] }} opts
+ */
+async function commitSaveTab(tabLike, opts = {}) {
+  const replaceMatchIds = opts.replaceMatchIds || [];
+  if (replaceMatchIds.length) {
+    await deleteTabItemsByIds(replaceMatchIds);
   }
 
-  let thumbBlob;
-  let snapBlob;
-  try {
-    thumbBlob = await compressToBlob(dataUrl, THUMB);
-    snapBlob = await compressToBlob(dataUrl, SNAPSHOT);
-  } catch (err) {
-    console.warn('[TabWall] compress failed:', err);
-    await flashBadge('!');
-    return;
+  let dataUrl = null;
+  if (tabLike.windowId != null) {
+    try {
+      if (tabLike.id != null) {
+        try {
+          await chrome.tabs.update(tabLike.id, { active: true });
+        } catch {
+          // ignore
+        }
+      }
+      dataUrl = await chrome.tabs.captureVisibleTab(tabLike.windowId, { format: 'png' });
+    } catch (err) {
+      console.warn('[TabWall] captureVisibleTab failed:', err);
+    }
+  }
+
+  let thumbBlob = null;
+  let snapBlob = null;
+  if (dataUrl) {
+    try {
+      thumbBlob = await compressToBlob(dataUrl, THUMB);
+      snapBlob = await compressToBlob(dataUrl, SNAPSHOT);
+    } catch (err) {
+      console.warn('[TabWall] compress failed:', err);
+    }
   }
 
   const id = crypto.randomUUID();
-  await Media.putFromBlobs(Media.mediaKeyTab(id), thumbBlob, snapBlob);
+  let hasThumb = false;
+  let hasSnap = false;
+  try {
+    const flags = await Media.putFromBlobs(Media.mediaKeyTab(id), thumbBlob, snapBlob);
+    hasThumb = flags.hasThumb;
+    hasSnap = flags.hasSnap;
+  } catch (err) {
+    console.warn('[TabWall] media put failed:', err);
+  }
 
   const entry = {
     kind: 'tab',
     id,
-    url: tab.url,
-    title: tab.title || tab.url || 'Untitled',
-    favIconUrl: tab.favIconUrl || '',
+    url: tabLike.url || '',
+    title: tabLike.title || tabLike.url || 'Untitled',
+    favIconUrl: tabLike.favIconUrl || '',
     note: '',
     tags: [],
     savedAt: Date.now(),
-    hasThumb: Boolean(thumbBlob),
-    hasSnap: Boolean(snapBlob),
+    hasThumb,
+    hasSnap,
   };
 
   const list = await getParkedItems();
@@ -714,126 +895,301 @@ async function saveCurrentTab(tab) {
   await setParkedItems(list);
 
   const { afterSave } = await getSettings();
-  if (afterSave === 'close') {
+  if (afterSave === 'close' && tabLike.id != null) {
     try {
-      await chrome.tabs.remove(tab.id);
+      await chrome.tabs.remove(tabLike.id);
     } catch (err) {
       console.warn('[TabWall] tabs.remove failed:', err);
     }
   }
   await flashBadge(String(Math.min(list.length, 99)), '#3b82f6', 1500);
+  return { ok: true, id, remaining: list.length };
+}
+
+async function saveCurrentTab(tab) {
+  if (!beginAction('save-tab')) return { ok: false, error: 'debounced' };
+  try {
+    if (!tab || tab.id == null) {
+      await flashBadge('!');
+      return { ok: false, error: 'no_tab' };
+    }
+    if (isRestrictedUrl(tab.url)) {
+      await flashBadge('!');
+      return { ok: false, error: 'restricted_url' };
+    }
+
+    const items = await getParkedItems();
+    const matches = findTabDuplicates(tab.url, items);
+    if (matches.length > 0) {
+      const pending = await setPendingConflict({
+        tabId: tab.id,
+        windowId: tab.windowId,
+        url: tab.url,
+        title: tab.title || tab.url || 'Untitled',
+        favIconUrl: tab.favIconUrl || '',
+        matches,
+      });
+      await flashBadge('?', '#f59e0b', 2500);
+      const hostTabId = tab.id;
+      await openParkOnTab(hostTabId, {
+        type: 'SHOW_SAVE_CONFLICT',
+        conflict: {
+          url: pending.url,
+          title: pending.title,
+          favIconUrl: pending.favIconUrl,
+          matches: pending.matches,
+        },
+      });
+      return { ok: true, conflict: true, matchCount: matches.length };
+    }
+
+    return await commitSaveTab(tab);
+  } catch (err) {
+    console.warn('[TabWall] saveCurrentTab failed:', err);
+    await flashBadge('!');
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function resolveSaveConflict(decision) {
+  const pending = await getPendingConflict();
+  if (!pending) {
+    return { ok: false, error: 'no_pending' };
+  }
+  if (decision === 'cancel') {
+    await clearPendingConflict();
+    return { ok: true, cancelled: true };
+  }
+
+  const tabLike = {
+    id: pending.tabId,
+    windowId: pending.windowId,
+    url: pending.url,
+    title: pending.title,
+    favIconUrl: pending.favIconUrl,
+  };
+
+  // Verify tab still exists; if closed, still save URL meta without capture window
+  if (pending.tabId != null) {
+    try {
+      const live = await chrome.tabs.get(pending.tabId);
+      tabLike.windowId = live.windowId;
+      tabLike.url = live.url || tabLike.url;
+      tabLike.title = live.title || tabLike.title;
+      tabLike.favIconUrl = live.favIconUrl || tabLike.favIconUrl;
+    } catch {
+      tabLike.id = null;
+      tabLike.windowId = null;
+    }
+  }
+
+  const replaceMatchIds =
+    decision === 'replace' ? (pending.matches || []).map((m) => m.id) : [];
+
+  // Avoid debounce blocking the follow-up commit
+  actionLocks.delete('save-tab');
+  const result = await commitSaveTab(tabLike, { replaceMatchIds });
+  await clearPendingConflict();
+  return result;
+}
+
+async function applyDedupe(ops) {
+  if (!Array.isArray(ops) || !ops.length) {
+    return { ok: false, error: 'no_ops' };
+  }
+  const list = await getParkedItems();
+  const toDelete = new Set();
+  for (const op of ops) {
+    const url = normalizeUrlKey(op.url);
+    const keep = new Set(Array.isArray(op.keepIds) ? op.keepIds : []);
+    if (!url || keep.size === 0) continue;
+    for (const item of list) {
+      if (item.kind !== 'tab') continue;
+      if (normalizeUrlKey(item.url) !== url) continue;
+      if (!keep.has(item.id)) toDelete.add(item.id);
+    }
+  }
+  if (toDelete.size === 0) {
+    return { ok: true, deleted: 0, items: list };
+  }
+  const deleted = await deleteTabItemsByIds([...toDelete]);
+  const next = await getParkedItems();
+  return { ok: true, deleted, items: next };
 }
 
 // ─── Save group ────────────────────────────────────────────────────
 
 async function saveActiveGroup() {
-  const tab = await getActiveTab();
-  if (!tab?.id) {
-    await flashBadge('!');
-    return { ok: false, error: 'no_tab' };
-  }
-
-  const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
-  if (tab.groupId == null || tab.groupId === none) {
-    await flashBadge('!');
-    return { ok: false, error: 'not_in_group' };
-  }
-
-  let meta;
+  if (!beginAction('save-group')) return { ok: false, error: 'debounced' };
   try {
-    meta = await chrome.tabGroups.get(tab.groupId);
-  } catch (err) {
-    console.warn('[TabWall] tabGroups.get failed:', err);
-    await flashBadge('!');
-    return { ok: false, error: 'group_get_failed' };
-  }
-
-  const members = await chrome.tabs.query({
-    windowId: tab.windowId,
-    groupId: tab.groupId,
-  });
-  members.sort((a, b) => a.index - b.index);
-  if (!members.length) {
-    await flashBadge('!');
-    return { ok: false, error: 'empty_group' };
-  }
-
-  const settings = await getSettings();
-  const captureMode = settings.saveGroupCapture || 'all';
-  const originalActiveId = tab.id;
-  const groupId = crypto.randomUUID();
-
-  await flashBadge('…', '#3b82f6', 60000);
-
-  const groupTabs = [];
-  for (let i = 0; i < members.length; i++) {
-    const m = members[i];
-    let hasThumb = false;
-    let hasSnap = false;
-    const memberId = crypto.randomUUID();
-    const shouldCapture =
-      captureMode === 'all' ||
-      (captureMode === 'activeOnly' && m.id === originalActiveId);
-
-    if (shouldCapture && !isRestrictedUrl(m.url)) {
-      await flashBadge(`${i + 1}/${members.length}`, '#3b82f6', 60000);
-      const { thumbBlob, snapBlob } = await captureTabBlobs(tab.windowId, m.id);
-      const flags = await Media.putFromBlobs(
-        Media.mediaKeyMember(groupId, memberId),
-        thumbBlob,
-        snapBlob
-      );
-      hasThumb = flags.hasThumb;
-      hasSnap = flags.hasSnap;
+    const tab = await getActiveTab();
+    if (!tab?.id) {
+      await flashBadge('!');
+      return { ok: false, error: 'no_tab' };
     }
 
-    groupTabs.push({
-      id: memberId,
-      url: m.url || '',
-      title: m.title || m.url || 'Untitled',
-      favIconUrl: m.favIconUrl || '',
-      pinned: Boolean(m.pinned),
-      indexInGroup: i,
+    const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+    if (tab.groupId == null || tab.groupId === none) {
+      await flashBadge('!');
+      return { ok: false, error: 'not_in_group' };
+    }
+
+    let meta;
+    try {
+      meta = await chrome.tabGroups.get(tab.groupId);
+    } catch (err) {
+      console.warn('[TabWall] tabGroups.get failed:', err);
+      await flashBadge('!');
+      return { ok: false, error: 'group_get_failed' };
+    }
+
+    const members = await chrome.tabs.query({
+      windowId: tab.windowId,
+      groupId: tab.groupId,
+    });
+    members.sort((a, b) => a.index - b.index);
+    if (!members.length) {
+      await flashBadge('!');
+      return { ok: false, error: 'empty_group' };
+    }
+
+    const settings = await getSettings();
+    const captureMode = settings.saveGroupCapture || 'all';
+    const originalActiveId = tab.id;
+    const groupId = crypto.randomUUID();
+
+    await flashBadge('…', '#3b82f6', 60000);
+
+    const groupTabs = [];
+    for (let i = 0; i < members.length; i++) {
+      const m = members[i];
+      let hasThumb = false;
+      let hasSnap = false;
+      const memberId = crypto.randomUUID();
+      const shouldCapture =
+        captureMode === 'all' ||
+        (captureMode === 'activeOnly' && m.id === originalActiveId);
+
+      if (shouldCapture && !isRestrictedUrl(m.url)) {
+        await flashBadge(`${i + 1}/${members.length}`, '#3b82f6', 60000);
+        try {
+          const { thumbBlob, snapBlob } = await captureTabBlobs(tab.windowId, m.id);
+          const flags = await Media.putFromBlobs(
+            Media.mediaKeyMember(groupId, memberId),
+            thumbBlob,
+            snapBlob
+          );
+          hasThumb = flags.hasThumb;
+          hasSnap = flags.hasSnap;
+        } catch (err) {
+          console.warn('[TabWall] group member media failed:', err);
+        }
+      }
+
+      groupTabs.push({
+        id: memberId,
+        url: m.url || '',
+        title: m.title || m.url || 'Untitled',
+        favIconUrl: m.favIconUrl || '',
+        pinned: Boolean(m.pinned),
+        indexInGroup: i,
+        note: '',
+        tags: [],
+        hasThumb,
+        hasSnap,
+      });
+    }
+
+    try {
+      await chrome.tabs.update(originalActiveId, { active: true });
+    } catch {
+      // ignore
+    }
+
+    const groupItem = {
+      kind: 'group',
+      id: groupId,
+      title: meta.title || '',
+      color: meta.color || 'grey',
+      collapsed: Boolean(meta.collapsed),
       note: '',
       tags: [],
-      hasThumb,
-      hasSnap,
-    });
-  }
+      savedAt: Date.now(),
+      tabs: groupTabs,
+    };
 
-  try {
-    await chrome.tabs.update(originalActiveId, { active: true });
-  } catch {
-    // ignore
-  }
+    const list = await getParkedItems();
+    list.unshift(groupItem);
+    await setParkedItems(list);
 
-  const groupItem = {
-    kind: 'group',
-    id: groupId,
-    title: meta.title || '',
-    color: meta.color || 'grey',
-    collapsed: Boolean(meta.collapsed),
-    note: '',
-    tags: [],
-    savedAt: Date.now(),
-    tabs: groupTabs,
-  };
-
-  const list = await getParkedItems();
-  list.unshift(groupItem);
-  await setParkedItems(list);
-
-  if ((settings.afterSaveGroup || 'close') === 'close') {
-    const ids = members.map((m) => m.id).filter((id) => id != null);
-    try {
-      await chrome.tabs.remove(ids);
-    } catch (err) {
-      console.warn('[TabWall] close group tabs failed:', err);
+    if ((settings.afterSaveGroup || 'close') === 'close') {
+      const ids = members.map((m) => m.id).filter((id) => id != null);
+      try {
+        await chrome.tabs.remove(ids);
+      } catch (err) {
+        console.warn('[TabWall] close group tabs failed:', err);
+      }
     }
-  }
 
-  await flashBadge(String(Math.min(list.length, 99)), '#3b82f6', 1500);
-  return { ok: true, id: groupItem.id, tabCount: groupTabs.length };
+    await flashBadge(String(Math.min(list.length, 99)), '#3b82f6', 1500);
+    return { ok: true, id: groupItem.id, tabCount: groupTabs.length };
+  } catch (err) {
+    console.warn('[TabWall] saveActiveGroup failed:', err);
+    await flashBadge('!');
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function handleHotkeyAction(action) {
+  if (action === 'save-tab') {
+    return saveCurrentTab(await getActiveTab());
+  }
+  if (action === 'save-group') {
+    return saveActiveGroup();
+  }
+  if (action === 'toggle-park') {
+    if (!beginAction('toggle-park')) return { ok: false, error: 'debounced' };
+    await toggleParkOnActiveTab();
+    return { ok: true };
+  }
+  return { ok: false, error: 'unknown_action' };
+}
+
+async function getCommandsStatus() {
+  try {
+    const list = await chrome.commands.getAll();
+    return {
+      ok: true,
+      commands: list.map((c) => ({
+        name: c.name,
+        description: c.description || '',
+        shortcut: c.shortcut || '',
+      })),
+    };
+  } catch (err) {
+    return { ok: false, error: String(err), commands: [] };
+  }
+}
+
+function normalizeShortcuts(raw) {
+  const base = {
+    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
+    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
+    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
+  };
+  if (!raw || typeof raw !== 'object') return base;
+  for (const name of Object.keys(base)) {
+    const s = raw[name];
+    if (!s || typeof s !== 'object' || !s.key) continue;
+    base[name] = {
+      alt: Boolean(s.alt),
+      shift: Boolean(s.shift),
+      ctrl: Boolean(s.ctrl),
+      meta: Boolean(s.meta),
+      key: String(s.key).toLowerCase(),
+    };
+  }
+  return base;
 }
 
 // ─── Restore / delete ──────────────────────────────────────────────
@@ -1063,6 +1419,43 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       case 'BATCH_DELETE_ITEMS':
         return batchDeleteItems(message.ids);
+      case 'HOTKEY':
+        return handleHotkeyAction(message.action);
+      case 'GET_COMMANDS':
+        return getCommandsStatus();
+      case 'GET_SHORTCUTS': {
+        const settings = await getSettings();
+        return { ok: true, shortcuts: normalizeShortcuts(settings.shortcuts) };
+      }
+      case 'OPEN_SHORTCUTS_PAGE':
+        await chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+        return { ok: true };
+      case 'GET_PENDING_CONFLICT': {
+        const pending = await getPendingConflict();
+        if (!pending) return { ok: true, conflict: null };
+        return {
+          ok: true,
+          conflict: {
+            url: pending.url,
+            title: pending.title,
+            favIconUrl: pending.favIconUrl,
+            matches: pending.matches || [],
+          },
+        };
+      }
+      case 'RESOLVE_SAVE_CONFLICT':
+        return resolveSaveConflict(message.decision || 'cancel');
+      case 'SCAN_DUPLICATES': {
+        const items = await getParkedItems();
+        return { ok: true, clusters: scanDuplicateClusters(items) };
+      }
+      case 'APPLY_DEDUPE': {
+        const res = await applyDedupe(message.ops);
+        if (res.ok) {
+          await flashBadge(String(Math.min((res.items || []).length, 99)), '#3b82f6', 1500);
+        }
+        return res;
+      }
       default:
         return { ok: false, error: 'unknown_type' };
     }
@@ -1074,16 +1467,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command === 'save-tab') {
-    await saveCurrentTab(await getActiveTab());
-    return;
-  }
-  if (command === 'save-group') {
-    await saveActiveGroup();
-    return;
-  }
-  if (command === 'toggle-park') {
-    await toggleParkOnActiveTab();
+  try {
+    await handleHotkeyAction(command);
+  } catch (err) {
+    console.warn('[TabWall] onCommand failed:', err);
   }
 });
 

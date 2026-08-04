@@ -210,6 +210,47 @@
         min-width: 36px;
       }
 
+      .btn.icon-close {
+        min-width: 36px;
+        padding: 6px 10px;
+        font-size: 18px;
+        line-height: 1;
+        font-weight: 600;
+      }
+
+      .meta,
+      .copy-hit {
+        cursor: copy;
+      }
+
+      .meta:hover .title,
+      .copy-hit:hover {
+        color: var(--accent);
+      }
+
+      .copy-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 72px;
+        transform: translateX(-50%);
+        z-index: 120;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        box-shadow: var(--edit-shadow);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+
+      .copy-toast.show {
+        opacity: 1;
+      }
+
       /* Floating panels: settings / tags */
       .float-backdrop {
         display: none;
@@ -225,7 +266,8 @@
 
       #settingsBox,
       #tagsBox,
-      #helpBox {
+      #helpBox,
+      #dedupeBox {
         display: none;
         position: fixed;
         z-index: 96;
@@ -243,10 +285,172 @@
         width: min(520px, calc(100vw - 32px));
       }
 
+      #dedupeBox {
+        width: min(560px, calc(100vw - 32px));
+        max-height: min(80vh, 720px);
+      }
+
       #settingsBox.open,
       #tagsBox.open,
-      #helpBox.open {
+      #helpBox.open,
+      #dedupeBox.open {
         display: flex;
+      }
+
+      /* Save conflict modal — above floats */
+      #conflictModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 130;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(2, 6, 23, 0.55);
+      }
+
+      #conflictModal.open {
+        display: flex;
+      }
+
+      #conflictModal .conflict-panel {
+        width: min(480px, calc(100vw - 32px));
+        max-height: min(80vh, 640px);
+        overflow: auto;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--edit-shadow);
+        padding: 16px 18px 14px;
+      }
+
+      #conflictModal h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      #conflictModal .conflict-incoming {
+        font-size: 13px;
+        margin-bottom: 12px;
+        padding: 10px;
+        border-radius: 10px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+      }
+
+      #conflictModal .conflict-incoming .title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      #conflictModal .conflict-incoming .url {
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
+      }
+
+      #conflictModal .conflict-list {
+        list-style: none;
+        margin: 0 0 14px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 220px;
+        overflow: auto;
+      }
+
+      #conflictModal .conflict-list li {
+        font-size: 12px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      #conflictModal .conflict-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .dedupe-cluster {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: var(--bg);
+      }
+
+      .dedupe-cluster .cluster-url {
+        font-size: 12px;
+        font-weight: 600;
+        word-break: break-all;
+        margin-bottom: 6px;
+      }
+
+      .dedupe-cluster .cluster-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .dedupe-item,
+      .conflict-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        padding: 6px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .dedupe-item:first-of-type {
+        border-top: 0;
+      }
+
+      .dedupe-item .di-body,
+      .conflict-list li .di-body {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .dedupe-item .di-title,
+      .conflict-list li .di-title {
+        font-weight: 600;
+      }
+
+      .dedupe-item .di-meta,
+      .conflict-list li .di-meta {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .dedupe-thumb,
+      .conflict-list .dedupe-thumb {
+        width: 52px;
+        height: 36px;
+        object-fit: cover;
+        border-radius: 6px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .dedupe-thumb.placeholder {
+        display: inline-block;
+      }
+
+      .dedupe-preview-btn {
+        flex-shrink: 0;
+      }
+
+      .dedupe-empty {
+        font-size: 13px;
+        color: var(--muted);
+        padding: 12px 0;
       }
 
       .help-section {
@@ -744,23 +948,6 @@
         font-weight: 600;
       }
 
-      #savedBadge {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 50;
-        padding: 8px 14px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        color: var(--text);
-        font-size: 12px;
-        font-weight: 600;
-        box-shadow: var(--shadow);
-        pointer-events: none;
-        opacity: 0.92;
-      }
-
       #versionBadge {
         position: fixed;
         left: 16px;
@@ -846,6 +1033,39 @@
         font-size: 13px;
         color: var(--text);
         cursor: pointer;
+      }
+
+      .shortcut-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      .shortcut-row .shortcut-label {
+        flex: 1 1 120px;
+        min-width: 100px;
+        color: var(--text);
+      }
+
+      .shortcut-row .shortcut-btn {
+        min-width: 120px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .shortcut-row .shortcut-btn.recording {
+        border-color: var(--accent);
+        color: var(--accent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+      }
+
+      .shortcut-row .chrome-bind {
+        flex: 1 1 100%;
+        font-size: 11px;
+        color: var(--muted);
       }
 
       .settings-row input[type='range'] {
@@ -1137,7 +1357,7 @@
         display: none;
         position: fixed;
         inset: 0;
-        z-index: 100;
+        z-index: 140;
         background: rgba(2, 6, 23, 0.92);
         flex-direction: column;
       }
@@ -1341,8 +1561,9 @@
           <button type="button" id="viewList" data-i18n="list">列表</button>
         </div>
         <select id="sortBy" data-i18n-aria="sort" aria-label="排序" title="排序">
-          <option value="newest" data-i18n="sortNewest">最新儲存</option>
-          <option value="oldest" data-i18n="sortOldest">最舊儲存</option>
+          <option value="newest" data-i18n="sortNewest">儲存時間（新→舊）</option>
+          <option value="oldest" data-i18n="sortOldest">儲存時間（舊→新）</option>
+          <option value="group-first" data-i18n="sortGroupFirst">Group 優先</option>
           <option value="title" data-i18n="sortTitle">名稱 A→Z</option>
           <option value="title-desc" data-i18n="sortTitleDesc">名稱 Z→A</option>
           <option value="domain" data-i18n="sortDomain">網域 A→Z</option>
@@ -1354,11 +1575,12 @@
           <span id="colsValue">4</span>
         </label>
         <button type="button" class="btn" id="selectModeBtn" data-i18n="selectMode">選擇</button>
+        <button type="button" class="btn" id="openDedupeBtn" data-i18n="dedupeScan" data-i18n-title="dedupeScanTitle" title="掃描重複">掃描重複</button>
         <button type="button" class="btn" id="themeBtn" data-i18n-title="themeToggle" title="切換主題">Light</button>
         <button type="button" class="btn" id="tagsBtn" data-i18n="tagsManage">Tags</button>
         <button type="button" class="btn" id="settingsBtn" data-i18n="settings">設定</button>
         <button type="button" class="btn" id="helpBtn" data-i18n="help">說明</button>
-        <button type="button" class="btn" id="closeBtn" data-i18n="close">關閉</button>
+        <button type="button" class="btn icon-close" id="closeBtn" data-i18n-title="close" title="關閉" aria-label="關閉">×</button>
       </div>
     </header>
 
@@ -1480,6 +1702,31 @@
             </label>
           </div>
         </div>
+        <div class="settings-block" id="shortcutsBlock">
+          <h2 data-i18n="shortcutsTitle">快捷鍵</h2>
+          <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="shortcutsHint">
+            應用內快捷鍵在一般網頁生效。點下方按鈕可重新錄製；chrome:// 等頁需用 Chrome 全域快捷鍵。
+          </p>
+          <div class="shortcut-row" data-action="save-tab">
+            <span class="shortcut-label" data-i18n="helpShortcutSave">儲存目前分頁（截圖）</span>
+            <button type="button" class="btn shortcut-btn" data-shortcut-action="save-tab">⌥S</button>
+            <span class="chrome-bind" data-chrome-cmd="save-tab"></span>
+          </div>
+          <div class="shortcut-row" data-action="save-group">
+            <span class="shortcut-label" data-i18n="helpShortcutGroup">儲存目前 Tab Group</span>
+            <button type="button" class="btn shortcut-btn" data-shortcut-action="save-group">⌥⇧G</button>
+            <span class="chrome-bind" data-chrome-cmd="save-group"></span>
+          </div>
+          <div class="shortcut-row" data-action="toggle-park">
+            <span class="shortcut-label" data-i18n="helpShortcutWall">開關 TabWall 照片牆</span>
+            <button type="button" class="btn shortcut-btn" data-shortcut-action="toggle-park">⌥O</button>
+            <span class="chrome-bind" data-chrome-cmd="toggle-park"></span>
+          </div>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <button type="button" class="btn" id="resetShortcutsBtn" data-i18n="shortcutsReset">重設預設</button>
+            <button type="button" class="btn" id="openChromeShortcutsBtn" data-i18n="shortcutsOpenChrome">在 Chrome 設定全域快捷鍵</button>
+          </div>
+        </div>
         <div class="settings-block">
           <h2 data-i18n="backupTitle">備份與還原</h2>
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px">
@@ -1497,7 +1744,6 @@
     </div>
 
     <div id="versionBadge">v—</div>
-    <div id="savedBadge" aria-live="polite">已存 0 個</div>
 
     <div id="lightbox" aria-hidden="true">
       <div class="lb-toolbar">
@@ -1556,6 +1802,48 @@
           <h3 data-i18n="helpLimitsTitle">限制</h3>
           <p data-i18n="helpLimitsBody">chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。</p>
         </div>
+        <div class="help-section">
+          <h3 data-i18n="dedupeScanTitle">去重複</h3>
+          <p data-i18n="helpDedupeBody">存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="conflictModal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="conflict-panel">
+        <h2 data-i18n="dedupeTitle">偵測到重複 URL</h2>
+        <p class="hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)" data-i18n="dedupeConflictHint">
+          牆內已有相同完整 URL 的分頁。請選擇如何處置。
+        </p>
+        <div class="conflict-incoming">
+          <div class="title" id="conflictIncomingTitle">—</div>
+          <div class="url" id="conflictIncomingUrl">—</div>
+        </div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="dedupeExisting">既有項目</div>
+        <ul class="conflict-list" id="conflictMatchList"></ul>
+        <div class="conflict-actions">
+          <button type="button" class="btn" id="conflictCancel" data-i18n="dedupeCancel">取消</button>
+          <button type="button" class="btn" id="conflictReplace" data-i18n="dedupeReplace">取代舊項</button>
+          <button type="button" class="btn primary" id="conflictKeepBoth" data-i18n="dedupeKeepBoth">保留兩者</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dedupeBox" aria-hidden="true">
+      <div class="float-drag" id="dedupeDrag">
+        <h2 data-i18n="dedupeScanTitle">去重複</h2>
+        <button type="button" class="btn" id="dedupeCloseX">×</button>
+      </div>
+      <div class="float-body" id="dedupeBody">
+        <p class="hint" style="margin:0 0 10px;font-size:11px;color:var(--muted)" data-i18n="dedupeScanHint">
+          掃描已存分頁中 URL 完全相同的項目，由你決定保留哪些。
+        </p>
+        <div id="dedupeClusters"></div>
+        <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:8px">
+          <button type="button" class="btn" id="dedupeRescanBtn" data-i18n="dedupeScan">掃描重複</button>
+          <button type="button" class="btn primary" id="dedupeApplyBtn" data-i18n="dedupeApply">套用</button>
+        </div>
+        <p id="dedupeStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
       </div>
     </div>
 

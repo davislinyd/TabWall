@@ -3,6 +3,12 @@
  */
 
 const SETTINGS_KEY = 'settings';
+const DEFAULT_SHORTCUTS = {
+  'save-tab': { alt: true, shift: false, ctrl: false, meta: false, key: 's' },
+  'save-group': { alt: true, shift: true, ctrl: false, meta: false, key: 'g' },
+  'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
@@ -15,6 +21,11 @@ const DEFAULT_SETTINGS = {
   locale: 'zh',
   defaultViewMode: 'cards',
   openWithSearchFocus: false,
+  shortcuts: {
+    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
+    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
+    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
+  },
 };
 
 const GROUP_COLORS = {
@@ -81,34 +92,15 @@ async function fetchMediaUrl(key, kind) {
   }
 }
 
-const thumbObserver =
-  typeof IntersectionObserver !== 'undefined'
-    ? new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-            const img = entry.target;
-            const key = img.dataset.mediaKey;
-            if (!key || img.dataset.loaded === '1') continue;
-            img.dataset.loaded = '1';
-            fetchMediaUrl(key, 'thumb').then((url) => {
-              if (url) img.src = url;
-            });
-            thumbObserver.unobserve(img);
-          }
-        },
-        { root: null, rootMargin: '120px', threshold: 0.01 }
-      )
-    : null;
-
+/** Eager-load thumbs (list has no snapshots; IO was delaying first paint in iframe). */
 function observeThumb(img) {
   if (!img) return;
-  if (thumbObserver) thumbObserver.observe(img);
-  else if (img.dataset.mediaKey) {
-    fetchMediaUrl(img.dataset.mediaKey, 'thumb').then((url) => {
-      if (url) img.src = url;
-    });
-  }
+  const key = img.dataset.mediaKey;
+  if (!key || img.dataset.loaded === '1') return;
+  img.dataset.loaded = '1';
+  fetchMediaUrl(key, 'thumb').then((url) => {
+    if (url) img.src = url;
+  });
 }
 
 function mediaKeyForItem(item) {
@@ -128,12 +120,16 @@ const I18N = {
     cards: '卡片',
     list: '列表',
     sort: '排序',
-    sortNewest: '最新儲存',
-    sortOldest: '最舊儲存',
+    sortNewest: '儲存時間（新→舊）',
+    sortOldest: '儲存時間（舊→新）',
+    sortGroupFirst: 'Group 優先',
     sortTitle: '名稱 A→Z',
     sortTitleDesc: '名稱 Z→A',
     sortDomain: '網域 A→Z',
     sortManual: '手動排列',
+    copied: '已複製連結',
+    copyFailed: '複製失敗',
+    copyLink: '複製連結',
     cols: '欄數',
     colsTitle: '卡片欄數 4–10',
     themeToggle: '切換主題',
@@ -211,6 +207,34 @@ const I18N = {
     helpShortcutSearch: '聚焦搜尋',
     helpShortcutEsc: '關閉浮層／照片牆',
     helpShortcutArrows: '快照上一張／下一張',
+    shortcutsTitle: '快捷鍵',
+    shortcutsHint:
+      '應用內快捷鍵在一般網頁生效。點下方按鈕可重新錄製；chrome:// 等頁需用 Chrome 全域快捷鍵。',
+    shortcutsReset: '重設預設',
+    shortcutsOpenChrome: '在 Chrome 設定全域快捷鍵',
+    shortcutsRecording: '按下組合鍵…',
+    shortcutsChromeBound: 'Chrome 全域：{s}',
+    shortcutsChromeUnbound: 'Chrome 全域：未綁定',
+    dedupeTitle: '偵測到重複 URL',
+    dedupeConflictHint: '牆內已有相同完整 URL 的分頁。請選擇如何處置。',
+    dedupeExisting: '既有項目',
+    dedupeKeepBoth: '保留兩者',
+    dedupeReplace: '取代舊項',
+    dedupeCancel: '取消',
+    dedupeScanTitle: '去重複',
+    dedupeScanHint: '掃描已存分頁中 URL 完全相同的項目，由你決定保留哪些。',
+    dedupeScan: '掃描重複',
+    dedupeNoDupes: '未發現重複',
+    dedupeKeepNewest: '只留最新',
+    dedupeKeepOldest: '只留最舊',
+    dedupeKeepAll: '全部保留',
+    dedupeApply: '套用',
+    dedupeApplyOk: '已刪除 {n} 筆重複',
+    dedupeApplyNone: '沒有需要刪除的項目',
+    dedupeCount: '{n} 筆',
+    dedupeSavedAt: '儲存於 {t}',
+    helpDedupeBody:
+      '存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。',
     helpBasicTitle: '基本使用',
     helpBasicBody:
       '點縮圖或標題還原分頁；中央 ✎ 編輯 note／tags；⤢ 放大快照；× 刪除。可拖曳卡片重排（磁吸）。',
@@ -248,12 +272,16 @@ const I18N = {
     cards: 'Cards',
     list: 'List',
     sort: 'Sort',
-    sortNewest: 'Newest',
-    sortOldest: 'Oldest',
+    sortNewest: 'Saved time (new → old)',
+    sortOldest: 'Saved time (old → new)',
+    sortGroupFirst: 'Groups first',
     sortTitle: 'Title A→Z',
     sortTitleDesc: 'Title Z→A',
     sortDomain: 'Domain A→Z',
     sortManual: 'Manual order',
+    copied: 'Link copied',
+    copyFailed: 'Copy failed',
+    copyLink: 'Copy link',
     cols: 'Cols',
     colsTitle: 'Card columns 4–10',
     themeToggle: 'Toggle theme',
@@ -331,6 +359,34 @@ const I18N = {
     helpShortcutSearch: 'Focus search',
     helpShortcutEsc: 'Close panels / TabWall',
     helpShortcutArrows: 'Previous / next snapshot',
+    shortcutsTitle: 'Shortcuts',
+    shortcutsHint:
+      'In-page shortcuts work on normal websites. Click a button to rebind. Use Chrome global shortcuts for chrome:// pages.',
+    shortcutsReset: 'Reset defaults',
+    shortcutsOpenChrome: 'Open Chrome shortcut settings',
+    shortcutsRecording: 'Press keys…',
+    shortcutsChromeBound: 'Chrome global: {s}',
+    shortcutsChromeUnbound: 'Chrome global: not set',
+    dedupeTitle: 'Duplicate URL detected',
+    dedupeConflictHint: 'This exact URL is already parked. Choose what to do.',
+    dedupeExisting: 'Existing items',
+    dedupeKeepBoth: 'Keep both',
+    dedupeReplace: 'Replace old',
+    dedupeCancel: 'Cancel',
+    dedupeScanTitle: 'Deduplicate',
+    dedupeScanHint: 'Scan parked tabs with identical full URLs and choose what to keep.',
+    dedupeScan: 'Scan duplicates',
+    dedupeNoDupes: 'No duplicates found',
+    dedupeKeepNewest: 'Keep newest',
+    dedupeKeepOldest: 'Keep oldest',
+    dedupeKeepAll: 'Keep all',
+    dedupeApply: 'Apply',
+    dedupeApplyOk: 'Removed {n} duplicate(s)',
+    dedupeApplyNone: 'Nothing to remove',
+    dedupeCount: '{n} items',
+    dedupeSavedAt: 'Saved {t}',
+    helpDedupeBody:
+      'Saving a tab with an existing URL asks you how to proceed. Use the toolbar “Scan duplicates” to clean the wall.',
     helpBasicTitle: 'Basics',
     helpBasicBody:
       'Click thumbnail or title to restore; ✎ for note/tags; ⤢ to expand snapshot; × to delete. Drag cards to reorder.',
@@ -382,6 +438,21 @@ const helpBtn = document.getElementById('helpBtn');
 const helpBox = document.getElementById('helpBox');
 const helpDrag = document.getElementById('helpDrag');
 const helpCloseX = document.getElementById('helpCloseX');
+const conflictModal = document.getElementById('conflictModal');
+const conflictIncomingTitle = document.getElementById('conflictIncomingTitle');
+const conflictIncomingUrl = document.getElementById('conflictIncomingUrl');
+const conflictMatchList = document.getElementById('conflictMatchList');
+const conflictCancel = document.getElementById('conflictCancel');
+const conflictReplace = document.getElementById('conflictReplace');
+const conflictKeepBoth = document.getElementById('conflictKeepBoth');
+const dedupeBox = document.getElementById('dedupeBox');
+const dedupeDrag = document.getElementById('dedupeDrag');
+const dedupeCloseX = document.getElementById('dedupeCloseX');
+const dedupeClustersEl = document.getElementById('dedupeClusters');
+const dedupeStatus = document.getElementById('dedupeStatus');
+const dedupeRescanBtn = document.getElementById('dedupeRescanBtn');
+const dedupeApplyBtn = document.getElementById('dedupeApplyBtn');
+const openDedupeBtn = document.getElementById('openDedupeBtn');
 const tagSearch = document.getElementById('tagSearch');
 const tagManageList = document.getElementById('tagManageList');
 const tagAddInput = document.getElementById('tagAddInput');
@@ -409,7 +480,6 @@ const colsValueEl = document.getElementById('colsValue');
 const settingsCardCols = document.getElementById('settingsCardCols');
 const settingsColsValue = document.getElementById('settingsColsValue');
 const openWithSearchFocusEl = document.getElementById('openWithSearchFocus');
-const savedBadge = document.getElementById('savedBadge');
 const versionBadge = document.getElementById('versionBadge');
 
 const lightbox = document.getElementById('lightbox');
@@ -468,6 +538,9 @@ let tagFilter = '';
 let selectMode = false;
 /** @type {Set<string>} */
 let selectedIds = new Set();
+/** @type {string|null} */
+let lastAnchorId = null;
+let copyToastTimer = null;
 
 /** @type {null | object} */
 let dragState = null;
@@ -485,8 +558,21 @@ function focusSearch() {
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'TABWALL_FOCUS_SEARCH') {
     focusSearch();
+    return;
+  }
+  if (event.data?.type === 'TABWALL_SAVE_CONFLICT' && event.data.conflict) {
+    openConflictModal(event.data.conflict);
   }
 });
+
+// Tell host content script the park UI is ready (for queued conflict payload)
+try {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'TABWALL_PARK_READY' }, '*');
+  }
+} catch {
+  // ignore
+}
 
 function t(key, vars) {
   const locale = settings.locale === 'en' ? 'en' : 'zh';
@@ -527,6 +613,8 @@ function applyI18n() {
   }
   updateSavedBadge();
   if (typeof updateBatchBar === 'function') updateBatchBar();
+  if (typeof refreshShortcutButtons === 'function') refreshShortcutButtons();
+  if (typeof refreshChromeCommandLabels === 'function') refreshChromeCommandLabels();
 }
 
 function requestHostClose() {
@@ -590,7 +678,65 @@ function clampCols(n) {
   return Math.min(10, Math.max(4, Math.round(v)));
 }
 
+
 // ─── Settings ──────────────────────────────────────────────────────
+
+function normalizeShortcuts(raw) {
+  const base = {
+    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
+    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
+    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
+  };
+  if (!raw || typeof raw !== 'object') return base;
+  for (const name of Object.keys(base)) {
+    const s = raw[name];
+    if (!s || typeof s !== 'object' || !s.key) continue;
+    base[name] = {
+      alt: Boolean(s.alt),
+      shift: Boolean(s.shift),
+      ctrl: Boolean(s.ctrl),
+      meta: Boolean(s.meta),
+      key: String(s.key).toLowerCase(),
+    };
+  }
+  return base;
+}
+
+function keyFromEvent(e) {
+  const code = e.code || '';
+  if (code.startsWith('Key') && code.length === 4) return code.slice(3).toLowerCase();
+  if (code.startsWith('Digit') && code.length === 6) return code.slice(5);
+  if (code.startsWith('Numpad') && code.length > 6) return code.slice(6).toLowerCase();
+  const map = {
+    Space: ' ',
+    Minus: '-',
+    Equal: '=',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Backslash: '\\',
+    Semicolon: ';',
+    Quote: "'",
+    Comma: ',',
+    Period: '.',
+    Slash: '/',
+    Backquote: '`',
+  };
+  if (map[code]) return map[code];
+  if (e.key && e.key.length === 1) return e.key.toLowerCase();
+  return (e.key || '').toLowerCase();
+}
+
+function formatShortcut(combo) {
+  if (!combo || !combo.key) return '—';
+  const parts = [];
+  if (combo.ctrl) parts.push('Ctrl');
+  if (combo.meta) parts.push(navigator.platform?.includes('Mac') ? '⌘' : 'Meta');
+  if (combo.alt) parts.push(navigator.platform?.includes('Mac') ? '⌥' : 'Alt');
+  if (combo.shift) parts.push(navigator.platform?.includes('Mac') ? '⇧' : 'Shift');
+  const k = String(combo.key);
+  parts.push(k === ' ' ? 'Space' : k.length === 1 ? k.toUpperCase() : k);
+  return parts.join(navigator.platform?.includes('Mac') ? '' : '+');
+}
 
 async function loadSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
@@ -598,6 +744,7 @@ async function loadSettings() {
   merged.cardCols = clampCols(merged.cardCols);
   if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'cards';
   if (merged.locale !== 'en') merged.locale = 'zh';
+  merged.shortcuts = normalizeShortcuts(merged.shortcuts);
   return merged;
 }
 
@@ -636,7 +783,6 @@ function applyCardCols(cols) {
 function updateSavedBadge() {
   const n = allTabs.length;
   const visible = getVisibleTabs().length;
-  savedBadge.textContent = t('savedCount', { n });
   countEl.textContent =
     query && visible !== n
       ? t('countFiltered', { shown: visible, total: n })
@@ -690,6 +836,127 @@ function syncSettingsUi() {
   if (viewRadio) viewRadio.checked = true;
 
   applyI18n();
+  refreshShortcutButtons();
+  refreshChromeCommandLabels();
+}
+
+let recordingAction = null;
+let recordingHandler = null;
+
+function stopShortcutRecording() {
+  if (recordingHandler) {
+    window.removeEventListener('keydown', recordingHandler, true);
+    recordingHandler = null;
+  }
+  recordingAction = null;
+  document.querySelectorAll('.shortcut-btn.recording').forEach((btn) => {
+    btn.classList.remove('recording');
+  });
+  refreshShortcutButtons();
+}
+
+function refreshShortcutButtons() {
+  const map = normalizeShortcuts(settings.shortcuts);
+  document.querySelectorAll('.shortcut-btn[data-shortcut-action]').forEach((btn) => {
+    const action = btn.getAttribute('data-shortcut-action');
+    if (recordingAction === action) {
+      btn.textContent = t('shortcutsRecording');
+      return;
+    }
+    btn.textContent = formatShortcut(map[action]);
+  });
+}
+
+async function refreshChromeCommandLabels() {
+  const res = await sendMessage({ type: 'GET_COMMANDS' });
+  const byName = new Map(
+    (res.ok && Array.isArray(res.commands) ? res.commands : []).map((c) => [c.name, c])
+  );
+  document.querySelectorAll('[data-chrome-cmd]').forEach((el) => {
+    const name = el.getAttribute('data-chrome-cmd');
+    const cmd = byName.get(name);
+    const sc = cmd?.shortcut || '';
+    el.textContent = sc
+      ? t('shortcutsChromeBound', { s: sc })
+      : t('shortcutsChromeUnbound');
+  });
+}
+
+function startShortcutRecording(action) {
+  stopShortcutRecording();
+  recordingAction = action;
+  refreshShortcutButtons();
+  document
+    .querySelector(`.shortcut-btn[data-shortcut-action="${action}"]`)
+    ?.classList.add('recording');
+
+  recordingHandler = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      stopShortcutRecording();
+      return;
+    }
+    if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+      return;
+    }
+    const key = keyFromEvent(e);
+    if (!key) return;
+    const combo = {
+      alt: e.altKey,
+      shift: e.shiftKey,
+      ctrl: e.ctrlKey,
+      meta: e.metaKey,
+      key,
+    };
+    // require at least one modifier for safety
+    if (!combo.alt && !combo.ctrl && !combo.meta && !combo.shift) {
+      return;
+    }
+    const next = {
+      ...normalizeShortcuts(settings.shortcuts),
+      [action]: combo,
+    };
+    await saveSettings({ shortcuts: next });
+    stopShortcutRecording();
+  };
+  window.addEventListener('keydown', recordingHandler, true);
+}
+
+function initShortcutsUi() {
+  document.querySelectorAll('.shortcut-btn[data-shortcut-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-shortcut-action');
+      if (!action) return;
+      if (recordingAction === action) {
+        stopShortcutRecording();
+        return;
+      }
+      startShortcutRecording(action);
+    });
+  });
+
+  const resetBtn = document.getElementById('resetShortcutsBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      stopShortcutRecording();
+      await saveSettings({
+        shortcuts: {
+          'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
+          'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
+          'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
+        },
+      });
+      refreshShortcutButtons();
+    });
+  }
+
+  const openChromeBtn = document.getElementById('openChromeShortcutsBtn');
+  if (openChromeBtn) {
+    openChromeBtn.addEventListener('click', () => {
+      sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+    });
+  }
 }
 
 async function initSettingsUi() {
@@ -776,9 +1043,286 @@ async function initSettingsUi() {
     await saveSettings({ cardCols: clampCols(settingsCardCols.value) });
   });
 
+  initShortcutsUi();
+  initDedupeUi();
+
   if (settings.openWithSearchFocus) {
     setTimeout(() => searchEl.focus(), 50);
   }
+
+  // Resume conflict modal if SW queued one before park loaded
+  sendMessage({ type: 'GET_PENDING_CONFLICT' }).then((res) => {
+    if (res?.ok && res.conflict) openConflictModal(res.conflict);
+  });
+}
+
+// ─── Save conflict (human decision) ────────────────────────────────
+
+function formatSavedAt(ts) {
+  if (!ts) return '—';
+  try {
+    return new Date(ts).toLocaleString(settings.locale === 'en' ? 'en' : 'zh-Hant');
+  } catch {
+    return String(ts);
+  }
+}
+
+function appendDedupeThumb(parent, item) {
+  const mediaKey = mediaKeyForItem({ id: item.id, kind: 'tab' });
+  if (item.hasThumb || item.hasSnap) {
+    const img = document.createElement('img');
+    img.className = 'dedupe-thumb lazy-thumb';
+    img.alt = '';
+    img.draggable = false;
+    img.dataset.mediaKey = mediaKey;
+    parent.appendChild(img);
+    observeThumb(img);
+  } else {
+    const ph = document.createElement('span');
+    ph.className = 'dedupe-thumb placeholder';
+    ph.setAttribute('aria-hidden', 'true');
+    parent.appendChild(ph);
+  }
+}
+
+function appendDedupePreviewBtn(parent, item) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'icon-btn dedupe-preview-btn';
+  btn.title = t('expand');
+  btn.setAttribute('aria-label', t('expand'));
+  btn.textContent = '⤢';
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openLightbox({
+      kind: 'tab',
+      id: item.id,
+      title: item.title || item.url || 'Untitled',
+      url: item.url || '',
+      hasThumb: Boolean(item.hasThumb),
+      hasSnap: Boolean(item.hasSnap),
+      savedAt: item.savedAt || 0,
+    });
+  });
+  parent.appendChild(btn);
+}
+
+function openConflictModal(conflict) {
+  if (!conflictModal || !conflict) return;
+  conflictIncomingTitle.textContent = conflict.title || conflict.url || '—';
+  conflictIncomingUrl.textContent = conflict.url || '—';
+  conflictMatchList.innerHTML = '';
+  const matches = Array.isArray(conflict.matches) ? conflict.matches : [];
+  for (const m of matches) {
+    const li = document.createElement('li');
+    appendDedupeThumb(li, m);
+    const body = document.createElement('div');
+    body.className = 'di-body';
+    body.innerHTML = `
+      <div class="di-title">${escapeHtml(m.title || m.url || '—')}</div>
+      <div class="di-meta">${escapeHtml(t('dedupeSavedAt', { t: formatSavedAt(m.savedAt) }))}</div>
+    `;
+    li.appendChild(body);
+    appendDedupePreviewBtn(li, m);
+    conflictMatchList.appendChild(li);
+  }
+  conflictModal.classList.add('open');
+  conflictModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeConflictModal() {
+  if (!conflictModal) return;
+  conflictModal.classList.remove('open');
+  conflictModal.setAttribute('aria-hidden', 'true');
+}
+
+async function resolveConflict(decision) {
+  closeConflictModal();
+  const res = await sendMessage({ type: 'RESOLVE_SAVE_CONFLICT', decision });
+  if (decision !== 'cancel') {
+    await loadList();
+  }
+  if (res && !res.ok && res.error === 'no_pending') {
+    // expired — ignore
+  }
+}
+
+function initConflictUi() {
+  if (!conflictModal) return;
+  conflictCancel?.addEventListener('click', () => resolveConflict('cancel'));
+  conflictReplace?.addEventListener('click', () => resolveConflict('replace'));
+  conflictKeepBoth?.addEventListener('click', () => resolveConflict('keep-both'));
+  conflictModal.addEventListener('click', (e) => {
+    if (e.target === conflictModal) resolveConflict('cancel');
+  });
+}
+
+// ─── Manual wall dedupe scan ───────────────────────────────────────
+
+/** @type {Array<{url:string, items:object[], mode:string, keepIds:Set<string>}>} */
+let dedupeState = [];
+
+function closeDedupeBox(sync = true) {
+  if (!dedupeBox) return;
+  dedupeBox.classList.remove('open');
+  dedupeBox.setAttribute('aria-hidden', 'true');
+  if (sync) syncFloatBackdrop();
+}
+
+async function openDedupeBox() {
+  if (!dedupeBox) return;
+  closeAllFloatsExcept('dedupe');
+  closeSettingsBox(false);
+  dedupeBox.classList.add('open');
+  dedupeBox.setAttribute('aria-hidden', 'false');
+  placeFloatBox(dedupeBox);
+  syncFloatBackdrop();
+  await runDedupeScan();
+}
+
+function setClusterKeepMode(cluster, mode) {
+  cluster.mode = mode;
+  const items = cluster.items || [];
+  cluster.keepIds = new Set();
+  if (mode === 'all') {
+    for (const it of items) cluster.keepIds.add(it.id);
+    return;
+  }
+  if (!items.length) return;
+  const sorted = [...items].sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+  if (mode === 'newest') {
+    cluster.keepIds.add(sorted[sorted.length - 1].id);
+  } else if (mode === 'oldest') {
+    cluster.keepIds.add(sorted[0].id);
+  } else if (mode === 'manual') {
+    // keep whatever checkboxes currently say — default all checked if empty
+    for (const it of items) cluster.keepIds.add(it.id);
+  }
+}
+
+function renderDedupeClusters() {
+  if (!dedupeClustersEl) return;
+  dedupeClustersEl.innerHTML = '';
+  if (!dedupeState.length) {
+    dedupeClustersEl.innerHTML = `<div class="dedupe-empty">${escapeHtml(t('dedupeNoDupes'))}</div>`;
+    if (dedupeStatus) dedupeStatus.textContent = t('dedupeNoDupes');
+    return;
+  }
+  if (dedupeStatus) {
+    dedupeStatus.textContent = t('dedupeCount', { n: dedupeState.length });
+  }
+
+  dedupeState.forEach((cluster, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'dedupe-cluster';
+    wrap.dataset.idx = String(idx);
+
+    const tools = document.createElement('div');
+    tools.className = 'cluster-tools';
+    const mkBtn = (label, mode) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn' + (cluster.mode === mode ? ' primary' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        setClusterKeepMode(cluster, mode);
+        renderDedupeClusters();
+      });
+      return b;
+    };
+    tools.append(
+      mkBtn(t('dedupeKeepAll'), 'all'),
+      mkBtn(t('dedupeKeepNewest'), 'newest'),
+      mkBtn(t('dedupeKeepOldest'), 'oldest')
+    );
+
+    const urlEl = document.createElement('div');
+    urlEl.className = 'cluster-url';
+    urlEl.textContent = `${cluster.url} · ${t('dedupeCount', { n: cluster.items.length })}`;
+
+    wrap.appendChild(urlEl);
+    wrap.appendChild(tools);
+
+    for (const it of cluster.items) {
+      const row = document.createElement('div');
+      row.className = 'dedupe-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = cluster.keepIds.has(it.id);
+      cb.addEventListener('change', () => {
+        cluster.mode = 'manual';
+        if (cb.checked) cluster.keepIds.add(it.id);
+        else cluster.keepIds.delete(it.id);
+        // ensure at least one kept
+        if (cluster.keepIds.size === 0) {
+          cb.checked = true;
+          cluster.keepIds.add(it.id);
+        }
+      });
+      row.appendChild(cb);
+      appendDedupeThumb(row, it);
+      const body = document.createElement('div');
+      body.className = 'di-body';
+      body.innerHTML = `
+        <div class="di-title">${escapeHtml(it.title || '—')}</div>
+        <div class="di-meta">${escapeHtml(t('dedupeSavedAt', { t: formatSavedAt(it.savedAt) }))}</div>
+      `;
+      row.appendChild(body);
+      appendDedupePreviewBtn(row, it);
+      wrap.appendChild(row);
+    }
+
+    dedupeClustersEl.appendChild(wrap);
+  });
+}
+
+async function runDedupeScan() {
+  if (dedupeStatus) dedupeStatus.textContent = '…';
+  const res = await sendMessage({ type: 'SCAN_DUPLICATES' });
+  const clusters = res?.ok && Array.isArray(res.clusters) ? res.clusters : [];
+  dedupeState = clusters.map((c) => {
+    const cluster = {
+      url: c.url,
+      items: Array.isArray(c.items) ? c.items : [],
+      mode: 'newest',
+      keepIds: new Set(),
+    };
+    setClusterKeepMode(cluster, 'newest');
+    return cluster;
+  });
+  renderDedupeClusters();
+}
+
+async function applyDedupeChoices() {
+  const ops = dedupeState
+    .filter((c) => c.keepIds.size > 0 && c.keepIds.size < c.items.length)
+    .map((c) => ({ url: c.url, keepIds: [...c.keepIds] }));
+
+  if (!ops.length) {
+    if (dedupeStatus) dedupeStatus.textContent = t('dedupeApplyNone');
+    return;
+  }
+
+  const res = await sendMessage({ type: 'APPLY_DEDUPE', ops });
+  if (res?.ok) {
+    if (dedupeStatus) dedupeStatus.textContent = t('dedupeApplyOk', { n: res.deleted || 0 });
+    await loadList();
+    await runDedupeScan();
+  } else if (dedupeStatus) {
+    dedupeStatus.textContent = res?.error || 'error';
+  }
+}
+
+function initDedupeUi() {
+  initConflictUi();
+  openDedupeBtn?.addEventListener('click', async () => {
+    await openDedupeBox();
+  });
+  dedupeCloseX?.addEventListener('click', () => closeDedupeBox());
+  dedupeRescanBtn?.addEventListener('click', () => runDedupeScan());
+  dedupeApplyBtn?.addEventListener('click', () => applyDedupeChoices());
+  if (dedupeDrag && dedupeBox) setupFloatDrag(dedupeDrag, dedupeBox);
 }
 
 function placeFloatBox(el) {
@@ -829,7 +1373,8 @@ function anyFloatOpen() {
     tagsBox.classList.contains('open') ||
     helpBox.classList.contains('open') ||
     editBox.classList.contains('open') ||
-    membersBox.classList.contains('open')
+    membersBox.classList.contains('open') ||
+    (dedupeBox && dedupeBox.classList.contains('open'))
   );
 }
 
@@ -849,6 +1394,7 @@ function closeAllFloatsExcept(except) {
   if (except !== 'help') closeHelpBox(false);
   if (except !== 'edit') closeEditBox();
   if (except !== 'members') closeMembersBox();
+  if (except !== 'dedupe') closeDedupeBox(false);
   syncFloatBackdrop();
 }
 
@@ -859,9 +1405,12 @@ function openSettingsBox() {
   settingsBtn.classList.add('active');
   placeFloatBox(settingsBox);
   syncFloatBackdrop();
+  refreshShortcutButtons();
+  refreshChromeCommandLabels();
 }
 
 function closeSettingsBox(sync = true) {
+  stopShortcutRecording();
   settingsBox.classList.remove('open');
   settingsBox.setAttribute('aria-hidden', 'true');
   settingsBtn.classList.remove('active');
@@ -937,6 +1486,10 @@ floatBackdrop.addEventListener('click', () => {
     syncFloatBackdrop();
     return;
   }
+  if (dedupeBox?.classList.contains('open')) {
+    closeDedupeBox();
+    return;
+  }
   if (helpBox.classList.contains('open')) {
     closeHelpBox();
     return;
@@ -984,6 +1537,9 @@ cardColsEl.addEventListener('change', async () => {
 });
 
 closeBtn.addEventListener('click', requestHostClose);
+closeBtn.textContent = '×';
+closeBtn.setAttribute('aria-label', t('close'));
+closeBtn.title = t('close');
 
 // ─── Search ────────────────────────────────────────────────────────
 
@@ -1003,6 +1559,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
+    if (conflictModal?.classList.contains('open')) {
+      resolveConflict('cancel');
+      return;
+    }
     if (editBox.classList.contains('open')) {
       closeEditBox();
       return;
@@ -1013,6 +1573,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (membersBox.classList.contains('open')) {
       closeMembersBox();
+      return;
+    }
+    if (dedupeBox?.classList.contains('open')) {
+      closeDedupeBox();
       return;
     }
     if (helpBox.classList.contains('open')) {
@@ -1064,6 +1628,13 @@ function sortTabs(list, sortBy) {
   switch (sortBy) {
     case 'oldest':
       return arr.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+    case 'group-first':
+      return arr.sort((a, b) => {
+        const ga = a.kind === 'group' ? 0 : 1;
+        const gb = b.kind === 'group' ? 0 : 1;
+        if (ga !== gb) return ga - gb;
+        return (b.savedAt || 0) - (a.savedAt || 0);
+      });
     case 'title':
       return arr.sort((a, b) => titleOf(a).localeCompare(titleOf(b), 'zh-Hant'));
     case 'title-desc':
@@ -1077,6 +1648,91 @@ function sortTabs(list, sortBy) {
     case 'newest':
     default:
       return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  }
+}
+
+function linkTextForItem(item) {
+  if (item.kind === 'group') {
+    return (item.tabs || [])
+      .map((m) => m.url)
+      .filter(Boolean)
+      .join('\n');
+  }
+  return item.url || '';
+}
+
+async function copySavedLink(item) {
+  const text = linkTextForItem(item);
+  if (!text) {
+    showCopyToast(t('copyFailed'));
+    return;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    showCopyToast(t('copied'));
+  } catch {
+    showCopyToast(t('copyFailed'));
+  }
+}
+
+function showCopyToast(msg) {
+  let el = document.getElementById('copyToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'copyToast';
+    el.className = 'copy-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  if (copyToastTimer) clearTimeout(copyToastTimer);
+  copyToastTimer = setTimeout(() => {
+    el.classList.remove('show');
+  }, 1400);
+}
+
+function isMultiSelectModifier(e) {
+  return Boolean(e && (e.metaKey || e.ctrlKey || e.shiftKey));
+}
+
+function handleCardSelectClick(itemId, e) {
+  if (!e) {
+    if (!selectMode) setSelectMode(true);
+    toggleSelect(itemId);
+    lastAnchorId = itemId;
+    return;
+  }
+  const visible = getVisibleTabs();
+  const ids = visible.map((x) => x.id);
+  const idx = ids.indexOf(itemId);
+  if (e.shiftKey && lastAnchorId) {
+    const a = ids.indexOf(lastAnchorId);
+    if (a >= 0 && idx >= 0) {
+      if (!selectMode) setSelectMode(true);
+      const lo = Math.min(a, idx);
+      const hi = Math.max(a, idx);
+      for (let i = lo; i <= hi; i++) selectedIds.add(ids[i]);
+      updateBatchBar();
+      renderGrid();
+      return;
+    }
+  }
+  // ⌘/Ctrl toggle, Shift 起點, 或已在選擇模式：切換此項
+  if (selectMode || e.metaKey || e.ctrlKey || e.shiftKey) {
+    if (!selectMode) setSelectMode(true);
+    toggleSelect(itemId);
+    lastAnchorId = itemId;
   }
 }
 
@@ -1746,6 +2402,7 @@ function setSelectMode(on) {
   selectModeBtn.textContent = on ? t('selectModeOn') : t('selectMode');
   if (!on) {
     selectedIds.clear();
+    lastAnchorId = null;
   }
   updateBatchBar();
   renderGrid();
@@ -1754,6 +2411,7 @@ function setSelectMode(on) {
 function toggleSelect(id) {
   if (selectedIds.has(id)) selectedIds.delete(id);
   else selectedIds.add(id);
+  lastAnchorId = id;
   updateBatchBar();
   const card = gridEl.querySelector(`[data-id="${id.replace(/"/g, '')}"]`);
   if (card) {
@@ -2327,9 +2985,16 @@ async function endCardDrag(e) {
 function attachCardDrag(card, item) {
   card.addEventListener('pointerdown', (e) => {
     if (selectMode) return;
+    if (isMultiSelectModifier(e)) return;
     if (settings.viewMode === 'list') return;
     if (e.button != null && e.button !== 0) return;
-    if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check')) return;
+    if (
+      e.target.closest(
+        '.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check, .meta, .members-btn'
+      )
+    ) {
+      return;
+    }
 
     dragState = {
       card,
@@ -2340,7 +3005,10 @@ function attachCardDrag(card, item) {
       offsetY: 0,
       placeholder: null,
       active: false,
-      allowClickRestore: Boolean(e.target.closest('.restore-hit, .thumb-wrap, .thumb')),
+      // only thumbnail click restores; title/meta copies link
+      allowClickRestore: Boolean(
+        e.target.closest('.thumb-wrap, .thumb, .group-cover, .group-mosaic, .group-badge')
+      ),
     };
     try {
       card.setPointerCapture(e.pointerId);
@@ -2415,12 +3083,12 @@ function createGroupCard(item) {
       <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}">×</button>
       <span class="group-badge">${escapeHtml(t('groupTabs', { n }))}</span>
     </div>
-    <div class="meta">
-      <div class="title-row restore-hit">
+    <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
+      <div class="title-row">
         <span class="color-dot" style="background:${color}"></span>
         <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
       </div>
-      <div class="url restore-hit">${escapeHtml(t('groupTabs', { n }))}</div>
+      <div class="url">${escapeHtml(t('groupTabs', { n }))}</div>
       ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
       ${
         tags.length
@@ -2434,19 +3102,26 @@ function createGroupCard(item) {
 
   card.querySelector('.card-check').addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleSelect(item.id);
+    if (!selectMode) setSelectMode(true);
+    handleCardSelectClick(item.id, e);
   });
 
-  card.querySelectorAll('.restore-hit, .thumb-wrap').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('.card-actions, .delete-btn, .members-btn, .card-check')) return;
-      if (dragState?.active) return;
-      if (selectMode) {
-        toggleSelect(item.id);
-        return;
-      }
-      restoreItem(item.id);
-    });
+  card.querySelector('.meta').addEventListener('click', (e) => {
+    if (dragState?.active) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+      return;
+    }
+    copySavedLink(item);
+  });
+
+  card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
+    if (e.target.closest('.card-actions, .delete-btn, .members-btn, .card-check')) return;
+    if (dragState?.active) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+    }
+    // pure thumb click restore is handled by endCardDrag
   });
 
   card.querySelector('.members-btn').addEventListener('click', (e) => {
@@ -2487,15 +3162,15 @@ function createCard(item) {
   card.innerHTML = `
     <input type="checkbox" class="card-check" ${selectedIds.has(item.id) ? 'checked' : ''} aria-label="select" />
     <div class="thumb-wrap">
-      <img class="thumb lazy-thumb" alt="" draggable="false" loading="lazy" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
+      <img class="thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
       <div class="card-actions">
         <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">✎</button>
         <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">⤢</button>
       </div>
       <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">×</button>
     </div>
-    <div class="meta">
-      <div class="title-row restore-hit">
+    <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
+      <div class="title-row">
         ${
           fav
             ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(fav)}" />`
@@ -2503,7 +3178,7 @@ function createCard(item) {
         }
         <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
       </div>
-      <div class="url restore-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
+      <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
       ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${escapeHtml(note)}</div>` : ''}
       ${
         tags.length
@@ -2517,7 +3192,8 @@ function createCard(item) {
   observeThumb(card.querySelector('img.lazy-thumb'));
   card.querySelector('.card-check').addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleSelect(item.id);
+    if (!selectMode) setSelectMode(true);
+    handleCardSelectClick(item.id, e);
   });
   card.querySelector('.expand-btn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2534,17 +3210,21 @@ function createCard(item) {
     if (selectMode) return;
     deleteItem(item.id);
   });
-  // click card body to restore or select
-  card.querySelectorAll('.restore-hit, .thumb-wrap').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check')) return;
-      if (dragState?.active) return;
-      if (selectMode) {
-        toggleSelect(item.id);
-        return;
-      }
-      // thumb click without drag ends in endCardDrag restore
-    });
+  card.querySelector('.meta').addEventListener('click', (e) => {
+    if (dragState?.active) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+      return;
+    }
+    copySavedLink(item);
+  });
+  card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
+    if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check')) return;
+    if (dragState?.active) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+    }
+    // pure thumb click restore is handled by endCardDrag
   });
   attachCardDrag(card, item);
   return card;
@@ -2570,13 +3250,13 @@ function createRow(item) {
   const color = isGroup ? GROUP_COLORS[item.color] || GROUP_COLORS.grey : null;
 
   row.innerHTML = `
-    <img class="row-thumb lazy-thumb" alt="" draggable="false" loading="lazy" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />
+    <img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />
     <div class="row-main">
-      <div class="title restore-hit" title="${escapeAttr(title)}">
+      <div class="title copy-hit" title="${escapeAttr(title)}">
         ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
         ${escapeHtml(title)}
       </div>
-      <div class="url restore-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
+      <div class="url copy-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
     </div>
     <div class="row-note" title="${escapeAttr(note)}">${note ? escapeHtml(note) : '—'}</div>
     <div class="row-tags">
@@ -2598,14 +3278,20 @@ function createRow(item) {
   `;
 
   observeThumb(row.querySelector('img.lazy-thumb'));
-  row.querySelector('.row-thumb').addEventListener('click', () => {
-    if (selectMode) toggleSelect(item.id);
-    else restoreItem(item.id);
+  row.querySelector('.row-thumb').addEventListener('click', (e) => {
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+      return;
+    }
+    restoreItem(item.id);
   });
-  row.querySelectorAll('.restore-hit').forEach((el) => {
-    el.addEventListener('click', () => {
-      if (selectMode) toggleSelect(item.id);
-      else restoreItem(item.id);
+  row.querySelectorAll('.copy-hit').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (selectMode || isMultiSelectModifier(e)) {
+        handleCardSelectClick(item.id, e);
+        return;
+      }
+      copySavedLink(item);
     });
   });
   if (selectedIds.has(item.id)) row.classList.add('selected');
@@ -2694,6 +3380,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
     settings.cardCols = clampCols(settings.cardCols);
+    settings.shortcuts = normalizeShortcuts(settings.shortcuts);
     syncSettingsUi();
     renderGrid();
   }
