@@ -2,16 +2,19 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
+**Current version:** see `manifest.json` (currently **2.6.3**).
+
 ## Performance (v2.6.x)
 
 - **Meta** (url/title/note/tags/order) → `chrome.storage.local`
 - **Images** (thumbnail + full snapshot) → **IndexedDB** blobs
-- Opening the wall loads **meta only**; thumbs load eagerly in the wall iframe
+- Opening the wall loads **meta only**; thumbs load in the wall iframe
 - First launch migrates old inline base64 into IDB automatically
+- Group cover area is fixed **16:10** so large thumbs cannot stretch cards
 
 ## Shortcuts
 
-Defaults (customizable in **Settings → 快捷鍵**):
+Defaults (customizable in **Settings → 快捷鍵** / in-page rebinding):
 
 | Shortcut | Action |
 |----------|--------|
@@ -24,6 +27,7 @@ Defaults (customizable in **Settings → 快捷鍵**):
 | `n`/`note` + Tab | Search notes only |
 | `re`/`regex` + Tab | Enable regex mode |
 | `all` + Tab | Reset field scope |
+| Empty search + Backspace/Delete or Esc | Leave tag/note/regex modes |
 | `.*` (toolbar) | Toggle regex search (`/pattern/flags` supported) |
 | `Esc` | Close panels / TabWall |
 | `←` / `→` | Prev / next snapshot |
@@ -33,24 +37,52 @@ Two channels:
 1. **In-page hotkeys** (`hotkeys.js` content script) — work on normal websites even if Chrome global bindings are empty. Uses physical keys (`e.code`) so macOS Option+letter works.
 2. **Chrome global commands** (`chrome.commands`) — needed on `chrome://` and similar restricted pages. Manage via Settings → “在 Chrome 設定全域快捷鍵” or `chrome://extensions/shortcuts`.
 
-After reload/update, re-open existing tabs once so the content script injects.
+After reload/update, re-open or refresh existing tabs once so the content script injects.
+
+## Card interaction
+
+| Action | Result |
+|--------|--------|
+| Click **thumbnail** | Restore tab / group (short click) |
+| Click **title / meta** | Copy saved URL(s) — groups copy member URLs, one per line |
+| Drag from **thumbnail** | Reorder cards |
+| Drag onto another card’s **center** (brief pause, **+** highlight) | **Stack** into a group |
+| Restore a stack/group | Recreates a Chrome **Tab Group** |
+
+List view supports copy on title/URL; card drag/stack is cards view only.
+
+## Search
+
+- Plain: `grafana zabbix` (AND), `grafana||zabbix` (OR)
+- Regex: toolbar `.*` or `re`/`regex` + Tab
+- Field scope: `tag` / `note` + Tab
+- When a **group** matches, the card lists **which member tabs** hit (restore / preview per row)
 
 ## Features
 
 - Group park/restore, member note/tags, multi-select batch ops
-- **Stack:** drag a card onto another’s center (iOS-style) to merge into a group; restore recreates a Chrome Tab Group
+- **Stack:** iOS-style merge by dropping a card on another’s center
 - Floating settings / tags / help (click outside to close)
 - Backup: lite JSON (no images) or full ZIP with binary media
-- **Dedup (human-decided):** exact URL match on save asks keep-both / replace / cancel; toolbar **掃描重複** scans the wall
+- **Dedup (human-decided):** exact URL on save → keep both / replace / cancel; toolbar **掃描重複** scans the wall
 
 ## Install
 
 1. `chrome://extensions` → Developer mode  
 2. Load unpacked → this folder  
-3. Reload after updates  
+3. After code changes: **Reload** the extension on that page  
+4. If shortcuts or in-page hotkeys misbehave: also **refresh** the target website tab  
+
+## Development
+
+- Use Chrome’s native **Reload** on the extension card after a coherent set of edits (do not reload mid-broken file).
+- UI-only tweaks to `park.html` / `park.js` still need extension reload (or re-open the wall) so the iframe picks up new scripts.
+- Versioning rules for agents: see **`AGENTS.md`** (patch +1 for small fixes).
 
 ## Files
 
 ```text
-manifest.json  background.js  mediaDb.js  hotkeys.js  content.js  park.html  park.js  icons/
+manifest.json   background.js   mediaDb.js   hotkeys.js
+content.js      park.html       park.js      icons/
+AGENTS.md       README.md
 ```
