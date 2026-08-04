@@ -810,20 +810,25 @@ async function exportBackup(mode = 'lite') {
   };
 }
 
-async function importBackup(backup) {
-  if (!backup || backup.format !== 'tabwall-backup') {
-    return { ok: false, error: 'invalid_format' };
-  }
-  let items = [];
-  if (Array.isArray(backup.parkedItems)) {
-    items = backup.parkedItems.map(normalizeItem).filter(Boolean);
-  } else if (Array.isArray(backup.parkedTabs)) {
-    items = backup.parkedTabs.map((t) => normalizeTabItem(t));
-  } else {
-    return { ok: false, error: 'invalid_tabs' };
-  }
+/** Fresh UUIDs so append never collides with existing items / media keys. */
+function remintItemIds(items) {
+  return (items || []).map((item) => {
+    if (!item) return item;
+    if (item.kind === 'group') {
+      return {
+        ...item,
+        id: crypto.randomUUID(),
+        tabs: (item.tabs || []).map((m) => ({
+          ...m,
+          id: crypto.randomUUID(),
+        })),
+      };
+    }
+    return { ...item, id: crypto.randomUUID() };
+  });
+}
 
-  // Move any inline media into IDB
+async function persistInlineMediaToIdb(items) {
   for (const item of items) {
     if (item.kind === 'group') {
       for (const m of item.tabs || []) {
@@ -851,6 +856,41 @@ async function importBackup(backup) {
       item.snapshot = '';
     }
   }
+}
+
+/**
+ * @param {object} backup
+ * @param {{ mode?: 'replace' | 'append' }} opts
+ */
+async function importBackup(backup, { mode = 'replace' } = {}) {
+  if (!backup || backup.format !== 'tabwall-backup') {
+    return { ok: false, error: 'invalid_format' };
+  }
+  let items = [];
+  if (Array.isArray(backup.parkedItems)) {
+    items = backup.parkedItems.map(normalizeItem).filter(Boolean);
+  } else if (Array.isArray(backup.parkedTabs)) {
+    items = backup.parkedTabs.map((t) => normalizeTabItem(t));
+  } else {
+    return { ok: false, error: 'invalid_tabs' };
+  }
+
+  const append = mode === 'append';
+  if (append) {
+    items = remintItemIds(items);
+  }
+
+  await persistInlineMediaToIdb(items);
+
+  if (append) {
+    const existing = await getParkedItems();
+    await setParkedItems([...existing, ...items]);
+    const catalog = await getTagCatalog();
+    const incoming = Array.isArray(backup.tagCatalog) ? backup.tagCatalog : [];
+    await setTagCatalog([...catalog, ...incoming]);
+    // Do not overwrite settings on append
+    return { ok: true, mode: 'append', added: items.length };
+  }
 
   await setParkedItems(items);
   const payload = {
@@ -861,7 +901,208 @@ async function importBackup(backup) {
     payload[SETTINGS_KEY] = backup.settings;
   }
   await chrome.storage.local.set(payload);
-  return { ok: true };
+  return { ok: true, mode: 'replace', added: items.length };
+}
+
+function titleFromUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname || url;
+  } catch {
+    return url || 'Untitled';
+  }
+}
+
+function escapeXml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Distinct placeholder for manually entered cards (thumb + full snap).
+ * SVG data URL — works in service worker without canvas.
+ */
+function manualPlaceholderDataUrl({ title, url }) {
+  const label = '手動輸入 · Manual';
+  const t = escapeXml(String(title || 'URL').slice(0, 42));
+  let host = '';
+  try {
+    host = new URL(url || '').hostname || '';
+  } catch {
+    host = '';
+  }
+  const sub = escapeXml((host || String(url || '')).slice(0, 48));
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#334155"/>
+    </pattern>
+  </defs>
+  <rect width="960" height="600" fill="url(#bg)"/>
+  <rect width="960" height="600" fill="url(#dots)" opacity="0.55"/>
+  <rect x="48" y="48" width="864" height="504" rx="28" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="14 10" opacity="0.9"/>
+  <rect x="360" y="168" width="240" height="72" rx="14" fill="#1d4ed8" opacity="0.35"/>
+  <text x="480" y="214" text-anchor="middle" fill="#93c5fd" font-family="system-ui,-apple-system,sans-serif" font-size="28" font-weight="700">${escapeXml(label)}</text>
+  <text x="480" y="300" text-anchor="middle" fill="#e2e8f0" font-family="system-ui,-apple-system,sans-serif" font-size="36" font-weight="600">${t}</text>
+  <text x="480" y="348" text-anchor="middle" fill="#94a3b8" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="22">${sub}</text>
+  <text x="480" y="500" text-anchor="middle" fill="#64748b" font-family="system-ui,-apple-system,sans-serif" font-size="18">no live screenshot</text>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+async function attachManualPlaceholders(items) {
+  for (const item of items) {
+    if (item.kind === 'group') {
+      for (const m of item.tabs || []) {
+        const dataUrl = manualPlaceholderDataUrl({
+          title: m.title || titleFromUrl(m.url),
+          url: m.url,
+        });
+        const flags = await Media.putFromDataUrls(
+          Media.mediaKeyMember(item.id, m.id),
+          dataUrl,
+          dataUrl
+        );
+        m.hasThumb = flags.hasThumb;
+        m.hasSnap = flags.hasSnap;
+        m.thumbnail = '';
+        m.snapshot = '';
+      }
+    } else {
+      const dataUrl = manualPlaceholderDataUrl({
+        title: item.title || titleFromUrl(item.url),
+        url: item.url,
+      });
+      const flags = await Media.putFromDataUrls(Media.mediaKeyTab(item.id), dataUrl, dataUrl);
+      item.hasThumb = flags.hasThumb;
+      item.hasSnap = flags.hasSnap;
+      item.thumbnail = '';
+      item.snapshot = '';
+    }
+  }
+}
+
+/** Normalize a line into https URL or null. */
+function parseUrlLine(line) {
+  let s = String(line || '').trim();
+  if (!s || s.startsWith('#')) return null;
+  // strip common markdown link wrappers: [text](url) or <url>
+  const md = s.match(/^\[[^\]]*\]\((https?:\/\/[^)\s]+)\)\s*$/i);
+  if (md) s = md[1];
+  const angle = s.match(/^<(https?:\/\/[^>]+)>\s*$/i);
+  if (angle) s = angle[1];
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) {
+    s = `https://${s}`;
+  }
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (!u.hostname) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse bulk text into parked items.
+ * #GROUP:Name ... #GROUP:Name wraps members into a group titled Name.
+ */
+function parseUrlTextToItems(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  const items = [];
+  let openGroup = null; // { title, tabs: [] }
+  let skipped = 0;
+  const now = Date.now();
+
+  const flushGroup = () => {
+    if (!openGroup) return;
+    if (openGroup.tabs.length) {
+      items.push(
+        normalizeGroupItem({
+          kind: 'group',
+          title: openGroup.title,
+          color: 'grey',
+          savedAt: now,
+          tabs: openGroup.tabs,
+        })
+      );
+    }
+    openGroup = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    const gMatch = line.match(/^#GROUP:\s*(.+?)\s*$/i);
+    if (gMatch) {
+      const name = gMatch[1].trim();
+      if (!name) {
+        skipped++;
+        continue;
+      }
+      if (openGroup && openGroup.title.toLowerCase() === name.toLowerCase()) {
+        flushGroup();
+      } else {
+        if (openGroup) flushGroup();
+        openGroup = { title: name, tabs: [] };
+      }
+      continue;
+    }
+
+    const url = parseUrlLine(line);
+    if (!url) {
+      skipped++;
+      continue;
+    }
+    const member = {
+      id: crypto.randomUUID(),
+      url,
+      title: titleFromUrl(url),
+      favIconUrl: '',
+      pinned: false,
+      note: '',
+      tags: [],
+      hasThumb: false,
+      hasSnap: false,
+    };
+    if (openGroup) {
+      member.indexInGroup = openGroup.tabs.length;
+      openGroup.tabs.push(member);
+    } else {
+      items.push(
+        normalizeTabItem({
+          kind: 'tab',
+          url,
+          title: titleFromUrl(url),
+          savedAt: now,
+        })
+      );
+    }
+  }
+  if (openGroup) flushGroup();
+  return { items, skipped };
+}
+
+async function createFromUrlText(text) {
+  const { items, skipped } = parseUrlTextToItems(text);
+  if (!items.length) {
+    return { ok: false, error: 'empty', added: 0, skipped };
+  }
+  await attachManualPlaceholders(items);
+  const existing = await getParkedItems();
+  await setParkedItems([...existing, ...items]);
+  return { ok: true, added: items.length, skipped };
 }
 
 async function batchUpdateItems(ids, patch) {
@@ -1938,7 +2179,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case 'EXPORT_BACKUP':
         return exportBackup(message.mode === 'full' ? 'full' : 'lite');
       case 'IMPORT_BACKUP':
-        return importBackup(message.backup);
+        return importBackup(message.backup, {
+          mode: message.mode === 'append' ? 'append' : 'replace',
+        });
+      case 'CREATE_FROM_URL_TEXT':
+        return createFromUrlText(message.text || '');
       case 'AUTO_BACKUP_RUN':
         return runAutoBackup({ force: Boolean(message.force), reason: message.reason || 'manual' });
       case 'AUTO_BACKUP_SYNC_ALARMS': {

@@ -2,7 +2,7 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
-**Current version:** see `manifest.json` (currently **2.8.0**).
+**Current version:** see `manifest.json` (currently **2.9.1**).
 
 ## Performance (v2.6.x)
 
@@ -65,6 +65,9 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 - **Stack:** iOS-style merge by dropping a card on another’s center
 - Floating settings / tags / help (click outside to close)
 - Backup: lite JSON (no images) or full ZIP with binary media
+- **Restore modes:** replace (overwrite all) or append (add without deleting existing cards)
+- **Manual add:** paste URLs (one per line); wrap with `#GROUP:Name` … `#GROUP:Name` to create a group (placeholder thumb/snapshot so manual cards are obvious)
+- **Group restore:** confirms before restoring an entire group
 - **Auto backup (Downloads subfolder):** Settings → set a subfolder under Chrome’s download directory (default `TabWall-Backups`); scheduled and/or after data changes; keep 1–99 copies. Full absolute path appears after the first successful backup.
 - **Dedup (human-decided):** exact URL on save → keep both / replace / cancel; toolbar **掃描重複** scans the wall
 

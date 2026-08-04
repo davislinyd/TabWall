@@ -1993,13 +1993,32 @@
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px">
             <button type="button" class="btn primary" id="exportLiteBtn" data-i18n="exportLite">匯出精簡</button>
             <button type="button" class="btn" id="exportFullBtn" data-i18n="exportFull">匯出完整 ZIP</button>
-            <button type="button" class="btn" id="importBackupBtn" data-i18n="importBackup">還原</button>
+            <button type="button" class="btn" id="importBackupBtn" data-i18n="importBackup">還原（覆蓋）</button>
+            <button type="button" class="btn" id="importAppendBtn" data-i18n="importAppend">匯入（附加）</button>
             <input id="importBackupFile" type="file" accept="application/json,.json,application/zip,.zip" hidden />
           </div>
           <p id="backupStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
           <p class="hint" style="margin:6px 0 0;font-size:11px;color:var(--muted)" data-i18n="backupHint">
-            精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。
+            精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。
           </p>
+        </div>
+        <div class="settings-block" id="manualAddBlock">
+          <h2 data-i18n="manualAddTitle">手動新增卡片</h2>
+          <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="manualAddHint">
+            每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。
+          </p>
+          <textarea
+            id="manualAddText"
+            rows="8"
+            spellcheck="false"
+            data-i18n-placeholder="manualAddPh"
+            placeholder="https://example.com/a&#10;https://example.com/b&#10;&#10;#GROUP:工作&#10;https://jira.example.com&#10;https://wiki.example.com&#10;#GROUP:工作"
+            style="width:100%;box-sizing:border-box;border:1px solid var(--border);background:var(--input-bg);color:var(--text);border-radius:10px;padding:10px 12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;resize:vertical;min-height:120px;line-height:1.45"
+          ></textarea>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <button type="button" class="btn primary" id="manualAddBtn" data-i18n="manualAddSubmit">新增卡片</button>
+          </div>
+          <p id="manualAddStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
         </div>
         <div class="settings-block" id="autoBackupBlock">
           <h2 data-i18n="autoBackupTitle">自動備份</h2>
@@ -2160,7 +2179,10 @@
         </div>
         <div class="help-section">
           <h3 data-i18n="helpBackupTitle">備份</h3>
-          <p data-i18n="helpBackupBody">精簡 JSON 不含截圖、檔案小；完整 ZIP 含圖片二進位。還原會覆寫現有資料。</p>
+          <p data-i18n="helpBackupBody">
+            精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱
+            包住多行可建群組。
+          </p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpLimitsTitle">限制</h3>

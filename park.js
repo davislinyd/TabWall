@@ -215,13 +215,24 @@ const I18N = {
     exportBackup: '匯出備份',
     exportLite: '匯出精簡',
     exportFull: '匯出完整 ZIP',
-    importBackup: '還原',
+    importBackup: '還原（覆蓋）',
+    importAppend: '匯入（附加）',
     backupExported: '已匯出備份',
     backupImported: '已還原備份',
+    backupAppended: '已附加 {n} 項',
     backupConfirm: '還原將覆寫目前所有 TabWall 資料，確定？',
+    backupAppendConfirm: '將附加備份中的項目到現有清單（不刪除現有卡片），確定？',
     backupInvalid: '備份檔無效',
     backupError: '操作失敗',
-    backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。',
+    backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。',
+    manualAddTitle: '手動新增卡片',
+    manualAddHint: '每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。',
+    manualAddPh:
+      'https://example.com/a\nhttps://example.com/b\n\n#GROUP:工作\nhttps://jira.example.com\nhttps://wiki.example.com\n#GROUP:工作',
+    manualAddSubmit: '新增卡片',
+    manualAddOk: '已新增 {n} 項',
+    manualAddEmpty: '沒有可新增的 URL',
+    manualAddSkipped: '（略過 {n} 行）',
     autoBackupTitle: '自動備份',
     autoBackupHint: '寫入 Chrome「下載」目錄下的子資料夾（不上傳）。首次備份成功後會顯示完整路徑。',
     autoBackupEnable: '啟用自動備份',
@@ -306,13 +317,14 @@ const I18N = {
     helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
     helpBackupTitle: '備份',
     helpBackupBody:
-      '精簡 JSON 不含截圖、檔案小；完整 ZIP 含圖片二進位。還原會覆寫現有資料。自動備份寫入 Chrome 下載目錄的子資料夾（可定時／變更後）。',
+      '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾。',
     helpLimitsTitle: '限制',
     helpLimitsBody:
       'chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。',
     groupTabs: '{n} 個分頁',
     unnamedGroup: '未命名群組',
     restoreGroup: '還原整個 Group',
+    restoreGroupConfirm: '還原群組「{title}」（{n} 個分頁）？',
     expandGroup: '展開成員',
     collapseGroup: '收合',
     afterSaveGroupTitle: '儲存 Group 後',
@@ -411,13 +423,24 @@ const I18N = {
     exportBackup: 'Export',
     exportLite: 'Export lite',
     exportFull: 'Export full ZIP',
-    importBackup: 'Restore',
+    importBackup: 'Restore (replace)',
+    importAppend: 'Import (append)',
     backupExported: 'Backup exported',
     backupImported: 'Backup restored',
+    backupAppended: 'Appended {n} item(s)',
     backupConfirm: 'Restore will overwrite all current TabWall data. Continue?',
+    backupAppendConfirm: 'Append backup items to the current wall (existing cards stay). Continue?',
     backupInvalid: 'Invalid backup file',
     backupError: 'Operation failed',
-    backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images.',
+    backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images. Replace overwrites all; append only adds.',
+    manualAddTitle: 'Add cards manually',
+    manualAddHint: 'One URL per line. Wrap lines with #GROUP:Name to create a group.',
+    manualAddPh:
+      'https://example.com/a\nhttps://example.com/b\n\n#GROUP:Work\nhttps://jira.example.com\nhttps://wiki.example.com\n#GROUP:Work',
+    manualAddSubmit: 'Add cards',
+    manualAddOk: 'Added {n} item(s)',
+    manualAddEmpty: 'No valid URLs to add',
+    manualAddSkipped: '({n} line(s) skipped)',
     autoBackupTitle: 'Auto backup',
     autoBackupHint:
       'Writes under your Chrome Downloads folder (never uploaded). Full path appears after the first successful backup.',
@@ -503,13 +526,14 @@ const I18N = {
     helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
     helpBackupTitle: 'Backup',
     helpBackupBody:
-      'Lite JSON omits screenshots (small). Full ZIP stores binary images. Restore overwrites current data. Auto-backup writes under your Chrome Downloads subfolder (on a schedule and/or after changes).',
+      'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder.',
     helpLimitsTitle: 'Limits',
     helpLimitsBody:
       'chrome:// pages cannot be captured or injected into. TabWall storage is not Chrome’s built-in Save group.',
     groupTabs: '{n} tabs',
     unnamedGroup: 'Untitled group',
     restoreGroup: 'Restore entire group',
+    restoreGroupConfirm: 'Restore group “{title}” ({n} tabs)?',
     expandGroup: 'Show members',
     collapseGroup: 'Collapse',
     afterSaveGroupTitle: 'After saving a group',
@@ -569,8 +593,14 @@ const tagAddBtn = document.getElementById('tagAddBtn');
 const exportLiteBtn = document.getElementById('exportLiteBtn');
 const exportFullBtn = document.getElementById('exportFullBtn');
 const importBackupBtn = document.getElementById('importBackupBtn');
+const importAppendBtn = document.getElementById('importAppendBtn');
 const importBackupFile = document.getElementById('importBackupFile');
 const backupStatus = document.getElementById('backupStatus');
+const manualAddText = document.getElementById('manualAddText');
+const manualAddBtn = document.getElementById('manualAddBtn');
+const manualAddStatus = document.getElementById('manualAddStatus');
+/** @type {'replace' | 'append'} */
+let pendingImportMode = 'replace';
 const autoBackupEnabledEl = document.getElementById('autoBackupEnabled');
 const autoBackupSubfolderEl = document.getElementById('autoBackupSubfolder');
 const autoBackupLocationLabelEl = document.getElementById('autoBackupLocationLabel');
@@ -2950,6 +2980,13 @@ exportFullBtn.addEventListener('click', async () => {
 
 importBackupBtn.addEventListener('click', () => {
   backupStatus.textContent = '';
+  pendingImportMode = 'replace';
+  importBackupFile.click();
+});
+
+importAppendBtn?.addEventListener('click', () => {
+  backupStatus.textContent = '';
+  pendingImportMode = 'append';
   importBackupFile.click();
 });
 
@@ -2957,7 +2994,10 @@ importBackupFile.addEventListener('change', async () => {
   const file = importBackupFile.files && importBackupFile.files[0];
   importBackupFile.value = '';
   if (!file) return;
-  if (!window.confirm(t('backupConfirm'))) return;
+  const mode = pendingImportMode === 'append' ? 'append' : 'replace';
+  pendingImportMode = 'replace';
+  const confirmMsg = mode === 'append' ? t('backupAppendConfirm') : t('backupConfirm');
+  if (!window.confirm(confirmMsg)) return;
 
   try {
     let backup;
@@ -2973,7 +3013,7 @@ importBackupFile.addEventListener('change', async () => {
     } else {
       backup = JSON.parse(await file.text());
     }
-    const res = await sendMessage({ type: 'IMPORT_BACKUP', backup });
+    const res = await sendMessage({ type: 'IMPORT_BACKUP', backup, mode });
     if (!res.ok) {
       backupStatus.textContent = t('backupInvalid');
       return;
@@ -2982,10 +3022,36 @@ importBackupFile.addEventListener('change', async () => {
     syncSettingsUi();
     await loadList();
     if (tagsBox.classList.contains('open')) await refreshTagManager();
-    backupStatus.textContent = t('backupImported');
+    if (mode === 'append') {
+      backupStatus.textContent = t('backupAppended', { n: res.added != null ? res.added : '—' });
+    } else {
+      backupStatus.textContent = t('backupImported');
+    }
   } catch (err) {
     console.warn(err);
     backupStatus.textContent = t('backupInvalid');
+  }
+});
+
+manualAddBtn?.addEventListener('click', async () => {
+  if (manualAddStatus) manualAddStatus.textContent = '';
+  const text = manualAddText ? manualAddText.value : '';
+  const res = await sendMessage({ type: 'CREATE_FROM_URL_TEXT', text });
+  if (!res?.ok) {
+    if (manualAddStatus) {
+      const skip =
+        res?.skipped > 0 ? ` ${t('manualAddSkipped', { n: res.skipped })}` : '';
+      manualAddStatus.textContent = t('manualAddEmpty') + skip;
+    }
+    return;
+  }
+  await loadList();
+  if (tagsBox.classList.contains('open')) await refreshTagManager();
+  if (manualAddText) manualAddText.value = '';
+  if (manualAddStatus) {
+    let msg = t('manualAddOk', { n: res.added });
+    if (res.skipped > 0) msg += ` ${t('manualAddSkipped', { n: res.skipped })}`;
+    manualAddStatus.textContent = msg;
   }
 });
 
@@ -3392,12 +3458,18 @@ membersDelete.addEventListener('click', async () => {
 
 async function restoreItem(id) {
   const item = allTabs.find((t) => t.id === id);
+  if (item?.kind === 'group') {
+    const n = (item.tabs || []).length;
+    const title = itemTitle(item);
+    if (!window.confirm(t('restoreGroupConfirm', { title, n }))) return;
+  }
   const type = item?.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
   const res = await sendMessage({ type, id });
   if (res.ok) {
     allTabs = allTabs.filter((t) => t.id !== id);
     if (expandedId === id) closeLightbox();
     if (editingId === id) closeEditBox();
+    if (membersGroupId === id) closeMembersBox();
     renderGrid();
   }
 }
