@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   locale: 'zh',
   defaultViewMode: 'cards',
   openWithSearchFocus: false,
+  searchRegex: false,
   shortcuts: {
     'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
     'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
@@ -116,7 +117,17 @@ function mediaKeyForMember(groupId, memberId) {
 const I18N = {
   zh: {
     appName: 'TabWall',
-    searchPh: '搜尋 tab name、URL、domain、note、tag',
+    searchPh: '搜尋…  空格/&& 且、|| 或（不分大小寫）',
+    searchRegexPh: '正規表示式（預設 i；或 /pattern/flags）',
+    searchRegexTitle: '正規表示式搜尋',
+    searchPhTag: '搜尋 tag…',
+    searchPhNote: '搜尋 note…',
+    searchPhTagRegex: 'Regex 搜尋 tag…',
+    searchPhNoteRegex: 'Regex 搜尋 note…',
+    searchScopeClear: '清除欄位模式（或 all + Tab）',
+    helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
+    helpShortcutSearchMode:
+      '搜尋框輸入 t/tag、n/note、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
     cards: '卡片',
     list: '列表',
     sort: '排序',
@@ -268,7 +279,17 @@ const I18N = {
   },
   en: {
     appName: 'TabWall',
-    searchPh: 'Search name, URL, domain, note, tag',
+    searchPh: 'Search…  space/&& AND, || OR (case-insensitive)',
+    searchRegexPh: 'Regex (default i; or /pattern/flags)',
+    searchRegexTitle: 'Regex search',
+    searchPhTag: 'Search tags…',
+    searchPhNote: 'Search notes…',
+    searchPhTagRegex: 'Regex search tags…',
+    searchPhNoteRegex: 'Regex search notes…',
+    searchScopeClear: 'Clear field mode (or all + Tab)',
+    helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
+    helpShortcutSearchMode:
+      'In search, type t/tag, n/note, or re/regex then Tab; all + Tab resets scope',
     cards: 'Cards',
     list: 'List',
     sort: 'Sort',
@@ -424,6 +445,9 @@ const I18N = {
 const gridEl = document.getElementById('grid');
 const countEl = document.getElementById('count');
 const searchEl = document.getElementById('search');
+const searchRegexBtn = document.getElementById('searchRegexBtn');
+const searchWrap = document.getElementById('searchWrap');
+const searchScopeChip = document.getElementById('searchScopeChip');
 const settingsEl = document.getElementById('settings');
 const floatBackdrop = document.getElementById('floatBackdrop');
 const settingsBox = document.getElementById('settingsBox');
@@ -516,6 +540,10 @@ const membersDelete = document.getElementById('membersDelete');
 /** @type {Array<any>} */
 let allTabs = []; // ParkItem[] (kind tab | group)
 let query = '';
+/** @type {'all'|'tag'|'note'} */
+let searchScope = 'all';
+/** @type {{ raw: string, re: RegExp|null, err: string|null }} */
+let compiledSearch = { raw: '', re: null, err: null };
 /** @type {typeof DEFAULT_SETTINGS} */
 let settings = { ...DEFAULT_SETTINGS };
 /** @type {string|null} */
@@ -615,6 +643,7 @@ function applyI18n() {
   if (typeof updateBatchBar === 'function') updateBatchBar();
   if (typeof refreshShortcutButtons === 'function') refreshShortcutButtons();
   if (typeof refreshChromeCommandLabels === 'function') refreshChromeCommandLabels();
+  if (typeof syncSearchRegexUi === 'function') syncSearchRegexUi();
 }
 
 function requestHostClose() {
@@ -748,10 +777,24 @@ async function loadSettings() {
   return merged;
 }
 
+/** Skip our own storage writes in onChanged (avoids full UI rebuild echo). */
+let suppressSettingsOnChanged = false;
+let suppressSettingsTimer = null;
+
 async function saveSettings(partial) {
   if (partial.cardCols != null) partial.cardCols = clampCols(partial.cardCols);
   settings = { ...settings, ...partial };
-  await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+  suppressSettingsOnChanged = true;
+  if (suppressSettingsTimer) clearTimeout(suppressSettingsTimer);
+  try {
+    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+  } finally {
+    // chrome.storage.onChanged may fire async after set resolves
+    suppressSettingsTimer = setTimeout(() => {
+      suppressSettingsOnChanged = false;
+      suppressSettingsTimer = null;
+    }, 50);
+  }
   return settings;
 }
 
@@ -838,6 +881,7 @@ function syncSettingsUi() {
   applyI18n();
   refreshShortcutButtons();
   refreshChromeCommandLabels();
+  syncSearchRegexUi();
 }
 
 let recordingAction = null;
@@ -1543,10 +1587,222 @@ closeBtn.title = t('close');
 
 // ─── Search ────────────────────────────────────────────────────────
 
-searchEl.addEventListener('input', () => {
-  query = searchEl.value.trim().toLowerCase();
+function searchPlaceholderText() {
+  const re = Boolean(settings.searchRegex);
+  if (searchScope === 'tag') return re ? t('searchPhTagRegex') : t('searchPhTag');
+  if (searchScope === 'note') return re ? t('searchPhNoteRegex') : t('searchPhNote');
+  return re ? t('searchRegexPh') : t('searchPh');
+}
+
+function syncSearchScopeUi() {
+  const scoped = searchScope === 'tag' || searchScope === 'note';
+  if (searchWrap) searchWrap.classList.toggle('has-scope', scoped);
+  if (searchScopeChip) {
+    if (scoped) {
+      searchScopeChip.hidden = false;
+      searchScopeChip.textContent = searchScope;
+      searchScopeChip.title = t('searchScopeClear');
+      searchScopeChip.setAttribute('aria-label', t('searchScopeClear'));
+    } else {
+      searchScopeChip.hidden = true;
+      searchScopeChip.textContent = '';
+    }
+  }
+  if (searchEl) searchEl.placeholder = searchPlaceholderText();
+}
+
+function syncSearchRegexUi() {
+  const on = Boolean(settings.searchRegex);
+  if (searchRegexBtn) {
+    searchRegexBtn.classList.toggle('active', on);
+    searchRegexBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    searchRegexBtn.title = t('searchRegexTitle');
+  }
+  if (searchEl) {
+    searchEl.placeholder = searchPlaceholderText();
+    if (!on) {
+      searchEl.classList.remove('invalid');
+      searchEl.removeAttribute('aria-invalid');
+      searchEl.removeAttribute('title');
+    } else {
+      applySearchCompileState();
+    }
+  }
+  syncSearchScopeUi();
+}
+
+function clearSearchInputKeepFocus() {
+  if (!searchEl) return;
+  searchEl.value = '';
+  query = '';
+  compiledSearch = { raw: '', re: null, err: null };
+  searchEl.classList.remove('invalid');
+  searchEl.removeAttribute('aria-invalid');
+  searchEl.removeAttribute('title');
+  searchEl.focus();
+}
+
+/** Empty query matches everything — no need to rebuild the photo wall. */
+function refilterSearchIfNeeded() {
+  if (query) renderGrid();
+  else updateSavedBadge();
+}
+
+async function applySearchTabToken(token) {
+  if (token === 'tag' || token === 'note' || token === 'all') {
+    searchScope = token === 'all' ? 'all' : token;
+    clearSearchInputKeepFocus();
+    syncSearchScopeUi();
+    refilterSearchIfNeeded();
+    return;
+  }
+  if (token === 'regex') {
+    if (!settings.searchRegex) {
+      await saveSettings({ searchRegex: true });
+    }
+    clearSearchInputKeepFocus();
+    syncSearchRegexUi();
+    refilterSearchIfNeeded();
+  }
+}
+
+/** Initial search mode: scope=all, regex off. Returns true if anything changed. */
+async function resetSearchModesToDefault() {
+  let changed = false;
+  if (searchScope !== 'all') {
+    searchScope = 'all';
+    changed = true;
+  }
+  if (settings.searchRegex) {
+    await saveSettings({ searchRegex: false });
+    changed = true;
+  }
+  if (changed) {
+    syncSearchRegexUi();
+    refilterSearchIfNeeded();
+  }
+  return changed;
+}
+
+function isSearchInCustomMode() {
+  return searchScope !== 'all' || Boolean(settings.searchRegex);
+}
+
+function parseRegexInput(raw) {
+  const s = String(raw || '');
+  // /pattern/flags form (flags: only gimsuyv)
+  const m = /^\/((?:\\\/|[^/])+)\/([gimsuyv]*)$/.exec(s);
+  if (m) {
+    return { source: m[1], flags: m[2] || 'i' };
+  }
+  return { source: s, flags: 'i' };
+}
+
+function compileSearchQuery(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) {
+    compiledSearch = { raw: '', re: null, err: null };
+    return compiledSearch;
+  }
+  if (!settings.searchRegex) {
+    compiledSearch = { raw: trimmed, re: null, err: null };
+    return compiledSearch;
+  }
+  try {
+    const { source, flags } = parseRegexInput(trimmed);
+    // Drop sticky/global to avoid lastIndex side effects on repeated .test
+    const safeFlags = flags.replace(/[gy]/g, '');
+    const re = new RegExp(source, safeFlags || 'i');
+    compiledSearch = { raw: trimmed, re, err: null };
+  } catch (err) {
+    compiledSearch = { raw: trimmed, re: null, err: String(err?.message || err) };
+  }
+  return compiledSearch;
+}
+
+function applySearchCompileState() {
+  if (!searchEl) return;
+  if (!settings.searchRegex || !query) {
+    searchEl.classList.remove('invalid');
+    searchEl.removeAttribute('aria-invalid');
+    if (settings.searchRegex) searchEl.removeAttribute('title');
+    return;
+  }
+  const { err } = compileSearchQuery(query);
+  if (err) {
+    searchEl.classList.add('invalid');
+    searchEl.setAttribute('aria-invalid', 'true');
+    searchEl.title = err;
+  } else {
+    searchEl.classList.remove('invalid');
+    searchEl.removeAttribute('aria-invalid');
+    searchEl.removeAttribute('title');
+  }
+}
+
+function setSearchQueryFromInput() {
+  // Keep original case for regex; plain mode lowercases inside matchesQuery
+  query = searchEl.value.trim();
+  compileSearchQuery(query);
+  applySearchCompileState();
   renderGrid();
+}
+
+searchEl.addEventListener('input', () => {
+  setSearchQueryFromInput();
 });
+
+const SEARCH_TAB_TOKENS = {
+  t: 'tag',
+  tag: 'tag',
+  n: 'note',
+  note: 'note',
+  re: 'regex',
+  regex: 'regex',
+  a: 'all',
+  all: 'all',
+};
+
+searchEl.addEventListener('keydown', (e) => {
+  // Empty field + Backspace/Delete → leave tag/note/regex back to default
+  if (
+    (e.key === 'Backspace' || e.key === 'Delete') &&
+    searchEl.value === '' &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.altKey
+  ) {
+    if (!isSearchInCustomMode()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resetSearchModesToDefault();
+    return;
+  }
+
+  if (e.key !== 'Tab' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+  const token = searchEl.value.trim().toLowerCase();
+  const mode = SEARCH_TAB_TOKENS[token];
+  if (!mode) return;
+  e.preventDefault();
+  e.stopPropagation();
+  applySearchTabToken(mode);
+});
+
+if (searchScopeChip) {
+  searchScopeChip.addEventListener('click', () => {
+    applySearchTabToken('all');
+  });
+}
+
+if (searchRegexBtn) {
+  searchRegexBtn.addEventListener('click', async () => {
+    await saveSettings({ searchRegex: !settings.searchRegex });
+    syncSearchRegexUi();
+    compileSearchQuery(query);
+    applySearchCompileState();
+    refilterSearchIfNeeded();
+  });
+}
 
 document.addEventListener('keydown', (e) => {
   if (e.key === '/' && !isTypingTarget(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -1595,12 +1851,22 @@ document.addEventListener('keydown', (e) => {
       setSelectMode(false);
       return;
     }
-    if (document.activeElement === searchEl && searchEl.value) {
-      searchEl.value = '';
-      query = '';
-      renderGrid();
-      searchEl.blur();
-      return;
+    if (document.activeElement === searchEl) {
+      if (searchEl.value) {
+        searchEl.value = '';
+        query = '';
+        compiledSearch = { raw: '', re: null, err: null };
+        searchEl.classList.remove('invalid');
+        searchEl.removeAttribute('aria-invalid');
+        searchEl.removeAttribute('title');
+        renderGrid();
+        searchEl.blur();
+        return;
+      }
+      if (isSearchInCustomMode()) {
+        resetSearchModesToDefault();
+        return;
+      }
     }
     requestHostClose();
     return;
@@ -1743,8 +2009,25 @@ function getVisibleTabs() {
   );
 }
 
-function matchesQuery(item, q) {
-  if (!q) return true;
+function itemHaystack(item, scope = searchScope) {
+  if (scope === 'tag') {
+    if (item.kind === 'group') {
+      const parts = [...(Array.isArray(item.tags) ? item.tags : [])];
+      for (const m of item.tabs || []) {
+        if (Array.isArray(m.tags)) parts.push(...m.tags);
+      }
+      return parts.join(' ');
+    }
+    return (Array.isArray(item.tags) ? item.tags : []).join(' ');
+  }
+  if (scope === 'note') {
+    if (item.kind === 'group') {
+      const parts = [item.note || ''];
+      for (const m of item.tabs || []) parts.push(m.note || '');
+      return parts.join(' ');
+    }
+    return item.note || '';
+  }
   if (item.kind === 'group') {
     const parts = [
       item.title || '',
@@ -1760,18 +2043,55 @@ function matchesQuery(item, q) {
         ...(Array.isArray(m.tags) ? m.tags : [])
       );
     }
-    return parts.join(' ').toLowerCase().includes(q);
+    return parts.join(' ');
   }
-  const hay = [
+  return [
     item.title || '',
     item.url || '',
     domainOf(item.url),
     item.note || '',
     ...(Array.isArray(item.tags) ? item.tags : []),
-  ]
-    .join(' ')
-    .toLowerCase();
-  return hay.includes(q);
+  ].join(' ');
+}
+
+/**
+ * Plain search: case-insensitive.
+ * - `||`  OR between groups
+ * - `&&` or whitespace  AND within a group
+ * Examples: `grafana||zabbix`  |  `grafana zabbix`  |  `grafana&&zabbix`
+ */
+function matchesPlainQuery(hay, q) {
+  const hayLower = String(hay).toLowerCase();
+  const raw = String(q || '').trim();
+  if (!raw) return true;
+
+  const orGroups = raw
+    .split(/\s*\|\|\s*/)
+    .map((g) => g.trim())
+    .filter(Boolean);
+  if (!orGroups.length) return true;
+
+  return orGroups.some((group) => {
+    const terms = group
+      .split(/\s*&&\s*|\s+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (!terms.length) return true;
+    return terms.every((term) => hayLower.includes(term));
+  });
+}
+
+function matchesQuery(item, q) {
+  if (!q) return true;
+  const hay = itemHaystack(item);
+  if (settings.searchRegex) {
+    const compiled =
+      compiledSearch.raw === q ? compiledSearch : compileSearchQuery(q);
+    if (!compiled.re) return false;
+    compiled.re.lastIndex = 0;
+    return compiled.re.test(hay);
+  }
+  return matchesPlainQuery(hay, q);
 }
 
 function itemTitle(item) {
@@ -3378,9 +3698,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.parkedTabs || changes.parkedItems) scheduleLoadList();
   if (changes.settings) {
+    // Ignore echo from this page's saveSettings (was rebuilding entire grid + thumbs)
+    if (suppressSettingsOnChanged) return;
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
     settings.cardCols = clampCols(settings.cardCols);
     settings.shortcuts = normalizeShortcuts(settings.shortcuts);
+    settings.searchRegex = Boolean(settings.searchRegex);
     syncSettingsUi();
     renderGrid();
   }

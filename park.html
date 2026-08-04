@@ -114,13 +114,22 @@
         background: var(--input-bg);
         color: var(--text);
         border-radius: 10px;
-        padding: 9px 12px 9px 34px;
+        padding: 9px 40px 9px 34px;
         font-size: 14px;
         outline: none;
       }
 
       #search:focus {
         border-color: var(--accent);
+      }
+
+      #search.invalid {
+        border-color: #f87171;
+      }
+
+      #search.invalid:focus {
+        border-color: #f87171;
+        box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
       }
 
       .search-icon {
@@ -131,6 +140,57 @@
         color: var(--muted);
         font-size: 13px;
         pointer-events: none;
+      }
+
+      .search-wrap.has-scope .search-icon {
+        display: none;
+      }
+
+      .search-wrap.has-scope #search {
+        padding-left: 52px;
+      }
+
+      #searchScopeChip {
+        display: none;
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
+        padding: 2px 7px;
+        border-radius: 6px;
+        border: 1px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.3;
+        cursor: pointer;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      .search-wrap.has-scope #searchScopeChip {
+        display: inline-block;
+      }
+
+      #searchRegexBtn {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        min-width: 32px;
+        padding: 4px 6px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-weight: 700;
+        line-height: 1;
+        border-radius: 8px;
+      }
+
+      #searchRegexBtn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
       }
 
       .toolbar-controls {
@@ -1544,16 +1604,33 @@
         <h1 data-i18n="appName">TabWall</h1>
         <span id="count">—</span>
       </div>
-      <div class="search-wrap">
+      <div class="search-wrap" id="searchWrap">
         <span class="search-icon">/</span>
+        <button
+          type="button"
+          id="searchScopeChip"
+          hidden
+          title="清除欄位模式"
+          aria-label="清除欄位模式"
+        ></button>
         <input
           id="search"
           type="search"
           data-i18n-placeholder="searchPh"
-          placeholder="搜尋 tab name、URL、domain、note、tag"
+          placeholder="搜尋…  空格/&& 且、|| 或（不分大小寫）"
           autocomplete="off"
           spellcheck="false"
         />
+        <button
+          type="button"
+          class="btn"
+          id="searchRegexBtn"
+          data-i18n-title="searchRegexTitle"
+          title="正規表示式搜尋"
+          aria-pressed="false"
+        >
+          .*
+        </button>
       </div>
       <div class="toolbar-controls">
         <div class="seg" role="group" data-i18n-aria="viewMode" aria-label="檢視模式">
@@ -1778,6 +1855,8 @@
             <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — <span data-i18n="helpShortcutGroup">儲存目前 Tab Group</span></li>
             <li><kbd>Alt</kbd>+<kbd>O</kbd> — <span data-i18n="helpShortcutWall">開關 TabWall 照片牆</span></li>
             <li><kbd>/</kbd> — <span data-i18n="helpShortcutSearch">聚焦搜尋</span></li>
+            <li><kbd>.*</kbd> — <span data-i18n="helpShortcutRegex">切換正規表示式搜尋（支援 /pattern/flags）</span></li>
+            <li><kbd>t</kbd>/<kbd>tag</kbd>、<kbd>n</kbd>/<kbd>note</kbd>、<kbd>re</kbd>/<kbd>regex</kbd> + <kbd>Tab</kbd> — <span data-i18n="helpShortcutSearchMode">進入 tag／note／regex 模式；all + Tab 回全搜</span></li>
             <li><kbd>Esc</kbd> — <span data-i18n="helpShortcutEsc">關閉浮層／照片牆</span></li>
             <li><kbd>←</kbd> <kbd>→</kbd> — <span data-i18n="helpShortcutArrows">快照上一張／下一張</span></li>
           </ul>

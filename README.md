@@ -19,6 +19,12 @@ Defaults (customizable in **Settings → 快捷鍵**):
 | `Option/Alt+Shift+G` | Park current Tab Group |
 | `Option/Alt+O` | Toggle TabWall |
 | `/` | Focus search |
+| Plain search | `||` = OR, space/`&&` = AND (case-insensitive) |
+| `t`/`tag` + Tab | Search tags only |
+| `n`/`note` + Tab | Search notes only |
+| `re`/`regex` + Tab | Enable regex mode |
+| `all` + Tab | Reset field scope |
+| `.*` (toolbar) | Toggle regex search (`/pattern/flags` supported) |
 | `Esc` | Close panels / TabWall |
 | `←` / `→` | Prev / next snapshot |
 
