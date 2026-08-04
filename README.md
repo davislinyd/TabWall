@@ -2,7 +2,7 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
-**Current version:** see `manifest.json` (currently **2.6.3**).
+**Current version:** see `manifest.json` (currently **2.8.0**).
 
 ## Performance (v2.6.x)
 
@@ -22,6 +22,7 @@ Defaults (customizable in **Settings → 快捷鍵** / in-page rebinding):
 | `Option/Alt+Shift+G` | Park current Tab Group |
 | `Option/Alt+O` | Toggle TabWall |
 | `/` | Focus search |
+| `⌥⌘S` (Mac) / `Alt+Win+S` | Open / close settings (in-wall) |
 | Plain search | `||` = OR, space/`&&` = AND (case-insensitive) |
 | `t`/`tag` + Tab | Search tags only |
 | `n`/`note` + Tab | Search notes only |
@@ -64,25 +65,39 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 - **Stack:** iOS-style merge by dropping a card on another’s center
 - Floating settings / tags / help (click outside to close)
 - Backup: lite JSON (no images) or full ZIP with binary media
+- **Auto backup (Downloads subfolder):** Settings → set a subfolder under Chrome’s download directory (default `TabWall-Backups`); scheduled and/or after data changes; keep 1–99 copies. Full absolute path appears after the first successful backup.
 - **Dedup (human-decided):** exact URL on save → keep both / replace / cancel; toolbar **掃描重複** scans the wall
 
 ## Install
+
+### From this repo (developers)
 
 1. `chrome://extensions` → Developer mode  
 2. Load unpacked → this folder  
 3. After code changes: **Reload** the extension on that page  
 4. If shortcuts or in-page hotkeys misbehave: also **refresh** the target website tab  
 
+### Share with others (recommended)
+
+1. Build a clean zip: `./scripts/pack.sh` → `dist/TabWall-<version>.zip`  
+2. Send the zip only (not the whole git tree)  
+3. Recipient: unzip → Developer mode → **Load unpacked** → select the **unzipped folder**  
+4. Rebuild the zip after every code change before sharing again (see **`AGENTS.md`**)
+
 ## Development
 
 - Use Chrome’s native **Reload** on the extension card after a coherent set of edits (do not reload mid-broken file).
 - UI-only tweaks to `park.html` / `park.js` still need extension reload (or re-open the wall) so the iframe picks up new scripts.
-- Versioning rules for agents: see **`AGENTS.md`** (patch +1 for small fixes).
+- Versioning and packaging rules: **`AGENTS.md`** (patch +1 for small fixes; re-pack clean zip for sharing).
 
 ## Files
 
 ```text
-manifest.json   background.js   mediaDb.js   hotkeys.js
-content.js      park.html       park.js      icons/
-AGENTS.md       README.md
+manifest.json   background.js   mediaDb.js   backupBuild.js
+hotkeys.js      content.js      park.html    park.js
+icons/
+AGENTS.md       README.md       docs/privacy.md
 ```
+
+Privacy policy (for Chrome Web Store URL): `docs/privacy.md`  
+Store listing drafts are **not** in git — keep them only under local `private/` (gitignored).

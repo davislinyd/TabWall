@@ -18,7 +18,8 @@ When you use TabWall, it may process:
 | Tab / group URLs, titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
 | Notes and tags you enter | Search and organize parked items | `chrome.storage.local` |
 | Screenshots (thumbnails and full snapshots) | Photo-wall preview | IndexedDB on your device |
-| Extension settings (theme, sort, shortcuts, etc.) | Preferences | `chrome.storage.local` |
+| Extension settings (theme, sort, shortcuts, auto-backup prefs, etc.) | Preferences | `chrome.storage.local` |
+| Auto-backup preferences (subfolder name, schedule) | Control local automatic backups under your download directory | `chrome.storage.local` |
 | Temporary in-memory state | Conflict UI, drag/stack, open panels | Memory only (cleared when the service worker or page unloads) |
 
 The extension reads the **currently active tab** (and related group tabs when you park a Tab Group) to capture a screenshot and save metadata. It does this only when **you** trigger park / related actions (or use your configured keyboard shortcuts).
@@ -43,10 +44,14 @@ If you install from the Chrome Web Store, **Google** may process data under Goog
 | `scripting` | Inject a lightweight script so keyboard shortcuts and the photo-wall overlay work on normal web pages |
 | Host access (`<all_urls>` / broad site access) | Allow shortcuts and the overlay on general websites; capture the visible tab when you park (subject to browser limits on special pages such as `chrome://`) |
 | `storage`, `unlimitedStorage` | Save many parked items and screenshot blobs locally |
+| `alarms` | Schedule optional automatic local backups |
+| `downloads` | Write optional automatic backups into a subfolder of your browser download directory; the absolute path is known after each download completes |
 
 ## Local backups you export
 
 If you use **export / import backup**, files are created or read **on your machine** at your request. TabWall does not upload those files. Protect exported backups as you would any file that may contain URLs and page images.
+
+If you enable **auto backup**, TabWall writes backup files into a **subfolder of your browser’s download directory** (name configurable in settings). Automatic backups are not uploaded to TabWall servers. You can change the subfolder name or disable auto backup at any time.
 
 ## Data retention and deletion
 
@@ -77,9 +82,10 @@ TabWall 將分頁與 Tab Group 暫存為本機照片牆。
 
 僅在您操作（含快捷鍵）時讀取目前分頁／群組以截圖與儲存。  
 您匯出的備份檔僅在本機產生；請自行妥善保管。  
-解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料。
+若啟用**自動備份**，會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。  
+解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。
 
-權限用途：分頁／群組讀寫與還原、在一般網頁注入快捷鍵與浮層、本機大量儲存截圖。  
+權限用途：分頁／群組讀寫與還原、在一般網頁注入快捷鍵與浮層、本機大量儲存截圖、可選的下載目錄自動備份。  
 若透過 Chrome 線上應用程式商店安裝，Google 可能依其政策處理商店相關資料，與 TabWall 本機儲存無關。
 
 隱私疑問請透過商店刊登的支援管道或專案公開儲存庫 Issues 聯絡發行者。

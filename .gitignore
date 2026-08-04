@@ -1,5 +1,7 @@
 .DS_Store
 .ai/
+dist/
+private/
 *.log
 .idea/
 .vscode/

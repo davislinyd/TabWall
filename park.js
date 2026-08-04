@@ -9,6 +9,20 @@ const DEFAULT_SHORTCUTS = {
   'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
 };
 
+const DEFAULT_AUTO_BACKUP = {
+  enabled: false,
+  mode: 'lite',
+  onChange: true,
+  intervalUnit: 'hour',
+  intervalValue: 24,
+  maxKeep: 5,
+  subfolder: 'TabWall-Backups',
+  folderPath: '',
+  lastSuccessAt: 0,
+  lastError: '',
+  dirtyAt: 0,
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
@@ -27,7 +41,10 @@ const DEFAULT_SETTINGS = {
     'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
     'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
   },
+  autoBackup: { ...DEFAULT_AUTO_BACKUP },
 };
+
+const Build = self.TabWallBackupBuild;
 
 const GROUP_COLORS = {
   grey: '#9ca3af',
@@ -205,6 +222,31 @@ const I18N = {
     backupInvalid: '備份檔無效',
     backupError: '操作失敗',
     backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。',
+    autoBackupTitle: '自動備份',
+    autoBackupHint: '寫入 Chrome「下載」目錄下的子資料夾（不上傳）。首次備份成功後會顯示完整路徑。',
+    autoBackupEnable: '啟用自動備份',
+    autoBackupSubfolder: '下載子資料夾',
+    autoBackupSubfolderHint: '相對於瀏覽器下載目錄，例如 TabWall-Backups',
+    autoBackupLocation: '備份位置',
+    autoBackupLocationPending: '下載目錄 / {subfolder}（首次備份後顯示完整路徑）',
+    autoBackupMode: '格式',
+    autoBackupModeLite: '精簡 JSON',
+    autoBackupModeFull: '完整 ZIP',
+    autoBackupOnChange: '資料變更後也備份',
+    autoBackupEvery: '每',
+    autoBackupUnitMinute: '分鐘',
+    autoBackupUnitHour: '小時',
+    autoBackupUnitDay: '天',
+    autoBackupMaxKeep: '最多保留',
+    autoBackupMaxKeepUnit: '份',
+    autoBackupNow: '立即備份',
+    autoBackupShowFolder: '開啟下載資料夾',
+    autoBackupRunning: '備份中…',
+    autoBackupOk: '已備份：{file}',
+    autoBackupLastOk: '上次成功：{time}',
+    autoBackupErrWrite: '寫入失敗',
+    autoBackupErrExport: '匯出失敗',
+    autoBackupErrDisabled: '請先啟用自動備份，或使用立即備份',
     selectMode: '選擇',
     selectModeOn: '選擇中',
     batchRestore: '還原',
@@ -223,6 +265,7 @@ const I18N = {
     helpShortcutGroup: '儲存目前 Tab Group',
     helpShortcutWall: '開關 TabWall 照片牆',
     helpShortcutSearch: '聚焦搜尋',
+    helpShortcutSettings: '開啟／關閉設定（⌥⌘S）',
     helpShortcutEsc: '關閉浮層／照片牆',
     helpShortcutArrows: '快照上一張／下一張',
     shortcutsTitle: '快捷鍵',
@@ -262,7 +305,8 @@ const I18N = {
     helpSelectTitle: '複選',
     helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
     helpBackupTitle: '備份',
-    helpBackupBody: '精簡 JSON 不含截圖、檔案小；完整 ZIP 含圖片二進位。還原會覆寫現有資料。',
+    helpBackupBody:
+      '精簡 JSON 不含截圖、檔案小；完整 ZIP 含圖片二進位。還原會覆寫現有資料。自動備份寫入 Chrome 下載目錄的子資料夾（可定時／變更後）。',
     helpLimitsTitle: '限制',
     helpLimitsBody:
       'chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。',
@@ -374,6 +418,32 @@ const I18N = {
     backupInvalid: 'Invalid backup file',
     backupError: 'Operation failed',
     backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images.',
+    autoBackupTitle: 'Auto backup',
+    autoBackupHint:
+      'Writes under your Chrome Downloads folder (never uploaded). Full path appears after the first successful backup.',
+    autoBackupEnable: 'Enable auto backup',
+    autoBackupSubfolder: 'Downloads subfolder',
+    autoBackupSubfolderHint: 'Relative to the browser download directory, e.g. TabWall-Backups',
+    autoBackupLocation: 'Backup location',
+    autoBackupLocationPending: 'Downloads / {subfolder} (full path after first backup)',
+    autoBackupMode: 'Format',
+    autoBackupModeLite: 'Lite JSON',
+    autoBackupModeFull: 'Full ZIP',
+    autoBackupOnChange: 'Also backup after data changes',
+    autoBackupEvery: 'Every',
+    autoBackupUnitMinute: 'minutes',
+    autoBackupUnitHour: 'hours',
+    autoBackupUnitDay: 'days',
+    autoBackupMaxKeep: 'Keep at most',
+    autoBackupMaxKeepUnit: 'copies',
+    autoBackupNow: 'Backup now',
+    autoBackupShowFolder: 'Open Downloads folder',
+    autoBackupRunning: 'Backing up…',
+    autoBackupOk: 'Saved: {file}',
+    autoBackupLastOk: 'Last success: {time}',
+    autoBackupErrWrite: 'Write failed',
+    autoBackupErrExport: 'Export failed',
+    autoBackupErrDisabled: 'Enable auto backup first, or use Backup now',
     selectMode: 'Select',
     selectModeOn: 'Selecting',
     batchRestore: 'Restore',
@@ -392,6 +462,7 @@ const I18N = {
     helpShortcutGroup: 'Park current Tab Group',
     helpShortcutWall: 'Toggle TabWall overlay',
     helpShortcutSearch: 'Focus search',
+    helpShortcutSettings: 'Open / close settings (⌥⌘S / Alt+Win+S)',
     helpShortcutEsc: 'Close panels / TabWall',
     helpShortcutArrows: 'Previous / next snapshot',
     shortcutsTitle: 'Shortcuts',
@@ -432,7 +503,7 @@ const I18N = {
     helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
     helpBackupTitle: 'Backup',
     helpBackupBody:
-      'Lite JSON omits screenshots (small). Full ZIP stores binary images. Restore overwrites current data.',
+      'Lite JSON omits screenshots (small). Full ZIP stores binary images. Restore overwrites current data. Auto-backup writes under your Chrome Downloads subfolder (on a schedule and/or after changes).',
     helpLimitsTitle: 'Limits',
     helpLimitsBody:
       'chrome:// pages cannot be captured or injected into. TabWall storage is not Chrome’s built-in Save group.',
@@ -500,6 +571,16 @@ const exportFullBtn = document.getElementById('exportFullBtn');
 const importBackupBtn = document.getElementById('importBackupBtn');
 const importBackupFile = document.getElementById('importBackupFile');
 const backupStatus = document.getElementById('backupStatus');
+const autoBackupEnabledEl = document.getElementById('autoBackupEnabled');
+const autoBackupSubfolderEl = document.getElementById('autoBackupSubfolder');
+const autoBackupLocationLabelEl = document.getElementById('autoBackupLocationLabel');
+const autoBackupOnChangeEl = document.getElementById('autoBackupOnChange');
+const autoBackupIntervalValueEl = document.getElementById('autoBackupIntervalValue');
+const autoBackupIntervalUnitEl = document.getElementById('autoBackupIntervalUnit');
+const autoBackupMaxKeepEl = document.getElementById('autoBackupMaxKeep');
+const autoBackupNowBtn = document.getElementById('autoBackupNowBtn');
+const autoBackupShowFolderBtn = document.getElementById('autoBackupShowFolderBtn');
+const autoBackupStatusEl = document.getElementById('autoBackupStatus');
 const selectModeBtn = document.getElementById('selectModeBtn');
 const batchBar = document.getElementById('batchBar');
 const batchCount = document.getElementById('batchCount');
@@ -781,6 +862,84 @@ function formatShortcut(combo) {
   return parts.join(navigator.platform?.includes('Mac') ? '' : '+');
 }
 
+function clampInt(n, min, max, fallback) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(v)));
+}
+
+function sanitizeSubfolder(raw) {
+  let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/');
+  s = s.replace(/^\/+/, '');
+  const parts = s
+    .split('/')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== '.' && p !== '..')
+    .map((p) => p.replace(/[?%*:|"<>]/g, '_').replace(/^\.+/, ''));
+  s = parts.join('/');
+  if (!s) s = 'TabWall-Backups';
+  if (s.length > 180) s = s.slice(0, 180);
+  return s;
+}
+
+function normalizeIntervalUnit(u) {
+  if (u === 'minute' || u === 'minutes') return 'minute';
+  if (u === 'day' || u === 'days') return 'day';
+  return 'hour';
+}
+
+function intervalValueBounds(unit) {
+  if (unit === 'minute') return { min: 10, max: 1440, fallback: 60 };
+  if (unit === 'day') return { min: 1, max: 7, fallback: 1 };
+  return { min: 1, max: 168, fallback: 24 };
+}
+
+function normalizeAutoBackup(raw) {
+  const o = raw && typeof raw === 'object' ? raw : {};
+  let unit = normalizeIntervalUnit(o.intervalUnit);
+  let valueRaw = o.intervalValue;
+  if (valueRaw == null && o.intervalHours != null) {
+    unit = 'hour';
+    valueRaw = o.intervalHours;
+  }
+  const bounds = intervalValueBounds(unit);
+  const subfolder = sanitizeSubfolder(
+    o.subfolder != null && String(o.subfolder).trim() !== ''
+      ? o.subfolder
+      : o.folderName || 'TabWall-Backups'
+  );
+  return {
+    enabled: Boolean(o.enabled),
+    mode: o.mode === 'full' ? 'full' : 'lite',
+    onChange: o.onChange !== false,
+    intervalUnit: unit,
+    intervalValue: clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
+    maxKeep: clampInt(o.maxKeep, 1, 99, 5),
+    subfolder,
+    folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
+    lastSuccessAt: Number(o.lastSuccessAt) || 0,
+    lastError: typeof o.lastError === 'string' ? o.lastError : '',
+    dirtyAt: Number(o.dirtyAt) || 0,
+  };
+}
+
+function autoBackupIntervalMinutes(ab) {
+  const n = normalizeAutoBackup(ab);
+  if (n.intervalUnit === 'minute') return n.intervalValue;
+  if (n.intervalUnit === 'day') return n.intervalValue * 24 * 60;
+  return n.intervalValue * 60;
+}
+
+function syncIntervalInputBounds() {
+  if (!autoBackupIntervalValueEl || !autoBackupIntervalUnitEl) return;
+  const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl.value);
+  const bounds = intervalValueBounds(unit);
+  autoBackupIntervalValueEl.min = String(bounds.min);
+  autoBackupIntervalValueEl.max = String(bounds.max);
+  const v = clampInt(autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
+  autoBackupIntervalValueEl.value = String(v);
+}
+
 async function loadSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
   const merged = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
@@ -788,6 +947,10 @@ async function loadSettings() {
   if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'cards';
   if (merged.locale !== 'en') merged.locale = 'zh';
   merged.shortcuts = normalizeShortcuts(merged.shortcuts);
+  merged.autoBackup = normalizeAutoBackup({
+    ...DEFAULT_AUTO_BACKUP,
+    ...(merged.autoBackup || {}),
+  });
   return merged;
 }
 
@@ -797,11 +960,21 @@ let suppressSettingsTimer = null;
 
 async function saveSettings(partial) {
   if (partial.cardCols != null) partial.cardCols = clampCols(partial.cardCols);
+  if (partial.autoBackup) {
+    partial = {
+      ...partial,
+      autoBackup: normalizeAutoBackup({ ...settings.autoBackup, ...partial.autoBackup }),
+    };
+  }
   settings = { ...settings, ...partial };
+  if (settings.autoBackup) settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
   suppressSettingsOnChanged = true;
   if (suppressSettingsTimer) clearTimeout(suppressSettingsTimer);
   try {
     await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+    if (partial.autoBackup) {
+      sendMessage({ type: 'AUTO_BACKUP_SYNC_ALARMS' }).catch(() => {});
+    }
   } finally {
     // chrome.storage.onChanged may fire async after set resolves
     suppressSettingsTimer = setTimeout(() => {
@@ -892,10 +1065,74 @@ function syncSettingsUi() {
     ) || settingsEl.querySelector('input[name="defaultViewMode"][value="cards"]');
   if (viewRadio) viewRadio.checked = true;
 
+  syncAutoBackupUi();
+
   applyI18n();
   refreshShortcutButtons();
   refreshChromeCommandLabels();
   syncSearchRegexUi();
+}
+
+function autoBackupErrorText(code) {
+  switch (code) {
+    case 'export_failed':
+    case 'build_failed':
+      return t('autoBackupErrExport');
+    case 'write_failed':
+    case 'busy':
+      return t('autoBackupErrWrite');
+    case 'disabled':
+      return t('autoBackupErrDisabled');
+    default:
+      return code ? t('autoBackupErrWrite') : '';
+  }
+}
+
+function syncAutoBackupUi() {
+  const ab = normalizeAutoBackup(settings.autoBackup);
+  settings.autoBackup = ab;
+  if (autoBackupEnabledEl) autoBackupEnabledEl.checked = ab.enabled;
+  if (autoBackupOnChangeEl) autoBackupOnChangeEl.checked = ab.onChange;
+  if (autoBackupIntervalUnitEl) autoBackupIntervalUnitEl.value = ab.intervalUnit;
+  if (autoBackupIntervalValueEl) {
+    autoBackupIntervalValueEl.value = String(ab.intervalValue);
+    syncIntervalInputBounds();
+    autoBackupIntervalValueEl.value = String(ab.intervalValue);
+  }
+  if (autoBackupMaxKeepEl) autoBackupMaxKeepEl.value = String(ab.maxKeep);
+  if (autoBackupSubfolderEl && document.activeElement !== autoBackupSubfolderEl) {
+    autoBackupSubfolderEl.value = ab.subfolder;
+  }
+  const modeRadio =
+    settingsEl.querySelector(`input[name="autoBackupMode"][value="${ab.mode}"]`) ||
+    settingsEl.querySelector('input[name="autoBackupMode"][value="lite"]');
+  if (modeRadio) modeRadio.checked = true;
+
+  if (autoBackupLocationLabelEl) {
+    if (ab.folderPath) {
+      autoBackupLocationLabelEl.textContent = ab.folderPath;
+      autoBackupLocationLabelEl.style.color = 'var(--text)';
+      autoBackupLocationLabelEl.setAttribute('title', ab.folderPath);
+    } else {
+      autoBackupLocationLabelEl.textContent = t('autoBackupLocationPending', {
+        subfolder: ab.subfolder || 'TabWall-Backups',
+      });
+      autoBackupLocationLabelEl.style.color = 'var(--muted)';
+      autoBackupLocationLabelEl.removeAttribute('title');
+    }
+  }
+
+  if (autoBackupStatusEl) {
+    const parts = [];
+    if (ab.lastSuccessAt) {
+      parts.push(t('autoBackupLastOk', { time: formatSavedAt(ab.lastSuccessAt) }));
+    }
+    if (ab.lastError) {
+      const errText = autoBackupErrorText(ab.lastError);
+      if (errText) parts.push(errText);
+    }
+    autoBackupStatusEl.textContent = parts.join(' · ');
+  }
 }
 
 let recordingAction = null;
@@ -1056,6 +1293,54 @@ async function initSettingsUi() {
     input.addEventListener('change', async () => {
       if (input.checked) await saveSettings({ restoreGroupIn: input.value });
     });
+  });
+
+  // Auto backup controls
+  autoBackupEnabledEl?.addEventListener('change', async () => {
+    await saveSettings({ autoBackup: { enabled: autoBackupEnabledEl.checked } });
+    syncAutoBackupUi();
+  });
+  autoBackupOnChangeEl?.addEventListener('change', async () => {
+    await saveSettings({ autoBackup: { onChange: autoBackupOnChangeEl.checked } });
+  });
+  autoBackupSubfolderEl?.addEventListener('change', async () => {
+    const subfolder = sanitizeSubfolder(autoBackupSubfolderEl.value);
+    autoBackupSubfolderEl.value = subfolder;
+    await saveSettings({ autoBackup: { subfolder } });
+    syncAutoBackupUi();
+  });
+  autoBackupIntervalUnitEl?.addEventListener('change', async () => {
+    const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl.value);
+    const bounds = intervalValueBounds(unit);
+    const value = clampInt(autoBackupIntervalValueEl?.value, bounds.min, bounds.max, bounds.fallback);
+    if (autoBackupIntervalValueEl) autoBackupIntervalValueEl.value = String(value);
+    syncIntervalInputBounds();
+    await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
+  });
+  autoBackupIntervalValueEl?.addEventListener('change', async () => {
+    const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl?.value || 'hour');
+    const bounds = intervalValueBounds(unit);
+    const value = clampInt(autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
+    autoBackupIntervalValueEl.value = String(value);
+    await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
+  });
+  autoBackupMaxKeepEl?.addEventListener('change', async () => {
+    const maxKeep = clampInt(autoBackupMaxKeepEl.value, 1, 99, 5);
+    autoBackupMaxKeepEl.value = String(maxKeep);
+    await saveSettings({ autoBackup: { maxKeep } });
+  });
+  settingsEl.querySelectorAll('input[name="autoBackupMode"]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      if (input.checked) {
+        await saveSettings({ autoBackup: { mode: input.value === 'full' ? 'full' : 'lite' } });
+      }
+    });
+  });
+  autoBackupNowBtn?.addEventListener('click', async () => {
+    await runLocalAutoBackup({ force: true });
+  });
+  autoBackupShowFolderBtn?.addEventListener('click', async () => {
+    await sendMessage({ type: 'AUTO_BACKUP_SHOW_FOLDER' });
   });
 
   settingsEl.querySelectorAll('input[name="theme"]').forEach((input) => {
@@ -1476,6 +1761,7 @@ function openSettingsBox() {
   syncFloatBackdrop();
   refreshShortcutButtons();
   refreshChromeCommandLabels();
+  syncAutoBackupUi();
 }
 
 function closeSettingsBox(sync = true) {
@@ -1834,6 +2120,21 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     focusSearch();
+    return;
+  }
+
+  // ⌥⌘S (Mac) / Alt+Win+S — toggle settings; works even when search is focused
+  if (
+    e.altKey &&
+    e.metaKey &&
+    !e.ctrlKey &&
+    !recordingAction &&
+    (e.key === 's' || e.key === 'S' || e.code === 'KeyS')
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (settingsBox.classList.contains('open')) closeSettingsBox();
+    else openSettingsBox();
     return;
   }
 
@@ -2574,231 +2875,48 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function dataUrlToBytes(dataUrl) {
-  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-    return null;
-  }
-  const comma = dataUrl.indexOf(',');
-  if (comma < 0) return null;
-  const b64 = dataUrl.slice(comma + 1);
+let autoBackupLocalRunning = false;
+
+/** Immediate / catch-up auto backup via background downloads. */
+async function runLocalAutoBackup({ force = false } = {}) {
+  if (autoBackupLocalRunning) return { ok: false, error: 'busy' };
+  const ab = normalizeAutoBackup(settings.autoBackup);
+  if (!force && !ab.enabled) return { ok: false, error: 'disabled' };
+
+  autoBackupLocalRunning = true;
+  if (autoBackupStatusEl) autoBackupStatusEl.textContent = t('autoBackupRunning');
   try {
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-function bytesToDataUrl(bytes, mime = 'image/jpeg') {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return `data:${mime};base64,${btoa(binary)}`;
-}
-
-/** CRC32 for ZIP */
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(buf) {
-  let c = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function u16(n) {
-  const b = new Uint8Array(2);
-  b[0] = n & 0xff;
-  b[1] = (n >>> 8) & 0xff;
-  return b;
-}
-
-function u32(n) {
-  const b = new Uint8Array(4);
-  b[0] = n & 0xff;
-  b[1] = (n >>> 8) & 0xff;
-  b[2] = (n >>> 16) & 0xff;
-  b[3] = (n >>> 24) & 0xff;
-  return b;
-}
-
-function concatBytes(parts) {
-  const len = parts.reduce((s, p) => s + p.length, 0);
-  const out = new Uint8Array(len);
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  return out;
-}
-
-/** Minimal ZIP (STORE only) — good for already-compressed JPEGs */
-function zipStore(files) {
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-  for (const f of files) {
-    const nameBytes = new TextEncoder().encode(f.name);
-    const data = f.data;
-    const crc = crc32(data);
-    const local = concatBytes([
-      u32(0x04034b50),
-      u16(20),
-      u16(0),
-      u16(0),
-      u16(0),
-      u16(0),
-      u32(crc),
-      u32(data.length),
-      u32(data.length),
-      u16(nameBytes.length),
-      u16(0),
-      nameBytes,
-      data,
-    ]);
-    const central = concatBytes([
-      u32(0x02014b50),
-      u16(20),
-      u16(20),
-      u16(0),
-      u16(0),
-      u16(0),
-      u16(0),
-      u32(crc),
-      u32(data.length),
-      u32(data.length),
-      u16(nameBytes.length),
-      u16(0),
-      u16(0),
-      u16(0),
-      u16(0),
-      u32(0),
-      u32(offset),
-      nameBytes,
-    ]);
-    locals.push(local);
-    centrals.push(central);
-    offset += local.length;
-  }
-  const centralDir = concatBytes(centrals);
-  const end = concatBytes([
-    u32(0x06054b50),
-    u16(0),
-    u16(0),
-    u16(files.length),
-    u16(files.length),
-    u32(centralDir.length),
-    u32(offset),
-    u16(0),
-  ]);
-  return concatBytes([...locals, centralDir, end]);
-}
-
-function readU16(v, o) {
-  return v[o] | (v[o + 1] << 8);
-}
-function readU32(v, o) {
-  return (v[o] | (v[o + 1] << 8) | (v[o + 2] << 16) | (v[o + 3] << 24)) >>> 0;
-}
-
-function unzipStore(buf) {
-  const view = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  const files = {};
-  let o = 0;
-  while (o + 30 <= view.length) {
-    const sig = readU32(view, o);
-    if (sig !== 0x04034b50) break;
-    const method = readU16(view, o + 8);
-    const compSize = readU32(view, o + 18);
-    const nameLen = readU16(view, o + 26);
-    const extraLen = readU16(view, o + 28);
-    const name = new TextDecoder().decode(view.subarray(o + 30, o + 30 + nameLen));
-    const dataStart = o + 30 + nameLen + extraLen;
-    const data = view.subarray(dataStart, dataStart + compSize);
-    if (method === 0) files[name] = data.slice();
-    o = dataStart + compSize;
-  }
-  return files;
-}
-
-function collectMediaFiles(items) {
-  const files = [];
-  const clone = JSON.parse(JSON.stringify(items));
-  for (const item of clone) {
-    if (item.kind === 'group') {
-      for (const m of item.tabs || []) {
-        const tBytes = dataUrlToBytes(m.thumbnail);
-        const sBytes = dataUrlToBytes(m.snapshot);
-        if (tBytes) {
-          const path = `media/${item.id}_${m.id}_thumb.jpg`;
-          files.push({ name: path, data: tBytes });
-          m.thumbnail = path;
-        } else m.thumbnail = '';
-        if (sBytes) {
-          const path = `media/${item.id}_${m.id}_snap.jpg`;
-          files.push({ name: path, data: sBytes });
-          m.snapshot = path;
-        } else m.snapshot = '';
+    const res = await sendMessage({
+      type: 'AUTO_BACKUP_RUN',
+      force: true,
+      reason: force ? 'manual' : 'local',
+    });
+    settings = await loadSettings();
+    syncAutoBackupUi();
+    if (res?.ok) {
+      if (autoBackupStatusEl) {
+        autoBackupStatusEl.textContent = t('autoBackupOk', {
+          file: res.filename || res.absoluteFile || ab.subfolder,
+        });
       }
-    } else {
-      const tBytes = dataUrlToBytes(item.thumbnail);
-      const sBytes = dataUrlToBytes(item.snapshot);
-      if (tBytes) {
-        const path = `media/${item.id}_thumb.jpg`;
-        files.push({ name: path, data: tBytes });
-        item.thumbnail = path;
-      } else item.thumbnail = '';
-      if (sBytes) {
-        const path = `media/${item.id}_snap.jpg`;
-        files.push({ name: path, data: sBytes });
-        item.snapshot = path;
-      } else item.snapshot = '';
+      return res;
     }
+    const err = res?.error || 'write_failed';
+    if (autoBackupStatusEl) autoBackupStatusEl.textContent = autoBackupErrorText(err);
+    return { ok: false, error: err };
+  } finally {
+    autoBackupLocalRunning = false;
   }
-  return { items: clone, files };
 }
 
-function rehydrateMedia(items, zipFiles) {
-  const get = (path) => {
-    if (!path || typeof path !== 'string') return '';
-    if (path.startsWith('data:')) return path;
-    const bytes = zipFiles[path];
-    if (!bytes) return '';
-    return bytesToDataUrl(bytes);
-  };
-  return items.map((item) => {
-    if (item.kind === 'group') {
-      return {
-        ...item,
-        tabs: (item.tabs || []).map((m) => ({
-          ...m,
-          thumbnail: get(m.thumbnail),
-          snapshot: get(m.snapshot),
-        })),
-      };
-    }
-    return {
-      ...item,
-      thumbnail: get(item.thumbnail),
-      snapshot: get(item.snapshot),
-    };
-  });
-}
-
-function stamp() {
-  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+async function maybeCatchUpAutoBackup() {
+  const ab = normalizeAutoBackup(settings.autoBackup);
+  if (!ab.enabled) return;
+  const dueDirty = ab.onChange && ab.dirtyAt > 0;
+  const intervalMs = Math.max(10, autoBackupIntervalMinutes(ab)) * 60 * 1000;
+  const dueSchedule = !ab.lastSuccessAt || Date.now() - ab.lastSuccessAt >= intervalMs;
+  if (!dueDirty && !dueSchedule) return;
+  await runLocalAutoBackup({ force: false });
 }
 
 exportLiteBtn.addEventListener('click', async () => {
@@ -2808,10 +2926,8 @@ exportLiteBtn.addEventListener('click', async () => {
     backupStatus.textContent = t('backupError');
     return;
   }
-  downloadBlob(
-    new Blob([JSON.stringify(res.backup, null, 2)], { type: 'application/json' }),
-    `tabwall-backup-lite-${stamp()}.json`
-  );
+  const { blob, filename } = Build.buildLiteBlob(res.backup, { auto: false });
+  downloadBlob(blob, filename);
   backupStatus.textContent = t('backupExported');
 });
 
@@ -2823,17 +2939,8 @@ exportFullBtn.addEventListener('click', async () => {
     return;
   }
   try {
-    const { items, files } = collectMediaFiles(res.backup.parkedItems || []);
-    const meta = {
-      ...res.backup,
-      version: 3,
-      media: 'zip',
-      parkedItems: items,
-      parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...r }) => r),
-    };
-    const jsonBytes = new TextEncoder().encode(JSON.stringify(meta));
-    const zip = zipStore([{ name: 'backup.json', data: jsonBytes }, ...files]);
-    downloadBlob(new Blob([zip], { type: 'application/zip' }), `tabwall-backup-full-${stamp()}.zip`);
+    const { blob, filename } = Build.buildFullZipBlob(res.backup, { auto: false });
+    downloadBlob(blob, filename);
     backupStatus.textContent = t('backupExported');
   } catch (err) {
     console.warn(err);
@@ -2856,12 +2963,12 @@ importBackupFile.addEventListener('change', async () => {
     let backup;
     if (file.name.endsWith('.zip') || file.type === 'application/zip') {
       const buf = new Uint8Array(await file.arrayBuffer());
-      const zipFiles = unzipStore(buf);
+      const zipFiles = Build.unzipStore(buf);
       const jsonBytes = zipFiles['backup.json'];
       if (!jsonBytes) throw new Error('no backup.json');
       backup = JSON.parse(new TextDecoder().decode(jsonBytes));
       if (Array.isArray(backup.parkedItems)) {
-        backup.parkedItems = rehydrateMedia(backup.parkedItems, zipFiles);
+        backup.parkedItems = Build.rehydrateMedia(backup.parkedItems, zipFiles);
       }
     } else {
       backup = JSON.parse(await file.text());
@@ -2881,8 +2988,6 @@ importBackupFile.addEventListener('change', async () => {
     backupStatus.textContent = t('backupInvalid');
   }
 });
-
-// legacy alias removed — use exportLite / exportFull
 
 // ─── Multi-select ──────────────────────────────────────────────────
 
@@ -4148,14 +4253,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
     settings.cardCols = clampCols(settings.cardCols);
     settings.shortcuts = normalizeShortcuts(settings.shortcuts);
     settings.searchRegex = Boolean(settings.searchRegex);
+    settings.autoBackup = normalizeAutoBackup({
+      ...DEFAULT_AUTO_BACKUP,
+      ...(settings.autoBackup || {}),
+    });
     syncSettingsUi();
     renderGrid();
   }
 });
 
-initSettingsUi().then(() => {
+initSettingsUi().then(async () => {
   if (Media?.openDb) Media.openDb().catch(() => {});
-  loadList();
+  await loadList();
+  maybeCatchUpAutoBackup().catch(() => {});
   try {
     window.focus();
   } catch {

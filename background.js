@@ -2,9 +2,10 @@
  * TabWall — Service Worker
  * Meta in chrome.storage.local; images in IndexedDB (mediaDb.js)
  */
-importScripts('mediaDb.js');
+importScripts('mediaDb.js', 'backupBuild.js');
 
 const Media = self.TabWallMediaDB;
+const Build = self.TabWallBackupBuild;
 const STORAGE_TABS = 'parkedTabs'; // legacy
 const STORAGE_ITEMS = 'parkedItems';
 const SETTINGS_KEY = 'settings';
@@ -18,13 +19,33 @@ const DEFAULT_SHORTCUTS = {
   'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
 };
 
+const DEFAULT_AUTO_BACKUP = {
+  enabled: false,
+  mode: 'lite',
+  onChange: true,
+  intervalUnit: 'hour', // minute | hour | day
+  intervalValue: 24,
+  maxKeep: 5,
+  subfolder: 'TabWall-Backups', // under Chrome download directory
+  folderPath: '', // absolute dir after last successful backup
+  lastSuccessAt: 0,
+  lastError: '',
+  dirtyAt: 0,
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
   shortcuts: { ...DEFAULT_SHORTCUTS },
+  autoBackup: { ...DEFAULT_AUTO_BACKUP },
 };
+
+const AUTO_BACKUP_ALARM = 'tabwall-auto-backup-schedule';
+const AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
+
+let autoBackupRunning = false;
 
 /** Prevent double-fire from chrome.commands + page hotkeys */
 const actionLocks = new Map();
@@ -168,6 +189,7 @@ async function setParkedItems(items) {
     .filter((i) => i.kind === 'tab')
     .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
   await chrome.storage.local.set({ [STORAGE_TABS]: flatTabs });
+  await markAutoBackupDirty();
   return stored;
 }
 
@@ -229,12 +251,349 @@ async function ensureMediaMigration() {
 
 // ─── Settings / tags ───────────────────────────────────────────────
 
+function clampInt(n, min, max, fallback) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(v)));
+}
+
+function normalizeIntervalUnit(u) {
+  if (u === 'minute' || u === 'minutes') return 'minute';
+  if (u === 'day' || u === 'days') return 'day';
+  return 'hour';
+}
+
+function intervalValueBounds(unit) {
+  if (unit === 'minute') return { min: 10, max: 1440, fallback: 60 };
+  if (unit === 'day') return { min: 1, max: 7, fallback: 1 };
+  return { min: 1, max: 168, fallback: 24 };
+}
+
+/** Sanitize relative path under Chrome's download directory. */
+function sanitizeSubfolder(raw) {
+  let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/');
+  s = s.replace(/^\/+/, '');
+  const parts = s
+    .split('/')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== '.' && p !== '..')
+    .map((p) => p.replace(/[?%*:|"<>]/g, '_').replace(/^\.+/, ''));
+  s = parts.join('/');
+  if (!s) s = 'TabWall-Backups';
+  if (s.length > 180) s = s.slice(0, 180);
+  return s;
+}
+
+function normalizeAutoBackup(raw) {
+  const o = raw && typeof raw === 'object' ? raw : {};
+  let unit = normalizeIntervalUnit(o.intervalUnit);
+  // Migrate legacy intervalHours
+  let valueRaw = o.intervalValue;
+  if (valueRaw == null && o.intervalHours != null) {
+    unit = 'hour';
+    valueRaw = o.intervalHours;
+  }
+  const bounds = intervalValueBounds(unit);
+  // Prefer subfolder; legacy folderName was FS handle basename — use as subfolder hint if no subfolder
+  const subfolder = sanitizeSubfolder(
+    o.subfolder != null && String(o.subfolder).trim() !== ''
+      ? o.subfolder
+      : o.folderName || 'TabWall-Backups'
+  );
+  return {
+    enabled: Boolean(o.enabled),
+    mode: o.mode === 'full' ? 'full' : 'lite',
+    onChange: o.onChange !== false,
+    intervalUnit: unit,
+    intervalValue: clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
+    maxKeep: clampInt(o.maxKeep, 1, 99, 5),
+    subfolder,
+    folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
+    lastSuccessAt: Number(o.lastSuccessAt) || 0,
+    lastError: typeof o.lastError === 'string' ? o.lastError : '',
+    dirtyAt: Number(o.dirtyAt) || 0,
+  };
+}
+
+/** Period in minutes for chrome.alarms */
+function autoBackupIntervalMinutes(ab) {
+  const n = normalizeAutoBackup(ab);
+  if (n.intervalUnit === 'minute') return n.intervalValue;
+  if (n.intervalUnit === 'day') return n.intervalValue * 24 * 60;
+  return n.intervalValue * 60;
+}
+
+function dirnameOfLocalPath(filePath) {
+  if (!filePath || typeof filePath !== 'string') return '';
+  const normalized = filePath.replace(/[/\\]+$/, '');
+  const idx = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  if (idx <= 0) return '';
+  return normalized.slice(0, idx);
+}
+
+function waitForDownloadComplete(downloadId, timeoutMs = 180000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (err, item) => {
+      if (settled) return;
+      settled = true;
+      try {
+        chrome.downloads.onChanged.removeListener(onChanged);
+      } catch {
+        // ignore
+      }
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve(item || null);
+    };
+    const onChanged = (delta) => {
+      if (delta.id !== downloadId) return;
+      if (delta.state?.current === 'complete') {
+        chrome.downloads.search({ id: downloadId }, (items) => {
+          if (chrome.runtime.lastError) {
+            finish(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          finish(null, items && items[0] ? items[0] : null);
+        });
+      } else if (delta.state?.current === 'interrupted') {
+        finish(new Error(delta.error?.current || 'interrupted'));
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    chrome.downloads.search({ id: downloadId }, (items) => {
+      const it = items && items[0];
+      if (!it) return;
+      if (it.state === 'complete') finish(null, it);
+      else if (it.state === 'interrupted') finish(new Error(it.error || 'interrupted'));
+    });
+    const timer = setTimeout(() => finish(new Error('timeout')), timeoutMs);
+  });
+}
+
+async function downloadBlobAsFile(blob, relativePath) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const downloadId = await new Promise((resolve, reject) => {
+      chrome.downloads.download(
+        {
+          url,
+          filename: relativePath,
+          saveAs: false,
+          conflictAction: 'uniquify',
+        },
+        (id) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (id == null) {
+            reject(new Error('no_download_id'));
+            return;
+          }
+          resolve(id);
+        }
+      );
+    });
+    const item = await waitForDownloadComplete(downloadId);
+    return { downloadId, item, filename: item?.filename || '' };
+  } finally {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function pruneDownloadedAutoBackups(mode, keep) {
+  const keepN = Math.min(99, Math.max(1, Math.round(Number(keep) || 5)));
+  const prefix = mode === 'full' ? 'tabwall-auto-full-' : 'tabwall-auto-lite-';
+  let items = [];
+  try {
+    items = await chrome.downloads.search({
+      orderBy: ['-startTime'],
+      limit: 200,
+      exists: true,
+    });
+  } catch (err) {
+    console.warn('[TabWall] prune search failed:', err);
+    return;
+  }
+  const matched = (items || []).filter((it) => {
+    const base = String(it.filename || '')
+      .split(/[/\\]/)
+      .pop();
+    return base && base.startsWith(prefix);
+  });
+  // already newest-first from orderBy
+  const drop = matched.slice(keepN);
+  for (const it of drop) {
+    try {
+      await new Promise((r) => chrome.downloads.removeFile(it.id, () => r()));
+    } catch {
+      // ignore
+    }
+    try {
+      await new Promise((r) => chrome.downloads.erase({ id: it.id }, () => r()));
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function getSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
   const merged = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
   merged.shortcuts = normalizeShortcuts(merged.shortcuts);
+  merged.autoBackup = normalizeAutoBackup({
+    ...DEFAULT_AUTO_BACKUP,
+    ...(merged.autoBackup || {}),
+  });
   return merged;
 }
+
+async function patchAutoBackup(partial) {
+  const settings = await getSettings();
+  const autoBackup = normalizeAutoBackup({ ...settings.autoBackup, ...partial });
+  const next = { ...settings, autoBackup };
+  await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+  return autoBackup;
+}
+
+async function markAutoBackupDirty() {
+  try {
+    const settings = await getSettings();
+    const ab = settings.autoBackup;
+    if (!ab.enabled || !ab.onChange) return;
+    await patchAutoBackup({ dirtyAt: Date.now(), lastError: ab.lastError || '' });
+    // 0.5 min when allowed; Chrome may clamp to ≥1 min for store installs
+    await chrome.alarms.create(AUTO_BACKUP_ONCHANGE_ALARM, { delayInMinutes: 0.5 });
+  } catch (err) {
+    console.warn('[TabWall] markAutoBackupDirty failed:', err);
+  }
+}
+
+async function syncAutoBackupAlarms(autoBackup) {
+  const ab = normalizeAutoBackup(autoBackup);
+  await chrome.alarms.clear(AUTO_BACKUP_ALARM);
+  if (ab.enabled) {
+    const periodInMinutes = Math.max(10, autoBackupIntervalMinutes(ab));
+    await chrome.alarms.create(AUTO_BACKUP_ALARM, {
+      delayInMinutes: Math.min(periodInMinutes, 60),
+      periodInMinutes,
+    });
+  }
+}
+
+/**
+ * Auto backup → Chrome Downloads/{subfolder}/…
+ * Absolute folder path is taken from DownloadItem.filename after success.
+ * @param {{ force?: boolean, reason?: string }} opts
+ */
+async function runAutoBackup(opts = {}) {
+  const force = Boolean(opts.force);
+  if (autoBackupRunning) return { ok: false, error: 'busy' };
+  autoBackupRunning = true;
+  try {
+    const settings = await getSettings();
+    const ab = settings.autoBackup;
+    if (!force && !ab.enabled) return { ok: false, error: 'disabled' };
+    if (!force && opts.reason === 'onchange' && ab.onChange && !ab.dirtyAt) {
+      return { ok: true, skipped: true };
+    }
+
+    if (!Build || typeof Build.buildLiteBlob !== 'function') {
+      await patchAutoBackup({ lastError: 'build_failed' });
+      return { ok: false, error: 'build_failed' };
+    }
+
+    const mode = ab.mode === 'full' ? 'full' : 'lite';
+    const exported = await exportBackup(mode);
+    if (!exported?.ok || !exported.backup) {
+      await patchAutoBackup({ lastError: 'export_failed' });
+      return { ok: false, error: 'export_failed' };
+    }
+
+    let built;
+    try {
+      built =
+        mode === 'full'
+          ? Build.buildFullZipBlob(exported.backup, { auto: true })
+          : Build.buildLiteBlob(exported.backup, { auto: true });
+    } catch (err) {
+      console.warn('[TabWall] auto backup build failed:', err);
+      await patchAutoBackup({ lastError: 'build_failed' });
+      return { ok: false, error: 'build_failed' };
+    }
+
+    const subfolder = sanitizeSubfolder(ab.subfolder);
+    const relative = `${subfolder}/${built.filename}`;
+    let downloaded;
+    try {
+      downloaded = await downloadBlobAsFile(built.blob, relative);
+    } catch (err) {
+      console.warn('[TabWall] auto backup download failed:', err);
+      await patchAutoBackup({ lastError: 'write_failed' });
+      return { ok: false, error: 'write_failed', detail: String(err?.message || err) };
+    }
+
+    const folderPath = dirnameOfLocalPath(downloaded.filename) || ab.folderPath || '';
+    await patchAutoBackup({
+      lastSuccessAt: Date.now(),
+      lastError: '',
+      dirtyAt: 0,
+      subfolder,
+      folderPath,
+    });
+
+    try {
+      await pruneDownloadedAutoBackups(mode, ab.maxKeep);
+    } catch (err) {
+      console.warn('[TabWall] prune failed:', err);
+    }
+
+    return {
+      ok: true,
+      filename: built.filename,
+      folderPath,
+      absoluteFile: downloaded.filename,
+    };
+  } catch (err) {
+    console.warn('[TabWall] runAutoBackup failed:', err);
+    await patchAutoBackup({ lastError: 'write_failed' });
+    return { ok: false, error: 'write_failed' };
+  } finally {
+    autoBackupRunning = false;
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === AUTO_BACKUP_ALARM) {
+    runAutoBackup({ reason: 'schedule' }).catch(() => {});
+  } else if (alarm.name === AUTO_BACKUP_ONCHANGE_ALARM) {
+    runAutoBackup({ reason: 'onchange' }).catch(() => {});
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue;
+  const ab = normalizeAutoBackup(next?.autoBackup);
+  syncAutoBackupAlarms(ab).catch(() => {});
+});
+
+// Restore schedule after SW wake / install
+chrome.runtime.onInstalled.addListener(() => {
+  getSettings()
+    .then((s) => syncAutoBackupAlarms(s.autoBackup))
+    .catch(() => {});
+});
+chrome.runtime.onStartup?.addListener?.(() => {
+  getSettings()
+    .then((s) => syncAutoBackupAlarms(s.autoBackup))
+    .catch(() => {});
+});
 
 async function getTagCatalog() {
   const data = await chrome.storage.local.get(TAG_CATALOG_KEY);
@@ -1580,6 +1939,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return exportBackup(message.mode === 'full' ? 'full' : 'lite');
       case 'IMPORT_BACKUP':
         return importBackup(message.backup);
+      case 'AUTO_BACKUP_RUN':
+        return runAutoBackup({ force: Boolean(message.force), reason: message.reason || 'manual' });
+      case 'AUTO_BACKUP_SYNC_ALARMS': {
+        const settings = await getSettings();
+        await syncAutoBackupAlarms(settings.autoBackup);
+        return { ok: true };
+      }
+      case 'AUTO_BACKUP_SHOW_FOLDER': {
+        try {
+          if (chrome.downloads?.showDefaultFolder) {
+            chrome.downloads.showDefaultFolder();
+            return { ok: true };
+          }
+        } catch (err) {
+          return { ok: false, error: String(err?.message || err) };
+        }
+        return { ok: false, error: 'unsupported' };
+      }
       case 'BATCH_UPDATE_ITEMS':
         return batchUpdateItems(message.ids, {
           note: message.note,

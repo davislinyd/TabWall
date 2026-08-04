@@ -1,15 +1,17 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.6.3",
-  "description": "Park tabs and Tab Groups as a photo wall. Fast list load via IndexedDB media separation.",
+  "version": "2.8.0",
+  "description": "Park tabs and Tab Groups as a screenshot photo wall. Search, stack, restore—data stays on your device.",
   "permissions": [
     "activeTab",
     "storage",
     "unlimitedStorage",
     "scripting",
     "tabs",
-    "tabGroups"
+    "tabGroups",
+    "alarms",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"

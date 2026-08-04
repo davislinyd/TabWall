@@ -28,3 +28,42 @@
 
 - 變更 JS 後執行 `node --check` 相關檔。
 - 拖曳／快捷鍵／儲存等 UI 行為需在說明中標明如何手動驗。
+
+## 分享打包（Load unpacked ZIP）
+
+給他人本機安裝時使用 **clean zip**（解壓後「載入未封裝項目」），不是整個 git 資料夾。
+
+### 強制規則
+
+1. **每次修改會影響擴充行為的程式或資源**（`*.js` / `park.html` / `manifest.json` / `icons/*` 等），在交付或分享前都必須 **重新打包**。
+2. 輸出路徑：`dist/TabWall-<version>.zip`，`<version>` 必須與 `manifest.json` 的 `version` 一致。
+3. **打包檔只能含執行所需檔案**（白名單），不得夾帶開發／文件／隱私草稿／截圖／git 等。
+
+### 白名單（僅這些）
+
+```text
+manifest.json
+background.js
+content.js
+hotkeys.js
+mediaDb.js
+backupBuild.js
+park.html
+park.js
+icons/icon16.png
+icons/icon48.png
+icons/icon128.png
+```
+
+### 明確排除（示例）
+
+`.git/`、`docs/`、`private/`、`README.md`、`AGENTS.md`、`scripts/`、`TabWall screenshots/`、`.gitignore`、編輯器設定、`.DS_Store`、舊版 zip 以外的雜項。
+
+### 指令
+
+```bash
+./scripts/pack.sh
+# 或：bash scripts/pack.sh
+```
+
+`dist/` 已在 `.gitignore`，**不要**把 zip commit 進倉庫。
