@@ -1,54 +1,72 @@
 /**
  * TabWall — Service Worker
- * Single-tab park + Tab Group park/restore
+ * Meta in chrome.storage.local; images in IndexedDB (mediaDb.js)
  */
+importScripts('mediaDb.js');
 
+const Media = self.TabWallMediaDB;
 const STORAGE_TABS = 'parkedTabs'; // legacy
 const STORAGE_ITEMS = 'parkedItems';
 const SETTINGS_KEY = 'settings';
 const TAG_CATALOG_KEY = 'tagCatalog';
+const DATA_VERSION_KEY = 'dataVersion';
+const DATA_VERSION = 4;
 
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
-  saveGroupCapture: 'all', // all | none | activeOnly
-  restoreGroupIn: 'currentWindow', // currentWindow | newWindow
+  saveGroupCapture: 'all',
+  restoreGroupIn: 'currentWindow',
 };
 
-const THUMB = { maxWidth: 360, quality: 0.5 };
+const THUMB = { maxWidth: 480, quality: 0.6 };
+const TINY = { maxWidth: 180, quality: 0.4 };
 const SNAPSHOT = { maxWidth: null, quality: 0.85 };
 
-// ─── Storage: parked items + migration ─────────────────────────────
+let migrationPromise = null;
+
+// ─── Normalize meta (no inline media) ──────────────────────────────
 
 function normalizeTabItem(raw) {
+  const hasInlineThumb = typeof raw.thumbnail === 'string' && raw.thumbnail.startsWith('data:');
+  const hasInlineSnap = typeof raw.snapshot === 'string' && raw.snapshot.startsWith('data:');
   return {
     kind: 'tab',
     id: raw.id || crypto.randomUUID(),
     url: raw.url || '',
     title: raw.title || raw.url || 'Untitled',
     favIconUrl: raw.favIconUrl || '',
-    thumbnail: raw.thumbnail || '',
-    snapshot: raw.snapshot || '',
     note: typeof raw.note === 'string' ? raw.note : '',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     savedAt: raw.savedAt || Date.now(),
+    hasThumb: raw.hasThumb === true || hasInlineThumb,
+    hasSnap: raw.hasSnap === true || hasInlineSnap,
+    // keep inline only during migration pass
+    thumbnail: hasInlineThumb ? raw.thumbnail : '',
+    snapshot: hasInlineSnap ? raw.snapshot : '',
   };
 }
 
 function normalizeGroupItem(raw) {
   const tabs = Array.isArray(raw.tabs)
-    ? raw.tabs.map((m, i) => ({
-        id: m.id || crypto.randomUUID(),
-        url: m.url || '',
-        title: m.title || m.url || 'Untitled',
-        favIconUrl: m.favIconUrl || '',
-        thumbnail: m.thumbnail || '',
-        snapshot: m.snapshot || '',
-        pinned: Boolean(m.pinned),
-        indexInGroup: typeof m.indexInGroup === 'number' ? m.indexInGroup : i,
-        note: typeof m.note === 'string' ? m.note : '',
-        tags: Array.isArray(m.tags) ? m.tags : [],
-      }))
+    ? raw.tabs.map((m, i) => {
+        const hasInlineThumb = typeof m.thumbnail === 'string' && m.thumbnail.startsWith('data:');
+        const hasInlineSnap = typeof m.snapshot === 'string' && m.snapshot.startsWith('data:');
+        return {
+          id: m.id || crypto.randomUUID(),
+          url: m.url || '',
+          title: m.title || m.url || 'Untitled',
+          favIconUrl: m.favIconUrl || '',
+          pinned: Boolean(m.pinned),
+          indexInGroup: typeof m.indexInGroup === 'number' ? m.indexInGroup : i,
+          note: typeof m.note === 'string' ? m.note : '',
+          tags: Array.isArray(m.tags) ? m.tags : [],
+          hasThumb: m.hasThumb === true || hasInlineThumb,
+          hasSnap: m.hasSnap === true || hasInlineSnap,
+          thumbnail: hasInlineThumb ? m.thumbnail : '',
+          snapshot: hasInlineSnap ? m.snapshot : '',
+        };
+      })
     : [];
   return {
     kind: 'group',
@@ -69,49 +87,128 @@ function normalizeItem(raw) {
   return normalizeTabItem(raw);
 }
 
-async function getParkedItems() {
+/** Strip any residual data URLs before persisting meta */
+function toStoredMeta(item) {
+  if (item.kind === 'group') {
+    return {
+      kind: 'group',
+      id: item.id,
+      title: item.title || '',
+      color: item.color || 'grey',
+      collapsed: Boolean(item.collapsed),
+      note: item.note || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      savedAt: item.savedAt || Date.now(),
+      tabs: (item.tabs || []).map((m) => ({
+        id: m.id,
+        url: m.url || '',
+        title: m.title || '',
+        favIconUrl: m.favIconUrl || '',
+        pinned: Boolean(m.pinned),
+        indexInGroup: m.indexInGroup || 0,
+        note: m.note || '',
+        tags: Array.isArray(m.tags) ? m.tags : [],
+        hasThumb: Boolean(m.hasThumb),
+        hasSnap: Boolean(m.hasSnap),
+      })),
+    };
+  }
+  return {
+    kind: 'tab',
+    id: item.id,
+    url: item.url || '',
+    title: item.title || '',
+    favIconUrl: item.favIconUrl || '',
+    note: item.note || '',
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    savedAt: item.savedAt || Date.now(),
+    hasThumb: Boolean(item.hasThumb),
+    hasSnap: Boolean(item.hasSnap),
+  };
+}
+
+async function getParkedItemsRaw() {
   const data = await chrome.storage.local.get([STORAGE_ITEMS, STORAGE_TABS]);
-  if (Array.isArray(data[STORAGE_ITEMS]) && data[STORAGE_ITEMS].length > 0) {
+  if (Array.isArray(data[STORAGE_ITEMS])) {
     return data[STORAGE_ITEMS].map(normalizeItem).filter(Boolean);
   }
-  // migrate legacy parkedTabs
   if (Array.isArray(data[STORAGE_TABS]) && data[STORAGE_TABS].length > 0) {
-    const items = data[STORAGE_TABS].map((t) => normalizeTabItem({ ...t, kind: 'tab' }));
-    await setParkedItems(items);
-    return items;
+    return data[STORAGE_TABS].map((t) => normalizeTabItem({ ...t, kind: 'tab' }));
   }
-  if (Array.isArray(data[STORAGE_ITEMS])) return [];
   return [];
 }
 
 async function setParkedItems(items) {
-  const normalized = items.map(normalizeItem).filter(Boolean);
-  // dual-write flat tabs for legacy consumers / partial backup compat
-  const flatTabs = normalized
-    .filter((i) => i.kind === 'tab')
-    .map(({ kind, ...rest }) => rest);
+  const stored = items.map(normalizeItem).filter(Boolean).map(toStoredMeta);
   await chrome.storage.local.set({
-    [STORAGE_ITEMS]: normalized,
-    [STORAGE_TABS]: flatTabs,
+    [STORAGE_ITEMS]: stored,
+    [DATA_VERSION_KEY]: DATA_VERSION,
   });
-  return normalized;
-}
-
-/** @deprecated use getParkedItems — returns tab-shaped entries only for old callers */
-async function getParkedTabs() {
-  const items = await getParkedItems();
-  return items
+  // legacy key: meta only, no images
+  const flatTabs = stored
     .filter((i) => i.kind === 'tab')
-    .map(({ kind, ...rest }) => rest);
+    .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
+  await chrome.storage.local.set({ [STORAGE_TABS]: flatTabs });
+  return stored;
 }
 
-async function setParkedTabs(tabs) {
-  // merge: replace all tab-kind items, keep groups
-  const items = await getParkedItems();
-  const groups = items.filter((i) => i.kind === 'group');
-  const nextTabs = tabs.map((t) => normalizeTabItem(t));
-  await setParkedItems([...nextTabs, ...groups]);
+async function getParkedItems() {
+  await ensureMediaMigration();
+  const items = await getParkedItemsRaw();
+  return items.map(toStoredMeta);
 }
+
+async function ensureMediaMigration() {
+  if (migrationPromise) return migrationPromise;
+  migrationPromise = (async () => {
+    const data = await chrome.storage.local.get([DATA_VERSION_KEY, STORAGE_ITEMS, STORAGE_TABS]);
+    if ((data[DATA_VERSION_KEY] || 0) >= DATA_VERSION) return;
+
+    let items = [];
+    if (Array.isArray(data[STORAGE_ITEMS]) && data[STORAGE_ITEMS].length) {
+      items = data[STORAGE_ITEMS].map(normalizeItem).filter(Boolean);
+    } else if (Array.isArray(data[STORAGE_TABS]) && data[STORAGE_TABS].length) {
+      items = data[STORAGE_TABS].map((t) => normalizeTabItem({ ...t, kind: 'tab' }));
+    }
+
+    for (const item of items) {
+      if (item.kind === 'group') {
+        for (const m of item.tabs || []) {
+          if (m.thumbnail || m.snapshot) {
+            const flags = await Media.putFromDataUrls(
+              Media.mediaKeyMember(item.id, m.id),
+              m.thumbnail,
+              m.snapshot
+            );
+            m.hasThumb = flags.hasThumb || m.hasThumb;
+            m.hasSnap = flags.hasSnap || m.hasSnap;
+          }
+          m.thumbnail = '';
+          m.snapshot = '';
+        }
+      } else if (item.thumbnail || item.snapshot) {
+        const flags = await Media.putFromDataUrls(
+          Media.mediaKeyTab(item.id),
+          item.thumbnail,
+          item.snapshot
+        );
+        item.hasThumb = flags.hasThumb || item.hasThumb;
+        item.hasSnap = flags.hasSnap || item.hasSnap;
+        item.thumbnail = '';
+        item.snapshot = '';
+      }
+    }
+
+    await setParkedItems(items);
+    await chrome.storage.local.set({ [DATA_VERSION_KEY]: DATA_VERSION });
+  })().catch((err) => {
+    console.warn('[TabWall] media migration failed:', err);
+    migrationPromise = null;
+  });
+  return migrationPromise;
+}
+
+// ─── Settings / tags ───────────────────────────────────────────────
 
 async function getSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
@@ -130,14 +227,10 @@ async function setTagCatalog(tags) {
 }
 
 function eachTagOnItem(item, fn) {
-  if (Array.isArray(item.tags)) {
-    for (const t of item.tags) fn(t);
-  }
+  if (Array.isArray(item.tags)) for (const t of item.tags) fn(t);
   if (item.kind === 'group' && Array.isArray(item.tabs)) {
     for (const m of item.tabs) {
-      if (Array.isArray(m.tags)) {
-        for (const t of m.tags) fn(t);
-      }
+      if (Array.isArray(m.tags)) for (const t of m.tags) fn(t);
     }
   }
 }
@@ -171,17 +264,12 @@ function countTagUsage(items, name) {
 async function getTagsWithCounts() {
   const names = await collectAllTagNames();
   const items = await getParkedItems();
-  return names.map((name) => ({
-    name,
-    count: countTagUsage(items, name),
-  }));
+  return names.map((name) => ({ name, count: countTagUsage(items, name) }));
 }
 
 function mapTagsInItem(item, mapFn) {
   const next = { ...item };
-  if (Array.isArray(item.tags)) {
-    next.tags = mapFn(item.tags);
-  }
+  if (Array.isArray(item.tags)) next.tags = mapFn(item.tags);
   if (item.kind === 'group' && Array.isArray(item.tabs)) {
     next.tabs = item.tabs.map((m) => ({
       ...m,
@@ -223,9 +311,7 @@ async function renameTag(from, to) {
     if (!hit) return item;
     changed = true;
     return mapTagsInItem(item, (tags) =>
-      tags
-        .map((t) => (t === oldName ? newName : t))
-        .filter((t, i, arr) => arr.indexOf(t) === i)
+      tags.map((t) => (t === oldName ? newName : t)).filter((t, i, arr) => arr.indexOf(t) === i)
     );
   });
   if (changed) await setParkedItems(next);
@@ -237,7 +323,6 @@ async function deleteTag(name) {
   if (!n) return { ok: false, error: 'empty' };
   const catalog = await getTagCatalog();
   await setTagCatalog(catalog.filter((t) => t !== n));
-
   const list = await getParkedItems();
   let changed = false;
   const next = list.map((item) => {
@@ -254,7 +339,7 @@ async function deleteTag(name) {
 }
 
 async function mergeTagsIntoCatalog(tags) {
-  if (!Array.isArray(tags) || tags.length === 0) return;
+  if (!Array.isArray(tags) || !tags.length) return;
   const catalog = await getTagCatalog();
   let catChanged = false;
   for (const tag of tags) {
@@ -274,7 +359,6 @@ async function updateGroupMember(groupId, memberId, patch) {
   const group = { ...list[gIdx], tabs: [...(list[gIdx].tabs || [])] };
   const mIdx = group.tabs.findIndex((m) => m.id === memberId);
   if (mIdx === -1) return { ok: false, error: 'member_not_found' };
-
   const member = { ...group.tabs[mIdx] };
   if (typeof patch.note === 'string') member.note = patch.note;
   if (Array.isArray(patch.tags)) {
@@ -290,20 +374,27 @@ async function updateGroupMember(groupId, memberId, patch) {
   return { ok: true, item: group, member };
 }
 
-function stripMediaFromItems(items) {
-  return items.map((item) => {
-    if (item.kind === 'group') {
-      return {
-        ...item,
-        tabs: (item.tabs || []).map((m) => ({
-          ...m,
-          thumbnail: '',
-          snapshot: '',
-        })),
-      };
+// ─── Media hydrate for export ──────────────────────────────────────
+
+async function hydrateItemMedia(item) {
+  if (item.kind === 'group') {
+    const tabs = [];
+    for (const m of item.tabs || []) {
+      const med = await Media.get(Media.mediaKeyMember(item.id, m.id));
+      tabs.push({
+        ...m,
+        thumbnail: med.thumb ? await Media.blobToDataUrl(med.thumb) : '',
+        snapshot: med.snap ? await Media.blobToDataUrl(med.snap) : '',
+      });
     }
-    return { ...item, thumbnail: '', snapshot: '' };
-  });
+    return { ...item, tabs };
+  }
+  const med = await Media.get(Media.mediaKeyTab(item.id));
+  return {
+    ...item,
+    thumbnail: med.thumb ? await Media.blobToDataUrl(med.thumb) : '',
+    snapshot: med.snap ? await Media.blobToDataUrl(med.snap) : '',
+  };
 }
 
 async function exportBackup(mode = 'lite') {
@@ -312,15 +403,22 @@ async function exportBackup(mode = 'lite') {
     chrome.storage.local.get(SETTINGS_KEY),
     getTagCatalog(),
   ]);
-  const items = mode === 'full' ? parkedItems : stripMediaFromItems(parkedItems);
+
+  let items = parkedItems;
+  if (mode === 'full') {
+    items = [];
+    for (const it of parkedItems) items.push(await hydrateItemMedia(it));
+  }
+
   const parkedTabs = items
     .filter((i) => i.kind === 'tab')
-    .map(({ kind, ...rest }) => rest);
+    .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
+
   return {
     ok: true,
     backup: {
       format: 'tabwall-backup',
-      version: 3,
+      version: 4,
       media: mode === 'full' ? 'inline' : 'none',
       appVersion: chrome.runtime.getManifest().version,
       exportedAt: new Date().toISOString(),
@@ -344,9 +442,40 @@ async function importBackup(backup) {
   } else {
     return { ok: false, error: 'invalid_tabs' };
   }
+
+  // Move any inline media into IDB
+  for (const item of items) {
+    if (item.kind === 'group') {
+      for (const m of item.tabs || []) {
+        if (m.thumbnail || m.snapshot) {
+          const flags = await Media.putFromDataUrls(
+            Media.mediaKeyMember(item.id, m.id),
+            m.thumbnail,
+            m.snapshot
+          );
+          m.hasThumb = flags.hasThumb;
+          m.hasSnap = flags.hasSnap;
+        }
+        m.thumbnail = '';
+        m.snapshot = '';
+      }
+    } else if (item.thumbnail || item.snapshot) {
+      const flags = await Media.putFromDataUrls(
+        Media.mediaKeyTab(item.id),
+        item.thumbnail,
+        item.snapshot
+      );
+      item.hasThumb = flags.hasThumb;
+      item.hasSnap = flags.hasSnap;
+      item.thumbnail = '';
+      item.snapshot = '';
+    }
+  }
+
   await setParkedItems(items);
   const payload = {
     [TAG_CATALOG_KEY]: Array.isArray(backup.tagCatalog) ? backup.tagCatalog : [],
+    [DATA_VERSION_KEY]: DATA_VERSION,
   };
   if (backup.settings && typeof backup.settings === 'object') {
     payload[SETTINGS_KEY] = backup.settings;
@@ -356,7 +485,7 @@ async function importBackup(backup) {
 }
 
 async function batchUpdateItems(ids, patch) {
-  if (!Array.isArray(ids) || ids.length === 0) return { ok: false, error: 'empty_ids' };
+  if (!Array.isArray(ids) || !ids.length) return { ok: false, error: 'empty_ids' };
   const idSet = new Set(ids);
   const list = await getParkedItems();
   const tagMode = patch.tagMode === 'replace' ? 'replace' : 'merge';
@@ -365,20 +494,14 @@ async function batchUpdateItems(ids, patch) {
     if (!idSet.has(item.id)) return item;
     changed++;
     const updated = { ...item };
-    if (typeof patch.note === 'string' && patch.note.length > 0) {
-      updated.note = patch.note;
-    }
+    if (typeof patch.note === 'string' && patch.note.length > 0) updated.note = patch.note;
     if (Array.isArray(patch.tags)) {
       const incoming = patch.tags
         .map((t) => String(t).trim())
         .filter(Boolean)
         .filter((t, i, arr) => arr.indexOf(t) === i);
-      if (tagMode === 'replace') {
-        updated.tags = incoming;
-      } else {
-        const set = new Set([...(item.tags || []), ...incoming]);
-        updated.tags = [...set];
-      }
+      if (tagMode === 'replace') updated.tags = incoming;
+      else updated.tags = [...new Set([...(item.tags || []), ...incoming])];
     }
     return updated;
   });
@@ -390,17 +513,21 @@ async function batchUpdateItems(ids, patch) {
 }
 
 async function batchDeleteItems(ids) {
-  if (!Array.isArray(ids) || ids.length === 0) return { ok: false, error: 'empty_ids' };
+  if (!Array.isArray(ids) || !ids.length) return { ok: false, error: 'empty_ids' };
   const idSet = new Set(ids);
   const list = await getParkedItems();
+  const removed = list.filter((i) => idSet.has(i.id));
+  for (const item of removed) {
+    await Media.removeMany(Media.keysForItem(item));
+  }
   const next = list.filter((i) => !idSet.has(i.id));
   await setParkedItems(next);
   return { ok: true, remaining: next.length };
 }
 
-// ─── Image compression ─────────────────────────────────────────────
+// ─── Image compression → Blob ──────────────────────────────────────
 
-async function compressImage(dataUrl, opts = {}) {
+async function compressToBlob(dataUrl, opts = {}) {
   const maxWidth = opts.maxWidth ?? null;
   const quality = opts.quality ?? 0.5;
   const response = await fetch(dataUrl);
@@ -420,17 +547,7 @@ async function compressImage(dataUrl, opts = {}) {
   }
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  const compressedBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
-  return blobToDataUrl(compressedBlob);
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-    reader.readAsDataURL(blob);
-  });
+  return canvas.convertToBlob({ type: 'image/jpeg', quality });
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -506,8 +623,6 @@ async function waitTabComplete(tabId, timeoutMs = 8000) {
   }
 }
 
-// ─── Overlay toggle ────────────────────────────────────────────────
-
 async function toggleParkOnActiveTab() {
   const tab = await getActiveTab();
   if (!tab?.id || isRestrictedUrl(tab.url)) {
@@ -532,23 +647,21 @@ async function toggleParkOnActiveTab() {
   }
 }
 
-// ─── Capture helpers ───────────────────────────────────────────────
-
-async function captureTabImages(windowId, tabId) {
+async function captureTabBlobs(windowId, tabId, { tiny = false } = {}) {
   try {
     await chrome.tabs.update(tabId, { active: true });
     await waitTabComplete(tabId);
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
-    const thumbnail = await compressImage(dataUrl, THUMB);
-    const snapshot = await compressImage(dataUrl, SNAPSHOT);
-    return { thumbnail, snapshot };
+    const thumbBlob = await compressToBlob(dataUrl, tiny ? TINY : THUMB);
+    const snapBlob = await compressToBlob(dataUrl, SNAPSHOT);
+    return { thumbBlob, snapBlob };
   } catch (err) {
     console.warn('[TabWall] capture failed for tab', tabId, err);
-    return { thumbnail: '', snapshot: '' };
+    return { thumbBlob: null, snapBlob: null };
   }
 }
 
-// ─── Save single tab ───────────────────────────────────────────────
+// ─── Save tab ──────────────────────────────────────────────────────
 
 async function saveCurrentTab(tab) {
   if (!tab || tab.id == null) {
@@ -569,28 +682,32 @@ async function saveCurrentTab(tab) {
     return;
   }
 
-  let thumbnail;
-  let snapshot;
+  let thumbBlob;
+  let snapBlob;
   try {
-    thumbnail = await compressImage(dataUrl, THUMB);
-    snapshot = await compressImage(dataUrl, SNAPSHOT);
+    thumbBlob = await compressToBlob(dataUrl, THUMB);
+    snapBlob = await compressToBlob(dataUrl, SNAPSHOT);
   } catch (err) {
-    console.warn('[TabWall] compressImage failed:', err);
+    console.warn('[TabWall] compress failed:', err);
     await flashBadge('!');
     return;
   }
 
-  const entry = normalizeTabItem({
-    id: crypto.randomUUID(),
+  const id = crypto.randomUUID();
+  await Media.putFromBlobs(Media.mediaKeyTab(id), thumbBlob, snapBlob);
+
+  const entry = {
+    kind: 'tab',
+    id,
     url: tab.url,
     title: tab.title || tab.url || 'Untitled',
     favIconUrl: tab.favIconUrl || '',
-    thumbnail,
-    snapshot,
     note: '',
     tags: [],
     savedAt: Date.now(),
-  });
+    hasThumb: Boolean(thumbBlob),
+    hasSnap: Boolean(snapBlob),
+  };
 
   const list = await getParkedItems();
   list.unshift(entry);
@@ -618,7 +735,6 @@ async function saveActiveGroup() {
 
   const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
   if (tab.groupId == null || tab.groupId === none) {
-    console.warn('[TabWall] Active tab is not in a group');
     await flashBadge('!');
     return { ok: false, error: 'not_in_group' };
   }
@@ -637,7 +753,7 @@ async function saveActiveGroup() {
     groupId: tab.groupId,
   });
   members.sort((a, b) => a.index - b.index);
-  if (members.length === 0) {
+  if (!members.length) {
     await flashBadge('!');
     return { ok: false, error: 'empty_group' };
   }
@@ -645,48 +761,55 @@ async function saveActiveGroup() {
   const settings = await getSettings();
   const captureMode = settings.saveGroupCapture || 'all';
   const originalActiveId = tab.id;
+  const groupId = crypto.randomUUID();
 
   await flashBadge('…', '#3b82f6', 60000);
 
   const groupTabs = [];
   for (let i = 0; i < members.length; i++) {
     const m = members[i];
-    let thumbnail = '';
-    let snapshot = '';
+    let hasThumb = false;
+    let hasSnap = false;
+    const memberId = crypto.randomUUID();
     const shouldCapture =
       captureMode === 'all' ||
       (captureMode === 'activeOnly' && m.id === originalActiveId);
 
     if (shouldCapture && !isRestrictedUrl(m.url)) {
       await flashBadge(`${i + 1}/${members.length}`, '#3b82f6', 60000);
-      const imgs = await captureTabImages(tab.windowId, m.id);
-      thumbnail = imgs.thumbnail;
-      snapshot = imgs.snapshot;
+      const { thumbBlob, snapBlob } = await captureTabBlobs(tab.windowId, m.id);
+      const flags = await Media.putFromBlobs(
+        Media.mediaKeyMember(groupId, memberId),
+        thumbBlob,
+        snapBlob
+      );
+      hasThumb = flags.hasThumb;
+      hasSnap = flags.hasSnap;
     }
 
     groupTabs.push({
-      id: crypto.randomUUID(),
+      id: memberId,
       url: m.url || '',
       title: m.title || m.url || 'Untitled',
       favIconUrl: m.favIconUrl || '',
-      thumbnail,
-      snapshot,
       pinned: Boolean(m.pinned),
       indexInGroup: i,
       note: '',
       tags: [],
+      hasThumb,
+      hasSnap,
     });
   }
 
-  // restore focus to original if still open
   try {
     await chrome.tabs.update(originalActiveId, { active: true });
   } catch {
-    // may have been closed mid-way — ignore
+    // ignore
   }
 
-  const groupItem = normalizeGroupItem({
-    id: crypto.randomUUID(),
+  const groupItem = {
+    kind: 'group',
+    id: groupId,
     title: meta.title || '',
     color: meta.color || 'grey',
     collapsed: Boolean(meta.collapsed),
@@ -694,7 +817,7 @@ async function saveActiveGroup() {
     tags: [],
     savedAt: Date.now(),
     tabs: groupTabs,
-  });
+  };
 
   const list = await getParkedItems();
   list.unshift(groupItem);
@@ -713,22 +836,18 @@ async function saveActiveGroup() {
   return { ok: true, id: groupItem.id, tabCount: groupTabs.length };
 }
 
-// ─── Restore ───────────────────────────────────────────────────────
+// ─── Restore / delete ──────────────────────────────────────────────
 
 async function restoreTab(id) {
   const list = await getParkedItems();
-  const idx = list.findIndex((t) => t.id === id && t.kind === 'tab');
-  if (idx === -1) {
-    // try any kind tab-shaped
-    const idx2 = list.findIndex((t) => t.id === id);
-    if (idx2 === -1 || list[idx2].kind === 'group') return { ok: false, error: 'not_found' };
-  }
   const i = list.findIndex((t) => t.id === id);
+  if (i === -1) return { ok: false, error: 'not_found' };
   const item = list[i];
   if (item.kind === 'group') return restoreGroup(id);
 
   list.splice(i, 1);
   await setParkedItems(list);
+  await Media.remove(Media.mediaKeyTab(id));
   try {
     await chrome.tabs.create({ url: item.url, active: true });
   } catch (err) {
@@ -750,29 +869,28 @@ async function restoreGroup(id) {
     (a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0)
   );
 
-  let windowId;
+  const finish = async (skipped = 0) => {
+    await Media.removeMany(Media.keysForItem(item));
+    list.splice(idx, 1);
+    await setParkedItems(list);
+    return { ok: true, remaining: list.length, skipped };
+  };
+
   if (settings.restoreGroupIn === 'newWindow') {
-    // create window with first restorable url
     const first = members.find((m) => isRestorableUrl(m.url));
     if (!first) return { ok: false, error: 'no_restorable_urls' };
     const win = await chrome.windows.create({ url: first.url, focused: true });
-    windowId = win.id;
+    const windowId = win.id;
     const createdIds = [];
     const firstTab = win.tabs && win.tabs[0];
     if (firstTab?.id != null) createdIds.push(firstTab.id);
-
     for (const m of members) {
       if (m === first) continue;
       if (!isRestorableUrl(m.url)) continue;
-      const t = await chrome.tabs.create({
-        url: m.url,
-        active: false,
-        windowId,
-      });
+      const t = await chrome.tabs.create({ url: m.url, active: false, windowId });
       createdIds.push(t.id);
     }
-
-    if (createdIds.length === 0) return { ok: false, error: 'no_restorable_urls' };
+    if (!createdIds.length) return { ok: false, error: 'no_restorable_urls' };
     const groupId = await chrome.tabs.group({
       tabIds: createdIds,
       createProperties: { windowId },
@@ -782,48 +900,40 @@ async function restoreGroup(id) {
       color: item.color || 'grey',
       collapsed: Boolean(item.collapsed),
     });
-  } else {
-    const createdIds = [];
-    let skipped = 0;
-    for (const m of members) {
-      if (!isRestorableUrl(m.url)) {
-        skipped++;
-        continue;
-      }
-      const t = await chrome.tabs.create({ url: m.url, active: false });
-      createdIds.push(t.id);
-      windowId = t.windowId;
-    }
-    if (createdIds.length === 0) return { ok: false, error: 'no_restorable_urls' };
-
-    const groupId = await chrome.tabs.group({ tabIds: createdIds });
-    await chrome.tabGroups.update(groupId, {
-      title: item.title || '',
-      color: item.color || 'grey',
-      collapsed: Boolean(item.collapsed),
-    });
-    // focus first tab
-    try {
-      await chrome.tabs.update(createdIds[0], { active: true });
-    } catch {
-      // ignore
-    }
-    list.splice(idx, 1);
-    await setParkedItems(list);
-    return { ok: true, remaining: list.length, skipped };
+    return finish(0);
   }
 
-  list.splice(idx, 1);
-  await setParkedItems(list);
-  return { ok: true, remaining: list.length };
+  const createdIds = [];
+  let skipped = 0;
+  for (const m of members) {
+    if (!isRestorableUrl(m.url)) {
+      skipped++;
+      continue;
+    }
+    const t = await chrome.tabs.create({ url: m.url, active: false });
+    createdIds.push(t.id);
+  }
+  if (!createdIds.length) return { ok: false, error: 'no_restorable_urls' };
+  const groupId = await chrome.tabs.group({ tabIds: createdIds });
+  await chrome.tabGroups.update(groupId, {
+    title: item.title || '',
+    color: item.color || 'grey',
+    collapsed: Boolean(item.collapsed),
+  });
+  try {
+    await chrome.tabs.update(createdIds[0], { active: true });
+  } catch {
+    // ignore
+  }
+  return finish(skipped);
 }
 
 async function restoreGroupMember(groupId, memberId) {
   const list = await getParkedItems();
   const gIdx = list.findIndex((t) => t.id === groupId && t.kind === 'group');
   if (gIdx === -1) return { ok: false, error: 'not_found' };
-  const group = list[gIdx];
-  const mIdx = (group.tabs || []).findIndex((m) => m.id === memberId);
+  const group = { ...list[gIdx], tabs: [...(list[gIdx].tabs || [])] };
+  const mIdx = group.tabs.findIndex((m) => m.id === memberId);
   if (mIdx === -1) return { ok: false, error: 'member_not_found' };
   const member = group.tabs[mIdx];
   if (!isRestorableUrl(member.url)) return { ok: false, error: 'restricted_url' };
@@ -834,8 +944,9 @@ async function restoreGroupMember(groupId, memberId) {
     return { ok: false, error: String(err) };
   }
 
+  await Media.remove(Media.mediaKeyMember(groupId, memberId));
   group.tabs.splice(mIdx, 1);
-  if (group.tabs.length === 0) {
+  if (!group.tabs.length) {
     list.splice(gIdx, 1);
   } else {
     list[gIdx] = group;
@@ -846,8 +957,10 @@ async function restoreGroupMember(groupId, memberId) {
 
 async function deleteItem(id) {
   const list = await getParkedItems();
+  const item = list.find((t) => t.id === id);
+  if (!item) return { ok: false, error: 'not_found' };
+  await Media.removeMany(Media.keysForItem(item));
   const next = list.filter((t) => t.id !== id);
-  if (next.length === list.length) return { ok: false, error: 'not_found' };
   await setParkedItems(next);
   return { ok: true, remaining: next.length };
 }
@@ -884,7 +997,15 @@ async function reorderItems(ids) {
   }
   for (const item of map.values()) next.push(item);
   await setParkedItems(next);
-  return { ok: true, items: next, tabs: next.filter((i) => i.kind === 'tab') };
+  return { ok: true, items: next };
+}
+
+async function getMediaMessage(key, kind) {
+  const part = kind === 'snap' ? 'snap' : 'thumb';
+  const blob = await Media.getPart(key, part);
+  if (!blob) return { ok: true, dataUrl: '', key, kind: part };
+  const dataUrl = await Media.blobToDataUrl(blob);
+  return { ok: true, dataUrl, key, kind: part };
 }
 
 // ─── Messages ──────────────────────────────────────────────────────
@@ -895,10 +1016,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case 'GET_PARKED_ITEMS':
         return { ok: true, items: await getParkedItems() };
       case 'GET_PARKED_TABS': {
-        // backward compatible: return all items as "tabs" field for park.js migration
         const items = await getParkedItems();
         return { ok: true, tabs: items, items };
       }
+      case 'GET_MEDIA':
+        return getMediaMessage(message.key, message.kind || 'thumb');
       case 'RESTORE_TAB':
         return restoreTab(message.id);
       case 'RESTORE_GROUP':
@@ -951,8 +1073,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-// ─── Commands & action ─────────────────────────────────────────────
-
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'save-tab') {
     await saveCurrentTab(await getActiveTab());
@@ -970,3 +1090,6 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.action.onClicked.addListener(async () => {
   await toggleParkOnActiveTab();
 });
+
+// Kick migration early
+ensureMediaMigration().catch(() => {});

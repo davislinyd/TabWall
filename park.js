@@ -29,6 +29,97 @@ const GROUP_COLORS = {
 };
 
 const DRAG_THRESHOLD = 6;
+const Media = self.TabWallMediaDB;
+
+/** @type {Set<string>} */
+const liveObjectUrls = new Set();
+/** @type {Map<string, string>} snap dataUrl/blob url cache */
+const snapCache = new Map();
+const SNAP_CACHE_MAX = 12;
+
+function trackObjectUrl(url) {
+  if (url && String(url).startsWith('blob:')) liveObjectUrls.add(url);
+  return url;
+}
+
+function revokeObjectUrl(url) {
+  if (url && String(url).startsWith('blob:') && liveObjectUrls.has(url)) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+    liveObjectUrls.delete(url);
+  }
+}
+
+function cacheSnap(key, url) {
+  if (snapCache.has(key)) {
+    const old = snapCache.get(key);
+    if (old !== url) revokeObjectUrl(old);
+  }
+  snapCache.set(key, url);
+  while (snapCache.size > SNAP_CACHE_MAX) {
+    const first = snapCache.keys().next().value;
+    revokeObjectUrl(snapCache.get(first));
+    snapCache.delete(first);
+  }
+}
+
+async function fetchMediaUrl(key, kind) {
+  if (!key || !Media) {
+    const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
+    return res.ok ? res.dataUrl || '' : '';
+  }
+  try {
+    const blob = await Media.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
+    if (!blob) return '';
+    return trackObjectUrl(URL.createObjectURL(blob));
+  } catch {
+    const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
+    return res.ok ? res.dataUrl || '' : '';
+  }
+}
+
+const thumbObserver =
+  typeof IntersectionObserver !== 'undefined'
+    ? new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const img = entry.target;
+            const key = img.dataset.mediaKey;
+            if (!key || img.dataset.loaded === '1') continue;
+            img.dataset.loaded = '1';
+            fetchMediaUrl(key, 'thumb').then((url) => {
+              if (url) img.src = url;
+            });
+            thumbObserver.unobserve(img);
+          }
+        },
+        { root: null, rootMargin: '120px', threshold: 0.01 }
+      )
+    : null;
+
+function observeThumb(img) {
+  if (!img) return;
+  if (thumbObserver) thumbObserver.observe(img);
+  else if (img.dataset.mediaKey) {
+    fetchMediaUrl(img.dataset.mediaKey, 'thumb').then((url) => {
+      if (url) img.src = url;
+    });
+  }
+}
+
+function mediaKeyForItem(item) {
+  if (!item) return '';
+  if (item.kind === 'group') return '';
+  return Media ? Media.mediaKeyTab(item.id) : `t:${item.id}`;
+}
+
+function mediaKeyForMember(groupId, memberId) {
+  return Media ? Media.mediaKeyMember(groupId, memberId) : `g:${groupId}:${memberId}`;
+}
 
 const I18N = {
   zh: {
@@ -1041,20 +1132,22 @@ function buildLightboxNavList() {
       for (const m of item.tabs || []) {
         list.push({
           key: `m:${item.id}:${m.id}`,
+          mediaKey: mediaKeyForMember(item.id, m.id),
           title: m.title || m.url || 'Untitled',
           url: m.url || '',
-          snapshot: m.snapshot || '',
-          thumbnail: m.thumbnail || '',
+          hasSnap: Boolean(m.hasSnap || m.snapshot),
+          hasThumb: Boolean(m.hasThumb || m.thumbnail),
           restore: { type: 'member', groupId: item.id, memberId: m.id },
         });
       }
     } else {
       list.push({
         key: `t:${item.id}`,
+        mediaKey: mediaKeyForItem(item),
         title: item.title || item.url || 'Untitled',
         url: item.url || '',
-        snapshot: item.snapshot || '',
-        thumbnail: item.thumbnail || '',
+        hasSnap: Boolean(item.hasSnap || item.snapshot),
+        hasThumb: Boolean(item.hasThumb || item.thumbnail),
         restore: { type: 'tab', id: item.id },
       });
     }
@@ -1062,22 +1155,67 @@ function buildLightboxNavList() {
   return list;
 }
 
-function showLightboxEntry(entry, index, list) {
+async function showLightboxEntry(entry, index, list) {
   expandedId = entry.restore.type === 'member' ? entry.restore.memberId : entry.restore.id;
   expandedMeta =
     entry.restore.type === 'member' ? { groupId: entry.restore.groupId } : null;
   lightboxNav = { list, index };
   lbTitle.textContent = entry.title;
   lbUrl.textContent = entry.url;
-  const src = entry.snapshot || entry.thumbnail || '';
-  if (src) lbImage.src = src;
-  else lbImage.removeAttribute('src');
-  lbSnapHint.hidden = Boolean(entry.snapshot);
   if (lbCounter) {
     lbCounter.textContent = list.length ? `${index + 1} / ${list.length}` : '—';
   }
   lightbox.classList.add('open');
   lightbox.setAttribute('aria-hidden', 'false');
+
+  // placeholder thumb then full snap
+  const prevSrc = lbImage.src;
+  if (prevSrc && prevSrc.startsWith('blob:') && ![...snapCache.values()].includes(prevSrc)) {
+    // keep snap cache; don't revoke mid-nav of cached
+  }
+
+  let shownSnap = false;
+  if (entry.mediaKey && snapCache.has(entry.mediaKey)) {
+    lbImage.src = snapCache.get(entry.mediaKey);
+    lbSnapHint.hidden = true;
+    shownSnap = true;
+  } else {
+    // show thumb first
+    if (entry.mediaKey && entry.hasThumb) {
+      const thumbUrl = await fetchMediaUrl(entry.mediaKey, 'thumb');
+      if (thumbUrl && lightboxNav?.index === index) lbImage.src = thumbUrl;
+    } else {
+      lbImage.removeAttribute('src');
+    }
+    lbSnapHint.hidden = !entry.hasSnap;
+    if (entry.mediaKey && entry.hasSnap) {
+      const snapUrl = await fetchMediaUrl(entry.mediaKey, 'snap');
+      if (snapUrl && lightboxNav?.index === index) {
+        cacheSnap(entry.mediaKey, snapUrl);
+        lbImage.src = snapUrl;
+        lbSnapHint.hidden = true;
+        shownSnap = true;
+      }
+    }
+  }
+
+  if (!shownSnap && !lbImage.getAttribute('src')) {
+    lbSnapHint.hidden = false;
+  }
+
+  // prefetch neighbors
+  const n = list.length;
+  if (n > 1) {
+    for (const d of [-1, 1]) {
+      const ni = (index + d + n) % n;
+      const ne = list[ni];
+      if (ne?.mediaKey && ne.hasSnap && !snapCache.has(ne.mediaKey)) {
+        fetchMediaUrl(ne.mediaKey, 'snap').then((url) => {
+          if (url) cacheSnap(ne.mediaKey, url);
+        });
+      }
+    }
+  }
 }
 
 function openLightbox(item, meta = null) {
@@ -1085,19 +1223,24 @@ function openLightbox(item, meta = null) {
   let index = 0;
   if (meta?.groupId) {
     index = list.findIndex(
-      (e) => e.restore.type === 'member' && e.restore.groupId === meta.groupId && e.restore.memberId === item.id
+      (e) =>
+        e.restore.type === 'member' &&
+        e.restore.groupId === meta.groupId &&
+        e.restore.memberId === item.id
     );
   } else {
     index = list.findIndex((e) => e.restore.type === 'tab' && e.restore.id === item.id);
   }
   if (index < 0) {
-    // fallback single entry
     const entry = {
       key: 'solo',
+      mediaKey: meta?.groupId
+        ? mediaKeyForMember(meta.groupId, item.id)
+        : mediaKeyForItem(item),
       title: item.title || item.url || 'Untitled',
       url: item.url || '',
-      snapshot: item.snapshot || '',
-      thumbnail: item.thumbnail || '',
+      hasSnap: Boolean(item.hasSnap || item.snapshot),
+      hasThumb: Boolean(item.hasThumb || item.thumbnail),
       restore: meta?.groupId
         ? { type: 'member', groupId: meta.groupId, memberId: item.id }
         : { type: 'tab', id: item.id },
@@ -1821,8 +1964,9 @@ function renderMembersList(group) {
     row.dataset.memberId = m.id;
     const note = m.note || '';
     const tags = Array.isArray(m.tags) ? m.tags : [];
+    const mKey = mediaKeyForMember(group.id, m.id);
     row.innerHTML = `
-      <img class="member-thumb" alt="" src="${escapeAttr(m.thumbnail || m.snapshot || '')}" />
+      <img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />
       <div class="member-body">
         <div class="member-title" title="${escapeAttr(m.title || '')}">${escapeHtml(m.title || m.url || '')}</div>
         <div class="member-url" title="${escapeAttr(m.url || '')}">${escapeHtml(m.url || '')}</div>
@@ -1839,30 +1983,21 @@ function renderMembersList(group) {
         </div>
       </div>
     `;
-    row.querySelector('.snap-btn').addEventListener('click', () => {
+    observeThumb(row.querySelector('img.lazy-thumb'));
+    const openMemberSnap = () => {
       openLightbox(
         {
           id: m.id,
           title: m.title,
           url: m.url,
-          snapshot: m.snapshot,
-          thumbnail: m.thumbnail,
+          hasSnap: m.hasSnap,
+          hasThumb: m.hasThumb,
         },
         { groupId: group.id }
       );
-    });
-    row.querySelector('.member-thumb').addEventListener('click', () => {
-      openLightbox(
-        {
-          id: m.id,
-          title: m.title,
-          url: m.url,
-          snapshot: m.snapshot,
-          thumbnail: m.thumbnail,
-        },
-        { groupId: group.id }
-      );
-    });
+    };
+    row.querySelector('.snap-btn').addEventListener('click', openMemberSnap);
+    row.querySelector('.member-thumb').addEventListener('click', openMemberSnap);
     row.querySelector('.edit-m-btn').addEventListener('click', () => {
       openMemberEditBox(group.id, m);
     });
@@ -2182,10 +2317,10 @@ async function endCardDrag(e) {
   sortByEl.value = 'manual';
 
   const res = await sendMessage({
-    type: 'REORDER_TABS',
+    type: 'REORDER_ITEMS',
     ids: allTabs.map((t) => t.id),
   });
-  if (res.ok && Array.isArray(res.tabs)) allTabs = res.tabs;
+  if (res.ok && Array.isArray(res.items)) allTabs = res.items;
   renderGrid();
 }
 
@@ -2226,16 +2361,29 @@ document.addEventListener('pointercancel', (e) => {
 // ─── Cards / List ──────────────────────────────────────────────────
 
 function groupCoverHtml(item) {
-  const members = item.tabs || [];
-  const thumbs = members.map((m) => m.thumbnail || m.snapshot).filter(Boolean).slice(0, 4);
-  if (thumbs.length === 0) {
-    return `<div class="group-cover empty-cover"></div>`;
+  const members = (item.tabs || []).filter((m) => m.hasThumb || m.thumbnail).slice(0, 4);
+  if (members.length === 0) {
+    // still try first few for keys even without hasThumb flag (migration)
+    const any = (item.tabs || []).slice(0, 4);
+    if (!any.length) return `<div class="group-cover empty-cover"></div>`;
+    if (any.length === 1) {
+      return `<img class="thumb lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, any[0].id))}" />`;
+    }
+    return `<div class="group-mosaic mosaic-${Math.min(any.length, 4)}">${any
+      .map(
+        (m) =>
+          `<img class="lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, m.id))}" />`
+      )
+      .join('')}</div>`;
   }
-  if (thumbs.length === 1) {
-    return `<img class="thumb" alt="" draggable="false" src="${escapeAttr(thumbs[0])}" />`;
+  if (members.length === 1) {
+    return `<img class="thumb lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, members[0].id))}" />`;
   }
-  return `<div class="group-mosaic mosaic-${Math.min(thumbs.length, 4)}">${thumbs
-    .map((src) => `<img alt="" draggable="false" src="${escapeAttr(src)}" />`)
+  return `<div class="group-mosaic mosaic-${Math.min(members.length, 4)}">${members
+    .map(
+      (m) =>
+        `<img class="lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, m.id))}" />`
+    )
     .join('')}</div>`;
 }
 
@@ -2282,6 +2430,8 @@ function createGroupCard(item) {
     </div>
   `;
 
+  card.querySelectorAll('img.lazy-thumb').forEach((img) => observeThumb(img));
+
   card.querySelector('.card-check').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleSelect(item.id);
@@ -2327,7 +2477,7 @@ function createCard(item) {
 
   const title = item.title || item.url || 'Untitled';
   const url = item.url || '';
-  const thumb = item.thumbnail || item.snapshot || '';
+  const mediaKey = mediaKeyForItem(item);
   const fav = item.favIconUrl || '';
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
@@ -2337,7 +2487,7 @@ function createCard(item) {
   card.innerHTML = `
     <input type="checkbox" class="card-check" ${selectedIds.has(item.id) ? 'checked' : ''} aria-label="select" />
     <div class="thumb-wrap">
-      <img class="thumb" alt="" draggable="false" src="${escapeAttr(thumb)}" />
+      <img class="thumb lazy-thumb" alt="" draggable="false" loading="lazy" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
       <div class="card-actions">
         <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">✎</button>
         <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">⤢</button>
@@ -2364,6 +2514,7 @@ function createCard(item) {
   `;
 
   wireFavicon(card);
+  observeThumb(card.querySelector('img.lazy-thumb'));
   card.querySelector('.card-check').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleSelect(item.id);
@@ -2408,15 +2559,18 @@ function createRow(item) {
   const isGroup = item.kind === 'group';
   const title = itemTitle(item);
   const url = isGroup ? t('groupTabs', { n: (item.tabs || []).length }) : item.url || '';
-  const thumb = isGroup
-    ? (item.tabs || []).map((m) => m.thumbnail || m.snapshot).find(Boolean) || ''
-    : item.thumbnail || item.snapshot || '';
+  const mediaKey = isGroup
+    ? (() => {
+        const m = (item.tabs || []).find((x) => x.hasThumb || x.id) || (item.tabs || [])[0];
+        return m ? mediaKeyForMember(item.id, m.id) : '';
+      })()
+    : mediaKeyForItem(item);
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
   const color = isGroup ? GROUP_COLORS[item.color] || GROUP_COLORS.grey : null;
 
   row.innerHTML = `
-    <img class="row-thumb" alt="" draggable="false" src="${escapeAttr(thumb)}" title="${escapeAttr(t('restore'))}" />
+    <img class="row-thumb lazy-thumb" alt="" draggable="false" loading="lazy" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />
     <div class="row-main">
       <div class="title restore-hit" title="${escapeAttr(title)}">
         ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
@@ -2443,6 +2597,7 @@ function createRow(item) {
     </div>
   `;
 
+  observeThumb(row.querySelector('img.lazy-thumb'));
   row.querySelector('.row-thumb').addEventListener('click', () => {
     if (selectMode) toggleSelect(item.id);
     else restoreItem(item.id);
@@ -2495,6 +2650,8 @@ function renderGrid() {
   gridEl.appendChild(frag);
 }
 
+let loadListTimer = null;
+
 async function loadList() {
   const res = await sendMessage({ type: 'GET_PARKED_ITEMS' });
   const raw =
@@ -2523,9 +2680,17 @@ async function loadList() {
   renderGrid();
 }
 
+function scheduleLoadList() {
+  if (loadListTimer) clearTimeout(loadListTimer);
+  loadListTimer = setTimeout(() => {
+    loadListTimer = null;
+    loadList();
+  }, 150);
+}
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.parkedTabs || changes.parkedItems) loadList();
+  if (changes.parkedTabs || changes.parkedItems) scheduleLoadList();
   if (changes.settings) {
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
     settings.cardCols = clampCols(settings.cardCols);
@@ -2535,6 +2700,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 initSettingsUi().then(() => {
+  if (Media?.openDb) Media.openDb().catch(() => {});
   loadList();
   try {
     window.focus();

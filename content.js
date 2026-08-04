@@ -66,7 +66,7 @@
         background: rgba(15, 23, 42, 0.5);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
-        animation: fade 0.15s ease-out;
+        animation: fade 0.07s ease-out;
       }
       @keyframes fade {
         from { opacity: 0; }
@@ -82,7 +82,7 @@
         border: 1px solid rgba(148, 163, 184, 0.25);
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
         background: #0b1220;
-        animation: panelIn 0.18s ease-out;
+        animation: panelIn 0.08s ease-out;
       }
       @keyframes panelIn {
         from { opacity: 0; transform: scale(0.97) translateY(8px); }

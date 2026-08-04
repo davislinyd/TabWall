@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.3.0",
-  "description": "Park tabs and Tab Groups as a photo wall. Snapshot navigation, help, multi-select, backup.",
+  "version": "2.4.0",
+  "description": "Park tabs and Tab Groups as a photo wall. Fast list load via IndexedDB media separation.",
   "permissions": [
     "activeTab",
     "storage",
@@ -34,7 +34,8 @@
     {
       "resources": [
         "park.html",
-        "park.js"
+        "park.js",
+        "mediaDb.js"
       ],
       "matches": [
         "<all_urls>"

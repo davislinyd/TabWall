@@ -2,6 +2,13 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
+## Performance (v2.4)
+
+- **Meta** (url/title/note/tags/order) → `chrome.storage.local`
+- **Images** (thumbnail + full snapshot) → **IndexedDB** blobs
+- Opening the wall loads **meta only**; thumbnails lazy-load when visible; full snapshots load on expand
+- First launch migrates old inline base64 into IDB automatically
+
 ## Shortcuts
 
 | Shortcut | Action |
@@ -10,17 +17,13 @@ Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual pho
 | `Option/Alt+Shift+G` | Park current Tab Group |
 | `Option/Alt+O` | Toggle TabWall |
 | `/` | Focus search |
-| `Esc` | Close floating panels, then TabWall |
-| `←` / `→` | Previous / next snapshot (while expanded) |
-
-In-app **Help** button lists shortcuts and usage (中文 / English).
+| `Esc` | Close panels / TabWall |
+| `←` / `→` | Prev / next snapshot |
 
 ## Features
 
-- Group cards · floating member panel · per-member snapshot / note / tags
-- Snapshot lightbox with arrow navigation across saved tabs/members
-- Multi-select batch restore / tags / delete
-- Settings, Tags, Help as draggable float panels (click outside to close)
+- Group park/restore, member note/tags, multi-select batch ops
+- Floating settings / tags / help (click outside to close)
 - Backup: lite JSON (no images) or full ZIP with binary media
 
 ## Install
@@ -32,5 +35,5 @@ In-app **Help** button lists shortcuts and usage (中文 / English).
 ## Files
 
 ```text
-manifest.json  background.js  content.js  park.html  park.js  icons/
+manifest.json  background.js  mediaDb.js  content.js  park.html  park.js  icons/
 ```
