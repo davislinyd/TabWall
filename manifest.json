@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.6.0",
+  "version": "2.6.2",
   "description": "Park tabs and Tab Groups as a photo wall. Fast list load via IndexedDB media separation.",
   "permissions": [
     "activeTab",

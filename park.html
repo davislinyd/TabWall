@@ -762,10 +762,137 @@
         position: relative;
       }
 
+      .card.stack-hover {
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent),
+          var(--shadow);
+        transform: scale(1.06);
+        z-index: 6;
+      }
+
+      .card.stack-hover::after {
+        content: '+';
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        z-index: 7;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1;
+        color: #fff;
+        background: var(--accent);
+        pointer-events: none;
+        box-shadow: var(--shadow);
+      }
+
+      #grid.is-dragging .card.stack-hover {
+        transition:
+          transform 0.12s ease,
+          border-color 0.12s ease,
+          box-shadow 0.12s ease;
+      }
+
       .group-color-bar {
         height: 4px;
         width: 100%;
         flex-shrink: 0;
+      }
+
+      /* Search: matching tabs inside a group */
+      .search-hits {
+        margin: 0;
+        padding: 8px 10px 10px;
+        border-top: 1px solid var(--border);
+        background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+        max-height: 180px;
+        overflow: auto;
+      }
+
+      .search-hits-head {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--accent);
+        margin-bottom: 6px;
+      }
+
+      .search-hits-head.meta-only {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .search-hit {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 5px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .search-hit:first-of-type {
+        border-top: 0;
+      }
+
+      .search-hit-main {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .search-hit-main:hover .search-hit-title {
+        color: var(--accent);
+      }
+
+      .search-hit-title {
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .search-hit-url {
+        font-size: 10px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .search-hit-actions {
+        display: flex;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+
+      .search-hits-more {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+        border: 0;
+        background: transparent;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: left;
+        padding: 4px 0 0;
+      }
+
+      .row .search-hits {
+        grid-column: 1 / -1;
       }
 
       .color-dot {
@@ -964,9 +1091,20 @@
         opacity: 0.95;
         z-index: 80;
         box-shadow: var(--edit-shadow);
-        pointer-events: none;
+        /* Do NOT use pointer-events:none — it drops setPointerCapture and kills drag */
         transform: scale(1.03);
         transition: none;
+      }
+
+      /* Kill native HTML5 drag (green + cursor on macOS) */
+      .card img,
+      .card a,
+      .card .thumb,
+      .card .lazy-thumb,
+      .card .favicon {
+        -webkit-user-drag: none;
+        user-drag: none;
+        user-select: none;
       }
 
       .card-placeholder {
@@ -1157,12 +1295,17 @@
         background: var(--overlay-actions);
         opacity: 0;
         transition: opacity 0.15s;
+        /* Layer never steals drag: only child buttons receive clicks */
         pointer-events: none;
       }
 
       .card:hover .card-actions,
       .card:focus-within .card-actions {
         opacity: 1;
+      }
+
+      .card-actions .icon-btn,
+      .card .delete-corner {
         pointer-events: auto;
       }
 
@@ -1863,11 +2006,11 @@
         </div>
         <div class="help-section">
           <h3 data-i18n="helpBasicTitle">基本使用</h3>
-          <p data-i18n="helpBasicBody">點縮圖或標題還原分頁；中央 ✎ 編輯 note／tags；⤢ 放大快照；× 刪除。可拖曳卡片重排（磁吸）。</p>
+          <p data-i18n="helpBasicBody">點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片中央可組成 Stack（還原為 Tab Group）。</p>
         </div>
         <div class="help-section">
-          <h3 data-i18n="helpGroupTitle">Tab Group</h3>
-          <p data-i18n="helpGroupBody">在 group 內按 Alt+Shift+G 可整組存檔。照片牆中 ▦ 開啟成員面板：可看每位成員快照、編輯 note／tags、還原單一或整個 group。</p>
+          <h3 data-i18n="helpGroupTitle">Tab Group / Stack</h3>
+          <p data-i18n="helpGroupBody">Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。▦ 成員面板可預覽、編輯、還原單一或整個 group。</p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpSelectTitle">複選</h3>

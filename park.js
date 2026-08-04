@@ -128,6 +128,13 @@ const I18N = {
     helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
     helpShortcutSearchMode:
       '搜尋框輸入 t/tag、n/note、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
+    searchHitsCount: '命中 {n} 個分頁',
+    searchHitGroupMeta: '符合 group 名稱／note／tags',
+    searchHitsMore: '還有 {n} 個…',
+    stackTitle: 'Stack',
+    stackHint: '拖曳卡片疊到另一張可組成 Stack，還原為 Tab Group',
+    stackMerged: '已合併為 Stack',
+    stackFailed: '無法合併',
     cards: '卡片',
     list: '列表',
     sort: '排序',
@@ -248,10 +255,10 @@ const I18N = {
       '存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。',
     helpBasicTitle: '基本使用',
     helpBasicBody:
-      '點縮圖或標題還原分頁；中央 ✎ 編輯 note／tags；⤢ 放大快照；× 刪除。可拖曳卡片重排（磁吸）。',
-    helpGroupTitle: 'Tab Group',
+      '點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片中央可組成 Stack（還原為 Tab Group）。',
+    helpGroupTitle: 'Tab Group / Stack',
     helpGroupBody:
-      '在 group 內按 Alt+Shift+G 可整組存檔。照片牆中 ▦ 開啟成員面板：可看每位成員快照、編輯 note／tags、還原單一或整個 group。',
+      'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。▦ 成員面板可預覽、編輯、還原單一或整個 group。',
     helpSelectTitle: '複選',
     helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
     helpBackupTitle: '備份',
@@ -290,6 +297,13 @@ const I18N = {
     helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
     helpShortcutSearchMode:
       'In search, type t/tag, n/note, or re/regex then Tab; all + Tab resets scope',
+    searchHitsCount: '{n} matching tab(s)',
+    searchHitGroupMeta: 'Matched group title / note / tags',
+    searchHitsMore: '+{n} more…',
+    stackTitle: 'Stack',
+    stackHint: 'Drag a card onto another to stack; restore as a Tab Group',
+    stackMerged: 'Stacked',
+    stackFailed: 'Could not stack',
     cards: 'Cards',
     list: 'List',
     sort: 'Sort',
@@ -410,10 +424,10 @@ const I18N = {
       'Saving a tab with an existing URL asks you how to proceed. Use the toolbar “Scan duplicates” to clean the wall.',
     helpBasicTitle: 'Basics',
     helpBasicBody:
-      'Click thumbnail or title to restore; ✎ for note/tags; ⤢ to expand snapshot; × to delete. Drag cards to reorder.',
-    helpGroupTitle: 'Tab Groups',
+      'Thumbnail restores; title copies link; ✎ note/tags; ⤢ snapshot; × delete. Drag to reorder, or drop onto another card’s center to stack (restores as a Tab Group).',
+    helpGroupTitle: 'Tab Groups / Stacks',
     helpGroupBody:
-      'Press Alt+Shift+G inside a group to park it. Use ▦ for the members panel: snapshots, per-tab note/tags, restore one or the whole group.',
+      'Alt+Shift+G parks a group; stacking tabs also builds a group. ▦ opens members for preview, edit, and restore one or all.',
     helpSelectTitle: 'Multi-select',
     helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
     helpBackupTitle: 'Backup',
@@ -1214,15 +1228,24 @@ function closeDedupeBox(sync = true) {
   if (sync) syncFloatBackdrop();
 }
 
+function centerDedupeBox() {
+  if (!dedupeBox || !dedupeBox.classList.contains('open')) return;
+  placeFloatBox(dedupeBox);
+}
+
 async function openDedupeBox() {
   if (!dedupeBox) return;
   closeAllFloatsExcept('dedupe');
   closeSettingsBox(false);
   dedupeBox.classList.add('open');
   dedupeBox.setAttribute('aria-hidden', 'false');
-  placeFloatBox(dedupeBox);
   syncFloatBackdrop();
+  centerDedupeBox();
   await runDedupeScan();
+  requestAnimationFrame(() => {
+    centerDedupeBox();
+    requestAnimationFrame(() => centerDedupeBox());
+  });
 }
 
 function setClusterKeepMode(cluster, mode) {
@@ -1319,6 +1342,7 @@ function renderDedupeClusters() {
 
     dedupeClustersEl.appendChild(wrap);
   });
+  centerDedupeBox();
 }
 
 async function runDedupeScan() {
@@ -1336,6 +1360,7 @@ async function runDedupeScan() {
     return cluster;
   });
   renderDedupeClusters();
+  requestAnimationFrame(() => centerDedupeBox());
 }
 
 async function applyDedupeChoices() {
@@ -1927,29 +1952,48 @@ function linkTextForItem(item) {
   return item.url || '';
 }
 
+function copyTextFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  return ok;
+}
+
 async function copySavedLink(item) {
   const text = linkTextForItem(item);
   if (!text) {
     showCopyToast(t('copyFailed'));
     return;
   }
+  // Prefer sync fallback first while still in the user-gesture stack (iframe-safe)
+  if (copyTextFallback(text)) {
+    showCopyToast(t('copied'));
+    return;
+  }
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
+      showCopyToast(t('copied'));
+      return;
     }
-    showCopyToast(t('copied'));
   } catch {
-    showCopyToast(t('copyFailed'));
+    // fall through
   }
+  showCopyToast(t('copyFailed'));
 }
 
 function showCopyToast(msg) {
@@ -2081,17 +2125,156 @@ function matchesPlainQuery(hay, q) {
   });
 }
 
-function matchesQuery(item, q) {
+function textMatchesQuery(text, q) {
   if (!q) return true;
-  const hay = itemHaystack(item);
   if (settings.searchRegex) {
     const compiled =
       compiledSearch.raw === q ? compiledSearch : compileSearchQuery(q);
     if (!compiled.re) return false;
     compiled.re.lastIndex = 0;
-    return compiled.re.test(hay);
+    return compiled.re.test(String(text || ''));
   }
-  return matchesPlainQuery(hay, q);
+  return matchesPlainQuery(text, q);
+}
+
+function memberHaystack(member, scope = searchScope) {
+  if (!member) return '';
+  if (scope === 'tag') {
+    return (Array.isArray(member.tags) ? member.tags : []).join(' ');
+  }
+  if (scope === 'note') {
+    return member.note || '';
+  }
+  return [
+    member.title || '',
+    member.url || '',
+    domainOf(member.url),
+    member.note || '',
+    ...(Array.isArray(member.tags) ? member.tags : []),
+  ].join(' ');
+}
+
+function groupMetaHaystack(group, scope = searchScope) {
+  if (scope === 'tag') {
+    return (Array.isArray(group.tags) ? group.tags : []).join(' ');
+  }
+  if (scope === 'note') {
+    return group.note || '';
+  }
+  return [
+    group.title || '',
+    group.note || '',
+    ...(Array.isArray(group.tags) ? group.tags : []),
+  ].join(' ');
+}
+
+function getMatchingMembers(group, q = query) {
+  if (!q || !group || group.kind !== 'group') return [];
+  return (group.tabs || []).filter((m) => textMatchesQuery(memberHaystack(m), q));
+}
+
+function groupMetaMatches(group, q = query) {
+  if (!q || !group || group.kind !== 'group') return false;
+  return textMatchesQuery(groupMetaHaystack(group), q);
+}
+
+function matchesQuery(item, q) {
+  if (!q) return true;
+  const hay = itemHaystack(item);
+  return textMatchesQuery(hay, q);
+}
+
+const SEARCH_HIT_LIMIT = 8;
+
+/** Append matching member rows under a group card/row when searching. */
+function appendGroupSearchHits(parentEl, group) {
+  if (!query || !parentEl || group?.kind !== 'group') return;
+
+  const hits = getMatchingMembers(group, query);
+  const metaHit = groupMetaMatches(group, query);
+  if (!hits.length && !metaHit) return;
+
+  const box = document.createElement('div');
+  box.className = 'search-hits';
+  box.addEventListener('click', (e) => e.stopPropagation());
+  box.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+  if (hits.length) {
+    const head = document.createElement('div');
+    head.className = 'search-hits-head';
+    head.textContent = t('searchHitsCount', { n: hits.length });
+    box.appendChild(head);
+
+    const show = hits.slice(0, SEARCH_HIT_LIMIT);
+    for (const m of show) {
+      const row = document.createElement('div');
+      row.className = 'search-hit';
+
+      const main = document.createElement('button');
+      main.type = 'button';
+      main.className = 'search-hit-main';
+      main.title = t('memberRestore');
+      main.innerHTML = `
+        <div class="search-hit-title">${escapeHtml(m.title || m.url || '—')}</div>
+        <div class="search-hit-url">${escapeHtml(m.url || '')}</div>
+      `;
+      main.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectMode) return;
+        restoreMember(group.id, m.id);
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'search-hit-actions';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'icon-btn sm';
+      prevBtn.title = t('expand');
+      prevBtn.textContent = '⤢';
+      prevBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(m, { groupId: group.id });
+      });
+
+      const restBtn = document.createElement('button');
+      restBtn.type = 'button';
+      restBtn.className = 'icon-btn sm';
+      restBtn.title = t('memberRestore');
+      restBtn.textContent = '↩';
+      restBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        restoreMember(group.id, m.id);
+      });
+
+      actions.append(prevBtn, restBtn);
+      row.append(main, actions);
+      box.appendChild(row);
+    }
+
+    if (hits.length > SEARCH_HIT_LIMIT) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'search-hits-more';
+      more.textContent = t('searchHitsMore', { n: hits.length - SEARCH_HIT_LIMIT });
+      more.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMembersBox(group);
+      });
+      box.appendChild(more);
+    }
+  } else if (metaHit) {
+    const head = document.createElement('div');
+    head.className = 'search-hits-head meta-only';
+    head.textContent = t('searchHitGroupMeta');
+    box.appendChild(head);
+  }
+
+  parentEl.appendChild(box);
 }
 
 function itemTitle(item) {
@@ -3184,6 +3367,8 @@ function beginCardDrag(state, e) {
   const placeholder = document.createElement('div');
   placeholder.className = 'card-placeholder';
   placeholder.style.height = `${rect.height}px`;
+  // Match card width so grid reflow is stable
+  placeholder.style.width = `${rect.width}px`;
   card.parentElement.insertBefore(placeholder, card);
   state.placeholder = placeholder;
 
@@ -3196,10 +3381,95 @@ function beginCardDrag(state, e) {
   card.style.height = `${rect.height}px`;
   card.style.zIndex = '80';
   card.style.margin = '0';
+  // Ensure capture survives after leaving the card bounds
+  try {
+    if (state.pointerId != null) card.setPointerCapture(state.pointerId);
+  } catch {
+    // ignore
+  }
+}
+
+/** Dwell before a drop is treated as stack (ms). Short so stacking is easy; still avoids drive-by merges. */
+const STACK_DWELL_MS = 150;
+
+function clearStackHover() {
+  gridEl.querySelectorAll('.card.stack-hover').forEach((el) => el.classList.remove('stack-hover'));
+}
+
+/**
+ * Central stack hot-zone: ~60% of card (20% inset each side).
+ */
+function pointInStackHotzone(clientX, clientY, rect) {
+  const mx = rect.width * 0.2;
+  const my = rect.height * 0.2;
+  return (
+    clientX >= rect.left + mx &&
+    clientX <= rect.right - mx &&
+    clientY >= rect.top + my &&
+    clientY <= rect.bottom - my
+  );
+}
+
+function findStackTargetAt(clientX, clientY, excludeCard) {
+  const cards = [...gridEl.querySelectorAll('.card')].filter(
+    (el) => el !== excludeCard && !el.classList.contains('dragging') && !el.classList.contains('card-placeholder')
+  );
+  // Prefer topmost card under point (last in paint order among hits)
+  let hit = null;
+  for (const el of cards) {
+    const rect = el.getBoundingClientRect();
+    if (pointInStackHotzone(clientX, clientY, rect)) hit = el;
+  }
+  return hit;
+}
+
+function updateStackHoverState(state, clientX, clientY) {
+  const stackEl = findStackTargetAt(clientX, clientY, state.card);
+  const candId = stackEl?.dataset?.id || null;
+  const now = performance.now();
+
+  if (candId !== state.stackCandidateId) {
+    state.stackCandidateId = candId;
+    state.stackCandidateSince = candId ? now : 0;
+    // Not armed until dwell completes
+    if (state.stackTargetId) {
+      clearStackHover();
+      state.stackTargetId = null;
+    }
+    return false;
+  }
+
+  if (!candId) {
+    if (state.stackTargetId) {
+      clearStackHover();
+      state.stackTargetId = null;
+    }
+    return false;
+  }
+
+  const armed = now - (state.stackCandidateSince || 0) >= STACK_DWELL_MS;
+  if (armed) {
+    if (state.stackTargetId !== candId) {
+      clearStackHover();
+      state.stackTargetId = candId;
+      if (stackEl) stackEl.classList.add('stack-hover');
+    }
+    return true;
+  }
+
+  // Hovering but not armed — still reorder
+  if (state.stackTargetId) {
+    clearStackHover();
+    state.stackTargetId = null;
+  }
+  return false;
 }
 
 function onCardPointerMove(e) {
   if (!dragState) return;
+  // Ignore multi-touch / wrong pointer
+  if (dragState.pointerId != null && e.pointerId !== dragState.pointerId) return;
+
   const dx = e.clientX - dragState.startX;
   const dy = e.clientY - dragState.startY;
 
@@ -3209,8 +3479,16 @@ function onCardPointerMove(e) {
   }
 
   const { card, offsetX, offsetY, placeholder } = dragState;
+  if (!card) return;
+
   card.style.left = `${e.clientX - offsetX}px`;
   card.style.top = `${e.clientY - offsetY}px`;
+
+  // Stack only after short dwell on center; otherwise keep reordering
+  const stacking = updateStackHoverState(dragState, e.clientX, e.clientY);
+  if (stacking) return;
+
+  if (!placeholder || !placeholder.parentElement) return;
 
   const before = snapshotCardRects();
   const siblings = [...gridEl.children].filter((el) => el !== card);
@@ -3241,23 +3519,9 @@ function onCardPointerMove(e) {
   }
 }
 
-async function endCardDrag(e) {
-  if (!dragState) return;
-  const state = dragState;
-  dragState = null;
-
-  try {
-    state.card.releasePointerCapture(e.pointerId);
-  } catch {
-    // ignore
-  }
-
-  if (!state.active) {
-    if (state.allowClickRestore && !selectMode) restoreItem(state.id);
-    return;
-  }
-
+function cleanupCardDragVisual(state) {
   const { card, placeholder } = state;
+  clearStackHover();
   card.classList.remove('dragging');
   gridEl.classList.remove('is-dragging');
   card.style.position = '';
@@ -3268,10 +3532,94 @@ async function endCardDrag(e) {
   card.style.zIndex = '';
   card.style.margin = '';
   card.style.transform = '';
-
   if (placeholder?.parentElement) {
     placeholder.parentElement.insertBefore(card, placeholder);
     placeholder.remove();
+  }
+}
+
+function normalizeParkedList(raw) {
+  return (Array.isArray(raw) ? raw : []).map((item) => {
+    if (item.kind === 'group' || Array.isArray(item.tabs)) {
+      return {
+        ...item,
+        kind: 'group',
+        note: typeof item.note === 'string' ? item.note : '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        tabs: Array.isArray(item.tabs) ? item.tabs : [],
+      };
+    }
+    return {
+      ...item,
+      kind: 'tab',
+      note: typeof item.note === 'string' ? item.note : '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+    };
+  });
+}
+
+async function endCardDrag(e) {
+  if (!dragState) return;
+  const state = dragState;
+  dragState = null;
+  detachCardDragListeners(state);
+
+  const clientX = e?.clientX;
+  const clientY = e?.clientY;
+
+  try {
+    if (e?.pointerId != null) state.card.releasePointerCapture(e.pointerId);
+    else if (state.pointerId != null) state.card.releasePointerCapture(state.pointerId);
+  } catch {
+    // ignore
+  }
+
+  if (!state.active) {
+    if (selectMode) return;
+    // setPointerCapture suppresses click — handle short-press here
+    if (state.allowClickCopy && state.item) {
+      copySavedLink(state.item);
+      return;
+    }
+    if (state.allowClickRestore) {
+      restoreItem(state.id);
+    }
+    return;
+  }
+
+  // Re-check stack target at drop point (dwell optional if still in hotzone)
+  let stackTargetId = state.stackTargetId || null;
+  if (
+    !stackTargetId &&
+    typeof clientX === 'number' &&
+    typeof clientY === 'number'
+  ) {
+    const el = findStackTargetAt(clientX, clientY, state.card);
+    if (el?.dataset?.id && el.dataset.id !== state.id) {
+      stackTargetId = el.dataset.id;
+    }
+  }
+
+  cleanupCardDragVisual(state);
+
+  // Drop onto another card → stack / merge into group
+  if (stackTargetId && stackTargetId !== state.id) {
+    const res = await sendMessage({
+      type: 'STACK_ITEMS',
+      sourceId: state.id,
+      targetId: stackTargetId,
+    });
+    if (res.ok && Array.isArray(res.items)) {
+      allTabs = normalizeParkedList(res.items);
+      await saveSettings({ sortBy: 'manual' });
+      sortByEl.value = 'manual';
+      renderGrid();
+      showCopyToast(t('stackMerged'));
+      return;
+    }
+    console.warn('[TabWall] STACK_ITEMS failed', res);
+    showCopyToast(t('stackFailed'));
+    // fall through to reorder if stack failed
   }
 
   const ids = [...gridEl.querySelectorAll('.card')].map((el) => el.dataset.id).filter(Boolean);
@@ -3302,49 +3650,156 @@ async function endCardDrag(e) {
   renderGrid();
 }
 
-function attachCardDrag(card, item) {
-  card.addEventListener('pointerdown', (e) => {
-    if (selectMode) return;
-    if (isMultiSelectModifier(e)) return;
-    if (settings.viewMode === 'list') return;
+function detachCardDragListeners(state) {
+  if (!state?.onMove) return;
+  window.removeEventListener('pointermove', state.onMove, true);
+  window.removeEventListener('pointerup', state.onUp, true);
+  window.removeEventListener('pointercancel', state.onUp, true);
+  state.onMove = null;
+  state.onUp = null;
+}
+
+/**
+ * Bind title/meta copy. Meta does not enter card drag (setPointerCapture kills click).
+ * pointerup + small movement = copy (more reliable than click alone).
+ */
+function bindMetaCopy(metaEl, item) {
+  if (!metaEl) return;
+  let downX = 0;
+  let downY = 0;
+  let downId = null;
+  let copiedOnUp = false;
+
+  metaEl.addEventListener('pointerdown', (e) => {
     if (e.button != null && e.button !== 0) return;
-    if (
-      e.target.closest(
-        '.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check, .meta, .members-btn'
-      )
-    ) {
+    if (e.target.closest('.search-hits, button, input')) return;
+    downX = e.clientX;
+    downY = e.clientY;
+    downId = e.pointerId;
+    copiedOnUp = false;
+  });
+
+  metaEl.addEventListener('pointerup', (e) => {
+    if (downId != null && e.pointerId !== downId) return;
+    const pid = downId;
+    downId = null;
+    if (pid == null) return;
+    if (e.button != null && e.button !== 0) return;
+    if (e.target.closest('.search-hits, button, input')) return;
+    if (dragState?.active) return;
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) >= DRAG_THRESHOLD) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
       return;
     }
+    e.preventDefault();
+    e.stopPropagation();
+    copiedOnUp = true;
+    copySavedLink(item);
+  });
 
-    dragState = {
-      card,
-      id: item.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      offsetX: 0,
-      offsetY: 0,
-      placeholder: null,
-      active: false,
-      // only thumbnail click restores; title/meta copies link
-      allowClickRestore: Boolean(
-        e.target.closest('.thumb-wrap, .thumb, .group-cover, .group-mosaic, .group-badge')
-      ),
-    };
-    try {
-      card.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
+  metaEl.addEventListener('click', (e) => {
+    if (copiedOnUp) {
+      copiedOnUp = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
+    if (e.target.closest('.search-hits, button, input')) return;
+    if (dragState?.active) return;
+    if (selectMode || isMultiSelectModifier(e)) {
+      handleCardSelectClick(item.id, e);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    copySavedLink(item);
   });
 }
 
-document.addEventListener('pointermove', onCardPointerMove);
-document.addEventListener('pointerup', (e) => {
-  if (dragState) endCardDrag(e).catch(() => {});
-});
-document.addEventListener('pointercancel', (e) => {
-  if (dragState) endCardDrag(e).catch(() => {});
-});
+function attachCardDrag(card, item) {
+  // Capture phase: thumb / card body can start drag; meta is excluded (copy only)
+  card.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (selectMode) return;
+      if (isMultiSelectModifier(e)) return;
+      if (settings.viewMode === 'list') return;
+      if (e.button != null && e.button !== 0) return;
+      // Meta / copy-hit: do not capture — copy handled by bindMetaCopy
+      if (e.target.closest('.meta, .copy-hit')) return;
+      if (
+        e.target.closest(
+          'button, input, a, .icon-btn, .card-check, .delete-btn, .search-hits, .search-hit'
+        )
+      ) {
+        return;
+      }
+
+      // End any prior gesture
+      if (dragState) {
+        detachCardDragListeners(dragState);
+        dragState = null;
+      }
+
+      const pointerId = e.pointerId;
+      e.preventDefault();
+
+      const state = {
+        card,
+        item,
+        id: item.id,
+        pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        offsetX: 0,
+        offsetY: 0,
+        placeholder: null,
+        active: false,
+        stackTargetId: null,
+        stackCandidateId: null,
+        stackCandidateSince: 0,
+        allowClickRestore: Boolean(
+          e.target.closest('.thumb-wrap, .thumb, .group-cover, .group-mosaic, .group-badge')
+        ),
+        allowClickCopy: false,
+        onMove: null,
+        onUp: null,
+      };
+
+      state.onMove = (ev) => {
+        if (ev.pointerId !== pointerId) return;
+        onCardPointerMove(ev);
+      };
+      state.onUp = (ev) => {
+        if (ev.pointerId !== pointerId) return;
+        detachCardDragListeners(state);
+        endCardDrag(ev).catch(() => {});
+      };
+
+      dragState = state;
+      window.addEventListener('pointermove', state.onMove, true);
+      window.addEventListener('pointerup', state.onUp, true);
+      window.addEventListener('pointercancel', state.onUp, true);
+
+      try {
+        card.setPointerCapture(pointerId);
+      } catch {
+        // ignore
+      }
+    },
+    true
+  );
+}
+
+// Block native HTML5 drag (img/link → green + cursor)
+document.addEventListener(
+  'dragstart',
+  (e) => {
+    if (e.target?.closest?.('.card, #grid')) e.preventDefault();
+  },
+  true
+);
 
 // ─── Cards / List ──────────────────────────────────────────────────
 
@@ -3419,6 +3874,7 @@ function createGroupCard(item) {
   `;
 
   card.querySelectorAll('img.lazy-thumb').forEach((img) => observeThumb(img));
+  appendGroupSearchHits(card, item);
 
   card.querySelector('.card-check').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3426,14 +3882,7 @@ function createGroupCard(item) {
     handleCardSelectClick(item.id, e);
   });
 
-  card.querySelector('.meta').addEventListener('click', (e) => {
-    if (dragState?.active) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-      return;
-    }
-    copySavedLink(item);
-  });
+  bindMetaCopy(card.querySelector('.meta'), item);
 
   card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
     if (e.target.closest('.card-actions, .delete-btn, .members-btn, .card-check')) return;
@@ -3530,14 +3979,7 @@ function createCard(item) {
     if (selectMode) return;
     deleteItem(item.id);
   });
-  card.querySelector('.meta').addEventListener('click', (e) => {
-    if (dragState?.active) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-      return;
-    }
-    copySavedLink(item);
-  });
+  bindMetaCopy(card.querySelector('.meta'), item);
   card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
     if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check')) return;
     if (dragState?.active) return;
@@ -3598,6 +4040,7 @@ function createRow(item) {
   `;
 
   observeThumb(row.querySelector('img.lazy-thumb'));
+  if (isGroup) appendGroupSearchHits(row, item);
   row.querySelector('.row-thumb').addEventListener('click', (e) => {
     if (selectMode || isMultiSelectModifier(e)) {
       handleCardSelectClick(item.id, e);
@@ -3607,6 +4050,7 @@ function createRow(item) {
   });
   row.querySelectorAll('.copy-hit').forEach((el) => {
     el.addEventListener('click', (e) => {
+      if (e.target.closest('.search-hits')) return;
       if (selectMode || isMultiSelectModifier(e)) {
         handleCardSelectClick(item.id, e);
         return;

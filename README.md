@@ -2,7 +2,7 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
-## Performance (v2.6)
+## Performance (v2.6.x)
 
 - **Meta** (url/title/note/tags/order) → `chrome.storage.local`
 - **Images** (thumbnail + full snapshot) → **IndexedDB** blobs
@@ -38,6 +38,7 @@ After reload/update, re-open existing tabs once so the content script injects.
 ## Features
 
 - Group park/restore, member note/tags, multi-select batch ops
+- **Stack:** drag a card onto another’s center (iOS-style) to merge into a group; restore recreates a Chrome Tab Group
 - Floating settings / tags / help (click outside to close)
 - Backup: lite JSON (no images) or full ZIP with binary media
 - **Dedup (human-decided):** exact URL match on save asks keep-both / replace / cancel; toolbar **掃描重複** scans the wall

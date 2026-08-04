@@ -1017,6 +1017,173 @@ async function applyDedupe(ops) {
   return { ok: true, deleted, items: next };
 }
 
+// ─── Stack / merge parked items into groups ────────────────────────
+
+async function rekeyMedia(oldKey, newKey) {
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  try {
+    const row = await Media.get(oldKey);
+    if (row?.thumb || row?.snap) {
+      await Media.put(newKey, { thumb: row.thumb || null, snap: row.snap || null });
+    }
+    await Media.remove(oldKey);
+  } catch (err) {
+    console.warn('[TabWall] rekeyMedia failed', oldKey, '→', newKey, err);
+  }
+}
+
+async function tabItemToMember(tabItem, groupId, indexInGroup) {
+  const memberId = crypto.randomUUID();
+  const oldKey = Media.mediaKeyTab(tabItem.id);
+  const newKey = Media.mediaKeyMember(groupId, memberId);
+  await rekeyMedia(oldKey, newKey);
+  return {
+    id: memberId,
+    url: tabItem.url || '',
+    title: tabItem.title || tabItem.url || 'Untitled',
+    favIconUrl: tabItem.favIconUrl || '',
+    pinned: false,
+    indexInGroup,
+    note: typeof tabItem.note === 'string' ? tabItem.note : '',
+    tags: Array.isArray(tabItem.tags) ? tabItem.tags : [],
+    hasThumb: Boolean(tabItem.hasThumb),
+    hasSnap: Boolean(tabItem.hasSnap),
+  };
+}
+
+async function rekeyGroupMembers(group, newGroupId, startIndex) {
+  const members = [];
+  let idx = startIndex;
+  for (const m of group.tabs || []) {
+    const memberId = m.id || crypto.randomUUID();
+    if (group.id !== newGroupId) {
+      await rekeyMedia(
+        Media.mediaKeyMember(group.id, m.id),
+        Media.mediaKeyMember(newGroupId, memberId)
+      );
+    }
+    members.push({
+      id: memberId,
+      url: m.url || '',
+      title: m.title || m.url || 'Untitled',
+      favIconUrl: m.favIconUrl || '',
+      pinned: Boolean(m.pinned),
+      indexInGroup: idx++,
+      note: typeof m.note === 'string' ? m.note : '',
+      tags: Array.isArray(m.tags) ? m.tags : [],
+      hasThumb: Boolean(m.hasThumb),
+      hasSnap: Boolean(m.hasSnap),
+    });
+  }
+  return members;
+}
+
+function replaceListKeepingOrder(list, removeIds, insertAtId, insertItem) {
+  const remove = new Set(removeIds);
+  const next = [];
+  let inserted = false;
+  for (const item of list) {
+    if (remove.has(item.id)) {
+      if (item.id === insertAtId && !inserted) {
+        next.push(insertItem);
+        inserted = true;
+      }
+      continue;
+    }
+    next.push(item);
+  }
+  if (!inserted) next.unshift(insertItem);
+  return next;
+}
+
+/**
+ * Stack source onto target (iOS-folder style).
+ * tab+tab → new group; tab+group / group+tab → add tab; group+group → merge into target.
+ */
+async function stackItems(sourceId, targetId) {
+  if (!sourceId || !targetId || sourceId === targetId) {
+    return { ok: false, error: 'invalid_ids' };
+  }
+  const list = await getParkedItems();
+  const source = list.find((i) => i.id === sourceId);
+  const target = list.find((i) => i.id === targetId);
+  if (!source || !target) return { ok: false, error: 'not_found' };
+
+  const srcGroup = source.kind === 'group';
+  const tgtGroup = target.kind === 'group';
+
+  try {
+    // tab → tab : create stack at target position
+    if (!srcGroup && !tgtGroup) {
+      const groupId = crypto.randomUUID();
+      const mTarget = await tabItemToMember(target, groupId, 0);
+      const mSource = await tabItemToMember(source, groupId, 1);
+      const group = {
+        kind: 'group',
+        id: groupId,
+        title: target.title || source.title || '',
+        color: 'grey',
+        collapsed: false,
+        note: '',
+        tags: [],
+        savedAt: Date.now(),
+        tabs: [mTarget, mSource],
+      };
+      const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, group);
+      await setParkedItems(next);
+      return { ok: true, items: next, groupId };
+    }
+
+    // tab → group : add tab into group
+    if (!srcGroup && tgtGroup) {
+      const member = await tabItemToMember(source, target.id, (target.tabs || []).length);
+      const updated = {
+        ...target,
+        tabs: [...(target.tabs || []), member],
+        savedAt: Date.now(),
+      };
+      const next = list
+        .map((i) => (i.id === target.id ? updated : i))
+        .filter((i) => i.id !== source.id);
+      await setParkedItems(next);
+      return { ok: true, items: next, groupId: target.id };
+    }
+
+    // group → tab : add tab into group, place group where tab was
+    if (srcGroup && !tgtGroup) {
+      const member = await tabItemToMember(target, source.id, (source.tabs || []).length);
+      const updated = {
+        ...source,
+        tabs: [...(source.tabs || []), member],
+        savedAt: Date.now(),
+      };
+      const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, updated);
+      await setParkedItems(next);
+      return { ok: true, items: next, groupId: source.id };
+    }
+
+    // group → group : merge source members into target
+    if (srcGroup && tgtGroup) {
+      const extra = await rekeyGroupMembers(source, target.id, (target.tabs || []).length);
+      const updated = {
+        ...target,
+        tabs: [...(target.tabs || []), ...extra],
+        savedAt: Date.now(),
+      };
+      const next = list
+        .map((i) => (i.id === target.id ? updated : i))
+        .filter((i) => i.id !== source.id);
+      await setParkedItems(next);
+      return { ok: true, items: next, groupId: target.id };
+    }
+
+    return { ok: false, error: 'unsupported' };
+  } catch (err) {
+    console.warn('[TabWall] stackItems failed:', err);
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ─── Save group ────────────────────────────────────────────────────
 
 async function saveActiveGroup() {
@@ -1397,6 +1564,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case 'REORDER_TABS':
       case 'REORDER_ITEMS':
         return reorderItems(message.ids);
+      case 'STACK_ITEMS':
+        return stackItems(message.sourceId, message.targetId);
       case 'SAVE_ACTIVE_GROUP':
         return saveActiveGroup();
       case 'GET_TAGS':
