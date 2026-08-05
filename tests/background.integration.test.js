@@ -38,6 +38,8 @@ function createRuntime() {
   const importStages = new Map();
   const removedDownloads = [];
   const removedTabs = [];
+  const testSetTimeout = setTimeout;
+  const testClearTimeout = clearTimeout;
   const chrome = {
     storage: {
       local: {
@@ -89,7 +91,11 @@ function createRuntime() {
       async setBadgeText() {},
     },
     tabs: {
-      async query() { return []; },
+      async query(queryInfo = {}) {
+        if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
+        if (queryInfo.groupId != null) return runtime.groupTabs;
+        return [];
+      },
       async create(info) {
         if (runtime.failTabCreate) throw new Error('tabs_create_failed');
         const tab = { id: ++runtime.nextTabId, ...info };
@@ -105,7 +111,18 @@ function createRuntime() {
       async sendMessage() {},
       async captureVisibleTab() { return ''; },
     },
-    tabGroups: { async update() {} },
+    tabGroups: {
+      TAB_GROUP_ID_NONE: -1,
+      async get(id) {
+        return runtime.groupMeta || {
+          id,
+          title: '',
+          color: 'grey',
+          collapsed: false,
+        };
+      },
+      async update() {},
+    },
     windows: {
       async create(info) {
         if (runtime.failWindowCreate) throw new Error('windows_create_failed');
@@ -134,6 +151,9 @@ function createRuntime() {
     nextTabId: 100,
     createdTabs: [],
     downloadItems: [],
+    activeTabs: [],
+    groupTabs: [],
+    groupMeta: null,
   };
 
   const mediaApi = {
@@ -208,8 +228,12 @@ function createRuntime() {
     atob,
     btoa,
     console,
-    setTimeout,
-    clearTimeout,
+    setTimeout(callback, delay, ...args) {
+      const timer = testSetTimeout(callback, delay, ...args);
+      if (delay >= 10000) timer.unref?.();
+      return timer;
+    },
+    clearTimeout: testClearTimeout,
     fetch,
     OffscreenCanvas: class {},
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
@@ -426,6 +450,163 @@ test('restore create failure retains parked metadata', async () => {
   const result = await runtime.api.restoreTab(ITEM_ID);
   assert.equal(result.ok, false);
   assert.equal(runtime.store.parkedItems.length, 1);
+});
+
+test('restored tab preserves note and tags when saved again', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    note: 'keep this note',
+    tags: ['keep', 'important'],
+  }]);
+
+  const restored = await runtime.api.restoreTab(ITEM_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 0);
+
+  const saved = await runtime.api.saveCurrentTab({
+    id: 201,
+    windowId: 1,
+    url: 'https://example.com/',
+    title: 'Updated title',
+    favIconUrl: '',
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].note, 'keep this note');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], ['keep', 'important']);
+
+  const savedAgain = await runtime.api.commitSaveTab({
+    id: 204,
+    windowId: 1,
+    url: 'https://example.com/',
+    title: 'Saved without hint',
+    favIconUrl: '',
+  });
+  assert.equal(savedAgain.ok, true);
+  assert.equal(runtime.store.parkedItems[0].note, '');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], []);
+});
+
+test('restore save hints require an exact URL match', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    note: 'do not copy',
+    tags: ['source'],
+  }]);
+
+  const restored = await runtime.api.restoreTab(ITEM_ID);
+  assert.equal(restored.ok, true);
+
+  const saved = await runtime.api.saveCurrentTab({
+    id: 202,
+    windowId: 1,
+    url: 'https://example.com/other',
+    title: 'Other URL',
+    favIconUrl: '',
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(runtime.store.parkedItems[0].note, '');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], []);
+});
+
+test('restored group member preserves note and tags when saved again', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Saved group',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [{
+      id: GROUP_HTTP_MEMBER_ID,
+      url: 'https://example.com/member',
+      title: 'Member',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 0,
+      note: 'member note',
+      tags: ['member-tag'],
+      hasThumb: false,
+      hasSnap: false,
+    }],
+  }]);
+
+  const restored = await runtime.api.restoreGroupMember(GROUP_ID, GROUP_HTTP_MEMBER_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 0);
+
+  const saved = await runtime.api.saveCurrentTab({
+    id: 203,
+    windowId: 1,
+    url: 'https://example.com/member',
+    title: 'Member again',
+    favIconUrl: '',
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].note, 'member note');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], ['member-tag']);
+});
+
+test('restored group preserves group note and tags when saved again', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Saved group',
+    color: 'blue',
+    collapsed: false,
+    note: 'group note',
+    tags: ['group-tag'],
+    savedAt: Date.now() - 1000,
+    tabs: [{
+      id: GROUP_HTTP_MEMBER_ID,
+      url: 'https://example.com/group-member',
+      title: 'Group member',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 0,
+      note: '',
+      tags: [],
+      hasThumb: false,
+      hasSnap: false,
+    }],
+  }]);
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 0);
+
+  const restoredTab = runtime.runtime.createdTabs[0];
+  runtime.store.settings = { saveGroupCapture: 'none' };
+  runtime.runtime.groupMeta = {
+    id: 77,
+    title: 'Saved group',
+    color: 'blue',
+    collapsed: false,
+  };
+  runtime.runtime.groupTabs = [{
+    ...restoredTab,
+    windowId: 1,
+    groupId: 77,
+    index: 0,
+  }];
+  runtime.runtime.activeTabs = [runtime.runtime.groupTabs[0]];
+
+  const saved = await runtime.api.saveActiveGroup();
+  assert.equal(saved.ok, true);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].note, 'group note');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], ['group-tag']);
 });
 
 test('Stack storage failure rolls copied media back and preserves old keys', async () => {

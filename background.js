@@ -1663,6 +1663,7 @@ async function captureTabBlobs(windowId, tabId, { tiny = false } = {}) {
 
 const PENDING_CONFLICT_KEY = 'pendingSaveConflict';
 const PENDING_TTL_MS = 10 * 60 * 1000;
+const RESTORE_HINTS_KEY = 'restoreSaveHints';
 
 /** Exact URL key (full string including query/hash). */
 function normalizeUrlKey(url) {
@@ -1756,6 +1757,130 @@ async function clearPendingConflict() {
   await chrome.storage.local.remove(PENDING_CONFLICT_KEY);
 }
 
+function normalizeRestoreHint(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const kind = raw.kind === 'group' ? 'group' : 'tab';
+  if (kind === 'group') {
+    const groupId = Number(raw.groupId);
+    if (!Number.isInteger(groupId) || groupId < 0) return null;
+    return {
+      kind,
+      id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
+      groupId,
+      note: safeText(raw.note, DATA_LIMITS.MAX_NOTE_LENGTH),
+      tags: normalizeTags(raw.tags),
+    };
+  }
+  const url = safeText(raw.url, DATA_LIMITS.MAX_URL_LENGTH);
+  if (!url) return null;
+  return {
+    kind,
+    id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
+    url,
+    note: safeText(raw.note, DATA_LIMITS.MAX_NOTE_LENGTH),
+    tags: normalizeTags(raw.tags),
+  };
+}
+
+async function getRestoreHints() {
+  let data = {};
+  try {
+    if (chrome.storage.session) {
+      data = await chrome.storage.session.get(RESTORE_HINTS_KEY);
+    }
+  } catch {
+    data = {};
+  }
+  if (!data[RESTORE_HINTS_KEY]) {
+    data = await chrome.storage.local.get(RESTORE_HINTS_KEY);
+  }
+  return Array.isArray(data[RESTORE_HINTS_KEY])
+    ? data[RESTORE_HINTS_KEY].map(normalizeRestoreHint).filter(Boolean)
+    : [];
+}
+
+async function setRestoreHints(hints) {
+  const cleaned = (Array.isArray(hints) ? hints : [])
+    .map(normalizeRestoreHint)
+    .filter(Boolean);
+  try {
+    if (chrome.storage.session) {
+      await chrome.storage.session.set({ [RESTORE_HINTS_KEY]: cleaned });
+      return;
+    }
+  } catch {
+    // Fall back to local storage when session storage is unavailable.
+  }
+  await chrome.storage.local.set({ [RESTORE_HINTS_KEY]: cleaned });
+}
+
+function restoreHintForItem(item) {
+  const hint = normalizeRestoreHint(item);
+  return hint ? { ...hint, id: crypto.randomUUID() } : null;
+}
+
+function restoreGroupHintForItem(groupId, item) {
+  const hint = normalizeRestoreHint({
+    kind: 'group',
+    groupId,
+    note: item?.note,
+    tags: item?.tags,
+  });
+  return hint ? { ...hint, id: crypto.randomUUID() } : null;
+}
+
+async function rememberRestoreHints(items) {
+  const additions = (Array.isArray(items) ? items : [])
+    .map(restoreHintForItem)
+    .filter(Boolean);
+  if (!additions.length) return;
+  const hints = await getRestoreHints();
+  await setRestoreHints([...hints, ...additions]);
+}
+
+async function rememberRestoreGroupHint(groupId, item) {
+  const addition = restoreGroupHintForItem(groupId, item);
+  if (!addition) return;
+  const hints = await getRestoreHints();
+  const next = hints.filter(
+    (hint) => !(hint.kind === 'group' && hint.groupId === addition.groupId)
+  );
+  await setRestoreHints([...next, addition]);
+}
+
+async function findRestoreHint(url) {
+  const key = normalizeUrlKey(url);
+  if (!key) return null;
+  const hints = await getRestoreHints();
+  for (let i = hints.length - 1; i >= 0; i--) {
+    if (hints[i].kind !== 'group' && normalizeUrlKey(hints[i].url) === key) {
+      return hints[i];
+    }
+  }
+  return null;
+}
+
+async function findRestoreGroupHint(groupId) {
+  const key = Number(groupId);
+  if (!Number.isInteger(key) || key < 0) return null;
+  const hints = await getRestoreHints();
+  for (let i = hints.length - 1; i >= 0; i--) {
+    if (hints[i].kind === 'group' && hints[i].groupId === key) {
+      return hints[i];
+    }
+  }
+  return null;
+}
+
+async function consumeRestoreHint(id) {
+  if (!id) return;
+  const hints = await getRestoreHints();
+  const index = hints.findIndex((hint) => hint.id === id);
+  if (index === -1) return;
+  hints.splice(index, 1);
+  await setRestoreHints(hints);
+}
+
 async function deleteTabItemsByIds(ids) {
   if (!ids?.length) return 0;
   const idSet = new Set(ids);
@@ -1780,6 +1905,7 @@ async function deleteTabItemsByIds(ids) {
  */
 async function commitSaveTab(tabLike, opts = {}) {
   const replaceMatchIds = opts.replaceMatchIds || [];
+  const restoreHint = await findRestoreHint(tabLike.url);
   if (replaceMatchIds.length) {
     await deleteTabItemsByIds(replaceMatchIds);
   }
@@ -1827,8 +1953,8 @@ async function commitSaveTab(tabLike, opts = {}) {
     url: tabLike.url || '',
     title: tabLike.title || tabLike.url || 'Untitled',
     favIconUrl: tabLike.favIconUrl || '',
-    note: '',
-    tags: [],
+    note: restoreHint?.note || '',
+    tags: Array.isArray(restoreHint?.tags) ? restoreHint.tags : [],
     savedAt: Date.now(),
     hasThumb,
     hasSnap,
@@ -1837,6 +1963,11 @@ async function commitSaveTab(tabLike, opts = {}) {
   const list = await getParkedItems();
   list.unshift(entry);
   await setParkedItems(list);
+  try {
+    await consumeRestoreHint(restoreHint?.id);
+  } catch (err) {
+    console.warn('[TabWall] restore hint cleanup failed:', err);
+  }
 
   const { afterSave } = await getSettings();
   if (afterSave === 'close' && tabLike.id != null) {
@@ -2173,6 +2304,7 @@ async function saveActiveGroup() {
       await flashBadge('!');
       return { ok: false, error: 'group_get_failed' };
     }
+    const restoreGroupHint = await findRestoreGroupHint(tab.groupId);
 
     const members = await chrome.tabs.query({
       windowId: tab.windowId,
@@ -2243,8 +2375,8 @@ async function saveActiveGroup() {
       title: meta.title || '',
       color: meta.color || 'grey',
       collapsed: Boolean(meta.collapsed),
-      note: '',
-      tags: [],
+      note: restoreGroupHint?.note || '',
+      tags: Array.isArray(restoreGroupHint?.tags) ? restoreGroupHint.tags : [],
       savedAt: Date.now(),
       tabs: groupTabs,
     };
@@ -2252,6 +2384,11 @@ async function saveActiveGroup() {
     const list = await getParkedItems();
     list.unshift(groupItem);
     await setParkedItems(list);
+    try {
+      await consumeRestoreHint(restoreGroupHint?.id);
+    } catch (err) {
+      console.warn('[TabWall] group restore hint cleanup failed:', err);
+    }
 
     if ((settings.afterSaveGroup || 'close') === 'close') {
       const ids = members.map((m) => m.id).filter((id) => id != null);
@@ -2322,13 +2459,33 @@ async function cleanupCreatedTabs(tabIds, windowId = null) {
   }
 }
 
-async function commitRestoredItem(list, index, item, createdIds, windowId = null) {
+async function commitRestoredItem(
+  list,
+  index,
+  item,
+  createdIds,
+  windowId = null,
+  restoredGroupId = null
+) {
   const next = list.filter((entry) => entry.id !== item.id);
   try {
     await setParkedItems(next);
   } catch (err) {
     await cleanupCreatedTabs(createdIds, windowId);
     return { ok: false, error: String(err?.message || err) };
+  }
+  if (item.kind === 'tab') {
+    try {
+      await rememberRestoreHints([item]);
+    } catch (err) {
+      console.warn('[TabWall] restore hint save failed:', err);
+    }
+  } else if (restoredGroupId != null) {
+    try {
+      await rememberRestoreGroupHint(restoredGroupId, item);
+    } catch (err) {
+      console.warn('[TabWall] group restore hint save failed:', err);
+    }
   }
   try {
     await Media.removeMany(Media.keysForItem(item));
@@ -2393,7 +2550,14 @@ async function restoreGroup(id) {
         color: item.color || 'grey',
         collapsed: Boolean(item.collapsed),
       });
-      const result = await commitRestoredItem(list, idx, item, createdIds, windowId);
+      const result = await commitRestoredItem(
+        list,
+        idx,
+        item,
+        createdIds,
+        windowId,
+        groupId
+      );
       if (!result.ok) return result;
       return { ...result, skipped: members.filter((m) => !isRestorableUrl(m.url)).length };
     } catch (err) {
@@ -2425,7 +2589,7 @@ async function restoreGroup(id) {
     } catch {
       // ignore
     }
-    const result = await commitRestoredItem(list, idx, item, createdIds);
+    const result = await commitRestoredItem(list, idx, item, createdIds, null, groupId);
     return result.ok ? { ...result, skipped } : result;
   } catch (err) {
     await cleanupCreatedTabs(createdIds);
@@ -2462,6 +2626,11 @@ async function restoreGroupMember(groupId, memberId) {
   } catch (err) {
     await cleanupCreatedTabs(created?.id != null ? [created.id] : []);
     return { ok: false, error: String(err?.message || err) };
+  }
+  try {
+    await rememberRestoreHints([member]);
+  } catch (err) {
+    console.warn('[TabWall] restore hint save failed:', err);
   }
   try {
     await Media.remove(Media.mediaKeyMember(groupId, memberId));
@@ -2734,6 +2903,9 @@ if (globalThis.__TABWALL_TEST__) {
     importBackup,
     pruneDownloadedAutoBackups,
     stackItems,
+    commitSaveTab,
+    saveCurrentTab,
+    saveActiveGroup,
     restoreTab,
     restoreGroup,
     restoreGroupMember,

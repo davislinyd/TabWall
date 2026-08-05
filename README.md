@@ -1,6 +1,10 @@
 # TabWall
 
+[English](#english) · [中文](#中文)
+
 ## English
+
+[中文](#中文)
 
 TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups as a visual photo wall. Data stays on the device.
 
@@ -77,6 +81,7 @@ List view supports copying from titles and URLs. Card dragging and stacking are 
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
 - **Group restore:** ask for confirmation before restoring a complete group.
+- **Metadata continuity:** notes and tags are retained when a restored tab or group is saved again in the same browser session.
 - **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups can run on a schedule or after data changes, and 1–99 copies can be retained.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
 - **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
@@ -117,6 +122,8 @@ docs/privacy.md docs/CHANGELOG.md
 Store listing drafts are kept only under the local, ignored `private/` directory.
 
 ## 中文
+
+[English](#english)
 
 TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存為照片牆，資料留在本機裝置。
 
@@ -193,6 +200,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
 - **群組還原：** 還原完整群組前會要求確認。
+- **中繼資料延續：** 還原分頁或群組後，在同一瀏覽器工作階段再次儲存時，會保留原本的備註與標籤。
 - **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
