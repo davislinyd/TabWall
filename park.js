@@ -1115,15 +1115,38 @@ function applyI18n() {
   if (typeof syncSearchRegexUi === 'function') syncSearchRegexUi();
 }
 
-function requestHostClose() {
+async function closeStandaloneTab() {
   try {
-    if (window.parent && window.parent !== window) {
-      if (postToParent({ type: 'TABWALL_CLOSE' })) return;
+    const tab = await chrome.tabs.getCurrent();
+    if (tab?.id != null) {
+      await chrome.tabs.remove(tab.id);
+      return;
     }
+  } catch {
+    // Fall back to window.close below.
+  }
+  try {
+    window.close();
   } catch {
     // ignore
   }
-  window.close();
+}
+
+function requestHostClose() {
+  if (window.parent && window.parent !== window) {
+    try {
+      if (postToParent({ type: 'TABWALL_CLOSE' })) return;
+    } catch {
+      // ignore
+    }
+    try {
+      window.close();
+    } catch {
+      // ignore
+    }
+    return;
+  }
+  closeStandaloneTab();
 }
 
 function sendMessage(payload) {

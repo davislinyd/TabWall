@@ -6,6 +6,7 @@ import vm from 'node:vm';
 
 const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
+const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
 const ITEM_ID = '11111111-1111-4111-8111-111111111111';
 const SOURCE_ID = '22222222-2222-4222-8222-222222222222';
 const TARGET_ID = '33333333-3333-4333-8333-333333333333';
@@ -83,6 +84,7 @@ function createRuntime() {
       onStartup: event(),
       lastError: null,
       getManifest: () => ({ version: '2.13.0' }),
+      getURL: (path) => `chrome-extension://test/${path}`,
     },
     commands: { onCommand: event(), async getAll() { return []; } },
     action: {
@@ -93,6 +95,9 @@ function createRuntime() {
     tabs: {
       async query(queryInfo = {}) {
         if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
+        if (queryInfo.url) {
+          return runtime.parkTabs.filter((tab) => tab.url === queryInfo.url);
+        }
         if (queryInfo.groupId != null) return runtime.groupTabs;
         return [];
       },
@@ -106,9 +111,16 @@ function createRuntime() {
         removedTabs.push(...(Array.isArray(ids) ? ids : [ids]));
       },
       async group() { return 77; },
-      async update() {},
+      async update(id, info) {
+        runtime.updatedTabs.push({ id, info });
+      },
+      async getCurrent() {
+        return runtime.currentTab;
+      },
       async get() { return { id: 1, windowId: 1, status: 'complete' }; },
-      async sendMessage() {},
+      async sendMessage() {
+        if (runtime.failSendMessage) throw new Error('send_message_failed');
+      },
       async captureVisibleTab() { return ''; },
     },
     tabGroups: {
@@ -130,9 +142,16 @@ function createRuntime() {
         runtime.createdTabs.push(tab);
         return { id: 55, tabs: [tab] };
       },
+      async update(id, info) {
+        runtime.updatedWindows.push({ id, info });
+      },
       async remove() {},
     },
-    scripting: { async executeScript() {} },
+    scripting: {
+      async executeScript() {
+        if (runtime.failExecuteScript) throw new Error('execute_script_failed');
+      },
+    },
     downloads: {
       onChanged: event(),
       async search() { return runtime.downloadItems; },
@@ -150,10 +169,16 @@ function createRuntime() {
     failWindowCreate: false,
     nextTabId: 100,
     createdTabs: [],
+    updatedTabs: [],
+    updatedWindows: [],
+    parkTabs: [],
+    currentTab: null,
     downloadItems: [],
     activeTabs: [],
     groupTabs: [],
     groupMeta: null,
+    failSendMessage: false,
+    failExecuteScript: false,
   };
 
   const mediaApi = {
@@ -273,6 +298,104 @@ function tab(id, url = 'https://example.com/') {
     hasSnap: true,
   };
 }
+
+test('manifest overrides the New Tab page with the TabWall UI', () => {
+  assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
+  assert.equal(MANIFEST.version, '2.14.0');
+});
+
+test('toggle keeps the overlay path for regular HTTPS tabs', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 7, windowId: 1, url: 'https://example.com/' }];
+
+  const result = await runtime.api.toggleParkOnActiveTab();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'overlay');
+  assert.equal(result.tabId, 7);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+});
+
+test('toggle opens a standalone page for restricted tabs', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 8, windowId: 1, url: 'chrome://extensions/' }];
+
+  const result = await runtime.api.toggleParkOnActiveTab();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'standalone');
+  assert.equal(result.created, true);
+  assert.equal(
+    runtime.runtime.createdTabs[0].url,
+    'chrome-extension://test/park.html?surface=standalone'
+  );
+});
+
+test('toggle falls back to a standalone page when content injection fails', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 9, windowId: 1, url: 'https://example.com/' }];
+  runtime.runtime.failSendMessage = true;
+  runtime.runtime.failExecuteScript = true;
+
+  const result = await runtime.api.toggleParkOnActiveTab();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'standalone');
+  assert.equal(runtime.runtime.createdTabs[0].url, 'chrome-extension://test/park.html?surface=standalone');
+});
+
+test('toggle reuses an existing standalone page instead of creating a duplicate', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 10, windowId: 1, url: 'chrome://extensions/' }];
+  runtime.runtime.parkTabs = [{
+    id: 110,
+    windowId: 2,
+    url: 'chrome-extension://test/park.html?surface=standalone',
+  }];
+
+  const result = await runtime.api.toggleParkOnActiveTab();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'standalone');
+  assert.equal(result.reused, true);
+  assert.equal(result.tabId, 110);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+  assert.equal(runtime.runtime.updatedTabs.length, 1);
+  assert.equal(runtime.runtime.updatedTabs[0].id, 110);
+  assert.equal(runtime.runtime.updatedTabs[0].info.active, true);
+  assert.equal(runtime.runtime.updatedWindows.length, 1);
+  assert.equal(runtime.runtime.updatedWindows[0].id, 2);
+  assert.equal(runtime.runtime.updatedWindows[0].info.focused, true);
+});
+
+test('toggle does not duplicate a TabWall page that is already active', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 11, windowId: 1, url: 'chrome-extension://test/park.html' }];
+
+  const result = await runtime.api.toggleParkOnActiveTab();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'already-open');
+  assert.equal(result.tabId, 11);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+});
+
+test('toggle-park command uses the same restricted-page fallback', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 12, windowId: 1, url: 'chrome://extensions/' }];
+
+  const result = await runtime.api.handleCommandAction('toggle-park');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'standalone');
+  assert.equal(runtime.runtime.createdTabs[0].url, 'chrome-extension://test/park.html?surface=standalone');
+});
 
 test('replace import removes stale media for an ID with no incoming image', async () => {
   const runtime = createRuntime();

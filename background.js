@@ -66,6 +66,8 @@ const DEFAULT_SETTINGS = {
 
 const AUTO_BACKUP_ALARM = 'tabwall-auto-backup-schedule';
 const AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
+const PARK_PAGE_PATH = 'park.html';
+const STANDALONE_SURFACE = 'standalone';
 
 let autoBackupRunning = false;
 
@@ -1568,6 +1570,46 @@ async function getActiveTab() {
   return tabs[0] || null;
 }
 
+function getParkPageUrl(surface = '') {
+  const url = chrome.runtime.getURL(PARK_PAGE_PATH);
+  return surface ? `${url}?surface=${encodeURIComponent(surface)}` : url;
+}
+
+function isOwnParkPageUrl(url) {
+  if (typeof url !== 'string' || !url) return false;
+  const base = getParkPageUrl();
+  return url === base || url.startsWith(`${base}?`);
+}
+
+async function openStandaloneParkTab() {
+  const url = getParkPageUrl(STANDALONE_SURFACE);
+  try {
+    const matches = await chrome.tabs.query({ url });
+    const existing = (matches || []).find((tab) => tab?.id != null);
+    if (existing) {
+      try {
+        await chrome.tabs.update(existing.id, { active: true });
+        if (existing.windowId != null && chrome.windows?.update) {
+          try {
+            await chrome.windows.update(existing.windowId, { focused: true });
+          } catch {
+            // The tab can still be activated when its window cannot be focused.
+          }
+        }
+        return { ok: true, mode: 'standalone', reused: true, tabId: existing.id };
+      } catch {
+        // The matching tab may have closed between query and update; create a new one.
+      }
+    }
+    const created = await chrome.tabs.create({ url, active: true });
+    return { ok: true, mode: 'standalone', created: true, tabId: created?.id ?? null };
+  } catch (err) {
+    console.warn('[TabWall] standalone page open failed:', err);
+    await flashBadge('!');
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -1620,15 +1662,18 @@ async function sendToTab(tabId, message) {
 
 async function toggleParkOnActiveTab() {
   const tab = await getActiveTab();
+  if (tab?.url && isOwnParkPageUrl(tab.url)) {
+    return { ok: true, mode: 'already-open', tabId: tab.id ?? null };
+  }
   if (!tab?.id || isRestrictedUrl(tab.url)) {
-    await flashBadge('!');
-    return;
+    return openStandaloneParkTab();
   }
   try {
     await sendToTab(tab.id, { type: 'TOGGLE_PARK' });
+    return { ok: true, mode: 'overlay', tabId: tab.id };
   } catch (err) {
     console.warn('[TabWall] inject/toggle failed:', err);
-    await flashBadge('!');
+    return openStandaloneParkTab();
   }
 }
 
@@ -2417,8 +2462,7 @@ async function handleCommandAction(action) {
   }
   if (action === 'toggle-park') {
     if (!beginAction('toggle-park')) return { ok: false, error: 'debounced' };
-    await toggleParkOnActiveTab();
-    return { ok: true };
+    return toggleParkOnActiveTab();
   }
   return { ok: false, error: 'unknown_action' };
 }
@@ -2909,6 +2953,9 @@ if (globalThis.__TABWALL_TEST__) {
     restoreTab,
     restoreGroup,
     restoreGroupMember,
+    toggleParkOnActiveTab,
+    openStandaloneParkTab,
+    handleCommandAction,
   };
 }
 
