@@ -3103,12 +3103,16 @@ lbRestore.addEventListener('click', async () => {
 
 function renderEditChips() {
   editChips.innerHTML = '';
-  editTagList.forEach((tag, index) => {
+  editTagList.forEach((tag) => {
     const chip = document.createElement('span');
     chip.className = 'tag-chip';
     chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">×</button>`;
-    chip.querySelector('button').addEventListener('click', () => {
-      editTagList.splice(index, 1);
+    chip.querySelector('button').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentIndex = editTagList.indexOf(tag);
+      if (currentIndex === -1) return;
+      editTagList.splice(currentIndex, 1);
       renderEditChips();
     });
     editChips.appendChild(chip);

@@ -1968,7 +1968,8 @@
         word-break: break-all;
       }
 
-      .edit-body label {
+      .edit-body label,
+      .edit-body .edit-field {
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -2533,14 +2534,14 @@
           <span data-i18n="note">Note</span>
           <textarea id="editNote" data-i18n-placeholder="notePh" placeholder="加入備註…"></textarea>
         </label>
-        <label>
+        <div class="edit-field">
           <span data-i18n="tags">Tags</span>
           <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
           <div class="tag-input" id="tagInput">
             <div class="chips" id="editChips"></div>
-            <input id="editTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+            <input id="editTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" />
           </div>
-        </label>
+        </div>
         <div class="edit-actions">
           <button type="button" class="btn" id="editCancel" data-i18n="cancel">取消</button>
           <button type="button" class="btn primary" id="editSave" data-i18n="save">儲存</button>
