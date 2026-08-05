@@ -1,3 +1,9 @@
+---
+layout: default
+title: TabWall
+permalink: /
+---
+
 # TabWall
 
 ## English
@@ -6,13 +12,13 @@
 
 TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups as a visual photo wall. Data stays on the device.
 
-**Current version:** See `manifest.json`.
+**Current version:** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
 
-**Release history:** [docs/CHANGELOG.md](docs/CHANGELOG.md)
+**Release history:** [CHANGELOG](CHANGELOG.html)
 
-**Privacy policy:** [docs/privacy.md](docs/privacy.md)
+**Privacy policy:** [privacy policy](privacy.html)
 
-**License:** [MIT License](LICENSE)
+**License:** [MIT License](https://github.com/davislinyd/TabWall/blob/main/LICENSE)
 
 ### Architecture
 
@@ -109,7 +115,7 @@ List view supports copying from titles and URLs. Card dragging and stacking are 
 - Use Chrome's native Reload action after a coherent set of edits.
 - UI-only changes to `park.html` or `park.js` still require an extension reload or reopening the wall.
 - Follow the versioning and packaging rules in `AGENTS.md`.
-- See [docs/CHANGELOG.md](docs/CHANGELOG.md) for release notes.
+- See [CHANGELOG](CHANGELOG.html) for release notes.
 
 ### Files
 
@@ -127,13 +133,13 @@ docs/privacy.md docs/CHANGELOG.md
 
 TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存為照片牆，資料留在本機裝置。
 
-**目前版本：** 請查看 `manifest.json`。
+**目前版本：** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
 
-**開發歷程：** [docs/CHANGELOG.md](docs/CHANGELOG.md)
+**開發歷程：** [CHANGELOG](CHANGELOG.html)
 
-**隱私政策：** [docs/privacy.md](docs/privacy.md)
+**隱私政策：** [隱私政策](privacy.html)
 
-**授權：** [MIT License](LICENSE)
+**授權：** [MIT License](https://github.com/davislinyd/TabWall/blob/main/LICENSE)
 
 ### 架構
 
@@ -230,7 +236,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 完成一組相關修改後，使用 Chrome 的原生「重新載入」。
 - 只修改 `park.html` 或 `park.js` 也需要重新載入擴充功能，或重新開啟照片牆。
 - 版本與打包規則請遵循 `AGENTS.md`。
-- 發布說明請查看 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+- 發布說明請查看 [CHANGELOG](CHANGELOG.html)。
 
 ### 檔案
 

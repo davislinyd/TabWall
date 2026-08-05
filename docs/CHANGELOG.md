@@ -1,3 +1,9 @@
+---
+layout: default
+title: "TabWall Changelog"
+permalink: /CHANGELOG.html
+---
+
 # 開發歷程 / Changelog
 
 版本語意（patch / minor / major）見根目錄 **`AGENTS.md`**。  
@@ -130,8 +136,6 @@
 |------|------|
 | `README.md` | 功能、快捷鍵、安裝與開發注意 |
 | `AGENTS.md` | 版號規則、clean zip 白名單、驗證 |
-| `docs/privacy.md` | Chrome Web Store 隱私政策（可公開） |
+| `docs/privacy.md` | 公開隱私政策 |
 | `docs/CHANGELOG.md` | 本檔：開發歷程 |
 | `scripts/pack.sh` | 產出 `dist/TabWall-<version>.zip` |
-
-商店文案草稿僅放本機 `private/`（已 gitignore，不入庫）。

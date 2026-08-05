@@ -1,8 +1,14 @@
+---
+layout: default
+title: "Privacy Policy — TabWall"
+permalink: /privacy.html
+---
+
 # Privacy Policy — TabWall
 
 **Last updated:** 2026-08-05  
 **Product:** TabWall (Chrome / Chromium extension)  
-**Contact:** Use the support email or GitHub repository issues associated with the extension listing.
+**Contact:** Use the [GitHub repository issues](https://github.com/davislinyd/TabWall/issues).
 
 ## Summary
 
@@ -32,8 +38,6 @@ TabWall does **not**:
 - Sell or rent your data
 - Use your parked content for advertising
 - Require an account to use the extension
-
-If you install from the Chrome Web Store, **Google** may process data under Google’s own policies (install metrics, store account, etc.). That is separate from TabWall’s local storage.
 
 ## Permissions (why they are needed)
 
@@ -68,7 +72,7 @@ We may update this policy when the extension’s data practices change. The “L
 
 ## Contact
 
-For privacy questions about TabWall, contact the publisher via the Chrome Web Store listing support channel or the project’s public repository issues.
+For privacy questions about TabWall, contact the publisher through the [project’s public GitHub repository issues](https://github.com/davislinyd/TabWall/issues).
 
 ---
 
@@ -85,6 +89,4 @@ TabWall 將分頁與 Tab Group 暫存為本機照片牆。
 解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。
 
 權限用途：分頁／群組讀寫與還原、在一般網頁注入照片牆浮層、本機大量儲存截圖、可選的下載目錄自動備份。
-若透過 Chrome 線上應用程式商店安裝，Google 可能依其政策處理商店相關資料，與 TabWall 本機儲存無關。
-
-隱私疑問請透過商店刊登的支援管道或專案公開儲存庫 Issues 聯絡發行者。
+隱私疑問請透過[專案公開儲存庫 Issues](https://github.com/davislinyd/TabWall/issues) 聯絡發行者。
