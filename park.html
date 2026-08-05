@@ -1498,18 +1498,6 @@
         color: var(--text);
       }
 
-      .shortcut-row .shortcut-btn {
-        min-width: 120px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12px;
-      }
-
-      .shortcut-row .shortcut-btn.recording {
-        border-color: var(--accent);
-        color: var(--accent);
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-      }
-
       .shortcut-row .chrome-bind {
         flex: 1 1 100%;
         font-size: 11px;
@@ -2197,28 +2185,24 @@
           </div>
         </div>
         <div class="settings-block" id="shortcutsBlock">
-          <h2 data-i18n="shortcutsTitle">快捷鍵</h2>
+          <h2 data-i18n="shortcutsTitle">Chrome 快捷鍵</h2>
           <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="shortcutsHint">
-            應用內快捷鍵在一般網頁生效。點下方按鈕可重新錄製；chrome:// 等頁需用 Chrome 全域快捷鍵。
+            快捷鍵由 Chrome 管理；請在 Chrome 設定頁設定或修改。
           </p>
           <div class="shortcut-row" data-action="save-tab">
             <span class="shortcut-label" data-i18n="helpShortcutSave">儲存目前分頁（截圖）</span>
-            <button type="button" class="btn shortcut-btn" data-shortcut-action="save-tab">⌥S</button>
             <span class="chrome-bind" data-chrome-cmd="save-tab"></span>
           </div>
           <div class="shortcut-row" data-action="save-group">
             <span class="shortcut-label" data-i18n="helpShortcutGroup">儲存目前 Tab Group</span>
-            <button type="button" class="btn shortcut-btn" data-shortcut-action="save-group">⌥⇧G</button>
             <span class="chrome-bind" data-chrome-cmd="save-group"></span>
           </div>
           <div class="shortcut-row" data-action="toggle-park">
             <span class="shortcut-label" data-i18n="helpShortcutWall">開關 TabWall 照片牆</span>
-            <button type="button" class="btn shortcut-btn" data-shortcut-action="toggle-park">⌥O</button>
             <span class="chrome-bind" data-chrome-cmd="toggle-park"></span>
           </div>
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
-            <button type="button" class="btn" id="resetShortcutsBtn" data-i18n="shortcutsReset">重設預設</button>
-            <button type="button" class="btn" id="openChromeShortcutsBtn" data-i18n="shortcutsOpenChrome">在 Chrome 設定全域快捷鍵</button>
+            <button type="button" class="btn" id="openChromeShortcutsBtn" data-i18n="shortcutsOpenChrome">在 Chrome 設定管理快捷鍵</button>
           </div>
         </div>
         <div class="settings-block">
@@ -2403,9 +2387,7 @@
         <div class="help-section">
           <h3 data-i18n="helpShortcutsTitle">快捷鍵</h3>
           <ul>
-            <li><kbd>Alt</kbd>+<kbd>S</kbd> — <span data-i18n="helpShortcutSave">儲存目前分頁（截圖）</span></li>
-            <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — <span data-i18n="helpShortcutGroup">儲存目前 Tab Group</span></li>
-            <li><kbd>Alt</kbd>+<kbd>O</kbd> — <span data-i18n="helpShortcutWall">開關 TabWall 照片牆</span></li>
+            <li><span data-i18n="helpShortcutChrome">以上三項快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。</span></li>
             <li><kbd>/</kbd> — <span data-i18n="helpShortcutSearch">聚焦搜尋</span></li>
             <li>
               <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> —

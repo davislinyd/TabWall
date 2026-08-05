@@ -7,6 +7,17 @@
 
 ---
 
+## 2.13.0 — 2026-08-05
+
+- 移除 TabWall 內的快捷鍵錄製、重設與頁內 hotkey 注入。
+- 三個操作快捷鍵改由 Chrome `commands` 管理；`manifest.json` 的 `suggested_key` 僅提供安裝時預設值。
+- 快捷鍵設定區改為唯讀顯示 Chrome 綁定狀態，並保留開啟 `chrome://extensions/shortcuts` 的入口。
+
+## 2.12.0 — 2026-08-05
+
+- 快捷鍵設定新增 Chrome 引導式套用流程：開啟 `chrome://extensions/shortcuts`，由使用者逐項設定相同組合鍵。
+- 返回 TabWall 後自動重新整理 Chrome command 綁定狀態，並明確區分頁內快捷鍵與 Chrome 快捷鍵。
+
 ## 2.11.4 — 2026-08-05
 
 - 修正大型 full ZIP 匯入超過 Chrome `runtime.sendMessage` 64 MiB 限制的問題。

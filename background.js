@@ -42,12 +42,6 @@ const DATA_LIMITS = Build?.LIMITS || {
   MAX_TAGS: 100,
 };
 
-const DEFAULT_SHORTCUTS = {
-  'save-tab': { alt: true, shift: false, ctrl: false, meta: false, key: 's' },
-  'save-group': { alt: true, shift: true, ctrl: false, meta: false, key: 'g' },
-  'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
-};
-
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
   mode: 'lite',
@@ -67,7 +61,6 @@ const DEFAULT_SETTINGS = {
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
-  shortcuts: { ...DEFAULT_SHORTCUTS },
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
 };
 
@@ -76,7 +69,7 @@ const AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
 
 let autoBackupRunning = false;
 
-/** Prevent double-fire from chrome.commands + page hotkeys */
+/** Prevent rapid duplicate actions from Chrome commands */
 const actionLocks = new Map();
 const ACTION_DEBOUNCE_MS = 700;
 
@@ -532,7 +525,8 @@ async function getSettings() {
 
 function normalizeSettings(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === 'object' ? raw : {}) };
-  merged.shortcuts = normalizeShortcuts(merged.shortcuts);
+  // Local shortcut settings were removed; discard the legacy field on the next write.
+  delete merged.shortcuts;
   merged.autoBackup = normalizeAutoBackup({
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
@@ -2277,7 +2271,7 @@ async function saveActiveGroup() {
   }
 }
 
-async function handleHotkeyAction(action) {
+async function handleCommandAction(action) {
   if (action === 'save-tab') {
     return saveCurrentTab(await getActiveTab());
   }
@@ -2306,27 +2300,6 @@ async function getCommandsStatus() {
   } catch (err) {
     return { ok: false, error: String(err), commands: [] };
   }
-}
-
-function normalizeShortcuts(raw) {
-  const base = {
-    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
-    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
-    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
-  };
-  if (!raw || typeof raw !== 'object') return base;
-  for (const name of Object.keys(base)) {
-    const s = raw[name];
-    if (!s || typeof s !== 'object' || !s.key) continue;
-    base[name] = {
-      alt: Boolean(s.alt),
-      shift: Boolean(s.shift),
-      ctrl: Boolean(s.ctrl),
-      meta: Boolean(s.meta),
-      key: String(s.key).toLowerCase(),
-    };
-  }
-  return base;
 }
 
 // ─── Restore / delete ──────────────────────────────────────────────
@@ -2579,7 +2552,6 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'PATCH_SETTINGS',
   'BATCH_UPDATE_ITEMS',
   'BATCH_DELETE_ITEMS',
-  'HOTKEY',
   'RESOLVE_SAVE_CONFLICT',
   'APPLY_DEDUPE',
 ]);
@@ -2697,14 +2669,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       case 'BATCH_DELETE_ITEMS':
         return batchDeleteItems(message.ids);
-      case 'HOTKEY':
-        return handleHotkeyAction(message.action);
       case 'GET_COMMANDS':
         return getCommandsStatus();
-      case 'GET_SHORTCUTS': {
-        const settings = await getSettings();
-        return { ok: true, shortcuts: normalizeShortcuts(settings.shortcuts) };
-      }
       case 'OPEN_SHORTCUTS_PAGE':
         await chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
         return { ok: true };
@@ -2749,7 +2715,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
   try {
-    await enqueueMutation(() => handleHotkeyAction(command));
+    await enqueueMutation(() => handleCommandAction(command));
   } catch (err) {
     console.warn('[TabWall] onCommand failed:', err);
   }

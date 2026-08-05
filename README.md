@@ -15,7 +15,7 @@ Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual pho
 
 ## Shortcuts
 
-Defaults (customizable in **Settings → 快捷鍵** / in-page rebinding):
+Chrome command defaults (managed in **`chrome://extensions/shortcuts`**):
 
 | Shortcut | Action |
 |----------|--------|
@@ -35,10 +35,9 @@ Defaults (customizable in **Settings → 快捷鍵** / in-page rebinding):
 | `Esc` | Close panels / TabWall |
 | `←` / `→` | Prev / next snapshot |
 
-Two channels:
+The three action shortcuts above are managed only by Chrome. The manifest `suggested_key` values provide install-time defaults; change or assign them in `chrome://extensions/shortcuts`. TabWall only displays the current Chrome bindings and provides a button to open that page.
 
-1. **In-page hotkeys** (`hotkeys.js` content script) — work on normal websites even if Chrome global bindings are empty. Uses physical keys (`e.code`) so macOS Option+letter works.
-2. **Chrome global commands** (`chrome.commands`) — needed on `chrome://` and similar restricted pages. Manage via Settings → “在 Chrome 設定全域快捷鍵” or `chrome://extensions/shortcuts`.
+The remaining shortcuts (`/`, `Esc`, arrows, search modes and the settings toggle) are built-in TabWall wall-navigation shortcuts and are not configurable.
 
 After reload/update, re-open or refresh existing tabs once so the content script injects.
 
@@ -83,7 +82,7 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 1. `chrome://extensions` → Developer mode  
 2. Load unpacked → this folder  
 3. After code changes: **Reload** the extension on that page  
-4. If shortcuts or in-page hotkeys misbehave: also **refresh** the target website tab  
+4. If a shortcut is unbound or conflicts: open `chrome://extensions/shortcuts` and assign a different combination
 
 ### Share with others (recommended)
 
@@ -103,7 +102,7 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 
 ```text
 manifest.json   background.js   mediaDb.js   backupBuild.js
-hotkeys.js      content.js      park.html    park.js
+content.js      park.html       park.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md
 docs/privacy.md docs/CHANGELOG.md

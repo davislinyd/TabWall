@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.11.4",
+  "version": "2.13.0",
   "description": "Park tabs and Tab Groups as a screenshot photo wall. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -31,18 +31,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "hotkeys.js"
-      ],
-      "run_at": "document_start",
-      "all_frames": false
-    }
-  ],
   "web_accessible_resources": [
     {
       "resources": [

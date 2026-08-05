@@ -80,7 +80,7 @@ function createRuntime() {
       onInstalled: event(),
       onStartup: event(),
       lastError: null,
-      getManifest: () => ({ version: '2.11.4' }),
+      getManifest: () => ({ version: '2.13.0' }),
     },
     commands: { onCommand: event(), async getAll() { return []; } },
     action: {

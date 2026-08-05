@@ -3,11 +3,6 @@
  */
 
 const SETTINGS_KEY = 'settings';
-const DEFAULT_SHORTCUTS = {
-  'save-tab': { alt: true, shift: false, ctrl: false, meta: false, key: 's' },
-  'save-group': { alt: true, shift: true, ctrl: false, meta: false, key: 'g' },
-  'toggle-park': { alt: true, shift: false, ctrl: false, meta: false, key: 'o' },
-};
 
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
@@ -36,11 +31,6 @@ const DEFAULT_SETTINGS = {
   defaultViewMode: 'cards',
   openWithSearchFocus: false,
   searchRegex: false,
-  shortcuts: {
-    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
-    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
-    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
-  },
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
 };
 
@@ -471,18 +461,19 @@ const I18N = {
     helpShortcutSave: '儲存目前分頁（截圖）',
     helpShortcutGroup: '儲存目前 Tab Group',
     helpShortcutWall: '開關 TabWall 照片牆',
+    helpShortcutChrome: '儲存分頁、儲存 Tab Group 與開關照片牆的快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。',
     helpShortcutSearch: '聚焦搜尋',
     helpShortcutSettings: '開啟／關閉設定（⌥⌘S）',
     helpShortcutEsc: '關閉浮層／照片牆',
     helpShortcutArrows: '快照上一張／下一張',
-    shortcutsTitle: '快捷鍵',
+    shortcutsTitle: 'Chrome 快捷鍵',
     shortcutsHint:
-      '應用內快捷鍵在一般網頁生效。點下方按鈕可重新錄製；chrome:// 等頁需用 Chrome 全域快捷鍵。',
-    shortcutsReset: '重設預設',
-    shortcutsOpenChrome: '在 Chrome 設定全域快捷鍵',
-    shortcutsRecording: '按下組合鍵…',
-    shortcutsChromeBound: 'Chrome 全域：{s}',
-    shortcutsChromeUnbound: 'Chrome 全域：未綁定',
+      '快捷鍵由 Chrome 管理。安裝時會採用 manifest 預設值；若要設定或修改，請在 Chrome 設定頁操作。',
+    shortcutsOpenChrome: '在 Chrome 設定管理快捷鍵',
+    shortcutsChromeOpened: '已開啟 Chrome 快捷鍵設定頁。請在 Chrome 中設定或修改。',
+    shortcutsChromeOpenFailed: '無法開啟 Chrome 快捷鍵設定頁。',
+    shortcutsChromeBound: 'Chrome 快捷鍵：{s}',
+    shortcutsChromeUnbound: 'Chrome 快捷鍵：未綁定',
     dedupeTitle: '偵測到重複 URL',
     dedupeConflictHint: '牆內已有相同完整 URL 的分頁。請選擇如何處置。',
     dedupeExisting: '既有項目',
@@ -717,18 +708,19 @@ const I18N = {
     helpShortcutSave: 'Park current tab (screenshot)',
     helpShortcutGroup: 'Park current Tab Group',
     helpShortcutWall: 'Toggle TabWall overlay',
+    helpShortcutChrome: 'Shortcuts for parking a tab, parking a Tab Group, and toggling the wall are managed by Chrome. Configure them in Chrome shortcut settings.',
     helpShortcutSearch: 'Focus search',
     helpShortcutSettings: 'Open / close settings (⌥⌘S / Alt+Win+S)',
     helpShortcutEsc: 'Close panels / TabWall',
     helpShortcutArrows: 'Previous / next snapshot',
-    shortcutsTitle: 'Shortcuts',
+    shortcutsTitle: 'Chrome Shortcuts',
     shortcutsHint:
-      'In-page shortcuts work on normal websites. Click a button to rebind. Use Chrome global shortcuts for chrome:// pages.',
-    shortcutsReset: 'Reset defaults',
-    shortcutsOpenChrome: 'Open Chrome shortcut settings',
-    shortcutsRecording: 'Press keys…',
-    shortcutsChromeBound: 'Chrome global: {s}',
-    shortcutsChromeUnbound: 'Chrome global: not set',
+      'Shortcuts are managed by Chrome. The manifest defaults are used at install time; configure or change them in Chrome shortcut settings.',
+    shortcutsOpenChrome: 'Manage shortcuts in Chrome settings',
+    shortcutsChromeOpened: 'Chrome shortcut settings opened. Configure or change the shortcuts there.',
+    shortcutsChromeOpenFailed: 'Unable to open Chrome shortcut settings.',
+    shortcutsChromeBound: 'Chrome shortcut: {s}',
+    shortcutsChromeUnbound: 'Chrome shortcut: not set',
     dedupeTitle: 'Duplicate URL detected',
     dedupeConflictHint: 'This exact URL is already parked. Choose what to do.',
     dedupeExisting: 'Existing items',
@@ -1119,7 +1111,6 @@ function applyI18n() {
   }
   updateSavedBadge();
   if (typeof updateBatchBar === 'function') updateBatchBar();
-  if (typeof refreshShortcutButtons === 'function') refreshShortcutButtons();
   if (typeof refreshChromeCommandLabels === 'function') refreshChromeCommandLabels();
   if (typeof syncSearchRegexUi === 'function') syncSearchRegexUi();
 }
@@ -1186,63 +1177,6 @@ function clampCols(n) {
 
 
 // ─── Settings ──────────────────────────────────────────────────────
-
-function normalizeShortcuts(raw) {
-  const base = {
-    'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
-    'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
-    'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
-  };
-  if (!raw || typeof raw !== 'object') return base;
-  for (const name of Object.keys(base)) {
-    const s = raw[name];
-    if (!s || typeof s !== 'object' || !s.key) continue;
-    base[name] = {
-      alt: Boolean(s.alt),
-      shift: Boolean(s.shift),
-      ctrl: Boolean(s.ctrl),
-      meta: Boolean(s.meta),
-      key: String(s.key).toLowerCase(),
-    };
-  }
-  return base;
-}
-
-function keyFromEvent(e) {
-  const code = e.code || '';
-  if (code.startsWith('Key') && code.length === 4) return code.slice(3).toLowerCase();
-  if (code.startsWith('Digit') && code.length === 6) return code.slice(5);
-  if (code.startsWith('Numpad') && code.length > 6) return code.slice(6).toLowerCase();
-  const map = {
-    Space: ' ',
-    Minus: '-',
-    Equal: '=',
-    BracketLeft: '[',
-    BracketRight: ']',
-    Backslash: '\\',
-    Semicolon: ';',
-    Quote: "'",
-    Comma: ',',
-    Period: '.',
-    Slash: '/',
-    Backquote: '`',
-  };
-  if (map[code]) return map[code];
-  if (e.key && e.key.length === 1) return e.key.toLowerCase();
-  return (e.key || '').toLowerCase();
-}
-
-function formatShortcut(combo) {
-  if (!combo || !combo.key) return '—';
-  const parts = [];
-  if (combo.ctrl) parts.push('Ctrl');
-  if (combo.meta) parts.push(navigator.platform?.includes('Mac') ? '⌘' : 'Meta');
-  if (combo.alt) parts.push(navigator.platform?.includes('Mac') ? '⌥' : 'Alt');
-  if (combo.shift) parts.push(navigator.platform?.includes('Mac') ? '⇧' : 'Shift');
-  const k = String(combo.key);
-  parts.push(k === ' ' ? 'Space' : k.length === 1 ? k.toUpperCase() : k);
-  return parts.join(navigator.platform?.includes('Mac') ? '' : '+');
-}
 
 function clampInt(n, min, max, fallback) {
   const v = Number(n);
@@ -1328,7 +1262,8 @@ async function loadSettings() {
   merged.cardCols = clampCols(merged.cardCols);
   if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'cards';
   if (merged.locale !== 'en') merged.locale = 'zh';
-  merged.shortcuts = normalizeShortcuts(merged.shortcuts);
+  // Local shortcut settings were removed; discard the legacy field on the next write.
+  delete merged.shortcuts;
   merged.autoBackup = normalizeAutoBackup({
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
@@ -1449,7 +1384,6 @@ function syncSettingsUi() {
   syncAutoBackupUi();
 
   applyI18n();
-  refreshShortcutButtons();
   refreshChromeCommandLabels();
   syncSearchRegexUi();
 }
@@ -1534,33 +1468,6 @@ function syncAutoBackupUi() {
   }
 }
 
-let recordingAction = null;
-let recordingHandler = null;
-
-function stopShortcutRecording() {
-  if (recordingHandler) {
-    window.removeEventListener('keydown', recordingHandler, true);
-    recordingHandler = null;
-  }
-  recordingAction = null;
-  document.querySelectorAll('.shortcut-btn.recording').forEach((btn) => {
-    btn.classList.remove('recording');
-  });
-  refreshShortcutButtons();
-}
-
-function refreshShortcutButtons() {
-  const map = normalizeShortcuts(settings.shortcuts);
-  document.querySelectorAll('.shortcut-btn[data-shortcut-action]').forEach((btn) => {
-    const action = btn.getAttribute('data-shortcut-action');
-    if (recordingAction === action) {
-      btn.textContent = t('shortcutsRecording');
-      return;
-    }
-    btn.textContent = formatShortcut(map[action]);
-  });
-}
-
 async function refreshChromeCommandLabels() {
   const res = await sendMessage({ type: 'GET_COMMANDS' });
   const byName = new Map(
@@ -1576,81 +1483,28 @@ async function refreshChromeCommandLabels() {
   });
 }
 
-function startShortcutRecording(action) {
-  stopShortcutRecording();
-  recordingAction = action;
-  refreshShortcutButtons();
-  document
-    .querySelector(`.shortcut-btn[data-shortcut-action="${action}"]`)
-    ?.classList.add('recording');
-
-  recordingHandler = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      stopShortcutRecording();
-      return;
-    }
-    if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
-      return;
-    }
-    const key = keyFromEvent(e);
-    if (!key) return;
-    const combo = {
-      alt: e.altKey,
-      shift: e.shiftKey,
-      ctrl: e.ctrlKey,
-      meta: e.metaKey,
-      key,
-    };
-    // require at least one modifier for safety
-    if (!combo.alt && !combo.ctrl && !combo.meta && !combo.shift) {
-      return;
-    }
-    const next = {
-      ...normalizeShortcuts(settings.shortcuts),
-      [action]: combo,
-    };
-    await saveSettings({ shortcuts: next });
-    stopShortcutRecording();
-  };
-  window.addEventListener('keydown', recordingHandler, true);
+function refreshChromeCommandLabelsOnFocus() {
+  if (document.visibilityState !== 'visible') return;
+  refreshChromeCommandLabels().catch(() => {});
 }
 
-function initShortcutsUi() {
-  document.querySelectorAll('.shortcut-btn[data-shortcut-action]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const action = btn.getAttribute('data-shortcut-action');
-      if (!action) return;
-      if (recordingAction === action) {
-        stopShortcutRecording();
-        return;
-      }
-      startShortcutRecording(action);
-    });
-  });
+async function openChromeShortcutsForApply() {
+  const res = await sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+  showCopyToast(
+    res?.ok ? t('shortcutsChromeOpened') : t('shortcutsChromeOpenFailed')
+  );
+}
 
-  const resetBtn = document.getElementById('resetShortcutsBtn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', async () => {
-      stopShortcutRecording();
-      await saveSettings({
-        shortcuts: {
-          'save-tab': { ...DEFAULT_SHORTCUTS['save-tab'] },
-          'save-group': { ...DEFAULT_SHORTCUTS['save-group'] },
-          'toggle-park': { ...DEFAULT_SHORTCUTS['toggle-park'] },
-        },
-      });
-      refreshShortcutButtons();
-    });
-  }
-
+function initChromeShortcutsUi() {
   const openChromeBtn = document.getElementById('openChromeShortcutsBtn');
   if (openChromeBtn) {
     openChromeBtn.addEventListener('click', () => {
-      sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+      openChromeShortcutsForApply();
     });
   }
+
+  document.addEventListener('visibilitychange', refreshChromeCommandLabelsOnFocus);
+  window.addEventListener('focus', refreshChromeCommandLabelsOnFocus);
 }
 
 async function initSettingsUi() {
@@ -1786,7 +1640,7 @@ async function initSettingsUi() {
     await saveSettings({ cardCols: clampCols(settingsCardCols.value) });
   });
 
-  initShortcutsUi();
+  initChromeShortcutsUi();
   initDedupeUi();
 
   if (settings.openWithSearchFocus) {
@@ -2161,14 +2015,12 @@ function openSettingsBox() {
   settingsBtn.classList.add('active');
   placeFloatBox(settingsBox);
   syncFloatBackdrop();
-  refreshShortcutButtons();
   refreshChromeCommandLabels();
   syncAutoBackupUi();
   refreshDiagLogPanel().catch(() => {});
 }
 
 function closeSettingsBox(sync = true) {
-  stopShortcutRecording();
   settingsBox.classList.remove('open');
   settingsBox.setAttribute('aria-hidden', 'true');
   settingsBtn.classList.remove('active');
@@ -2575,7 +2427,6 @@ document.addEventListener('keydown', (e) => {
     e.altKey &&
     e.metaKey &&
     !e.ctrlKey &&
-    !recordingAction &&
     (e.key === 's' || e.key === 'S' || e.code === 'KeyS')
   ) {
     e.preventDefault();
@@ -5395,8 +5246,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // Ignore echo from this page's saveSettings (was rebuilding entire grid + thumbs)
     if (suppressSettingsOnChanged) return;
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
+    delete settings.shortcuts;
     settings.cardCols = clampCols(settings.cardCols);
-    settings.shortcuts = normalizeShortcuts(settings.shortcuts);
     settings.searchRegex = Boolean(settings.searchRegex);
     settings.autoBackup = normalizeAutoBackup({
       ...DEFAULT_AUTO_BACKUP,
