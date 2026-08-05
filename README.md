@@ -4,11 +4,11 @@ Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual pho
 
 **Current version:** see `manifest.json` (currently **2.10.2**).
 
-## Performance (v2.6.x)
+## Architecture
 
 - **Meta** (url/title/note/tags/order) → `chrome.storage.local`
 - **Images** (thumbnail + full snapshot) → **IndexedDB** blobs
-- Opening the wall loads **meta only**; thumbs load in the wall iframe
+- Opening the wall loads **meta only**; thumbs load lazily in the wall iframe (with cache)
 - First launch migrates old inline base64 into IDB automatically
 - Group cover area is fixed **16:10** so large thumbs cannot stretch cards
 
@@ -45,7 +45,7 @@ After reload/update, re-open or refresh existing tabs once so the content script
 
 | Action | Result |
 |--------|--------|
-| Click **thumbnail** | Restore tab / group (short click) |
+| Click **thumbnail** | Restore tab / group (short click; **groups confirm first**) |
 | Click **title / meta** | Copy saved URL(s) — groups copy member URLs, one per line |
 | Drag from **thumbnail** | Reorder cards |
 | Drag onto another card’s **center** (brief pause, **+** highlight) | **Stack** into a group |
@@ -59,17 +59,18 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 - Regex: toolbar `.*` or `re`/`regex` + Tab
 - Field scope: `tag` / `note` / `group` + Tab
 - When a **group** matches, the card lists **which member tabs** hit (restore / preview per row)
+- Typing in search is debounced; thumbs load when near the viewport
 
 ## Features
 
 - Group park/restore, member note/tags, multi-select batch ops
 - **Stack:** iOS-style merge by dropping a card on another’s center
 - Floating settings / tags / help (click outside to close)
-- Backup: lite JSON (no images) or full ZIP with binary media
+- **Backup export:** lite JSON (no images) or full ZIP with binary media
 - **Restore modes:** replace (overwrite all) or append (add without deleting existing cards)
 - **Manual add:** paste URLs (one per line); wrap with `#GROUP:Name` … `#GROUP:Name` to create a group (placeholder thumb/snapshot so manual cards are obvious)
 - **Group restore:** confirms before restoring an entire group
-- **Auto backup (Downloads subfolder):** Settings → set a subfolder under Chrome’s download directory (default `TabWall-Backups`); scheduled and/or after data changes; keep 1–99 copies. Full absolute path appears after the first successful backup.
+- **Auto backup:** writes under Chrome’s **configured download location** (not always `~/Downloads` — see `chrome://settings/downloads`) into a subfolder (default `TabWall-Backups`); scheduled and/or after data changes; keep 1–99 copies; full path updates after a successful backup
 - **Dedup (human-decided):** exact URL on save → keep both / replace / cancel; toolbar **掃描重複** scans the wall
 
 ## Install
@@ -99,7 +100,7 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 ```text
 manifest.json   background.js   mediaDb.js   backupBuild.js
 hotkeys.js      content.js      park.html    park.js
-icons/
+icons/          scripts/pack.sh
 AGENTS.md       README.md       docs/privacy.md
 ```
 
