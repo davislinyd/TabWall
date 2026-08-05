@@ -223,7 +223,7 @@ const I18N = {
     searchHitGroupMeta: '符合 group 名稱／note／tags',
     searchHitsMore: '還有 {n} 個…',
     stackTitle: 'Stack',
-    stackHint: '拖曳卡片疊到另一張可組成 Stack，還原為 Tab Group',
+    stackHint: '拖曳卡片到另一張的標題區可組成 Stack，還原為 Tab Group',
     stackMerged: '已合併為 Stack',
     stackFailed: '無法合併',
     cards: '卡片',
@@ -292,6 +292,7 @@ const I18N = {
     importBackup: '還原（覆蓋）',
     importAppend: '匯入（附加）',
     backupExported: '已匯出備份',
+    backupExporting: '匯出中…',
     backupImported: '已還原備份',
     backupAppended: '已附加 {n} 項',
     backupConfirm: '還原將覆寫目前所有 TabWall 資料，確定？',
@@ -299,6 +300,13 @@ const I18N = {
     backupInvalid: '備份檔無效',
     backupError: '操作失敗',
     backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。',
+    diagLogTitle: '診斷日誌',
+    diagLogHint: '匯出／匯入／自動備份等事件。可複製給除錯用。',
+    diagLogRefresh: '重新整理',
+    diagLogCopy: '複製',
+    diagLogClear: '清除',
+    diagLogEmpty: '尚無日誌',
+    diagLogCopied: '已複製',
     manualAddTitle: '手動新增卡片',
     manualAddHint: '每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。',
     manualAddPh:
@@ -338,9 +346,24 @@ const I18N = {
     selectModeOn: '選擇中',
     batchRestore: '還原',
     batchEdit: 'Note / Tags',
+    batchExportLite: '匯出精簡',
+    batchExportFull: '匯出完整',
     batchDelete: '刪除',
     batchClear: '取消',
     batchCount: '已選 {n}',
+    batchExportEmpty: '請先選擇卡片',
+    importPickTitle: '選擇要還原的項目',
+    importPickHint: '勾選要寫入的 tab／group。預設全選。可點「預覽」查看縮圖／成員。',
+    importPickAll: '全選',
+    importPickNone: '全不選',
+    importPickConfirm: '確認還原',
+    importPickCount: '已選 {n} / {total}',
+    importPickEmpty: '請至少選擇一項',
+    importPickModeReplace: '模式：覆蓋現有資料',
+    importPickModeAppend: '模式：附加到現有資料',
+    importPickPreview: '預覽',
+    importPreviewNoImage: '此項目無縮圖／快照（精簡備份僅含文字）',
+    importPreviewGroupEmpty: '此 group 無成員',
     batchDeleteConfirm: '刪除選取的 {n} 項？',
     batchEditHeading: '批次編輯 Note / Tags',
     batchEditSub: 'Note 非空則覆寫；Tags 預設合併到各項目',
@@ -385,7 +408,7 @@ const I18N = {
       '存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。',
     helpBasicTitle: '基本使用',
     helpBasicBody:
-      '點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片中央可組成 Stack（還原為 Tab Group）。',
+      '點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片標題區稍停可組成 Stack（還原為 Tab Group）。',
     helpGroupTitle: 'Tab Group / Stack',
     helpGroupBody:
       'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。▦ 成員面板可預覽、編輯、還原單一或整個 group。',
@@ -435,7 +458,7 @@ const I18N = {
     searchHitGroupMeta: 'Matched group title / note / tags',
     searchHitsMore: '+{n} more…',
     stackTitle: 'Stack',
-    stackHint: 'Drag a card onto another to stack; restore as a Tab Group',
+    stackHint: 'Drag a card onto another card’s title area to stack; restore as a Tab Group',
     stackMerged: 'Stacked',
     stackFailed: 'Could not stack',
     cards: 'Cards',
@@ -504,6 +527,7 @@ const I18N = {
     importBackup: 'Restore (replace)',
     importAppend: 'Import (append)',
     backupExported: 'Backup exported',
+    backupExporting: 'Exporting…',
     backupImported: 'Backup restored',
     backupAppended: 'Appended {n} item(s)',
     backupConfirm: 'Restore will overwrite all current TabWall data. Continue?',
@@ -511,6 +535,13 @@ const I18N = {
     backupInvalid: 'Invalid backup file',
     backupError: 'Operation failed',
     backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images. Replace overwrites all; append only adds.',
+    diagLogTitle: 'Diagnostic log',
+    diagLogHint: 'Events for export / import / auto-backup. Copy for debugging.',
+    diagLogRefresh: 'Refresh',
+    diagLogCopy: 'Copy',
+    diagLogClear: 'Clear',
+    diagLogEmpty: 'No log entries yet',
+    diagLogCopied: 'Copied',
     manualAddTitle: 'Add cards manually',
     manualAddHint: 'One URL per line. Wrap lines with #GROUP:Name to create a group.',
     manualAddPh:
@@ -550,9 +581,24 @@ const I18N = {
     selectModeOn: 'Selecting',
     batchRestore: 'Restore',
     batchEdit: 'Note / Tags',
+    batchExportLite: 'Export lite',
+    batchExportFull: 'Export full',
     batchDelete: 'Delete',
     batchClear: 'Cancel',
     batchCount: '{n} selected',
+    batchExportEmpty: 'Select cards first',
+    importPickTitle: 'Choose items to restore',
+    importPickHint: 'Check tabs/groups to write. All selected by default. Use Preview for thumbs / members.',
+    importPickAll: 'Select all',
+    importPickNone: 'Select none',
+    importPickConfirm: 'Confirm restore',
+    importPickCount: '{n} / {total} selected',
+    importPickEmpty: 'Select at least one item',
+    importPickModeReplace: 'Mode: replace existing data',
+    importPickModeAppend: 'Mode: append to existing data',
+    importPickPreview: 'Preview',
+    importPreviewNoImage: 'No thumbnail/snapshot (lite backup is text-only)',
+    importPreviewGroupEmpty: 'This group has no members',
     batchDeleteConfirm: 'Delete {n} selected items?',
     batchEditHeading: 'Batch edit note / tags',
     batchEditSub: 'Non-empty note overwrites; tags are merged by default',
@@ -597,7 +643,7 @@ const I18N = {
       'Saving a tab with an existing URL asks you how to proceed. Use the toolbar “Scan duplicates” to clean the wall.',
     helpBasicTitle: 'Basics',
     helpBasicBody:
-      'Thumbnail restores; title copies link; ✎ note/tags; ⤢ snapshot; × delete. Drag to reorder, or drop onto another card’s center to stack (restores as a Tab Group).',
+      'Thumbnail restores; title copies link; ✎ note/tags; ⤢ snapshot; × delete. Drag to reorder, or drop onto another card’s title area to stack (restores as a Tab Group).',
     helpGroupTitle: 'Tab Groups / Stacks',
     helpGroupBody:
       'Alt+Shift+G parks a group; stacking tabs also builds a group. ▦ opens members for preview, edit, and restore one or all.',
@@ -678,8 +724,88 @@ const backupStatus = document.getElementById('backupStatus');
 const manualAddText = document.getElementById('manualAddText');
 const manualAddBtn = document.getElementById('manualAddBtn');
 const manualAddStatus = document.getElementById('manualAddStatus');
+const diagLogText = document.getElementById('diagLogText');
+const diagLogRefreshBtn = document.getElementById('diagLogRefreshBtn');
+const diagLogCopyBtn = document.getElementById('diagLogCopyBtn');
+const diagLogClearBtn = document.getElementById('diagLogClearBtn');
+const diagLogStatus = document.getElementById('diagLogStatus');
 /** @type {'replace' | 'append'} */
 let pendingImportMode = 'replace';
+
+/** @type {{ t: number, level: string, tag: string, msg: string, detail: string }[]} */
+const uiLogBuffer = [];
+const UI_LOG_MAX = 150;
+
+function uiLog(level, tag, msg, detail) {
+  const entry = {
+    t: Date.now(),
+    level: level || 'info',
+    tag: String(tag || 'ui'),
+    msg: String(msg || ''),
+    detail: detail != null ? String(detail).slice(0, 800) : '',
+  };
+  uiLogBuffer.push(entry);
+  while (uiLogBuffer.length > UI_LOG_MAX) uiLogBuffer.shift();
+  const line = `[TabWall][${entry.tag}] ${entry.msg}${entry.detail ? ' | ' + entry.detail : ''}`;
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+  // Best-effort forward to SW buffer
+  sendMessage({
+    type: 'LOG',
+    level: entry.level,
+    tag: entry.tag,
+    msg: entry.msg,
+    detail: entry.detail,
+  }).catch(() => {});
+  return entry;
+}
+
+function formatLogEntry(e) {
+  const ts = new Date(e.t).toISOString().replace('T', ' ').replace('Z', '');
+  const d = e.detail ? ` | ${e.detail}` : '';
+  return `${ts} [${e.level}] [${e.tag}] ${e.msg}${d}`;
+}
+
+async function refreshDiagLogPanel() {
+  if (!diagLogText) return;
+  const res = await sendMessage({ type: 'GET_LOGS' });
+  const swLogs = res?.ok && Array.isArray(res.logs) ? res.logs : [];
+  const merged = [...swLogs, ...uiLogBuffer].sort((a, b) => a.t - b.t);
+  // Dedupe near-identical consecutive lines
+  const lines = [];
+  let prev = '';
+  for (const e of merged) {
+    const line = formatLogEntry(e);
+    if (line === prev) continue;
+    lines.push(line);
+    prev = line;
+  }
+  diagLogText.value = lines.length ? lines.join('\n') : t('diagLogEmpty');
+  if (diagLogStatus) diagLogStatus.textContent = '';
+}
+
+diagLogRefreshBtn?.addEventListener('click', () => {
+  refreshDiagLogPanel();
+});
+diagLogCopyBtn?.addEventListener('click', async () => {
+  const text = diagLogText?.value || '';
+  try {
+    await navigator.clipboard.writeText(text);
+    if (diagLogStatus) diagLogStatus.textContent = t('diagLogCopied');
+  } catch {
+    if (diagLogText) {
+      diagLogText.select();
+      document.execCommand('copy');
+      if (diagLogStatus) diagLogStatus.textContent = t('diagLogCopied');
+    }
+  }
+});
+diagLogClearBtn?.addEventListener('click', async () => {
+  uiLogBuffer.length = 0;
+  await sendMessage({ type: 'CLEAR_LOGS' });
+  await refreshDiagLogPanel();
+});
 const autoBackupEnabledEl = document.getElementById('autoBackupEnabled');
 const autoBackupSubfolderEl = document.getElementById('autoBackupSubfolder');
 const autoBackupLocationLabelEl = document.getElementById('autoBackupLocationLabel');
@@ -695,8 +821,28 @@ const batchBar = document.getElementById('batchBar');
 const batchCount = document.getElementById('batchCount');
 const batchRestore = document.getElementById('batchRestore');
 const batchEdit = document.getElementById('batchEdit');
+const batchExportLite = document.getElementById('batchExportLite');
+const batchExportFull = document.getElementById('batchExportFull');
 const batchDelete = document.getElementById('batchDelete');
 const batchClear = document.getElementById('batchClear');
+const importPickBox = document.getElementById('importPickBox');
+const importPickDrag = document.getElementById('importPickDrag');
+const importPickCloseX = document.getElementById('importPickCloseX');
+const importPickList = document.getElementById('importPickList');
+const importPickAllBtn = document.getElementById('importPickAllBtn');
+const importPickNoneBtn = document.getElementById('importPickNoneBtn');
+const importPickCount = document.getElementById('importPickCount');
+const importPickCancelBtn = document.getElementById('importPickCancelBtn');
+const importPickConfirmBtn = document.getElementById('importPickConfirmBtn');
+const importPickStatus = document.getElementById('importPickStatus');
+const importPickHintEl = document.getElementById('importPickHint');
+const importPreviewOverlay = document.getElementById('importPreviewOverlay');
+const importPreviewTitle = document.getElementById('importPreviewTitle');
+const importPreviewUrl = document.getElementById('importPreviewUrl');
+const importPreviewBody = document.getElementById('importPreviewBody');
+const importPreviewCloseBtn = document.getElementById('importPreviewCloseBtn');
+/** @type {{ mode: 'replace'|'append', backup: object, selected: Set<string> } | null} */
+let pendingImportPick = null;
 const closeBtn = document.getElementById('closeBtn');
 const themeBtn = document.getElementById('themeBtn');
 const viewCardsBtn = document.getElementById('viewCards');
@@ -1856,7 +2002,8 @@ function anyFloatOpen() {
     helpBox.classList.contains('open') ||
     editBox.classList.contains('open') ||
     membersBox.classList.contains('open') ||
-    (dedupeBox && dedupeBox.classList.contains('open'))
+    (dedupeBox && dedupeBox.classList.contains('open')) ||
+    (importPickBox && importPickBox.classList.contains('open'))
   );
 }
 
@@ -1877,6 +2024,7 @@ function closeAllFloatsExcept(except) {
   if (except !== 'edit') closeEditBox();
   if (except !== 'members') closeMembersBox();
   if (except !== 'dedupe') closeDedupeBox(false);
+  if (except !== 'importPick') closeImportPickBox(false);
   syncFloatBackdrop();
 }
 
@@ -1890,6 +2038,7 @@ function openSettingsBox() {
   refreshShortcutButtons();
   refreshChromeCommandLabels();
   syncAutoBackupUi();
+  refreshDiagLogPanel().catch(() => {});
 }
 
 function closeSettingsBox(sync = true) {
@@ -2313,6 +2462,10 @@ document.addEventListener('keydown', (e) => {
       resolveConflict('cancel');
       return;
     }
+    if (importPreviewOverlay?.classList.contains('open')) {
+      closeImportPreview();
+      return;
+    }
     if (editBox.classList.contains('open')) {
       closeEditBox();
       return;
@@ -2327,6 +2480,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (dedupeBox?.classList.contains('open')) {
       closeDedupeBox();
+      return;
+    }
+    if (importPickBox?.classList.contains('open')) {
+      closeImportPickBox();
       return;
     }
     if (helpBox.classList.contains('open')) {
@@ -3128,32 +3285,98 @@ async function maybeCatchUpAutoBackup() {
   await runLocalAutoBackup({ force: false });
 }
 
-exportLiteBtn.addEventListener('click', async () => {
-  backupStatus.textContent = '';
-  const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
-  if (!res.ok || !res.backup) {
-    backupStatus.textContent = t('backupError');
-    return;
+/** Hydrate thumb/snap from local IDB for full ZIP (avoids huge SW messages). */
+async function hydrateItemMediaLocal(item) {
+  if (!item) return item;
+  if (item.kind === 'group') {
+    const tabs = [];
+    for (const m of item.tabs || []) {
+      const key = mediaKeyForMember(item.id, m.id);
+      let thumb = '';
+      let snap = '';
+      try {
+        if (Media) {
+          const row = await Media.get(key);
+          if (row?.thumb) thumb = await Media.blobToDataUrl(row.thumb);
+          if (row?.snap) snap = await Media.blobToDataUrl(row.snap);
+        }
+      } catch (err) {
+        uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
+      }
+      tabs.push({ ...m, thumbnail: thumb, snapshot: snap });
+    }
+    return { ...item, tabs };
   }
-  const { blob, filename } = Build.buildLiteBlob(res.backup, { auto: false });
-  downloadBlob(blob, filename);
-  backupStatus.textContent = t('backupExported');
+  const key = mediaKeyForItem(item);
+  let thumbnail = '';
+  let snapshot = '';
+  try {
+    if (Media && key) {
+      const row = await Media.get(key);
+      if (row?.thumb) thumbnail = await Media.blobToDataUrl(row.thumb);
+      if (row?.snap) snapshot = await Media.blobToDataUrl(row.snap);
+    }
+  } catch (err) {
+    uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
+  }
+  return { ...item, thumbnail, snapshot };
+}
+
+exportLiteBtn.addEventListener('click', async () => {
+  backupStatus.textContent = t('backupExporting');
+  uiLog('info', 'export', 'lite start');
+  try {
+    const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
+    if (!res.ok || !res.backup) {
+      const err = res?.error || 'export_failed';
+      uiLog('error', 'export', 'lite failed', err);
+      backupStatus.textContent = `${t('backupError')}: ${err}`;
+      return;
+    }
+    const { blob, filename } = Build.buildLiteBlob(res.backup, { auto: false });
+    downloadBlob(blob, filename);
+    uiLog('info', 'export', 'lite ok', `file=${filename} bytes=${blob.size}`);
+    backupStatus.textContent = t('backupExported');
+  } catch (err) {
+    uiLog('error', 'export', 'lite exception', err?.message || err);
+    backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
+  }
 });
 
 exportFullBtn.addEventListener('click', async () => {
-  backupStatus.textContent = '';
-  const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'full' });
-  if (!res.ok || !res.backup) {
-    backupStatus.textContent = t('backupError');
-    return;
-  }
+  backupStatus.textContent = t('backupExporting');
+  uiLog('info', 'export', 'full start');
   try {
-    const { blob, filename } = Build.buildFullZipBlob(res.backup, { auto: false });
+    // Meta only over the wire — hydrate images in this page from IDB
+    const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'full' });
+    if (!res.ok || !res.backup) {
+      const err = res?.error || 'export_failed';
+      uiLog('error', 'export', 'full meta failed', err);
+      backupStatus.textContent = `${t('backupError')}: ${err}`;
+      return;
+    }
+    const rawItems = res.backup.parkedItems || [];
+    uiLog('info', 'export', 'hydrating media', `items=${rawItems.length}`);
+    const hydrated = [];
+    for (let i = 0; i < rawItems.length; i++) {
+      hydrated.push(await hydrateItemMediaLocal(rawItems[i]));
+      if (i > 0 && i % 20 === 0) {
+        backupStatus.textContent = `${t('backupExporting')} (${i}/${rawItems.length})`;
+      }
+    }
+    const backup = {
+      ...res.backup,
+      media: 'inline',
+      parkedItems: hydrated,
+    };
+    const { blob, filename } = Build.buildFullZipBlob(backup, { auto: false });
     downloadBlob(blob, filename);
+    uiLog('info', 'export', 'full ok', `file=${filename} bytes=${blob.size}`);
     backupStatus.textContent = t('backupExported');
   } catch (err) {
     console.warn(err);
-    backupStatus.textContent = t('backupError');
+    uiLog('error', 'export', 'full exception', err?.message || err);
+    backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
   }
 });
 
@@ -3169,14 +3392,233 @@ importAppendBtn?.addEventListener('click', () => {
   importBackupFile.click();
 });
 
+function closeImportPickBox(sync = true) {
+  if (!importPickBox) return;
+  closeImportPreview();
+  importPickBox.classList.remove('open');
+  importPickBox.setAttribute('aria-hidden', 'true');
+  pendingImportPick = null;
+  if (importPickList) importPickList.innerHTML = '';
+  if (importPickStatus) importPickStatus.textContent = '';
+  if (sync) syncFloatBackdrop();
+}
+
+function updateImportPickCount() {
+  if (!pendingImportPick || !importPickCount) return;
+  const total = (pendingImportPick.backup.parkedItems || []).length;
+  const n = pendingImportPick.selected.size;
+  importPickCount.textContent = t('importPickCount', { n, total });
+}
+
+/** Prefer full snapshot, then thumbnail (data-URL only after ZIP rehydrate). */
+function pickImportImageDataUrl(item) {
+  if (!item || typeof item !== 'object') return '';
+  for (const key of ['snapshot', 'thumbnail']) {
+    const v = item[key];
+    if (typeof v === 'string' && v.startsWith('data:')) return v;
+  }
+  return '';
+}
+
+function closeImportPreview() {
+  if (!importPreviewOverlay) return;
+  importPreviewOverlay.classList.remove('open');
+  importPreviewOverlay.setAttribute('aria-hidden', 'true');
+  if (importPreviewBody) importPreviewBody.innerHTML = '';
+  if (importPreviewTitle) importPreviewTitle.textContent = '—';
+  if (importPreviewUrl) importPreviewUrl.textContent = '';
+}
+
+function openImportTabPreview(item) {
+  if (!importPreviewOverlay || !importPreviewBody) return;
+  const title = item?.title || item?.url || '—';
+  const url = item?.url || '';
+  if (importPreviewTitle) importPreviewTitle.textContent = title;
+  if (importPreviewUrl) importPreviewUrl.textContent = url;
+  importPreviewBody.innerHTML = '';
+  const src = pickImportImageDataUrl(item);
+  if (src) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = title;
+    importPreviewBody.appendChild(img);
+  } else {
+    const empty = document.createElement('div');
+    empty.className = 'import-preview-empty';
+    empty.textContent = t('importPreviewNoImage');
+    importPreviewBody.appendChild(empty);
+  }
+  importPreviewOverlay.classList.add('open');
+  importPreviewOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function openImportGroupPreview(item) {
+  if (!importPreviewOverlay || !importPreviewBody) return;
+  const title = item?.title || t('stackTitle');
+  const members = Array.isArray(item?.tabs) ? item.tabs : [];
+  if (importPreviewTitle) importPreviewTitle.textContent = title;
+  if (importPreviewUrl) {
+    importPreviewUrl.textContent = t('groupTabs', { n: members.length });
+  }
+  importPreviewBody.innerHTML = '';
+  if (!members.length) {
+    const empty = document.createElement('div');
+    empty.className = 'import-preview-empty';
+    empty.textContent = t('importPreviewGroupEmpty');
+    importPreviewBody.appendChild(empty);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'import-preview-members';
+    members.forEach((m) => {
+      const row = document.createElement('div');
+      row.className = 'import-preview-member';
+      const mTitle = m?.title || m?.url || '—';
+      const mUrl = m?.url || '';
+      const thumb = pickImportImageDataUrl(m);
+      row.innerHTML = `
+        ${
+          thumb
+            ? `<img src="${escapeAttr(thumb)}" alt="" style="width:48px;height:30px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--input-bg)" />`
+            : ''
+        }
+        <div class="m-main">
+          <div class="m-title">${escapeHtml(mTitle)}</div>
+          <div class="m-url">${escapeHtml(mUrl)}</div>
+        </div>
+        <button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>
+      `;
+      row.querySelector('button')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openImportTabPreview(m);
+      });
+      list.appendChild(row);
+    });
+    importPreviewBody.appendChild(list);
+  }
+  importPreviewOverlay.classList.add('open');
+  importPreviewOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function openImportPickBox(mode, backup) {
+  if (!importPickBox || !importPickList) return;
+  const items = Array.isArray(backup.parkedItems) ? backup.parkedItems : [];
+  const selected = new Set(items.map((it, i) => String(it.id || `idx-${i}`)));
+  // Ensure each item has a stable pick key
+  items.forEach((it, i) => {
+    if (!it.id) it.id = `idx-${i}-${Date.now()}`;
+    selected.add(String(it.id));
+  });
+  pendingImportPick = { mode, backup, selected };
+
+  closeAllFloatsExcept('importPick');
+  importPickBox.classList.add('open');
+  importPickBox.setAttribute('aria-hidden', 'false');
+  if (importPickHintEl) {
+    const modeLabel =
+      mode === 'append' ? t('importPickModeAppend') : t('importPickModeReplace');
+    importPickHintEl.textContent = `${t('importPickHint')} ${modeLabel}`;
+  }
+  if (importPickStatus) importPickStatus.textContent = '';
+
+  importPickList.innerHTML = '';
+  items.forEach((item) => {
+    const id = String(item.id);
+    const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
+    const title = isGroup
+      ? item.title || t('stackTitle')
+      : item.title || item.url || '—';
+    const sub = isGroup
+      ? t('groupTabs', { n: (item.tabs || []).length })
+      : item.url || '';
+
+    const row = document.createElement('div');
+    row.className = 'import-pick-row';
+    row.innerHTML = `
+      <label class="import-pick-label">
+        <input type="checkbox" data-pick-id="${escapeAttr(id)}" ${selected.has(id) ? 'checked' : ''} />
+        <span class="import-pick-kind ${isGroup ? 'group' : ''}">${isGroup ? 'group' : 'tab'}</span>
+        <span class="import-pick-main">
+          <div class="import-pick-title">${escapeHtml(title)}</div>
+          <div class="import-pick-sub">${escapeHtml(sub)}</div>
+        </span>
+      </label>
+      <button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>
+    `;
+    const cb = row.querySelector('input');
+    cb.addEventListener('change', () => {
+      if (cb.checked) pendingImportPick.selected.add(id);
+      else pendingImportPick.selected.delete(id);
+      updateImportPickCount();
+    });
+    row.querySelector('.import-pick-preview')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isGroup) openImportGroupPreview(item);
+      else openImportTabPreview(item);
+    });
+    importPickList.appendChild(row);
+  });
+  updateImportPickCount();
+  placeFloatBox(importPickBox);
+  syncFloatBackdrop();
+}
+
+async function confirmImportPick() {
+  if (!pendingImportPick) return;
+  const { mode, backup, selected } = pendingImportPick;
+  if (!selected.size) {
+    if (importPickStatus) importPickStatus.textContent = t('importPickEmpty');
+    return;
+  }
+  const confirmMsg =
+    mode === 'append'
+      ? t('backupAppendConfirm')
+      : t('backupConfirm');
+  if (!window.confirm(confirmMsg)) return;
+
+  const all = Array.isArray(backup.parkedItems) ? backup.parkedItems : [];
+  const filtered = all.filter((it) => selected.has(String(it.id)));
+  const payload = {
+    ...backup,
+    parkedItems: filtered,
+    parkedTabs: filtered
+      .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+      .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
+  };
+
+  if (importPickStatus) importPickStatus.textContent = t('backupExporting');
+  uiLog('info', 'import', `confirm mode=${mode}`, `selected=${filtered.length}/${all.length}`);
+  try {
+    const res = await sendMessage({ type: 'IMPORT_BACKUP', backup: payload, mode });
+    if (!res.ok) {
+      if (importPickStatus) importPickStatus.textContent = t('backupInvalid');
+      uiLog('error', 'import', 'failed', res.error);
+      return;
+    }
+    closeImportPickBox();
+    settings = await loadSettings();
+    syncSettingsUi();
+    await loadList();
+    if (tagsBox.classList.contains('open')) await refreshTagManager();
+    if (mode === 'append') {
+      backupStatus.textContent = t('backupAppended', { n: res.added != null ? res.added : filtered.length });
+    } else {
+      backupStatus.textContent = t('backupImported');
+    }
+  } catch (err) {
+    console.warn(err);
+    uiLog('error', 'import', 'exception', err?.message || err);
+    if (importPickStatus) importPickStatus.textContent = t('backupInvalid');
+  }
+}
+
 importBackupFile.addEventListener('change', async () => {
   const file = importBackupFile.files && importBackupFile.files[0];
   importBackupFile.value = '';
   if (!file) return;
   const mode = pendingImportMode === 'append' ? 'append' : 'replace';
   pendingImportMode = 'replace';
-  const confirmMsg = mode === 'append' ? t('backupAppendConfirm') : t('backupConfirm');
-  if (!window.confirm(confirmMsg)) return;
 
   try {
     let backup;
@@ -3192,24 +3634,52 @@ importBackupFile.addEventListener('change', async () => {
     } else {
       backup = JSON.parse(await file.text());
     }
-    const res = await sendMessage({ type: 'IMPORT_BACKUP', backup, mode });
-    if (!res.ok) {
+    if (!backup || backup.format !== 'tabwall-backup') {
       backupStatus.textContent = t('backupInvalid');
       return;
     }
-    settings = await loadSettings();
-    syncSettingsUi();
-    await loadList();
-    if (tagsBox.classList.contains('open')) await refreshTagManager();
-    if (mode === 'append') {
-      backupStatus.textContent = t('backupAppended', { n: res.added != null ? res.added : '—' });
-    } else {
-      backupStatus.textContent = t('backupImported');
+    if (!Array.isArray(backup.parkedItems) && Array.isArray(backup.parkedTabs)) {
+      backup.parkedItems = backup.parkedTabs.map((t) => ({ ...t, kind: 'tab' }));
     }
+    if (!Array.isArray(backup.parkedItems) || !backup.parkedItems.length) {
+      backupStatus.textContent = t('backupInvalid');
+      return;
+    }
+    openImportPickBox(mode, backup);
   } catch (err) {
     console.warn(err);
+    uiLog('error', 'import', 'parse failed', err?.message || err);
     backupStatus.textContent = t('backupInvalid');
   }
+});
+
+importPickCloseX?.addEventListener('click', () => closeImportPickBox());
+importPickCancelBtn?.addEventListener('click', () => closeImportPickBox());
+importPickConfirmBtn?.addEventListener('click', () => {
+  confirmImportPick();
+});
+importPickAllBtn?.addEventListener('click', () => {
+  if (!pendingImportPick) return;
+  (pendingImportPick.backup.parkedItems || []).forEach((it) =>
+    pendingImportPick.selected.add(String(it.id))
+  );
+  importPickList?.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.checked = true;
+  });
+  updateImportPickCount();
+});
+importPickNoneBtn?.addEventListener('click', () => {
+  if (!pendingImportPick) return;
+  pendingImportPick.selected.clear();
+  importPickList?.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.checked = false;
+  });
+  updateImportPickCount();
+});
+if (importPickDrag && importPickBox) setupFloatDrag(importPickDrag, importPickBox);
+importPreviewCloseBtn?.addEventListener('click', () => closeImportPreview());
+importPreviewOverlay?.addEventListener('click', (e) => {
+  if (e.target === importPreviewOverlay) closeImportPreview();
 });
 
 manualAddBtn?.addEventListener('click', async () => {
@@ -3277,6 +3747,93 @@ function toggleSelect(id) {
 selectModeBtn.addEventListener('click', () => setSelectMode(!selectMode));
 
 batchClear.addEventListener('click', () => setSelectMode(false));
+
+async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
+  const parkedItems = [];
+  for (const it of items) {
+    parkedItems.push(withMedia ? await hydrateItemMediaLocal(it) : { ...it });
+  }
+  // Strip any accidental inline emptiness for lite
+  if (!withMedia) {
+    for (const it of parkedItems) {
+      if (it.kind === 'group') {
+        for (const m of it.tabs || []) {
+          m.thumbnail = '';
+          m.snapshot = '';
+        }
+      } else {
+        it.thumbnail = '';
+        it.snapshot = '';
+      }
+    }
+  }
+  const parkedTabs = parkedItems
+    .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+    .map(({ kind, hasThumb, hasSnap, thumbnail, snapshot, ...rest }) => rest);
+  return {
+    format: 'tabwall-backup',
+    version: 4,
+    media: withMedia ? 'inline' : 'none',
+    partial: true,
+    appVersion: (() => {
+      try {
+        return chrome.runtime.getManifest().version;
+      } catch {
+        return '';
+      }
+    })(),
+    exportedAt: new Date().toISOString(),
+    parkedItems,
+    parkedTabs,
+    settings: { ...settings },
+    tagCatalog: [], // filled async if needed
+  };
+}
+
+async function exportSelected(mode) {
+  const ids = [...selectedIds];
+  if (!ids.length) {
+    uiLog('warn', 'export', 'partial empty selection');
+    window.alert(t('batchExportEmpty'));
+    return;
+  }
+  const idSet = new Set(ids);
+  // Preserve wall order
+  const items = allTabs.filter((it) => idSet.has(it.id));
+  if (!items.length) {
+    window.alert(t('batchExportEmpty'));
+    return;
+  }
+  uiLog('info', 'export', `partial ${mode} start`, `n=${items.length}`);
+  try {
+    const backup = await buildPartialBackupPayload(items, { withMedia: mode === 'full' });
+    // Best-effort tag catalog from SW via lite export settings not needed
+    const tagRes = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
+    if (tagRes?.ok && tagRes.backup?.tagCatalog) {
+      backup.tagCatalog = tagRes.backup.tagCatalog;
+    }
+    if (tagRes?.ok && tagRes.backup?.settings) {
+      backup.settings = tagRes.backup.settings;
+    }
+    const built =
+      mode === 'full'
+        ? Build.buildFullZipBlob(backup, { auto: false, partial: true })
+        : Build.buildLiteBlob(backup, { auto: false, partial: true });
+    downloadBlob(built.blob, built.filename);
+    uiLog('info', 'export', `partial ${mode} ok`, `file=${built.filename} n=${items.length}`);
+  } catch (err) {
+    console.warn(err);
+    uiLog('error', 'export', `partial ${mode} failed`, err?.message || err);
+    window.alert(`${t('backupError')}: ${err?.message || err}`);
+  }
+}
+
+batchExportLite?.addEventListener('click', () => {
+  exportSelected('lite');
+});
+batchExportFull?.addEventListener('click', () => {
+  exportSelected('full');
+});
 
 batchRestore.addEventListener('click', async () => {
   const ids = [...selectedIds];
@@ -3753,19 +4310,9 @@ function clearStackHover() {
 }
 
 /**
- * Central stack hot-zone: ~60% of card (20% inset each side).
+ * Stack hot-zone: only the card title/meta strip (not thumb center).
+ * Avoids green + while dragging over the bulk of the card.
  */
-function pointInStackHotzone(clientX, clientY, rect) {
-  const mx = rect.width * 0.2;
-  const my = rect.height * 0.2;
-  return (
-    clientX >= rect.left + mx &&
-    clientX <= rect.right - mx &&
-    clientY >= rect.top + my &&
-    clientY <= rect.bottom - my
-  );
-}
-
 function findStackTargetAt(clientX, clientY, excludeCard) {
   const cards = [...gridEl.querySelectorAll('.card')].filter(
     (el) => el !== excludeCard && !el.classList.contains('dragging') && !el.classList.contains('card-placeholder')
@@ -3773,8 +4320,17 @@ function findStackTargetAt(clientX, clientY, excludeCard) {
   // Prefer topmost card under point (last in paint order among hits)
   let hit = null;
   for (const el of cards) {
-    const rect = el.getBoundingClientRect();
-    if (pointInStackHotzone(clientX, clientY, rect)) hit = el;
+    const meta = el.querySelector('.meta');
+    if (!meta) continue;
+    const rect = meta.getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      hit = el;
+    }
   }
   return hit;
 }
@@ -4148,11 +4704,19 @@ function attachCardDrag(card, item) {
   );
 }
 
-// Block native HTML5 drag (img/link → green + cursor)
+// Block native HTML5 drag (img/link → green + cursor under pointer)
 document.addEventListener(
   'dragstart',
   (e) => {
-    if (e.target?.closest?.('.card, #grid')) e.preventDefault();
+    const t = e.target;
+    if (
+      t?.closest?.('.card, #grid, .thumb, .lazy-thumb, .favicon, .meta, .title') ||
+      t?.tagName === 'IMG' ||
+      t?.tagName === 'A'
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   },
   true
 );
@@ -4189,6 +4753,7 @@ function groupCoverHtml(item) {
 function createGroupCard(item) {
   const card = document.createElement('article');
   card.className = 'card group-card';
+  card.draggable = false;
   card.dataset.id = item.id;
   card.dataset.kind = 'group';
   card.setAttribute('role', 'listitem');
@@ -4271,6 +4836,7 @@ function createCard(item) {
 
   const card = document.createElement('article');
   card.className = 'card';
+  card.draggable = false;
   card.dataset.id = item.id;
   card.dataset.kind = 'tab';
   card.setAttribute('role', 'listitem');

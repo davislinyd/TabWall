@@ -6,6 +6,28 @@ importScripts('mediaDb.js', 'backupBuild.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
+
+// ─── App diagnostic log (ring buffer) ──────────────────────────────
+const APP_LOG_MAX = 300;
+/** @type {{ t: number, level: string, tag: string, msg: string, detail: string }[]} */
+const appLog = [];
+
+function appLogPush(level, tag, msg, detail) {
+  const entry = {
+    t: Date.now(),
+    level: level || 'info',
+    tag: String(tag || 'app'),
+    msg: String(msg || ''),
+    detail: detail != null ? String(detail).slice(0, 800) : '',
+  };
+  appLog.push(entry);
+  while (appLog.length > APP_LOG_MAX) appLog.shift();
+  const line = `[TabWall][${entry.tag}] ${entry.msg}${entry.detail ? ' | ' + entry.detail : ''}`;
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+  return entry;
+}
 const STORAGE_TABS = 'parkedTabs'; // legacy
 const STORAGE_ITEMS = 'parkedItems';
 const SETTINGS_KEY = 'settings';
@@ -514,8 +536,10 @@ async function runAutoBackup(opts = {}) {
     }
 
     const mode = ab.mode === 'full' ? 'full' : 'lite';
-    const exported = await exportBackup(mode);
+    // Auto full must hydrate in SW (no park page). Manual full export hydrates in park.
+    const exported = await exportBackup(mode, { hydrate: mode === 'full' });
     if (!exported?.ok || !exported.backup) {
+      appLogPush('error', 'autoBackup', 'export_failed');
       await patchAutoBackup({ lastError: 'export_failed' });
       return { ok: false, error: 'export_failed' };
     }
@@ -538,8 +562,8 @@ async function runAutoBackup(opts = {}) {
     try {
       downloaded = await downloadBlobAsFile(built.blob, relative);
     } catch (err) {
-      console.warn('[TabWall] auto backup download failed:', err);
       const detail = String(err?.message || err);
+      appLogPush('error', 'autoBackup', 'download failed', detail);
       await patchAutoBackup({ lastError: 'write_failed' });
       return { ok: false, error: 'write_failed', detail };
     }
@@ -557,8 +581,15 @@ async function runAutoBackup(opts = {}) {
     try {
       await pruneDownloadedAutoBackups(mode, ab.maxKeep);
     } catch (err) {
-      console.warn('[TabWall] prune failed:', err);
+      appLogPush('warn', 'autoBackup', 'prune failed', err?.message || err);
     }
+
+    appLogPush(
+      'info',
+      'autoBackup',
+      'ok',
+      `file=${built.filename} path=${folderPath || '—'} mode=${mode}`
+    );
 
     return {
       ok: true,
@@ -567,7 +598,7 @@ async function runAutoBackup(opts = {}) {
       absoluteFile: downloaded.filename,
     };
   } catch (err) {
-    console.warn('[TabWall] runAutoBackup failed:', err);
+    appLogPush('error', 'autoBackup', 'runAutoBackup failed', err?.message || err);
     await patchAutoBackup({ lastError: 'write_failed' });
     return { ok: false, error: 'write_failed' };
   } finally {
@@ -784,7 +815,11 @@ async function hydrateItemMedia(item) {
   };
 }
 
-async function exportBackup(mode = 'lite') {
+/**
+ * @param {'lite'|'full'} mode
+ * @param {{ hydrate?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
+ */
+async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
   const [parkedItems, settingsData, tagCatalog] = await Promise.all([
     getParkedItems(),
     chrome.storage.local.get(SETTINGS_KEY),
@@ -792,21 +827,28 @@ async function exportBackup(mode = 'lite') {
   ]);
 
   let items = parkedItems;
-  if (mode === 'full') {
+  let media = 'none';
+  if (mode === 'full' && hydrate) {
     items = [];
     for (const it of parkedItems) items.push(await hydrateItemMedia(it));
+    media = 'inline';
+  } else if (mode === 'full') {
+    // Meta only — park hydrates from IDB to avoid huge extension messages
+    media = 'idb';
   }
 
   const parkedTabs = items
     .filter((i) => i.kind === 'tab')
     .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
 
+  appLogPush('info', 'export', `exportBackup mode=${mode} hydrate=${hydrate}`, `items=${items.length}`);
+
   return {
     ok: true,
     backup: {
       format: 'tabwall-backup',
       version: 4,
-      media: mode === 'full' ? 'inline' : 'none',
+      media,
       appVersion: chrome.runtime.getManifest().version,
       exportedAt: new Date().toISOString(),
       parkedItems: items,
@@ -2184,13 +2226,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case 'DELETE_TAG':
         return deleteTag(message.name);
       case 'EXPORT_BACKUP':
-        return exportBackup(message.mode === 'full' ? 'full' : 'lite');
-      case 'IMPORT_BACKUP':
-        return importBackup(message.backup, {
+        // Never hydrate over the wire — full ZIP is assembled in park from IDB.
+        return exportBackup(message.mode === 'full' ? 'full' : 'lite', { hydrate: false });
+      case 'IMPORT_BACKUP': {
+        const res = await importBackup(message.backup, {
           mode: message.mode === 'append' ? 'append' : 'replace',
         });
-      case 'CREATE_FROM_URL_TEXT':
-        return createFromUrlText(message.text || '');
+        appLogPush(
+          res.ok ? 'info' : 'error',
+          'import',
+          res.ok ? `ok mode=${res.mode} added=${res.added}` : `fail ${res.error}`,
+          ''
+        );
+        return res;
+      }
+      case 'CREATE_FROM_URL_TEXT': {
+        const res = await createFromUrlText(message.text || '');
+        appLogPush(
+          res.ok ? 'info' : 'warn',
+          'manualAdd',
+          res.ok ? `added=${res.added} skipped=${res.skipped}` : `empty skipped=${res.skipped}`,
+          ''
+        );
+        return res;
+      }
+      case 'LOG':
+        appLogPush(message.level || 'info', message.tag || 'ui', message.msg || '', message.detail);
+        return { ok: true };
+      case 'GET_LOGS':
+        return { ok: true, logs: appLog.slice() };
+      case 'CLEAR_LOGS':
+        appLog.length = 0;
+        appLogPush('info', 'log', 'cleared');
+        return { ok: true };
       case 'AUTO_BACKUP_RUN':
         return runAutoBackup({ force: Boolean(message.force), reason: message.reason || 'manual' });
       case 'AUTO_BACKUP_SYNC_ALARMS': {

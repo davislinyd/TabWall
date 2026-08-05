@@ -349,7 +349,8 @@
       #settingsBox,
       #tagsBox,
       #helpBox,
-      #dedupeBox {
+      #dedupeBox,
+      #importPickBox {
         display: none;
         position: fixed;
         z-index: 96;
@@ -372,11 +373,200 @@
         max-height: min(80vh, 720px);
       }
 
+      #importPickBox {
+        width: min(520px, calc(100vw - 32px));
+        max-height: min(80vh, 720px);
+        z-index: 125;
+      }
+
       #settingsBox.open,
       #tagsBox.open,
       #helpBox.open,
-      #dedupeBox.open {
+      #dedupeBox.open,
+      #importPickBox.open {
         display: flex;
+      }
+
+      #importPickList {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: min(48vh, 420px);
+        overflow: auto;
+        padding: 2px 0;
+      }
+
+      #importPickList .import-pick-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--input-bg);
+      }
+
+      #importPickList .import-pick-row:hover {
+        border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      }
+
+      #importPickList .import-pick-label {
+        display: flex;
+        flex: 1;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+        cursor: pointer;
+      }
+
+      #importPickList .import-pick-main {
+        flex: 1;
+        min-width: 0;
+      }
+
+      #importPickList .import-pick-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        word-break: break-word;
+      }
+
+      #importPickList .import-pick-sub {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 2px;
+        word-break: break-all;
+      }
+
+      #importPickList .import-pick-kind {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 2px 6px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+
+      #importPickList .import-pick-kind.group {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      #importPickList .import-pick-preview {
+        flex-shrink: 0;
+        min-width: 32px;
+        padding: 4px 8px;
+      }
+
+      /* Lightweight preview for import picker (data-URL images) */
+      #importPreviewOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 140;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(2, 6, 23, 0.65);
+      }
+
+      #importPreviewOverlay.open {
+        display: flex;
+      }
+
+      #importPreviewOverlay .import-preview-panel {
+        width: min(720px, calc(100vw - 32px));
+        max-height: min(88vh, 900px);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--edit-shadow);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      #importPreviewOverlay .import-preview-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      #importPreviewOverlay .import-preview-head h3 {
+        margin: 0;
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
+        word-break: break-word;
+      }
+
+      #importPreviewOverlay .import-preview-url {
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
+        margin-top: 4px;
+      }
+
+      #importPreviewOverlay .import-preview-body {
+        padding: 12px;
+        overflow: auto;
+        flex: 1;
+        min-height: 120px;
+      }
+
+      #importPreviewOverlay .import-preview-body img {
+        display: block;
+        max-width: 100%;
+        max-height: min(60vh, 560px);
+        margin: 0 auto;
+        border-radius: 10px;
+        background: var(--input-bg);
+      }
+
+      #importPreviewOverlay .import-preview-empty {
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 28px 12px;
+      }
+
+      #importPreviewOverlay .import-preview-members {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      #importPreviewOverlay .import-preview-member {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--input-bg);
+      }
+
+      #importPreviewOverlay .import-preview-member .m-main {
+        flex: 1;
+        min-width: 0;
+      }
+
+      #importPreviewOverlay .import-preview-member .m-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+        word-break: break-word;
+      }
+
+      #importPreviewOverlay .import-preview-member .m-url {
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
       }
 
       /* Save conflict modal — above floats */
@@ -795,11 +985,13 @@
         z-index: 6;
       }
 
+      /* Stack + sits on title/meta strip (hot-zone is .meta only) */
       .card.stack-hover::after {
         content: '+';
         position: absolute;
         right: 10px;
-        top: 10px;
+        bottom: 14px;
+        top: auto;
         z-index: 7;
         width: 28px;
         height: 28px;
@@ -1122,11 +1314,15 @@
       }
 
       /* Kill native HTML5 drag (green + cursor on macOS) */
+      .card,
+      .card *,
       .card img,
       .card a,
       .card .thumb,
       .card .lazy-thumb,
-      .card .favicon {
+      .card .favicon,
+      .card .meta,
+      .card .title {
         -webkit-user-drag: none;
         user-drag: none;
         user-select: none;
@@ -1858,6 +2054,8 @@
       <span class="batch-count" id="batchCount">0</span>
       <button type="button" class="btn primary" id="batchRestore" data-i18n="batchRestore">還原</button>
       <button type="button" class="btn" id="batchEdit" data-i18n="batchEdit">Note / Tags</button>
+      <button type="button" class="btn" id="batchExportLite" data-i18n="batchExportLite">匯出精簡</button>
+      <button type="button" class="btn" id="batchExportFull" data-i18n="batchExportFull">匯出完整</button>
       <button type="button" class="btn" id="batchDelete" data-i18n="batchDelete">刪除</button>
       <button type="button" class="btn" id="batchClear" data-i18n="batchClear">取消</button>
     </div>
@@ -2006,6 +2204,25 @@
           <p class="hint" style="margin:6px 0 0;font-size:11px;color:var(--muted)" data-i18n="backupHint">
             精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。
           </p>
+        </div>
+        <div class="settings-block" id="diagLogBlock">
+          <h2 data-i18n="diagLogTitle">診斷日誌</h2>
+          <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="diagLogHint">
+            匯出／匯入／自動備份等事件。可複製給除錯用。
+          </p>
+          <textarea
+            id="diagLogText"
+            rows="8"
+            readonly
+            spellcheck="false"
+            style="width:100%;box-sizing:border-box;border:1px solid var(--border);background:var(--input-bg);color:var(--muted);border-radius:10px;padding:10px 12px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;resize:vertical;min-height:100px;line-height:1.4"
+          ></textarea>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <button type="button" class="btn" id="diagLogRefreshBtn" data-i18n="diagLogRefresh">重新整理</button>
+            <button type="button" class="btn" id="diagLogCopyBtn" data-i18n="diagLogCopy">複製</button>
+            <button type="button" class="btn" id="diagLogClearBtn" data-i18n="diagLogClear">清除</button>
+          </div>
+          <p id="diagLogStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
         </div>
         <div class="settings-block" id="manualAddBlock">
           <h2 data-i18n="manualAddTitle">手動新增卡片</h2>
@@ -2241,6 +2458,42 @@
           <button type="button" class="btn primary" id="dedupeApplyBtn" data-i18n="dedupeApply">套用</button>
         </div>
         <p id="dedupeStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
+      </div>
+    </div>
+
+    <div id="importPickBox" aria-hidden="true">
+      <div class="float-drag" id="importPickDrag">
+        <h2 id="importPickTitle" data-i18n="importPickTitle">選擇要還原的項目</h2>
+        <button type="button" class="btn" id="importPickCloseX">×</button>
+      </div>
+      <div class="float-body">
+        <p class="hint" style="margin:0 0 10px;font-size:11px;color:var(--muted)" id="importPickHint" data-i18n="importPickHint">
+          勾選要寫入的 tab／group。預設全選。可點「預覽」查看縮圖／成員。
+        </p>
+        <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <button type="button" class="btn" id="importPickAllBtn" data-i18n="importPickAll">全選</button>
+          <button type="button" class="btn" id="importPickNoneBtn" data-i18n="importPickNone">全不選</button>
+          <span class="hint" id="importPickCount" style="font-size:12px;color:var(--muted);align-self:center"></span>
+        </div>
+        <div id="importPickList"></div>
+        <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:12px">
+          <button type="button" class="btn" id="importPickCancelBtn" data-i18n="cancel">取消</button>
+          <button type="button" class="btn primary" id="importPickConfirmBtn" data-i18n="importPickConfirm">確認還原</button>
+        </div>
+        <p id="importPickStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
+      </div>
+    </div>
+
+    <div id="importPreviewOverlay" aria-hidden="true">
+      <div class="import-preview-panel" role="dialog" aria-modal="true">
+        <div class="import-preview-head">
+          <div style="flex:1;min-width:0">
+            <h3 id="importPreviewTitle">—</h3>
+            <div class="import-preview-url" id="importPreviewUrl"></div>
+          </div>
+          <button type="button" class="btn" id="importPreviewCloseBtn" data-i18n="close">關閉</button>
+        </div>
+        <div class="import-preview-body" id="importPreviewBody"></div>
       </div>
     </div>
 

@@ -160,6 +160,18 @@
     return files;
   }
 
+  function extFromDataUrl(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return 'bin';
+    const m = /^data:([^;,]+)/i.exec(dataUrl);
+    const mime = (m && m[1] || '').toLowerCase();
+    if (mime.includes('png')) return 'png';
+    if (mime.includes('webp')) return 'webp';
+    if (mime.includes('svg')) return 'svg';
+    if (mime.includes('gif')) return 'gif';
+    if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+    return 'bin';
+  }
+
   function collectMediaFiles(items) {
     const files = [];
     const clone = JSON.parse(JSON.stringify(items));
@@ -169,12 +181,12 @@
           const tBytes = dataUrlToBytes(m.thumbnail);
           const sBytes = dataUrlToBytes(m.snapshot);
           if (tBytes) {
-            const path = `media/${item.id}_${m.id}_thumb.jpg`;
+            const path = `media/${item.id}_${m.id}_thumb.${extFromDataUrl(m.thumbnail)}`;
             files.push({ name: path, data: tBytes });
             m.thumbnail = path;
           } else m.thumbnail = '';
           if (sBytes) {
-            const path = `media/${item.id}_${m.id}_snap.jpg`;
+            const path = `media/${item.id}_${m.id}_snap.${extFromDataUrl(m.snapshot)}`;
             files.push({ name: path, data: sBytes });
             m.snapshot = path;
           } else m.snapshot = '';
@@ -183,12 +195,12 @@
         const tBytes = dataUrlToBytes(item.thumbnail);
         const sBytes = dataUrlToBytes(item.snapshot);
         if (tBytes) {
-          const path = `media/${item.id}_thumb.jpg`;
+          const path = `media/${item.id}_thumb.${extFromDataUrl(item.thumbnail)}`;
           files.push({ name: path, data: tBytes });
           item.thumbnail = path;
         } else item.thumbnail = '';
         if (sBytes) {
-          const path = `media/${item.id}_snap.jpg`;
+          const path = `media/${item.id}_snap.${extFromDataUrl(item.snapshot)}`;
           files.push({ name: path, data: sBytes });
           item.snapshot = path;
         } else item.snapshot = '';
@@ -224,18 +236,33 @@
     });
   }
 
+  /**
+   * Local wall-clock + offset for filenames (no ':' for Windows).
+   * Example: 2026-08-04T13-00-00+0800
+   */
   function stamp(date = new Date()) {
-    return date.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const p = (n) => String(n).padStart(2, '0');
+    const offMin = -date.getTimezoneOffset();
+    const sign = offMin >= 0 ? '+' : '-';
+    const abs = Math.abs(offMin);
+    const oh = p(Math.floor(abs / 60));
+    const om = p(abs % 60);
+    return (
+      `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}` +
+      `T${p(date.getHours())}-${p(date.getMinutes())}-${p(date.getSeconds())}` +
+      `${sign}${oh}${om}`
+    );
   }
 
-  function buildLiteBlob(backup, { auto = false } = {}) {
-    const prefix = auto ? 'tabwall-auto-lite' : 'tabwall-backup-lite';
+  function buildLiteBlob(backup, { auto = false, partial = false } = {}) {
+    let prefix = auto ? 'tabwall-auto-lite' : 'tabwall-backup-lite';
+    if (partial && !auto) prefix = 'tabwall-backup-lite-partial';
     const filename = `${prefix}-${stamp()}.json`;
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     return { blob, filename };
   }
 
-  function buildFullZipBlob(backup, { auto = false } = {}) {
+  function buildFullZipBlob(backup, { auto = false, partial = false } = {}) {
     const { items, files } = collectMediaFiles(backup.parkedItems || []);
     const meta = {
       ...backup,
@@ -246,7 +273,8 @@
     };
     const jsonBytes = new TextEncoder().encode(JSON.stringify(meta));
     const zip = zipStore([{ name: 'backup.json', data: jsonBytes }, ...files]);
-    const prefix = auto ? 'tabwall-auto-full' : 'tabwall-backup-full';
+    let prefix = auto ? 'tabwall-auto-full' : 'tabwall-backup-full';
+    if (partial && !auto) prefix = 'tabwall-backup-full-partial';
     const filename = `${prefix}-${stamp()}.zip`;
     const blob = new Blob([zip], { type: 'application/zip' });
     return { blob, filename };
