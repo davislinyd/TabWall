@@ -95,30 +95,102 @@ function cacheSnap(key, url) {
   }
 }
 
+/** Reuse thumb blob URLs across re-renders (search typing). */
+const THUMB_URL_CACHE_MAX = 100;
+/** @type {Map<string, string>} */
+const thumbUrlCache = new Map();
+
+function cacheThumbUrl(key, url) {
+  if (!key || !url) return url;
+  if (thumbUrlCache.has(key)) {
+    const old = thumbUrlCache.get(key);
+    if (old !== url) revokeObjectUrl(old);
+    thumbUrlCache.delete(key);
+  }
+  thumbUrlCache.set(key, url);
+  while (thumbUrlCache.size > THUMB_URL_CACHE_MAX) {
+    const first = thumbUrlCache.keys().next().value;
+    revokeObjectUrl(thumbUrlCache.get(first));
+    thumbUrlCache.delete(first);
+  }
+  return url;
+}
+
 async function fetchMediaUrl(key, kind) {
-  if (!key || !Media) {
+  if (!key) return '';
+  if (kind === 'thumb' && thumbUrlCache.has(key)) {
+    return thumbUrlCache.get(key) || '';
+  }
+  if (!Media) {
     const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
-    return res.ok ? res.dataUrl || '' : '';
+    const url = res.ok ? res.dataUrl || '' : '';
+    if (kind === 'thumb' && url) cacheThumbUrl(key, url);
+    return url;
   }
   try {
     const blob = await Media.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
     if (!blob) return '';
-    return trackObjectUrl(URL.createObjectURL(blob));
+    const url = trackObjectUrl(URL.createObjectURL(blob));
+    if (kind === 'thumb') cacheThumbUrl(key, url);
+    return url;
   } catch {
     const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
-    return res.ok ? res.dataUrl || '' : '';
+    const url = res.ok ? res.dataUrl || '' : '';
+    if (kind === 'thumb' && url) cacheThumbUrl(key, url);
+    return url;
   }
 }
 
-/** Eager-load thumbs (list has no snapshots; IO was delaying first paint in iframe). */
-function observeThumb(img) {
+/** True lazy-load via IntersectionObserver + thumb cache. */
+let thumbObserver = null;
+
+function getThumbObserver() {
+  if (thumbObserver) return thumbObserver;
+  if (typeof IntersectionObserver === 'undefined') return null;
+  thumbObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const img = entry.target;
+        thumbObserver.unobserve(img);
+        loadThumbInto(img);
+      }
+    },
+    { root: null, rootMargin: '240px 0px', threshold: 0.01 }
+  );
+  return thumbObserver;
+}
+
+function loadThumbInto(img) {
   if (!img) return;
   const key = img.dataset.mediaKey;
   if (!key || img.dataset.loaded === '1') return;
   img.dataset.loaded = '1';
+  if (thumbUrlCache.has(key)) {
+    img.src = thumbUrlCache.get(key);
+    return;
+  }
   fetchMediaUrl(key, 'thumb').then((url) => {
-    if (url) img.src = url;
+    if (url && img.isConnected) img.src = url;
   });
+}
+
+function observeThumb(img) {
+  if (!img) return;
+  const key = img.dataset.mediaKey;
+  if (!key || img.dataset.loaded === '1') return;
+  // Cache hit: paint immediately (no flash on search re-render)
+  if (thumbUrlCache.has(key)) {
+    img.dataset.loaded = '1';
+    img.src = thumbUrlCache.get(key);
+    return;
+  }
+  const obs = getThumbObserver();
+  if (!obs) {
+    loadThumbInto(img);
+    return;
+  }
+  obs.observe(img);
 }
 
 function mediaKeyForItem(item) {
@@ -139,12 +211,14 @@ const I18N = {
     searchRegexTitle: '正規表示式搜尋',
     searchPhTag: '搜尋 tag…',
     searchPhNote: '搜尋 note…',
+    searchPhGroup: '搜尋群組名稱或成員…',
     searchPhTagRegex: 'Regex 搜尋 tag…',
     searchPhNoteRegex: 'Regex 搜尋 note…',
+    searchPhGroupRegex: '群組／成員正規表示式…',
     searchScopeClear: '清除欄位模式（或 all + Tab）',
     helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
     helpShortcutSearchMode:
-      '搜尋框輸入 t/tag、n/note、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
+      '搜尋框輸入 t/tag、n/note、g/group、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
     searchHitsCount: '命中 {n} 個分頁',
     searchHitGroupMeta: '符合 group 名稱／note／tags',
     searchHitsMore: '還有 {n} 個…',
@@ -234,12 +308,14 @@ const I18N = {
     manualAddEmpty: '沒有可新增的 URL',
     manualAddSkipped: '（略過 {n} 行）',
     autoBackupTitle: '自動備份',
-    autoBackupHint: '寫入 Chrome「下載」目錄下的子資料夾（不上傳）。首次備份成功後會顯示完整路徑。',
+    autoBackupHint:
+      '寫入「瀏覽器設定的下載位置」下的子資料夾（不一定是 Downloads；可在 chrome://settings/downloads 查看）。不上傳。',
     autoBackupEnable: '啟用自動備份',
-    autoBackupSubfolder: '下載子資料夾',
-    autoBackupSubfolderHint: '相對於瀏覽器下載目錄，例如 TabWall-Backups',
+    autoBackupSubfolder: '下載位置子資料夾',
+    autoBackupSubfolderHint: '相對於 Chrome 下載位置，例如 TabWall-Backups',
     autoBackupLocation: '備份位置',
-    autoBackupLocationPending: '下載目錄 / {subfolder}（首次備份後顯示完整路徑）',
+    autoBackupLocationPending: '下載位置 / {subfolder}（成功備份後顯示完整路徑）',
+    autoBackupLocationStale: '路徑待更新 — 請按「立即備份」以寫入目前下載位置',
     autoBackupMode: '格式',
     autoBackupModeLite: '精簡 JSON',
     autoBackupModeFull: '完整 ZIP',
@@ -347,12 +423,14 @@ const I18N = {
     searchRegexTitle: 'Regex search',
     searchPhTag: 'Search tags…',
     searchPhNote: 'Search notes…',
+    searchPhGroup: 'Search group name or member tabs…',
     searchPhTagRegex: 'Regex search tags…',
     searchPhNoteRegex: 'Regex search notes…',
+    searchPhGroupRegex: 'Group/member regex…',
     searchScopeClear: 'Clear field mode (or all + Tab)',
     helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
     helpShortcutSearchMode:
-      'In search, type t/tag, n/note, or re/regex then Tab; all + Tab resets scope',
+      'In search, type t/tag, n/note, g/group, or re/regex then Tab; all + Tab resets scope',
     searchHitsCount: '{n} matching tab(s)',
     searchHitGroupMeta: 'Matched group title / note / tags',
     searchHitsMore: '+{n} more…',
@@ -443,12 +521,13 @@ const I18N = {
     manualAddSkipped: '({n} line(s) skipped)',
     autoBackupTitle: 'Auto backup',
     autoBackupHint:
-      'Writes under your Chrome Downloads folder (never uploaded). Full path appears after the first successful backup.',
+      'Writes under Chrome’s configured download location (not always ~/Downloads — see chrome://settings/downloads). Never uploaded.',
     autoBackupEnable: 'Enable auto backup',
-    autoBackupSubfolder: 'Downloads subfolder',
-    autoBackupSubfolderHint: 'Relative to the browser download directory, e.g. TabWall-Backups',
+    autoBackupSubfolder: 'Subfolder under download location',
+    autoBackupSubfolderHint: 'Relative to Chrome’s download location, e.g. TabWall-Backups',
     autoBackupLocation: 'Backup location',
-    autoBackupLocationPending: 'Downloads / {subfolder} (full path after first backup)',
+    autoBackupLocationPending: 'Download location / {subfolder} (full path after a successful backup)',
+    autoBackupLocationStale: 'Path outdated — click Backup now to write to the current download location',
     autoBackupMode: 'Format',
     autoBackupModeLite: 'Lite JSON',
     autoBackupModeFull: 'Full ZIP',
@@ -1103,19 +1182,33 @@ function syncSettingsUi() {
   syncSearchRegexUi();
 }
 
-function autoBackupErrorText(code) {
+function autoBackupErrorText(code, detail) {
+  let base = '';
   switch (code) {
     case 'export_failed':
     case 'build_failed':
-      return t('autoBackupErrExport');
+      base = t('autoBackupErrExport');
+      break;
     case 'write_failed':
     case 'busy':
-      return t('autoBackupErrWrite');
+      base = t('autoBackupErrWrite');
+      break;
     case 'disabled':
-      return t('autoBackupErrDisabled');
+      base = t('autoBackupErrDisabled');
+      break;
     default:
-      return code ? t('autoBackupErrWrite') : '';
+      base = code ? t('autoBackupErrWrite') : '';
   }
+  if (base && detail) return `${base}: ${detail}`;
+  return base;
+}
+
+/** True if stored absolute path looks like it belongs to current subfolder. */
+function folderPathMatchesSubfolder(folderPath, subfolder) {
+  if (!folderPath || !subfolder) return false;
+  const norm = String(folderPath).replace(/[/\\]+$/, '');
+  const base = norm.split(/[/\\]/).pop() || '';
+  return base === subfolder || norm.endsWith('/' + subfolder) || norm.endsWith('\\' + subfolder);
 }
 
 function syncAutoBackupUi() {
@@ -1139,9 +1232,13 @@ function syncAutoBackupUi() {
   if (modeRadio) modeRadio.checked = true;
 
   if (autoBackupLocationLabelEl) {
-    if (ab.folderPath) {
+    if (ab.folderPath && folderPathMatchesSubfolder(ab.folderPath, ab.subfolder)) {
       autoBackupLocationLabelEl.textContent = ab.folderPath;
       autoBackupLocationLabelEl.style.color = 'var(--text)';
+      autoBackupLocationLabelEl.setAttribute('title', ab.folderPath);
+    } else if (ab.folderPath && !folderPathMatchesSubfolder(ab.folderPath, ab.subfolder)) {
+      autoBackupLocationLabelEl.textContent = t('autoBackupLocationStale');
+      autoBackupLocationLabelEl.style.color = 'var(--muted)';
       autoBackupLocationLabelEl.setAttribute('title', ab.folderPath);
     } else {
       autoBackupLocationLabelEl.textContent = t('autoBackupLocationPending', {
@@ -1336,7 +1433,8 @@ async function initSettingsUi() {
   autoBackupSubfolderEl?.addEventListener('change', async () => {
     const subfolder = sanitizeSubfolder(autoBackupSubfolderEl.value);
     autoBackupSubfolderEl.value = subfolder;
-    await saveSettings({ autoBackup: { subfolder } });
+    // Clear stale absolute path from older FS-access / old subfolder
+    await saveSettings({ autoBackup: { subfolder, folderPath: '' } });
     syncAutoBackupUi();
   });
   autoBackupIntervalUnitEl?.addEventListener('change', async () => {
@@ -1932,11 +2030,12 @@ function searchPlaceholderText() {
   const re = Boolean(settings.searchRegex);
   if (searchScope === 'tag') return re ? t('searchPhTagRegex') : t('searchPhTag');
   if (searchScope === 'note') return re ? t('searchPhNoteRegex') : t('searchPhNote');
+  if (searchScope === 'group') return re ? t('searchPhGroupRegex') : t('searchPhGroup');
   return re ? t('searchRegexPh') : t('searchPh');
 }
 
 function syncSearchScopeUi() {
-  const scoped = searchScope === 'tag' || searchScope === 'note';
+  const scoped = searchScope === 'tag' || searchScope === 'note' || searchScope === 'group';
   if (searchWrap) searchWrap.classList.toggle('has-scope', scoped);
   if (searchScopeChip) {
     if (scoped) {
@@ -1949,7 +2048,19 @@ function syncSearchScopeUi() {
       searchScopeChip.textContent = '';
     }
   }
-  if (searchEl) searchEl.placeholder = searchPlaceholderText();
+  if (searchEl) {
+    searchEl.placeholder = searchPlaceholderText();
+    // "group" chip is wider than "tag"/"note" — pad input so caret is not covered
+    if (scoped && searchScopeChip) {
+      requestAnimationFrame(() => {
+        if (!searchEl || !searchScopeChip || searchScopeChip.hidden) return;
+        const w = searchScopeChip.offsetWidth || 0;
+        searchEl.style.paddingLeft = `${Math.max(52, w + 16)}px`;
+      });
+    } else {
+      searchEl.style.paddingLeft = '';
+    }
+  }
 }
 
 function syncSearchRegexUi() {
@@ -1981,16 +2092,26 @@ function clearSearchInputKeepFocus() {
   searchEl.removeAttribute('aria-invalid');
   searchEl.removeAttribute('title');
   searchEl.focus();
+  if (searchRenderTimer) {
+    clearTimeout(searchRenderTimer);
+    searchRenderTimer = null;
+  }
 }
 
 /** Empty query matches everything — no need to rebuild the photo wall. */
 function refilterSearchIfNeeded() {
+  if (searchRenderTimer) {
+    clearTimeout(searchRenderTimer);
+    searchRenderTimer = null;
+  }
   if (query) renderGrid();
-  else updateSavedBadge();
+  else {
+    renderGrid(); // scope change (e.g. group) must refilter even with empty query
+  }
 }
 
 async function applySearchTabToken(token) {
-  if (token === 'tag' || token === 'note' || token === 'all') {
+  if (token === 'tag' || token === 'note' || token === 'group' || token === 'all') {
     searchScope = token === 'all' ? 'all' : token;
     clearSearchInputKeepFocus();
     syncSearchScopeUi();
@@ -2081,16 +2202,31 @@ function applySearchCompileState() {
   }
 }
 
-function setSearchQueryFromInput() {
+let searchRenderTimer = null;
+const SEARCH_RENDER_DEBOUNCE_MS = 120;
+
+function setSearchQueryFromInput({ immediate = false } = {}) {
   // Keep original case for regex; plain mode lowercases inside matchesQuery
   query = searchEl.value.trim();
   compileSearchQuery(query);
   applySearchCompileState();
-  renderGrid();
+  if (immediate) {
+    if (searchRenderTimer) {
+      clearTimeout(searchRenderTimer);
+      searchRenderTimer = null;
+    }
+    renderGrid();
+    return;
+  }
+  if (searchRenderTimer) clearTimeout(searchRenderTimer);
+  searchRenderTimer = setTimeout(() => {
+    searchRenderTimer = null;
+    renderGrid();
+  }, SEARCH_RENDER_DEBOUNCE_MS);
 }
 
 searchEl.addEventListener('input', () => {
-  setSearchQueryFromInput();
+  setSearchQueryFromInput({ immediate: false });
 });
 
 const SEARCH_TAB_TOKENS = {
@@ -2098,6 +2234,8 @@ const SEARCH_TAB_TOKENS = {
   tag: 'tag',
   n: 'note',
   note: 'note',
+  g: 'group',
+  group: 'group',
   re: 'regex',
   regex: 'regex',
   a: 'all',
@@ -2385,6 +2523,15 @@ function getVisibleTabs() {
 }
 
 function itemHaystack(item, scope = searchScope) {
+  if (scope === 'group') {
+    // Only group cards; name + member tabs (title/url/domain)
+    if (item.kind !== 'group') return '';
+    const parts = [item.title || ''];
+    for (const m of item.tabs || []) {
+      parts.push(m.title || '', m.url || '', domainOf(m.url));
+    }
+    return parts.join(' ');
+  }
   if (scope === 'tag') {
     if (item.kind === 'group') {
       const parts = [...(Array.isArray(item.tags) ? item.tags : [])];
@@ -2470,6 +2617,9 @@ function textMatchesQuery(text, q) {
 
 function memberHaystack(member, scope = searchScope) {
   if (!member) return '';
+  if (scope === 'group') {
+    return [member.title || '', member.url || '', domainOf(member.url)].join(' ');
+  }
   if (scope === 'tag') {
     return (Array.isArray(member.tags) ? member.tags : []).join(' ');
   }
@@ -2486,6 +2636,9 @@ function memberHaystack(member, scope = searchScope) {
 }
 
 function groupMetaHaystack(group, scope = searchScope) {
+  if (scope === 'group') {
+    return group.title || '';
+  }
   if (scope === 'tag') {
     return (Array.isArray(group.tags) ? group.tags : []).join(' ');
   }
@@ -2509,8 +2662,33 @@ function groupMetaMatches(group, q = query) {
   return textMatchesQuery(groupMetaHaystack(group), q);
 }
 
+/** Per-render cache: avoid double getMatchingMembers for filter + hit rows. */
+/** @type {Map<string, { hits: any[], metaHit: boolean }> | null} */
+let searchMatchCache = null;
+
+function getGroupSearchMatch(group, q = query) {
+  if (!group || group.kind !== 'group') return { hits: [], metaHit: false };
+  if (searchMatchCache && searchMatchCache.has(group.id)) {
+    return searchMatchCache.get(group.id);
+  }
+  const metaHit = !q ? false : groupMetaMatches(group, q);
+  const hits = !q ? [] : getMatchingMembers(group, q);
+  const result = { hits, metaHit };
+  if (searchMatchCache) searchMatchCache.set(group.id, result);
+  return result;
+}
+
 function matchesQuery(item, q) {
-  if (!q) return true;
+  if (!q) {
+    // Empty query: group scope still only shows groups
+    if (searchScope === 'group') return item?.kind === 'group';
+    return true;
+  }
+  if (searchScope === 'group') {
+    if (item?.kind !== 'group') return false;
+    const { hits, metaHit } = getGroupSearchMatch(item, q);
+    return metaHit || hits.length > 0;
+  }
   const hay = itemHaystack(item);
   return textMatchesQuery(hay, q);
 }
@@ -2521,8 +2699,7 @@ const SEARCH_HIT_LIMIT = 8;
 function appendGroupSearchHits(parentEl, group) {
   if (!query || !parentEl || group?.kind !== 'group') return;
 
-  const hits = getMatchingMembers(group, query);
-  const metaHit = groupMetaMatches(group, query);
+  const { hits, metaHit } = getGroupSearchMatch(group, query);
   if (!hits.length && !metaHit) return;
 
   const box = document.createElement('div');
@@ -2932,7 +3109,9 @@ async function runLocalAutoBackup({ force = false } = {}) {
       return res;
     }
     const err = res?.error || 'write_failed';
-    if (autoBackupStatusEl) autoBackupStatusEl.textContent = autoBackupErrorText(err);
+    if (autoBackupStatusEl) {
+      autoBackupStatusEl.textContent = autoBackupErrorText(err, res?.detail);
+    }
     return { ok: false, error: err };
   } finally {
     autoBackupLocalRunning = false;
@@ -4255,16 +4434,29 @@ function renderEmpty(message) {
 }
 
 function renderGrid() {
+  // Fresh match cache for this paint (shared by filter + group hit rows)
+  searchMatchCache = new Map();
   const filtered = getVisibleTabs();
   updateSavedBadge();
 
   if (allTabs.length === 0) {
+    searchMatchCache = null;
     renderEmpty({ title: t('emptyTitle'), body: t('emptyBody') });
     return;
   }
   if (filtered.length === 0) {
+    searchMatchCache = null;
     renderEmpty({ title: t('noResultsTitle'), body: t('noResultsBody') });
     return;
+  }
+
+  // Disconnect old thumb observations before tearing down DOM
+  if (thumbObserver) {
+    try {
+      thumbObserver.disconnect();
+    } catch {
+      // ignore
+    }
   }
 
   gridEl.innerHTML = '';
@@ -4275,6 +4467,7 @@ function renderGrid() {
     frag.appendChild(isList ? createRow(item) : createCard(item));
   });
   gridEl.appendChild(frag);
+  searchMatchCache = null;
 }
 
 let loadListTimer = null;

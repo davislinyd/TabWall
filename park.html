@@ -147,7 +147,8 @@
       }
 
       .search-wrap.has-scope #search {
-        padding-left: 52px;
+        /* Fallback; JS sets exact padding from chip width (group is wider than tag/note) */
+        padding-left: 72px;
       }
 
       #searchScopeChip {
@@ -157,6 +158,10 @@
         top: 50%;
         transform: translateY(-50%);
         z-index: 1;
+        max-width: 40%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         padding: 2px 7px;
         border-radius: 6px;
         border: 1px solid var(--accent);
@@ -2023,7 +2028,7 @@
         <div class="settings-block" id="autoBackupBlock">
           <h2 data-i18n="autoBackupTitle">自動備份</h2>
           <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="autoBackupHint">
-            寫入 Chrome「下載」目錄下的子資料夾（不上傳）。首次備份成功後會顯示完整路徑。
+            寫入「瀏覽器設定的下載位置」下的子資料夾（不一定是 Downloads；可在 chrome://settings/downloads 查看）。不上傳。
           </p>
           <div class="settings-row">
             <label class="inline">
@@ -2033,7 +2038,7 @@
           </div>
           <div class="settings-row" style="margin-top:8px">
             <label class="inline" style="flex-wrap:wrap">
-              <span data-i18n="autoBackupSubfolder">下載子資料夾</span>
+              <span data-i18n="autoBackupSubfolder">下載位置子資料夾</span>
               <input
                 id="autoBackupSubfolder"
                 type="text"
@@ -2044,7 +2049,7 @@
               />
             </label>
             <p class="hint" style="margin:4px 0 0;font-size:11px;color:var(--muted)" data-i18n="autoBackupSubfolderHint">
-              相對於瀏覽器下載目錄，例如 TabWall-Backups
+              相對於 Chrome 下載位置，例如 TabWall-Backups
             </p>
           </div>
           <div class="settings-row" style="margin-top:8px">
@@ -2160,7 +2165,13 @@
               <span data-i18n="helpShortcutSettings">開啟／關閉設定（⌥⌘S）</span>
             </li>
             <li><kbd>.*</kbd> — <span data-i18n="helpShortcutRegex">切換正規表示式搜尋（支援 /pattern/flags）</span></li>
-            <li><kbd>t</kbd>/<kbd>tag</kbd>、<kbd>n</kbd>/<kbd>note</kbd>、<kbd>re</kbd>/<kbd>regex</kbd> + <kbd>Tab</kbd> — <span data-i18n="helpShortcutSearchMode">進入 tag／note／regex 模式；all + Tab 回全搜</span></li>
+            <li>
+              <kbd>t</kbd>/<kbd>tag</kbd>、<kbd>n</kbd>/<kbd>note</kbd>、<kbd>g</kbd>/<kbd>group</kbd>、<kbd>re</kbd>/<kbd>regex</kbd>
+              + <kbd>Tab</kbd> —
+              <span data-i18n="helpShortcutSearchMode"
+                >進入 tag／note／group／regex 模式；all + Tab 回全搜</span
+              >
+            </li>
             <li><kbd>Esc</kbd> — <span data-i18n="helpShortcutEsc">關閉浮層／照片牆</span></li>
             <li><kbd>←</kbd> <kbd>→</kbd> — <span data-i18n="helpShortcutArrows">快照上一張／下一張</span></li>
           </ul>

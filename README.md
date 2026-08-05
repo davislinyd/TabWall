@@ -2,7 +2,7 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
-**Current version:** see `manifest.json` (currently **2.9.1**).
+**Current version:** see `manifest.json` (currently **2.10.2**).
 
 ## Performance (v2.6.x)
 
@@ -26,9 +26,10 @@ Defaults (customizable in **Settings → 快捷鍵** / in-page rebinding):
 | Plain search | `||` = OR, space/`&&` = AND (case-insensitive) |
 | `t`/`tag` + Tab | Search tags only |
 | `n`/`note` + Tab | Search notes only |
+| `g`/`group` + Tab | Search groups only (group name or member tabs) |
 | `re`/`regex` + Tab | Enable regex mode |
 | `all` + Tab | Reset field scope |
-| Empty search + Backspace/Delete or Esc | Leave tag/note/regex modes |
+| Empty search + Backspace/Delete or Esc | Leave tag/note/group/regex modes |
 | `.*` (toolbar) | Toggle regex search (`/pattern/flags` supported) |
 | `Esc` | Close panels / TabWall |
 | `←` / `→` | Prev / next snapshot |
@@ -56,7 +57,7 @@ List view supports copy on title/URL; card drag/stack is cards view only.
 
 - Plain: `grafana zabbix` (AND), `grafana||zabbix` (OR)
 - Regex: toolbar `.*` or `re`/`regex` + Tab
-- Field scope: `tag` / `note` + Tab
+- Field scope: `tag` / `note` / `group` + Tab
 - When a **group** matches, the card lists **which member tabs** hit (restore / preview per row)
 
 ## Features

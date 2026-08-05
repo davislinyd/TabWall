@@ -371,39 +371,44 @@ function waitForDownloadComplete(downloadId, timeoutMs = 180000) {
   });
 }
 
-async function downloadBlobAsFile(blob, relativePath) {
-  const url = URL.createObjectURL(blob);
-  try {
-    const downloadId = await new Promise((resolve, reject) => {
-      chrome.downloads.download(
-        {
-          url,
-          filename: relativePath,
-          saveAs: false,
-          conflictAction: 'uniquify',
-        },
-        (id) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-          if (id == null) {
-            reject(new Error('no_download_id'));
-            return;
-          }
-          resolve(id);
-        }
-      );
-    });
-    const item = await waitForDownloadComplete(downloadId);
-    return { downloadId, item, filename: item?.filename || '' };
-  } finally {
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      // ignore
-    }
+/** blob: URLs from MV3 service workers are unreliable for chrome.downloads — use data: */
+async function blobToDataUrl(blob) {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
+  const mime = (blob && blob.type) || 'application/octet-stream';
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
+async function downloadBlobAsFile(blob, relativePath) {
+  const url = await blobToDataUrl(blob);
+  const downloadId = await new Promise((resolve, reject) => {
+    chrome.downloads.download(
+      {
+        url,
+        filename: relativePath,
+        saveAs: false,
+        conflictAction: 'uniquify',
+      },
+      (id) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (id == null) {
+          reject(new Error('no_download_id'));
+          return;
+        }
+        resolve(id);
+      }
+    );
+  });
+  const item = await waitForDownloadComplete(downloadId);
+  return { downloadId, item, filename: item?.filename || '' };
 }
 
 async function pruneDownloadedAutoBackups(mode, keep) {
@@ -534,11 +539,13 @@ async function runAutoBackup(opts = {}) {
       downloaded = await downloadBlobAsFile(built.blob, relative);
     } catch (err) {
       console.warn('[TabWall] auto backup download failed:', err);
+      const detail = String(err?.message || err);
       await patchAutoBackup({ lastError: 'write_failed' });
-      return { ok: false, error: 'write_failed', detail: String(err?.message || err) };
+      return { ok: false, error: 'write_failed', detail };
     }
 
-    const folderPath = dirnameOfLocalPath(downloaded.filename) || ab.folderPath || '';
+    // Always prefer path from this download (clears stale FS-access paths)
+    const folderPath = dirnameOfLocalPath(downloaded.filename) || '';
     await patchAutoBackup({
       lastSuccessAt: Date.now(),
       lastError: '',
