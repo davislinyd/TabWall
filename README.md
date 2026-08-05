@@ -1,104 +1,110 @@
 # TabWall
 
-Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
+## English
 
-**Current version:** see `manifest.json`.
-**Changelog / 開發歷程:** [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups as a visual photo wall. Data stays on the device.
 
-## Architecture
+**Current version:** See `manifest.json`.
 
-- **Meta** (url/title/note/tags/order) → `chrome.storage.local`
-- **Images** (thumbnail + full snapshot) → **IndexedDB** blobs
-- Opening the wall loads **meta only**; thumbs load lazily in the wall iframe (with cache)
-- First launch migrates old inline base64 into IDB automatically
-- Group cover area is fixed **16:10** so large thumbs cannot stretch cards
+**Release history:** [docs/CHANGELOG.md](docs/CHANGELOG.md)
 
-## Shortcuts
+**Privacy policy:** [docs/privacy.md](docs/privacy.md)
 
-Chrome command defaults (managed in **`chrome://extensions/shortcuts`**):
+### Architecture
+
+- Metadata such as URLs, titles, notes, tags, and order is stored in `chrome.storage.local`.
+- Thumbnails and full snapshots are stored as `IndexedDB` blobs.
+- Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
+- The first launch migrates legacy inline `Base64` media into `IndexedDB`.
+- Group covers use a fixed `16:10` ratio so large images do not stretch cards.
+
+### Shortcuts
+
+Chrome command defaults are declared in `manifest.json` and managed in `chrome://extensions/shortcuts`.
 
 | Shortcut | Action |
 |----------|--------|
-| `Option/Alt+S` | Park current tab |
-| `Option/Alt+Shift+G` | Park current Tab Group |
-| `Option/Alt+O` | Toggle TabWall |
+| `Option/Alt+S` | Park the current tab |
+| `Option/Alt+Shift+G` | Park the current Tab Group |
+| `Option/Alt+O` | Toggle the TabWall photo wall |
 | `/` | Focus search |
-| `⌥⌘S` (Mac) / `Alt+Win+S` | Open / close settings (in-wall) |
-| Plain search | `||` = OR, space/`&&` = AND (case-insensitive) |
-| `t`/`tag` + Tab | Search tags only |
-| `n`/`note` + Tab | Search notes only |
-| `g`/`group` + Tab | Search groups only (group name or member tabs) |
-| `re`/`regex` + Tab | Enable regex mode |
-| `all` + Tab | Reset field scope |
-| Empty search + Backspace/Delete or Esc | Leave tag/note/group/regex modes |
-| `.*` (toolbar) | Toggle regex search (`/pattern/flags` supported) |
-| `Esc` | Close panels / TabWall |
-| `←` / `→` | Prev / next snapshot |
+| `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
+| Plain search | `||` means OR; spaces and `&&` mean AND |
+| `t` or `tag` + Tab | Search tags only |
+| `n` or `note` + Tab | Search notes only |
+| `g` or `group` + Tab | Search groups only |
+| `re` or `regex` + Tab | Enable regular-expression search |
+| `all` + Tab | Reset the search field scope |
+| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, or regular-expression mode |
+| `.*` in the toolbar | Toggle regular-expression search; `/pattern/flags` is supported |
+| `Esc` | Close panels or the TabWall wall |
+| `←` / `→` | Show the previous or next snapshot |
 
-The three action shortcuts above are managed only by Chrome. The manifest `suggested_key` values provide install-time defaults; change or assign them in `chrome://extensions/shortcuts`. TabWall only displays the current Chrome bindings and provides a button to open that page.
+The first three actions are Chrome commands. Their `suggested_key` values provide install-time defaults. Existing Chrome assignments, shortcut conflicts, and platform rules can leave a command unbound. Manage the commands in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
 
-The remaining shortcuts (`/`, `Esc`, arrows, search modes and the settings toggle) are built-in TabWall wall-navigation shortcuts and are not configurable.
+The other shortcuts are built-in wall-navigation behavior and cannot be customized in TabWall.
 
-After reload/update, re-open or refresh existing tabs once so the content script injects.
+After an extension reload or update, reopen or refresh existing tabs when a page still has an older injected overlay.
 
-## Card interaction
+### Card interaction
 
 | Action | Result |
 |--------|--------|
-| Click **thumbnail** | Restore tab / group (short click; **groups confirm first**) |
-| Click **title / meta** | Copy saved URL(s) — groups copy member URLs, one per line |
-| Drag from **thumbnail** | Reorder cards |
-| Drag onto another card’s **title / meta** (brief pause, **+** on title) | **Stack** into a group |
-| Restore a stack/group | Recreates a Chrome **Tab Group** |
+| Click a thumbnail | Restore a tab or group; groups ask for confirmation first |
+| Click a title or metadata area | Copy the saved URL or the member URLs |
+| Drag from a thumbnail | Reorder cards |
+| Drag onto another card's title or metadata area | Stack the cards into a group |
+| Restore a stack or group | Recreate a Chrome Tab Group |
 
-List view supports copy on title/URL; card drag/stack is cards view only.
+List view supports copying from titles and URLs. Card dragging and stacking are available in card view.
 
-## Search
+### Search
 
-- Plain: `grafana zabbix` (AND), `grafana||zabbix` (OR)
-- Regex: toolbar `.*` or `re`/`regex` + Tab
-- Field scope: `tag` / `note` / `group` + Tab
-- When a **group** matches, the card lists **which member tabs** hit (restore / preview per row)
-- Typing in search is debounced; thumbs load when near the viewport
+- Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
+- Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
+- Field scope: use `tag`, `note`, or `group` followed by Tab.
+- When a group matches, the card lists the member tabs that matched.
+- Search input is debounced, and thumbnails load near the visible area.
 
-## Features
+### Features
 
-- Group park/restore, member note/tags, multi-select batch ops
-- **Stack:** iOS-style merge by dropping a card on another’s **title area**
-- Floating settings / tags / help (click outside to close)
-- **Backup export:** lite JSON (no images) or full ZIP with binary media; filenames use **local time + offset** (e.g. `2026-08-04T13-00-00+0800`)
-- **Multi-select export:** batch bar → export lite/full for selected cards only
-- **Restore modes:** replace or append; after choosing a file, **pick which tabs/groups** to write (each row has **Preview**: full ZIP shows thumbs/snapshots; lite is text / members only)
-- **Manual add:** paste URLs (one per line); wrap with `#GROUP:Name` … `#GROUP:Name` to create a group (placeholder thumb/snapshot so manual cards are obvious)
-- **Group restore:** confirms before restoring an entire group
-- **Auto backup:** writes under Chrome’s **configured download location** (not always `~/Downloads` — see `chrome://settings/downloads`) into a subfolder (default `TabWall-Backups`); scheduled and/or after data changes; keep 1–99 copies; full path updates after a successful backup
-- **Dedup (human-decided):** exact URL on save → keep both / replace / cancel; toolbar **掃描重複** scans the wall
-- **Diagnostic log:** Settings → 診斷日誌 (export/import/auto-backup events; copy/clear)
+- Park and restore groups, with member notes and tags.
+- Multi-selection and batch operations.
+- **Stack:** merge cards by dropping one card onto another card's title area.
+- Floating settings, tag, and help panels; click outside to close them.
+- **Backup export:** lite JSON without images or a full ZIP with binary media. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
+- **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
+- **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
+- **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
+- **Group restore:** ask for confirmation before restoring a complete group.
+- **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups can run on a schedule or after data changes, and 1–99 copies can be retained.
+- **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
+- **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
 
-## Install
+### Installation
 
-### From this repo (developers)
+#### From this repository
 
-1. `chrome://extensions` → Developer mode  
-2. Load unpacked → this folder  
-3. After code changes: **Reload** the extension on that page  
-4. If a shortcut is unbound or conflicts: open `chrome://extensions/shortcuts` and assign a different combination
+1. Open `chrome://extensions` and enable Developer mode.
+2. Choose Load unpacked and select this folder.
+3. After code changes, use Chrome's Reload action for the extension.
+4. If a command is unbound or conflicts with another command, open `chrome://extensions/shortcuts` and assign a different combination.
 
-### Share with others (recommended)
+#### Sharing with others
 
-1. Build a clean zip: `./scripts/pack.sh` → `dist/TabWall-<version>.zip`  
-2. Send the zip only (not the whole git tree)  
-3. Recipient: unzip → Developer mode → **Load unpacked** → select the **unzipped folder**  
-4. Rebuild the zip after every code change before sharing again (see **`AGENTS.md`**)
+1. Build a clean ZIP with `./scripts/pack.sh`; the output is `dist/TabWall-<version>.zip`.
+2. Share only the ZIP, not the Git repository.
+3. The recipient should unzip it, enable Developer mode, choose Load unpacked, and select the unzipped folder.
+4. Rebuild the ZIP after every behavior or resource change. See `AGENTS.md` for the packaging rules.
 
-## Development
+### Development
 
-- Use Chrome’s native **Reload** on the extension card after a coherent set of edits (do not reload mid-broken file).
-- UI-only tweaks to `park.html` / `park.js` still need extension reload (or re-open the wall) so the iframe picks up new scripts.
-- Versioning and packaging rules: **`AGENTS.md`** (patch +1 for small fixes; re-pack clean zip for sharing).
-- Release notes and feature history: **`docs/CHANGELOG.md`**.
+- Use Chrome's native Reload action after a coherent set of edits.
+- UI-only changes to `park.html` or `park.js` still require an extension reload or reopening the wall.
+- Follow the versioning and packaging rules in `AGENTS.md`.
+- See [docs/CHANGELOG.md](docs/CHANGELOG.md) for release notes.
 
-## Files
+### Files
 
 ```text
 manifest.json   background.js   mediaDb.js   backupBuild.js
@@ -108,6 +114,120 @@ AGENTS.md       README.md
 docs/privacy.md docs/CHANGELOG.md
 ```
 
-Privacy policy (for Chrome Web Store URL): `docs/privacy.md`  
-Changelog / 開發歷程: `docs/CHANGELOG.md`  
-Store listing drafts are **not** in git — keep them only under local `private/` (gitignored).
+Store listing drafts are kept only under the local, ignored `private/` directory.
+
+## 中文
+
+TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存為照片牆，資料留在本機裝置。
+
+**目前版本：** 請查看 `manifest.json`。
+
+**開發歷程：** [docs/CHANGELOG.md](docs/CHANGELOG.md)
+
+**隱私政策：** [docs/privacy.md](docs/privacy.md)
+
+### 架構
+
+- 網址、標題、備註、標籤與排序等中繼資料儲存在 `chrome.storage.local`。
+- 縮圖與完整快照以 `IndexedDB` 二進位資料儲存。
+- 開啟照片牆時先載入中繼資料，縮圖再於照片牆框架中延遲載入。
+- 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
+- 群組封面固定使用 `16:10` 比例，避免大圖拉伸卡片。
+
+### 快捷鍵
+
+Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions/shortcuts` 管理。
+
+| 快捷鍵 | 動作 |
+|--------|------|
+| `Option/Alt+S` | 暫存目前分頁 |
+| `Option/Alt+Shift+G` | 暫存目前 Tab Group |
+| `Option/Alt+O` | 開關 TabWall 照片牆 |
+| `/` | 聚焦搜尋框 |
+| Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉照片牆設定 |
+| 一般搜尋 | `||` 表示或；空格與 `&&` 表示且 |
+| `t` 或 `tag` 加 Tab | 只搜尋標籤 |
+| `n` 或 `note` 加 Tab | 只搜尋備註 |
+| `g` 或 `group` 加 Tab | 只搜尋群組 |
+| `re` 或 `regex` 加 Tab | 啟用正規表示式搜尋 |
+| `all` 加 Tab | 重設搜尋欄位範圍 |
+| 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組或正規表示式模式 |
+| 工具列中的 `.*` | 開關正規表示式搜尋，支援 `/pattern/flags` |
+| `Esc` | 關閉面板或照片牆 |
+| `←`／`→` | 顯示上一張或下一張快照 |
+
+前三項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+
+其餘快捷鍵是照片牆內建的操作，不可在 TabWall 中自訂。
+
+擴充功能重新載入或更新後，若頁面仍保留舊版浮層，請重新開啟或重新整理該分頁。
+
+### 卡片操作
+
+| 操作 | 結果 |
+|------|------|
+| 點擊縮圖 | 還原分頁或群組；群組會先要求確認 |
+| 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
+| 從縮圖拖曳 | 重新排列卡片 |
+| 拖到另一張卡片的標題或中繼資料區 | 將卡片堆疊成群組 |
+| 還原堆疊或群組 | 重新建立 Chrome Tab Group |
+
+列表檢視支援從標題與網址複製內容；卡片拖曳與堆疊只在卡片檢視提供。
+
+### 搜尋
+
+- 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
+- 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
+- 欄位範圍：輸入 `tag`、`note` 或 `group` 後按 Tab。
+- 群組命中時，卡片會列出符合條件的成員分頁。
+- 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
+
+### 功能
+
+- 暫存與還原群組，支援成員備註與標籤。
+- 多選與批次操作。
+- **堆疊：** 將一張卡片拖到另一張卡片的標題區即可合併。
+- 設定、標籤與說明使用浮動面板；點擊外部即可關閉。
+- **備份匯出：** 可匯出不含圖片的精簡 JSON，或包含二進位媒體的完整 ZIP；檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
+- **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
+- **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
+- **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
+- **群組還原：** 還原完整群組前會要求確認。
+- **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
+- **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
+- **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
+
+### 安裝
+
+#### 從此儲存庫安裝
+
+1. 開啟 `chrome://extensions`，啟用開發人員模式。
+2. 選擇「載入未封裝項目」，指定此資料夾。
+3. 程式變更後，使用 Chrome 擴充功能卡片上的「重新載入」。
+4. 若命令未綁定或與其他命令衝突，開啟 `chrome://extensions/shortcuts` 並指定其他組合鍵。
+
+#### 分享給其他人
+
+1. 執行 `./scripts/pack.sh` 建立乾淨 ZIP，輸出為 `dist/TabWall-<version>.zip`。
+2. 只分享 ZIP，不要分享整個 Git 儲存庫。
+3. 接收者解壓縮後啟用開發人員模式，選擇「載入未封裝項目」，指定解壓縮後的資料夾。
+4. 每次行為或資源變更後都要重新建立 ZIP；打包規則請查看 `AGENTS.md`。
+
+### 開發
+
+- 完成一組相關修改後，使用 Chrome 的原生「重新載入」。
+- 只修改 `park.html` 或 `park.js` 也需要重新載入擴充功能，或重新開啟照片牆。
+- 版本與打包規則請遵循 `AGENTS.md`。
+- 發布說明請查看 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+
+### 檔案
+
+```text
+manifest.json   background.js   mediaDb.js   backupBuild.js
+content.js      park.html       park.js
+icons/          scripts/pack.sh
+AGENTS.md       README.md
+docs/privacy.md docs/CHANGELOG.md
+```
+
+商店刊登草稿只保留在本機且被忽略的 `private/` 資料夾中。

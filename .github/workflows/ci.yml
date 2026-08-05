@@ -17,7 +17,6 @@ jobs:
           node --check background.js
           node --check backupBuild.js
           node --check content.js
-          node --check hotkeys.js
           node --check mediaDb.js
           node --check park.js
           node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'))"
@@ -29,7 +28,7 @@ jobs:
           version=$(node -p "require('./manifest.json').version")
           test -f "dist/TabWall-${version}.zip"
           expected=$(printf '%s\n' \
-            manifest.json background.js content.js hotkeys.js mediaDb.js backupBuild.js \
+            manifest.json background.js content.js mediaDb.js backupBuild.js \
             park.html park.js icons/icon16.png icons/icon48.png icons/icon128.png | sort)
           actual=$(unzip -Z1 "dist/TabWall-${version}.zip" | sort)
           test "$expected" = "$actual"

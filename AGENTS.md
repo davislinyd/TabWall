@@ -45,7 +45,6 @@
 manifest.json
 background.js
 content.js
-hotkeys.js
 mediaDb.js
 backupBuild.js
 park.html
