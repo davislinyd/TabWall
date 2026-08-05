@@ -7,6 +7,25 @@
 
 ---
 
+## 2.11.4 — 2026-08-05
+
+- 修正大型 full ZIP 匯入超過 Chrome `runtime.sendMessage` 64 MiB 限制的問題。
+- 圖片改先寫入共享 IndexedDB import staging，service worker 僅接收 metadata 與短暫 import ID。
+- 補強 replace／append 媒體提交、暫存清理與重新配置 ID 的整合測試。
+
+## 2.11.3 — 2026-08-05
+
+- 相容舊版 v3 full ZIP：支援帶 MIME parameters 的 data URL、舊版 `orange` 群組色與缺少 `mediaMimes` 的 JPG 媒體。
+- 保留合法 `file:` URL 為不可直接還原的項目；匯入預覽、卡片與成員清單會標記，群組還原會回報略過數量。
+- 匯入錯誤改顯示具體原因，並增加實際舊版備份 ZIP、部分群組還原與 URL／MIME 回歸測試。
+
+## 2.11.2 — 2026-08-05
+
+- 強化自動備份清理、匯入驗證、IndexedDB orphan cleanup 與還原／Stack rollback。
+- 串行化 service-worker mutation，避免並行 read-modify-write 覆蓋資料。
+- 限制 ZIP、圖片、文字與 ID 資料邊界，並保留完整 backup MIME metadata。
+- 改善訊息來源驗證、錯誤畫面、busy lock 與 full backup 媒體 hydrate 效能。
+
 ## 2.11.1 — 2026-08-05
 
 ### 還原挑選預覽

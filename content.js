@@ -8,6 +8,7 @@
   window.__tabWallInjected = true;
 
   const ROOT_ID = 'tabwall-root';
+  const EXTENSION_ORIGIN = new URL(chrome.runtime.getURL('park.html')).origin;
   let isOpen = false;
   let rootEl = null;
   let shadow = null;
@@ -19,6 +20,13 @@
   let iframeReady = false;
 
   function destroy() {
+    if (pendingConflict) {
+      try {
+        chrome.runtime.sendMessage({ type: 'RESOLVE_SAVE_CONFLICT', decision: 'cancel' }, () => {});
+      } catch {
+        // ignore
+      }
+    }
     if (messageHandler) {
       window.removeEventListener('message', messageHandler);
       messageHandler = null;
@@ -35,13 +43,14 @@
     iframeEl = null;
     isOpen = false;
     iframeReady = false;
+    pendingConflict = null;
   }
 
   function focusParkSearch() {
     if (!iframeEl?.contentWindow) return;
     try {
       iframeEl.focus();
-      iframeEl.contentWindow.postMessage({ type: 'TABWALL_FOCUS_SEARCH' }, '*');
+      iframeEl.contentWindow.postMessage({ type: 'TABWALL_FOCUS_SEARCH' }, EXTENSION_ORIGIN);
     } catch {
       // ignore
     }
@@ -50,7 +59,7 @@
   function postToPark(payload) {
     if (!iframeEl?.contentWindow) return false;
     try {
-      iframeEl.contentWindow.postMessage(payload, '*');
+      iframeEl.contentWindow.postMessage(payload, EXTENSION_ORIGIN);
       return true;
     } catch {
       return false;
@@ -174,6 +183,7 @@
 
     messageHandler = (event) => {
       if (event.source !== iframe.contentWindow) return;
+      if (event.origin !== EXTENSION_ORIGIN) return;
       if (event.data?.type === 'TABWALL_CLOSE') destroy();
       if (event.data?.type === 'TABWALL_PARK_READY') {
         iframeReady = true;

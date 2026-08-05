@@ -40,7 +40,6 @@ If you install from the Chrome Web Store, **Google** may process data under Goog
 | Permission | Why |
 |------------|-----|
 | `tabs`, `tabGroups` | Read tab/group info to park and restore; recreate Tab Groups on restore |
-| `activeTab` | Work with the tab you are using when you invoke the extension |
 | `scripting` | Inject a lightweight script so keyboard shortcuts and the photo-wall overlay work on normal web pages |
 | Host access (`<all_urls>` / broad site access) | Allow shortcuts and the overlay on general websites; capture the visible tab when you park (subject to browser limits on special pages such as `chrome://`) |
 | `storage`, `unlimitedStorage` | Save many parked items and screenshot blobs locally |
@@ -51,7 +50,7 @@ If you install from the Chrome Web Store, **Google** may process data under Goog
 
 If you use **export / import backup**, files are created or read **on your machine** at your request. TabWall does not upload those files. Protect exported backups as you would any file that may contain URLs and page images.
 
-If you enable **auto backup**, TabWall writes backup files into a **subfolder of your browser’s download directory** (name configurable in settings). Automatic backups are not uploaded to TabWall servers. You can change the subfolder name or disable auto backup at any time.
+If you enable **auto backup**, TabWall queries Chrome Downloads history to identify its own backup files and deletes older TabWall backups according to your retention setting. It writes backup files into a **subfolder of your browser’s download directory** (name configurable in settings). Automatic backups are not uploaded to TabWall servers. You can change the subfolder name or disable auto backup at any time.
 
 ## Data retention and deletion
 
@@ -82,7 +81,7 @@ TabWall 將分頁與 Tab Group 暫存為本機照片牆。
 
 僅在您操作（含快捷鍵）時讀取目前分頁／群組以截圖與儲存。  
 您匯出的備份檔僅在本機產生；請自行妥善保管。  
-若啟用**自動備份**，會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。  
+若啟用**自動備份**，TabWall 會查詢 Chrome 的 Downloads history 以辨識自己建立的備份，並依您設定的保留數量刪除舊的 TabWall 備份；備份會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。
 解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。
 
 權限用途：分頁／群組讀寫與還原、在一般網頁注入快捷鍵與浮層、本機大量儲存截圖、可選的下載目錄自動備份。  

@@ -101,6 +101,12 @@
         white-space: nowrap;
       }
 
+      #loadStatus {
+        max-width: 220px;
+        font-size: 11px;
+        color: var(--danger, #f87171);
+      }
+
       .search-wrap {
         flex: 1 1 180px;
         min-width: 140px;
@@ -410,6 +416,11 @@
         border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
       }
 
+      #importPickList .import-pick-row.stored-only,
+      #importPreviewOverlay .import-preview-member.stored-only {
+        border-color: color-mix(in srgb, var(--danger) 48%, var(--border));
+      }
+
       #importPickList .import-pick-label {
         display: flex;
         flex: 1;
@@ -453,6 +464,24 @@
       #importPickList .import-pick-kind.group {
         border-color: var(--accent);
         color: var(--accent);
+      }
+
+      #importPickList .import-pick-kind.stored-only,
+      .stored-only-badge {
+        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+        color: var(--danger);
+      }
+
+      .stored-only-badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 5px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        font-size: 9px;
+        font-weight: 700;
+        line-height: 1.2;
+        vertical-align: middle;
       }
 
       #importPickList .import-pick-preview {
@@ -1988,6 +2017,7 @@
       <div class="brand">
         <h1 data-i18n="appName">TabWall</h1>
         <span id="count">—</span>
+        <span id="loadStatus" role="status" aria-live="polite"></span>
       </div>
       <div class="search-wrap" id="searchWrap">
         <span class="search-icon">/</span>
@@ -2395,7 +2425,7 @@
         </div>
         <div class="help-section">
           <h3 data-i18n="helpBasicTitle">基本使用</h3>
-          <p data-i18n="helpBasicBody">點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片中央可組成 Stack（還原為 Tab Group）。</p>
+          <p data-i18n="helpBasicBody">點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片的標題／meta 區可組成 Stack（還原為 Tab Group）。</p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpGroupTitle">Tab Group / Stack</h3>

@@ -2,7 +2,7 @@
 
 Manifest V3 Chromium extension: park **tabs** and **Tab Groups** as a visual photo wall (~95% overlay).
 
-**Current version:** see `manifest.json` (currently **2.11.1**).  
+**Current version:** see `manifest.json`.
 **Changelog / 開發歷程:** [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 
 ## Architecture

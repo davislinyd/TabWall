@@ -46,6 +46,76 @@ const DEFAULT_SETTINGS = {
 
 const Build = self.TabWallBackupBuild;
 
+function classifyStoredUrl(url) {
+  if (Build?.classifyUrl) return Build.classifyUrl(url, { allowStoredOnly: true });
+  if (/^https?:\/\//i.test(String(url || ''))) return 'restorable';
+  if (/^file:/i.test(String(url || ''))) return 'stored_only';
+  return 'invalid';
+}
+
+function isStoredOnlyUrl(url) {
+  return classifyStoredUrl(url) === 'stored_only';
+}
+
+function countStoredOnlyUrls(items) {
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+  return list.reduce((count, item) => {
+    if (Array.isArray(item?.tabs)) {
+      return count + item.tabs.filter((member) => isStoredOnlyUrl(member?.url)).length;
+    }
+    return count + (isStoredOnlyUrl(item?.url) ? 1 : 0);
+  }, 0);
+}
+
+function formatImportWarnings(warnings) {
+  const parts = [];
+  if (warnings?.legacyVersion) {
+    parts.push(t('backupLegacyNotice', { version: warnings.legacyVersion }));
+  }
+  if (warnings?.normalizedGroupColors) {
+    parts.push(t('backupColorNotice', { n: warnings.normalizedGroupColors }));
+  }
+  if (warnings?.droppedFavicons) {
+    parts.push(t('backupFaviconNotice', { n: warnings.droppedFavicons }));
+  }
+  if (warnings?.storedOnlyUrls) {
+    parts.push(t('backupStoredOnly', { n: warnings.storedOnlyUrls }));
+  }
+  return parts.join(' ');
+}
+
+function formatBackupError(error) {
+  const code = typeof error === 'string' ? error : error?.error || 'invalid_backup';
+  const detail = error && typeof error === 'object' && error.detail ? ` (${error.detail})` : '';
+  return t('backupInvalidDetail', { error: `${code}${detail}` });
+}
+
+function getParentOrigin() {
+  try {
+    const ancestor = window.location.ancestorOrigins?.[0];
+    if (ancestor) return new URL(ancestor).origin;
+  } catch {
+    // fall through to referrer
+  }
+  try {
+    return document.referrer ? new URL(document.referrer).origin : '';
+  } catch {
+    return '';
+  }
+}
+
+const PARENT_ORIGIN = getParentOrigin();
+
+function postToParent(payload) {
+  if (!PARENT_ORIGIN || !window.parent || window.parent === window) return false;
+  try {
+    window.parent.postMessage(payload, PARENT_ORIGIN);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const GROUP_COLORS = {
   grey: '#9ca3af',
   blue: '#60a5fa',
@@ -58,10 +128,12 @@ const GROUP_COLORS = {
 };
 
 const DRAG_THRESHOLD = 6;
+const MAX_SEARCH_REGEX_LENGTH = 512;
 const Media = self.TabWallMediaDB;
 
 /** @type {Set<string>} */
 const liveObjectUrls = new Set();
+const pendingObjectUrlRevokes = new Set();
 /** @type {Map<string, string>} snap dataUrl/blob url cache */
 const snapCache = new Map();
 const SNAP_CACHE_MAX = 12;
@@ -73,6 +145,16 @@ function trackObjectUrl(url) {
 
 function revokeObjectUrl(url) {
   if (url && String(url).startsWith('blob:') && liveObjectUrls.has(url)) {
+    const inUse = [...document.images].some((img) => img.isConnected && img.src === url);
+    if (inUse) {
+      pendingObjectUrlRevokes.add(url);
+      setTimeout(() => {
+        if (!pendingObjectUrlRevokes.has(url)) return;
+        pendingObjectUrlRevokes.delete(url);
+        revokeObjectUrl(url);
+      }, 1000);
+      return;
+    }
     try {
       URL.revokeObjectURL(url);
     } catch {
@@ -89,7 +171,11 @@ function cacheSnap(key, url) {
   }
   snapCache.set(key, url);
   while (snapCache.size > SNAP_CACHE_MAX) {
-    const first = snapCache.keys().next().value;
+    const first = [...snapCache.keys()].find((candidate) => {
+      const cached = snapCache.get(candidate);
+      return ![...document.images].some((img) => img.isConnected && img.src === cached);
+    });
+    if (first == null) break;
     revokeObjectUrl(snapCache.get(first));
     snapCache.delete(first);
   }
@@ -109,7 +195,11 @@ function cacheThumbUrl(key, url) {
   }
   thumbUrlCache.set(key, url);
   while (thumbUrlCache.size > THUMB_URL_CACHE_MAX) {
-    const first = thumbUrlCache.keys().next().value;
+    const first = [...thumbUrlCache.keys()].find((candidate) => {
+      const cached = thumbUrlCache.get(candidate);
+      return ![...document.images].some((img) => img.isConnected && img.src === cached);
+    });
+    if (first == null) break;
     revokeObjectUrl(thumbUrlCache.get(first));
     thumbUrlCache.delete(first);
   }
@@ -206,6 +296,7 @@ function mediaKeyForMember(groupId, memberId) {
 const I18N = {
   zh: {
     appName: 'TabWall',
+    loadFailed: '資料讀取失敗，已保留目前畫面。',
     searchPh: '搜尋…  空格/&& 且、|| 或（不分大小寫）',
     searchRegexPh: '正規表示式（預設 i；或 /pattern/flags）',
     searchRegexTitle: '正規表示式搜尋',
@@ -293,11 +384,17 @@ const I18N = {
     importAppend: '匯入（附加）',
     backupExported: '已匯出備份',
     backupExporting: '匯出中…',
+    backupImporting: '匯入中…',
     backupImported: '已還原備份',
     backupAppended: '已附加 {n} 項',
     backupConfirm: '還原將覆寫目前所有 TabWall 資料，確定？',
     backupAppendConfirm: '將附加備份中的項目到現有清單（不刪除現有卡片），確定？',
     backupInvalid: '備份檔無效',
+    backupInvalidDetail: '備份無法匯入：{error}',
+    backupLegacyNotice: '已相容匯入舊版 v{version} 備份。',
+    backupColorNotice: '已將 {n} 個舊版群組色轉換為目前格式。',
+    backupFaviconNotice: '略過 {n} 個超出限制或格式無效的 favicon。',
+    backupStoredOnly: '保留 {n} 個 file URL；這些項目不可直接還原。',
     backupError: '操作失敗',
     backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。',
     diagLogTitle: '診斷日誌',
@@ -435,12 +532,17 @@ const I18N = {
     restoreCurrentWindow: '目前視窗',
     restoreNewWindow: '新視窗',
     memberRestore: '還原此分頁',
+    storedOnly: '不可直接還原',
+    storedOnlyShort: 'file',
+    restoreRestricted: '此 URL 不支援直接還原，項目已保留。',
+    restoreSkipped: '群組已還原，略過 {n} 個不可直接還原的成員。',
     memberSnapshot: '快照',
     memberEdit: 'Note / Tags',
     editMemberHeading: '編輯成員 Note / Tags',
   },
   en: {
     appName: 'TabWall',
+    loadFailed: 'Data could not be loaded; the current view was kept.',
     searchPh: 'Search…  space/&& AND, || OR (case-insensitive)',
     searchRegexPh: 'Regex (default i; or /pattern/flags)',
     searchRegexTitle: 'Regex search',
@@ -528,11 +630,17 @@ const I18N = {
     importAppend: 'Import (append)',
     backupExported: 'Backup exported',
     backupExporting: 'Exporting…',
+    backupImporting: 'Importing…',
     backupImported: 'Backup restored',
     backupAppended: 'Appended {n} item(s)',
     backupConfirm: 'Restore will overwrite all current TabWall data. Continue?',
     backupAppendConfirm: 'Append backup items to the current wall (existing cards stay). Continue?',
     backupInvalid: 'Invalid backup file',
+    backupInvalidDetail: 'Backup could not be imported: {error}',
+    backupLegacyNotice: 'Legacy v{version} backup compatibility was applied.',
+    backupColorNotice: 'Converted {n} legacy group color(s) to the current format.',
+    backupFaviconNotice: 'Skipped {n} favicon(s) that exceeded limits or had an invalid format.',
+    backupStoredOnly: '{n} file URL(s) were kept but cannot be restored directly.',
     backupError: 'Operation failed',
     backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images. Replace overwrites all; append only adds.',
     diagLogTitle: 'Diagnostic log',
@@ -670,6 +778,10 @@ const I18N = {
     restoreCurrentWindow: 'Current window',
     restoreNewWindow: 'New window',
     memberRestore: 'Restore this tab',
+    storedOnly: 'Cannot restore directly',
+    storedOnlyShort: 'file',
+    restoreRestricted: 'This URL cannot be restored directly; the item was kept.',
+    restoreSkipped: 'Group restored; skipped {n} member(s) that cannot be restored directly.',
     memberSnapshot: 'Snapshot',
     memberEdit: 'Note / Tags',
     editMemberHeading: 'Edit member note / tags',
@@ -678,6 +790,7 @@ const I18N = {
 
 const gridEl = document.getElementById('grid');
 const countEl = document.getElementById('count');
+const loadStatusEl = document.getElementById('loadStatus');
 const searchEl = document.getElementById('search');
 const searchRegexBtn = document.getElementById('searchRegexBtn');
 const searchWrap = document.getElementById('searchWrap');
@@ -841,7 +954,7 @@ const importPreviewTitle = document.getElementById('importPreviewTitle');
 const importPreviewUrl = document.getElementById('importPreviewUrl');
 const importPreviewBody = document.getElementById('importPreviewBody');
 const importPreviewCloseBtn = document.getElementById('importPreviewCloseBtn');
-/** @type {{ mode: 'replace'|'append', backup: object, selected: Set<string> } | null} */
+/** @type {{ mode: 'replace'|'append', backup: object, selected: Set<string>, warnings: object } | null} */
 let pendingImportPick = null;
 const closeBtn = document.getElementById('closeBtn');
 const themeBtn = document.getElementById('themeBtn');
@@ -923,6 +1036,20 @@ let copyToastTimer = null;
 /** @type {null | object} */
 let dragState = null;
 
+const uiBusyActions = new Set();
+
+async function withUiActionLock(name, task) {
+  if (uiBusyActions.has(name)) return { ok: false, error: 'busy' };
+  uiBusyActions.add(name);
+  document.body.dataset.tabwallBusy = '1';
+  try {
+    return await task();
+  } finally {
+    uiBusyActions.delete(name);
+    if (!uiBusyActions.size) delete document.body.dataset.tabwallBusy;
+  }
+}
+
 function focusSearch() {
   try {
     window.focus();
@@ -934,6 +1061,7 @@ function focusSearch() {
 }
 
 window.addEventListener('message', (event) => {
+  if (event.source !== window.parent || !PARENT_ORIGIN || event.origin !== PARENT_ORIGIN) return;
   if (event.data?.type === 'TABWALL_FOCUS_SEARCH') {
     focusSearch();
     return;
@@ -946,7 +1074,7 @@ window.addEventListener('message', (event) => {
 // Tell host content script the park UI is ready (for queued conflict payload)
 try {
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: 'TABWALL_PARK_READY' }, '*');
+    postToParent({ type: 'TABWALL_PARK_READY' });
   }
 } catch {
   // ignore
@@ -999,8 +1127,7 @@ function applyI18n() {
 function requestHostClose() {
   try {
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'TABWALL_CLOSE' }, '*');
-      return;
+      if (postToParent({ type: 'TABWALL_CLOSE' })) return;
     }
   } catch {
     // ignore
@@ -1214,22 +1341,22 @@ let suppressSettingsOnChanged = false;
 let suppressSettingsTimer = null;
 
 async function saveSettings(partial) {
-  if (partial.cardCols != null) partial.cardCols = clampCols(partial.cardCols);
-  if (partial.autoBackup) {
-    partial = {
-      ...partial,
-      autoBackup: normalizeAutoBackup({ ...settings.autoBackup, ...partial.autoBackup }),
-    };
+  let patch = { ...(partial || {}) };
+  if (patch.cardCols != null) patch.cardCols = clampCols(patch.cardCols);
+  if (patch.autoBackup) {
+    patch.autoBackup = normalizeAutoBackup({ ...settings.autoBackup, ...patch.autoBackup });
   }
-  settings = { ...settings, ...partial };
-  if (settings.autoBackup) settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
   suppressSettingsOnChanged = true;
   if (suppressSettingsTimer) clearTimeout(suppressSettingsTimer);
   try {
-    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-    if (partial.autoBackup) {
-      sendMessage({ type: 'AUTO_BACKUP_SYNC_ALARMS' }).catch(() => {});
+    const res = await sendMessage({ type: 'PATCH_SETTINGS', partial: patch });
+    if (!res?.ok || !res.settings) {
+      uiLog('error', 'settings', 'save failed', res?.error || 'unknown');
+      return settings;
     }
+    settings = { ...settings, ...res.settings };
+    if (settings.autoBackup) settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
+    return settings;
   } finally {
     // chrome.storage.onChanged may fire async after set resolves
     suppressSettingsTimer = setTimeout(() => {
@@ -1237,7 +1364,6 @@ async function saveSettings(partial) {
       suppressSettingsTimer = null;
     }, 50);
   }
-  return settings;
 }
 
 function applyTheme(theme) {
@@ -2319,6 +2445,10 @@ function compileSearchQuery(raw) {
     compiledSearch = { raw: trimmed, re: null, err: null };
     return compiledSearch;
   }
+  if (trimmed.length > MAX_SEARCH_REGEX_LENGTH) {
+    compiledSearch = { raw: trimmed, re: null, err: `pattern_too_long_${MAX_SEARCH_REGEX_LENGTH}` };
+    return compiledSearch;
+  }
   try {
     const { source, flags } = parseRegexInput(trimmed);
     // Drop sticky/global to avoid lastIndex side effects on repeated .test
@@ -3286,11 +3416,27 @@ async function maybeCatchUpAutoBackup() {
 }
 
 /** Hydrate thumb/snap from local IDB for full ZIP (avoids huge SW messages). */
+async function mapWithConcurrencyLocal(values, limit, mapper) {
+  const list = Array.isArray(values) ? values : [];
+  const result = new Array(list.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= list.length) return;
+      result[index] = await mapper(list[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), list.length || 1) }, worker)
+  );
+  return result;
+}
+
 async function hydrateItemMediaLocal(item) {
   if (!item) return item;
   if (item.kind === 'group') {
-    const tabs = [];
-    for (const m of item.tabs || []) {
+    const tabs = await mapWithConcurrencyLocal(item.tabs || [], 4, async (m) => {
       const key = mediaKeyForMember(item.id, m.id);
       let thumb = '';
       let snap = '';
@@ -3303,8 +3449,8 @@ async function hydrateItemMediaLocal(item) {
       } catch (err) {
         uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
       }
-      tabs.push({ ...m, thumbnail: thumb, snapshot: snap });
-    }
+      return { ...m, thumbnail: thumb, snapshot: snap };
+    });
     return { ...item, tabs };
   }
   const key = mediaKeyForItem(item);
@@ -3357,13 +3503,15 @@ exportFullBtn.addEventListener('click', async () => {
     }
     const rawItems = res.backup.parkedItems || [];
     uiLog('info', 'export', 'hydrating media', `items=${rawItems.length}`);
-    const hydrated = [];
-    for (let i = 0; i < rawItems.length; i++) {
-      hydrated.push(await hydrateItemMediaLocal(rawItems[i]));
-      if (i > 0 && i % 20 === 0) {
-        backupStatus.textContent = `${t('backupExporting')} (${i}/${rawItems.length})`;
+    let hydratedCount = 0;
+    const hydrated = await mapWithConcurrencyLocal(rawItems, 4, async (item) => {
+      const result = await hydrateItemMediaLocal(item);
+      hydratedCount++;
+      if (hydratedCount % 20 === 0 || hydratedCount === rawItems.length) {
+        backupStatus.textContent = `${t('backupExporting')} (${hydratedCount}/${rawItems.length})`;
       }
-    }
+      return result;
+    });
     const backup = {
       ...res.backup,
       media: 'inline',
@@ -3420,6 +3568,57 @@ function pickImportImageDataUrl(item) {
   return '';
 }
 
+function newImportStageId() {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  } catch {
+    // fall through to a local opaque id
+  }
+  return `stage-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Convert preview data URLs into shared IndexedDB blobs before messaging SW. */
+async function stageImportMedia(stageId, items) {
+  if (!Media?.dataUrlToBlob || !Media?.putImportStage) {
+    throw new Error('import_stage_unavailable');
+  }
+  const rows = [];
+  const stagedItems = (Array.isArray(items) ? items : []).map((raw) => {
+    const item = { ...raw };
+    const stageOwner = (owner, mediaKey) => {
+      const thumb = owner.thumbnail ? Media.dataUrlToBlob(owner.thumbnail) : null;
+      const snap = owner.snapshot ? Media.dataUrlToBlob(owner.snapshot) : null;
+      if ((owner.thumbnail && !thumb) || (owner.snapshot && !snap)) {
+        throw new Error('invalid_image');
+      }
+      if (thumb || snap) rows.push({ mediaKey, thumb, snap });
+      owner.hasThumb = Boolean(thumb);
+      owner.hasSnap = Boolean(snap);
+      owner.thumbnail = '';
+      owner.snapshot = '';
+    };
+
+    if (item.kind === 'group' || Array.isArray(item.tabs)) {
+      // Group-level media is not a persisted format; never carry it into the
+      // transport payload even if an old backup contains unexpected fields.
+      item.hasThumb = false;
+      item.hasSnap = false;
+      item.thumbnail = '';
+      item.snapshot = '';
+      item.tabs = (item.tabs || []).map((rawMember) => {
+        const member = { ...rawMember };
+        stageOwner(member, Media.mediaKeyMember(item.id, member.id));
+        return member;
+      });
+    } else {
+      stageOwner(item, Media.mediaKeyTab(item.id));
+    }
+    return item;
+  });
+  await Media.putImportStage(stageId, rows);
+  return { items: stagedItems, mediaOwners: rows.length };
+}
+
 function closeImportPreview() {
   if (!importPreviewOverlay) return;
   importPreviewOverlay.classList.remove('open');
@@ -3434,7 +3633,9 @@ function openImportTabPreview(item) {
   const title = item?.title || item?.url || '—';
   const url = item?.url || '';
   if (importPreviewTitle) importPreviewTitle.textContent = title;
-  if (importPreviewUrl) importPreviewUrl.textContent = url;
+  if (importPreviewUrl) {
+    importPreviewUrl.textContent = isStoredOnlyUrl(url) ? `${url} · ${t('storedOnly')}` : url;
+  }
   importPreviewBody.innerHTML = '';
   const src = pickImportImageDataUrl(item);
   if (src) {
@@ -3471,7 +3672,8 @@ function openImportGroupPreview(item) {
     list.className = 'import-preview-members';
     members.forEach((m) => {
       const row = document.createElement('div');
-      row.className = 'import-preview-member';
+      const storedOnly = isStoredOnlyUrl(m?.url);
+      row.className = `import-preview-member${storedOnly ? ' stored-only' : ''}`;
       const mTitle = m?.title || m?.url || '—';
       const mUrl = m?.url || '';
       const thumb = pickImportImageDataUrl(m);
@@ -3482,7 +3684,10 @@ function openImportGroupPreview(item) {
             : ''
         }
         <div class="m-main">
-          <div class="m-title">${escapeHtml(mTitle)}</div>
+          <div class="m-title">
+            ${escapeHtml(mTitle)}
+            ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
+          </div>
           <div class="m-url">${escapeHtml(mUrl)}</div>
         </div>
         <button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>
@@ -3500,7 +3705,7 @@ function openImportGroupPreview(item) {
   importPreviewOverlay.setAttribute('aria-hidden', 'false');
 }
 
-function openImportPickBox(mode, backup) {
+function openImportPickBox(mode, backup, warnings = {}) {
   if (!importPickBox || !importPickList) return;
   const items = Array.isArray(backup.parkedItems) ? backup.parkedItems : [];
   const selected = new Set(items.map((it, i) => String(it.id || `idx-${i}`)));
@@ -3509,7 +3714,7 @@ function openImportPickBox(mode, backup) {
     if (!it.id) it.id = `idx-${i}-${Date.now()}`;
     selected.add(String(it.id));
   });
-  pendingImportPick = { mode, backup, selected };
+  pendingImportPick = { mode, backup, selected, warnings };
 
   closeAllFloatsExcept('importPick');
   importPickBox.classList.add('open');
@@ -3519,25 +3724,29 @@ function openImportPickBox(mode, backup) {
       mode === 'append' ? t('importPickModeAppend') : t('importPickModeReplace');
     importPickHintEl.textContent = `${t('importPickHint')} ${modeLabel}`;
   }
-  if (importPickStatus) importPickStatus.textContent = '';
+  if (importPickStatus) importPickStatus.textContent = formatImportWarnings(warnings);
 
   importPickList.innerHTML = '';
   items.forEach((item) => {
     const id = String(item.id);
     const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
+    const storedOnlyCount = countStoredOnlyUrls(item);
     const title = isGroup
       ? item.title || t('stackTitle')
       : item.title || item.url || '—';
     const sub = isGroup
-      ? t('groupTabs', { n: (item.tabs || []).length })
-      : item.url || '';
+      ? `${t('groupTabs', { n: (item.tabs || []).length })}${storedOnlyCount ? ` · ${t('backupStoredOnly', { n: storedOnlyCount })}` : ''}`
+      : isStoredOnlyUrl(item.url)
+        ? `${item.url || ''} · ${t('storedOnly')}`
+        : item.url || '';
+    const kindLabel = isGroup ? 'group' : storedOnlyCount ? t('storedOnlyShort') : 'tab';
 
     const row = document.createElement('div');
-    row.className = 'import-pick-row';
+    row.className = `import-pick-row${storedOnlyCount ? ' stored-only' : ''}`;
     row.innerHTML = `
       <label class="import-pick-label">
         <input type="checkbox" data-pick-id="${escapeAttr(id)}" ${selected.has(id) ? 'checked' : ''} />
-        <span class="import-pick-kind ${isGroup ? 'group' : ''}">${isGroup ? 'group' : 'tab'}</span>
+        <span class="import-pick-kind ${isGroup ? 'group' : storedOnlyCount ? 'stored-only' : ''}">${escapeHtml(kindLabel)}</span>
         <span class="import-pick-main">
           <div class="import-pick-title">${escapeHtml(title)}</div>
           <div class="import-pick-sub">${escapeHtml(sub)}</div>
@@ -3565,6 +3774,10 @@ function openImportPickBox(mode, backup) {
 }
 
 async function confirmImportPick() {
+  return withUiActionLock('import', confirmImportPickUnlocked);
+}
+
+async function confirmImportPickUnlocked() {
   if (!pendingImportPick) return;
   const { mode, backup, selected } = pendingImportPick;
   if (!selected.size) {
@@ -3587,13 +3800,34 @@ async function confirmImportPick() {
       .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
   };
 
-  if (importPickStatus) importPickStatus.textContent = t('backupExporting');
+  if (importPickStatus) importPickStatus.textContent = t('backupImporting');
   uiLog('info', 'import', `confirm mode=${mode}`, `selected=${filtered.length}/${all.length}`);
+  let importId = '';
+  let messageSent = false;
   try {
-    const res = await sendMessage({ type: 'IMPORT_BACKUP', backup: payload, mode });
+    importId = newImportStageId();
+    const staged = await stageImportMedia(importId, filtered);
+    const transportItems = staged.items;
+    const transportBackup = {
+      ...payload,
+      media: 'idb',
+      parkedItems: transportItems,
+      parkedTabs: transportItems
+        .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+        .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
+    };
+    const res = await sendMessage({
+      type: 'IMPORT_BACKUP',
+      backup: transportBackup,
+      mode,
+      importId,
+    });
+    messageSent = true;
     if (!res.ok) {
-      if (importPickStatus) importPickStatus.textContent = t('backupInvalid');
-      uiLog('error', 'import', 'failed', res.error);
+      const errorText = formatBackupError(res);
+      if (importPickStatus) importPickStatus.textContent = errorText;
+      backupStatus.textContent = errorText;
+      uiLog('error', 'import', 'failed', `${res.error || 'invalid_backup'}${res.detail ? ` ${res.detail}` : ''}`);
       return;
     }
     closeImportPickBox();
@@ -3601,15 +3835,25 @@ async function confirmImportPick() {
     syncSettingsUi();
     await loadList();
     if (tagsBox.classList.contains('open')) await refreshTagManager();
+    const warningText = formatImportWarnings(res.warnings);
     if (mode === 'append') {
-      backupStatus.textContent = t('backupAppended', { n: res.added != null ? res.added : filtered.length });
+      backupStatus.textContent = `${t('backupAppended', { n: res.added != null ? res.added : filtered.length })}${warningText ? ` ${warningText}` : ''}`;
     } else {
-      backupStatus.textContent = t('backupImported');
+      backupStatus.textContent = `${t('backupImported')}${warningText ? ` ${warningText}` : ''}`;
     }
   } catch (err) {
+    if (!messageSent && importId) {
+      try {
+        await Media.removeImportStage?.(importId);
+      } catch {
+        // best effort cleanup; the service worker also removes stale stages
+      }
+    }
     console.warn(err);
     uiLog('error', 'import', 'exception', err?.message || err);
-    if (importPickStatus) importPickStatus.textContent = t('backupInvalid');
+    const errorText = formatBackupError(err?.message || err);
+    if (importPickStatus) importPickStatus.textContent = errorText;
+    backupStatus.textContent = errorText;
   }
 }
 
@@ -3623,33 +3867,56 @@ importBackupFile.addEventListener('change', async () => {
   try {
     let backup;
     if (file.name.endsWith('.zip') || file.type === 'application/zip') {
+      if (file.size > (Build.LIMITS?.MAX_ZIP_BYTES || 256 * 1024 * 1024)) {
+        throw new Error('backup_too_large');
+      }
       const buf = new Uint8Array(await file.arrayBuffer());
       const zipFiles = Build.unzipStore(buf);
       const jsonBytes = zipFiles['backup.json'];
       if (!jsonBytes) throw new Error('no backup.json');
       backup = JSON.parse(new TextDecoder().decode(jsonBytes));
       if (Array.isArray(backup.parkedItems)) {
-        backup.parkedItems = Build.rehydrateMedia(backup.parkedItems, zipFiles);
+        backup.parkedItems = Build.rehydrateMedia(
+          backup.parkedItems,
+          zipFiles,
+          backup.mediaMimes || {}
+        );
       }
     } else {
+      if (file.size > (Build.LIMITS?.MAX_JSON_BYTES || 100 * 1024 * 1024)) {
+        throw new Error('backup_too_large');
+      }
       backup = JSON.parse(await file.text());
     }
     if (!backup || backup.format !== 'tabwall-backup') {
-      backupStatus.textContent = t('backupInvalid');
+      const errorText = formatBackupError('invalid_format');
+      backupStatus.textContent = errorText;
+      uiLog('error', 'import', 'parse failed', 'invalid_format');
       return;
     }
-    if (!Array.isArray(backup.parkedItems) && Array.isArray(backup.parkedTabs)) {
-      backup.parkedItems = backup.parkedTabs.map((t) => ({ ...t, kind: 'tab' }));
-    }
-    if (!Array.isArray(backup.parkedItems) || !backup.parkedItems.length) {
-      backupStatus.textContent = t('backupInvalid');
+    const prepared = Build.prepareImportedBackup(backup);
+    if (!prepared?.ok) {
+      const errorText = formatBackupError(prepared);
+      backupStatus.textContent = errorText;
+      uiLog('error', 'import', 'validation failed', prepared?.error || 'invalid_backup');
       return;
     }
-    openImportPickBox(mode, backup);
+    backup = prepared.backup;
+    const validation = Build.validateBackup(backup, {
+      allowStoredOnlyUrls: Boolean(prepared.allowStoredOnlyUrls),
+    });
+    if (!validation?.ok || !Array.isArray(backup.parkedItems)) {
+      const errorText = formatBackupError(validation || 'invalid_backup');
+      backupStatus.textContent = errorText;
+      uiLog('error', 'import', 'validation failed', `${validation?.error || 'invalid_backup'}${validation?.detail ? ` ${validation.detail}` : ''}`);
+      return;
+    }
+    openImportPickBox(mode, backup, prepared.warnings);
   } catch (err) {
     console.warn(err);
+    const errorText = formatBackupError(err?.message || err);
     uiLog('error', 'import', 'parse failed', err?.message || err);
-    backupStatus.textContent = t('backupInvalid');
+    backupStatus.textContent = errorText;
   }
 });
 
@@ -3772,7 +4039,7 @@ async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
     .map(({ kind, hasThumb, hasSnap, thumbnail, snapshot, ...rest }) => rest);
   return {
     format: 'tabwall-backup',
-    version: 4,
+    version: Build.FORMAT_VERSION || 4,
     media: withMedia ? 'inline' : 'none',
     partial: true,
     appVersion: (() => {
@@ -3836,23 +4103,25 @@ batchExportFull?.addEventListener('click', () => {
 });
 
 batchRestore.addEventListener('click', async () => {
-  const ids = [...selectedIds];
-  for (const id of ids) {
-    await restoreItem(id);
-  }
-  selectedIds.clear();
-  updateBatchBar();
-  await loadList();
+  await withUiActionLock('batch-restore', async () => {
+    const ids = [...selectedIds];
+    for (const id of ids) await restoreItem(id);
+    selectedIds.clear();
+    updateBatchBar();
+    await loadList();
+  });
 });
 
 batchDelete.addEventListener('click', async () => {
-  const ids = [...selectedIds];
-  if (!ids.length) return;
-  if (!window.confirm(t('batchDeleteConfirm', { n: ids.length }))) return;
-  await sendMessage({ type: 'BATCH_DELETE_ITEMS', ids });
-  selectedIds.clear();
-  updateBatchBar();
-  await loadList();
+  await withUiActionLock('batch-delete', async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!window.confirm(t('batchDeleteConfirm', { n: ids.length }))) return;
+    await sendMessage({ type: 'BATCH_DELETE_ITEMS', ids });
+    selectedIds.clear();
+    updateBatchBar();
+    await loadList();
+  });
 });
 
 batchEdit.addEventListener('click', () => {
@@ -4030,14 +4299,19 @@ function renderMembersList(group) {
     const row = document.createElement('div');
     row.className = 'member-row';
     row.dataset.memberId = m.id;
+    const storedOnly = isStoredOnlyUrl(m.url);
     const note = m.note || '';
     const tags = Array.isArray(m.tags) ? m.tags : [];
     const mKey = mediaKeyForMember(group.id, m.id);
     row.innerHTML = `
       <img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />
       <div class="member-body">
-        <div class="member-title" title="${escapeAttr(m.title || '')}">${escapeHtml(m.title || m.url || '')}</div>
+        <div class="member-title" title="${escapeAttr(m.title || '')}">
+          ${escapeHtml(m.title || m.url || '')}
+          ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
+        </div>
         <div class="member-url" title="${escapeAttr(m.url || '')}">${escapeHtml(m.url || '')}</div>
+        ${storedOnly ? `<div class="note-preview">${escapeHtml(t('storedOnly'))}</div>` : ''}
         ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
         ${
           tags.length
@@ -4047,7 +4321,7 @@ function renderMembersList(group) {
         <div class="member-actions">
           <button type="button" class="btn snap-btn">${escapeHtml(t('memberSnapshot'))}</button>
           <button type="button" class="btn edit-m-btn">${escapeHtml(t('memberEdit'))}</button>
-          <button type="button" class="btn primary restore-m-btn">${escapeHtml(t('memberRestore'))}</button>
+          <button type="button" class="btn primary restore-m-btn" ${storedOnly ? `disabled title="${escapeAttr(t('storedOnly'))}"` : ''}>${escapeHtml(t('memberRestore'))}</button>
         </div>
       </div>
     `;
@@ -4193,42 +4467,63 @@ membersDelete.addEventListener('click', async () => {
 // ─── Actions ───────────────────────────────────────────────────────
 
 async function restoreItem(id) {
-  const item = allTabs.find((t) => t.id === id);
-  if (item?.kind === 'group') {
-    const n = (item.tabs || []).length;
-    const title = itemTitle(item);
-    if (!window.confirm(t('restoreGroupConfirm', { title, n }))) return;
-  }
-  const type = item?.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
-  const res = await sendMessage({ type, id });
-  if (res.ok) {
-    allTabs = allTabs.filter((t) => t.id !== id);
-    if (expandedId === id) closeLightbox();
-    if (editingId === id) closeEditBox();
-    if (membersGroupId === id) closeMembersBox();
-    renderGrid();
-  }
+  return withUiActionLock(`restore:${id}`, async () => {
+    const item = allTabs.find((t) => t.id === id);
+    if (item?.kind !== 'group' && isStoredOnlyUrl(item?.url)) {
+      showCopyToast(t('restoreRestricted'));
+      return { ok: false, error: 'restricted_url' };
+    }
+    if (item?.kind === 'group') {
+      const n = (item.tabs || []).length;
+      const title = itemTitle(item);
+      if (!window.confirm(t('restoreGroupConfirm', { title, n }))) return { ok: false, error: 'cancelled' };
+    }
+    const type = item?.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
+    const res = await sendMessage({ type, id });
+    if (res.ok) {
+      allTabs = allTabs.filter((t) => t.id !== id);
+      if (expandedId === id) closeLightbox();
+      if (editingId === id) closeEditBox();
+      if (membersGroupId === id) closeMembersBox();
+      renderGrid();
+      if (res.skipped) showCopyToast(t('restoreSkipped', { n: res.skipped }));
+    } else if (res.error === 'restricted_url' || res.error === 'no_restorable_urls') {
+      showCopyToast(t('restoreRestricted'));
+    }
+    return res;
+  });
 }
 
 async function restoreMember(groupId, memberId) {
-  const res = await sendMessage({
-    type: 'RESTORE_GROUP_MEMBER',
-    groupId,
-    memberId,
+  return withUiActionLock(`restore-member:${groupId}:${memberId}`, async () => {
+    const group = allTabs.find((item) => item.id === groupId && item.kind === 'group');
+    const member = group?.tabs?.find((item) => item.id === memberId);
+    if (isStoredOnlyUrl(member?.url)) {
+      showCopyToast(t('restoreRestricted'));
+      return { ok: false, error: 'restricted_url' };
+    }
+    const res = await sendMessage({
+      type: 'RESTORE_GROUP_MEMBER',
+      groupId,
+      memberId,
+    });
+    if (res.ok) await loadList();
+    else if (res.error === 'restricted_url') showCopyToast(t('restoreRestricted'));
+    return res;
   });
-  if (res.ok) {
-    await loadList();
-  }
 }
 
 async function deleteItem(id) {
-  const res = await sendMessage({ type: 'DELETE_ITEM', id });
-  if (res.ok) {
-    allTabs = allTabs.filter((t) => t.id !== id);
-    if (expandedId === id) closeLightbox();
-    if (editingId === id) closeEditBox();
-    renderGrid();
-  }
+  return withUiActionLock(`delete:${id}`, async () => {
+    const res = await sendMessage({ type: 'DELETE_ITEM', id });
+    if (res.ok) {
+      allTabs = allTabs.filter((t) => t.id !== id);
+      if (expandedId === id) closeLightbox();
+      if (editingId === id) closeEditBox();
+      renderGrid();
+    }
+    return res;
+  });
 }
 
 function wireFavicon(root) {
@@ -4396,7 +4691,7 @@ function onCardPointerMove(e) {
   card.style.left = `${e.clientX - offsetX}px`;
   card.style.top = `${e.clientY - offsetY}px`;
 
-  // Stack only after short dwell on center; otherwise keep reordering
+  // Stack only after a short dwell on the title/meta hot-zone; otherwise keep reordering
   const stacking = updateStackHoverState(dragState, e.clientX, e.clientY);
   if (stacking) return;
 
@@ -4760,6 +5055,7 @@ function createGroupCard(item) {
 
   const title = itemTitle(item);
   const n = (item.tabs || []).length;
+  const storedOnlyCount = countStoredOnlyUrls(item);
   const color = GROUP_COLORS[item.color] || GROUP_COLORS.grey;
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
@@ -4782,7 +5078,10 @@ function createGroupCard(item) {
     <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
       <div class="title-row">
         <span class="color-dot" style="background:${color}"></span>
-        <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
+        <div class="title" title="${escapeAttr(title)}">
+          ${escapeHtml(title)}
+          ${storedOnlyCount ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))} ×${storedOnlyCount}</span>` : ''}
+        </div>
       </div>
       <div class="url">${escapeHtml(t('groupTabs', { n }))}</div>
       ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
@@ -4845,6 +5144,7 @@ function createCard(item) {
   const url = item.url || '';
   const mediaKey = mediaKeyForItem(item);
   const fav = item.favIconUrl || '';
+  const storedOnly = isStoredOnlyUrl(url);
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
 
@@ -4867,7 +5167,10 @@ function createCard(item) {
             ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(fav)}" />`
             : `<span class="favicon-fallback" aria-hidden="true"></span>`
         }
-        <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
+        <div class="title" title="${escapeAttr(title)}">
+          ${escapeHtml(title)}
+          ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
+        </div>
       </div>
       <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
       ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${escapeHtml(note)}</div>` : ''}
@@ -4932,6 +5235,7 @@ function createRow(item) {
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
   const color = isGroup ? GROUP_COLORS[item.color] || GROUP_COLORS.grey : null;
+  const storedOnlyCount = countStoredOnlyUrls(item);
 
   row.innerHTML = `
     <img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />
@@ -4939,6 +5243,7 @@ function createRow(item) {
       <div class="title copy-hit" title="${escapeAttr(title)}">
         ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
         ${escapeHtml(title)}
+        ${storedOnlyCount ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
       </div>
       <div class="url copy-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
     </div>
@@ -5000,6 +5305,14 @@ function renderEmpty(message) {
 }
 
 function renderGrid() {
+  // Always release observations before replacing or emptying the grid.
+  if (thumbObserver) {
+    try {
+      thumbObserver.disconnect();
+    } catch {
+      // ignore
+    }
+  }
   // Fresh match cache for this paint (shared by filter + group hit rows)
   searchMatchCache = new Map();
   const filtered = getVisibleTabs();
@@ -5014,15 +5327,6 @@ function renderGrid() {
     searchMatchCache = null;
     renderEmpty({ title: t('noResultsTitle'), body: t('noResultsBody') });
     return;
-  }
-
-  // Disconnect old thumb observations before tearing down DOM
-  if (thumbObserver) {
-    try {
-      thumbObserver.disconnect();
-    } catch {
-      // ignore
-    }
   }
 
   gridEl.innerHTML = '';
@@ -5040,10 +5344,16 @@ let loadListTimer = null;
 
 async function loadList() {
   const res = await sendMessage({ type: 'GET_PARKED_ITEMS' });
+  if (!res?.ok || (!Array.isArray(res.items) && !Array.isArray(res.tabs))) {
+    if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
+    uiLog('error', 'load', 'parked items unavailable', res?.error || 'invalid_response');
+    return false;
+  }
+  if (loadStatusEl) loadStatusEl.textContent = '';
   const raw =
-    res.ok && Array.isArray(res.items)
+    Array.isArray(res.items)
       ? res.items
-      : res.ok && Array.isArray(res.tabs)
+      : Array.isArray(res.tabs)
         ? res.tabs
         : [];
   allTabs = raw.map((item) => {
@@ -5064,13 +5374,17 @@ async function loadList() {
     };
   });
   renderGrid();
+  return true;
 }
 
 function scheduleLoadList() {
   if (loadListTimer) clearTimeout(loadListTimer);
   loadListTimer = setTimeout(() => {
     loadListTimer = null;
-    loadList();
+    loadList().catch((err) => {
+      if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
+      uiLog('error', 'load', 'exception', err?.message || err);
+    });
   }, 150);
 }
 

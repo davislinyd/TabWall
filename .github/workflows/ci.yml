@@ -1,0 +1,37 @@
+name: TabWall CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax and manifest checks
+        run: |
+          node --check background.js
+          node --check backupBuild.js
+          node --check content.js
+          node --check hotkeys.js
+          node --check mediaDb.js
+          node --check park.js
+          node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'))"
+      - name: Unit and integration tests
+        run: node --test tests/*.test.js
+      - name: Build and validate clean ZIP
+        run: |
+          bash scripts/pack.sh >/tmp/tabwall-pack.log
+          version=$(node -p "require('./manifest.json').version")
+          test -f "dist/TabWall-${version}.zip"
+          expected=$(printf '%s\n' \
+            manifest.json background.js content.js hotkeys.js mediaDb.js backupBuild.js \
+            park.html park.js icons/icon16.png icons/icon48.png icons/icon128.png | sort)
+          actual=$(unzip -Z1 "dist/TabWall-${version}.zip" | sort)
+          test "$expected" = "$actual"
+      - name: Diff check
+        run: git diff --check
