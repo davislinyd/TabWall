@@ -24,6 +24,7 @@ zip -r "$OUT_ZIP" \
   content.js \
   mediaDb.js \
   backupBuild.js \
+  canvasStore.js \
   park.html \
   park.js \
   icons/icon16.png \

@@ -13,6 +13,101 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.17.0 — 2026-08-08
+
+- 將 TabWall 重整為高密度、低框線的 Editorial Workbench，Light／Dark 使用同一套暖象牙／石墨視覺系統；新安裝預設深色。
+- 移除手機／平板重新排版，固定 1200px 桌面幾何；窄視窗保留完整桌面版並使用水平捲動。
+
+---
+
+## 2.16.8 — 2026-08-07
+
+- 將新增、列表／畫布、Tags 與設定入口集中到右上角，移除畫布左下角的重複按鈕。
+- 新增按鈕改用主色淡背景與主色文字，改善淺色與深色主題下的可讀性。
+
+---
+
+## 2.16.7 — 2026-08-07
+
+- Canvas 卡片單擊改為預覽快照，雙擊才還原；卡片內容區可按住拖曳，操作按鈕維持獨立功能。
+- Group 卡片新增放大 mosaic 預覽，整理畫布新增棋盤與圓形排列模式。
+- 修正 Canvas header-primary 背景與外層 header 不一致及高度覆寫問題。
+
+---
+
+## 2.16.6 — 2026-08-06
+
+- 一般滑鼠／Trackpad 滾輪改為畫布平移；Ctrl／Command 加垂直滾輪與 Trackpad pinch 用於縮放。
+- 預設畫布首次依卡片範圍置中，右下角 minimap 改以實際卡片尺寸與 viewport frame 映射。
+- 左側欄取消整體 scrollbar，僅 Group 清單獨立捲動。
+
+---
+
+## 2.16.5 — 2026-08-06
+
+- 以單一 Canvas Store、增量 keyed renderer 與 RAF pointer pipeline 重整 Spatial Canvas，避免互動期間整頁重繪與 stuck pointer state。
+- 新增 `canvasLayoutRevision` CAS 儲存、衝突重播與 bounded retry；堆疊／匯入的 items 與 layout 改為單次 metadata commit，保留既有 `canvasLayout` v1 與備份格式。
+- Canvas hydrate／sync 失敗時僅於目前 session 切換列表 fallback，不改寫使用者的 view preference。
+
+---
+
+## 2.16.4 — 2026-08-06
+
+- 畫布空白區在 `select` 工具下可用滑鼠左鍵拖曳平移，節點拖曳與 `area` 框選維持獨立操作。
+- 畫布預設視角改為 100%；舊版 76% 預設只 migration 一次，自訂視角不受影響。
+- 畫布放大時改載入高解析度 snapshot，無 snapshot 時退回 thumbnail，降低放大預覽模糊。
+
+---
+
+## 2.16.3 — 2026-08-06
+
+- 修正設定面板 open state 被舊版抽屜 transform 覆蓋，導致面板從 viewport 中央向右下溢出。
+
+---
+
+## 2.16.2 — 2026-08-06
+
+- 修正設定面板 footer 仍嵌在兩欄 layout 內造成的下方裁切；完成按鈕與自動儲存狀態固定在面板底部。
+- 清除設定面板遺留的右側／底部定位約束，補上 `100vh` fallback，確保桌面與窄視窗都完整落在 viewport 內。
+
+---
+
+## 2.16.1 — 2026-08-06
+
+- 修復 Spatial Canvas 控制項誤觸發框選／平移、節點拖曳重繪、節點操作、鍵盤焦點與堆疊命中區域。
+- 畫布篩選／總數與 header count 統一，吸附格線同步設定，layout 儲存改用快照 debounce；多選 CREATE_STACK 失敗時回復原狀。
+- 重整設定面板為固定 header／側邊分類／可滾動內容／固定 footer，窄螢幕改用水平分類列並加入 `100dvh` 與安全邊距。
+
+---
+
+## 2.16.0 — 2026-08-06
+
+- 主畫面改為 Spatial Canvas：支援平移、縮放、框選、多選、自由拖曳、吸附格線、minimap 與依 Stack／日期整理。
+- 新增左側工具／索引 rail、選取後上下文工具帶、空白區建立 Stack，以及列表模式作為大量資料與無障礙 fallback。
+- 新增獨立 `canvasLayout` 儲存資料；位置、尺寸與 viewport 會納入精簡／完整備份，舊備份缺少欄位時自動產生預設版。
+- 新增 `GET_CANVAS_LAYOUT`、`PATCH_CANVAS_LAYOUT`、`CREATE_STACK` 內部路由；附加匯入保留目前視角並為新項目套用匯入位置。
+- 設定、Tags、編輯、匯入與診斷浮層統一為居中 dialog；Overlay 改為全視窗畫布容器。
+- 新安裝預設淺色與 canvas；舊 `cards` view preference 遷移為 `canvas`，明確使用 `list` 者保留。
+
+---
+
+## 2.15.1 — 2026-08-06
+
+- 將主畫面、卡片、列表、工具列與 Overlay 改為 Quiet Archive 視覺：暖紙張預設主題、暖深色主題、低對比 hairline 與開放式目錄布局。
+- 移除不必要的 cobalt、漸層、blur、發光邊框、厚重陰影與大圓角；保留既有功能、資料格式與訊息路由。
+- 設定、Tags、Lightbox、批次列、錯誤／toast 與窄視窗 sheet 統一為低刺激、長時間可讀的樣式。
+
+---
+
+## 2.15.0 — 2026-08-05
+
+- 主照片牆改為深色 graphite＋cobalt 編輯式檔案庫視覺：兩層工具列、16:10 卡片、Group mosaic、卡片／列表操作列、focus／selected／danger 狀態與 reduced-motion 支援。
+- 新增快速新增選單：Overlay 可儲存目前分頁／Group；New Tab 與獨立 Tab 停用無目標操作，但保留貼上 URL。
+- 頂層分頁與群組新增 `pinned` 狀態，支援固定／取消固定與「已固定」篩選；舊資料與舊備份缺少欄位時預設為 `false`，不改變排序、拖曳順序或備份篩選狀態。
+- 設定改為桌面右側抽屜、窄視窗全螢幕 sheet，分為一般、顯示、整理、備份、快捷鍵與診斷；維持變更即自動儲存。Tags 改為獨立管理抽屜。
+- 新增 `SAVE_TAB_FROM_CONTENT`、`SAVE_ACTIVE_TAB` 與 `UPDATE_ITEM.pinned` 路由，補上 Overlay／Standalone 防誤存與受限 URL 回報。
+- 更新 README、文件、整合測試與 clean ZIP 打包流程。
+
 ## 2.14.0 — 2026-08-05
 
 - New Tab 直接顯示 TabWall；一般網頁維持 overlay。

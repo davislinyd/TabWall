@@ -28,13 +28,14 @@ const LEGACY_ZIP = new URL(
   import.meta.url
 );
 
-function sampleItem({ image = true, id = ITEM_ID } = {}) {
+function sampleItem({ image = true, id = ITEM_ID, pinned = false } = {}) {
   return {
     kind: 'tab',
     id,
     url: 'https://example.com/path?q=1',
     title: 'Example',
     favIconUrl: 'https://example.com/favicon.ico',
+    pinned,
     note: 'note',
     tags: ['one'],
     savedAt: Date.now() - 1000,
@@ -182,6 +183,54 @@ test('backup schema rejects duplicate IDs and non-HTTP URLs', () => {
     url: 'javascript:alert(1)',
   }]);
   assert.equal(Build.validateBackup(invalidUrl).error, 'invalid_url');
+});
+
+test('backup keeps optional top-level pinned state and accepts legacy omission', async () => {
+  const pinnedBackup = sampleBackup([sampleItem({ pinned: true })]);
+  assert.equal(Build.validateBackup(pinnedBackup).ok, true);
+  const built = Build.buildFullZipBlob(pinnedBackup);
+  const files = Build.unzipStore(new Uint8Array(await built.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  assert.equal(metadata.parkedItems[0].pinned, true);
+
+  const legacyBackup = sampleBackup([sampleItem()]);
+  delete legacyBackup.parkedItems[0].pinned;
+  delete legacyBackup.parkedTabs[0].pinned;
+  assert.equal(Build.validateBackup(legacyBackup).ok, true);
+});
+
+test('backup preserves optional canvas layout and validates its bounds', async () => {
+  const backup = sampleBackup();
+  backup.canvasLayout = {
+    version: 1,
+    viewport: { x: 12, y: 24, zoom: 0.76 },
+    positions: { [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 } },
+  };
+  assert.equal(Build.validateBackup(backup).ok, true);
+
+  const lite = Build.buildLiteBlob(backup);
+  const liteMetadata = JSON.parse(await lite.blob.text());
+  assert.deepEqual(liteMetadata.canvasLayout, backup.canvasLayout);
+
+  const full = Build.buildFullZipBlob(backup);
+  const files = Build.unzipStore(new Uint8Array(await full.blob.arrayBuffer()));
+  const fullMetadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  assert.deepEqual(fullMetadata.canvasLayout, backup.canvasLayout);
+
+  const invalid = {
+    ...backup,
+    canvasLayout: {
+      version: 1,
+      viewport: { x: 0, y: 0, zoom: 3 },
+      positions: { [ITEM_ID]: { x: 0, y: 0, w: 120, h: 170, z: 0 } },
+    },
+  };
+  assert.equal(Build.validateBackup(invalid).error, 'invalid_canvas_layout');
+});
+
+test('backup rejects a non-boolean top-level pinned value', () => {
+  const invalid = sampleBackup([{ ...sampleItem(), pinned: 'yes' }]);
+  assert.equal(Build.validateBackup(invalid).error, 'invalid_pinned');
 });
 
 test('backup schema accepts valid group members and rejects invalid color', () => {

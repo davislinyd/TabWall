@@ -87,11 +87,11 @@ function createRuntime() {
       getURL: (path) => `chrome-extension://test/${path}`,
     },
     commands: { onCommand: event(), async getAll() { return []; } },
-    action: {
+  action: {
       onClicked: event(),
       async setBadgeBackgroundColor() {},
       async setBadgeText() {},
-    },
+  },
     tabs: {
       async query(queryInfo = {}) {
         if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
@@ -273,6 +273,7 @@ function createRuntime() {
   const ready = new Promise((resolve) => setTimeout(resolve, 0));
   return {
     api: sandbox.TabWallBackgroundTest,
+    chrome,
     Build: sandbox.TabWallBackupBuild,
     store,
     media,
@@ -301,7 +302,298 @@ function tab(id, url = 'https://example.com/') {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.14.0');
+  assert.equal(MANIFEST.version, '2.17.0');
+});
+
+function dispatchMessage(runtime, message, sender = {}) {
+  const listener = runtime.chrome.runtime.onMessage.listeners[0];
+  return new Promise((resolve) => {
+    listener(message, sender, resolve);
+  });
+}
+
+test('legacy items default top-level pinned to false and update keeps order', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([
+    tab(ITEM_ID),
+    {
+      kind: 'group',
+      id: GROUP_ID,
+      title: 'Group',
+      color: 'blue',
+      collapsed: false,
+      note: '',
+      tags: [],
+      savedAt: Date.now() - 1000,
+      tabs: [],
+    },
+  ]);
+
+  let items = await runtime.api.getParkedItems();
+  assert.deepEqual(items.map((item) => item.pinned), [false, false]);
+
+  const updated = await runtime.api.updateItem(GROUP_ID, { pinned: true });
+  assert.equal(updated.ok, true);
+  items = await runtime.api.getParkedItems();
+  assert.deepEqual(items.map((item) => item.id), [ITEM_ID, GROUP_ID]);
+  assert.deepEqual(items.map((item) => item.pinned), [false, true]);
+});
+
+test('canvas layout defaults missing positions and normalizes bounds', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID)]);
+
+  const initial = await runtime.api.getCanvasLayout();
+  assert.equal(initial.version, 1);
+  assert.equal(initial.viewport.x, 0);
+  assert.equal(initial.viewport.y, 0);
+  assert.equal(initial.viewport.zoom, 1);
+  assert.deepEqual(Object.keys(initial.positions), [ITEM_ID, SOURCE_ID]);
+
+  const normalized = await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 999999, y: 'bad', zoom: 0 },
+    positions: {
+      [ITEM_ID]: { x: 12, y: 24, w: 999, h: 1, z: -4 },
+      'unknown-id': { x: 80, y: 80, w: 220, h: 170, z: 2 },
+    },
+  });
+  assert.equal(normalized.viewport.x, 100000);
+  assert.equal(normalized.viewport.y, 0);
+  assert.equal(normalized.viewport.zoom, 0.25);
+  assert.equal(normalized.positions[ITEM_ID].w, 640);
+  assert.equal(normalized.positions[ITEM_ID].h, 120);
+  assert.equal(normalized.positions[ITEM_ID].z, 0);
+  assert.equal(normalized.positions[SOURCE_ID].x, 396);
+  assert.equal(normalized.positions['unknown-id'], undefined);
+});
+
+test('canvas initial center is reported once and does not follow Reset View', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID)]);
+
+  const initial = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(initial.ok, true);
+  assert.equal(initial.needsInitialCenter, true);
+  assert.equal(runtime.store.canvasInitialCenterMigratedV1, false);
+
+  const centered = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    baseRevision: initial.revision,
+    layout: {
+      ...initial.layout,
+      viewport: { x: 140, y: 90, zoom: 1 },
+    },
+  });
+  assert.equal(centered.ok, true);
+  assert.equal(runtime.store.canvasInitialCenterMigratedV1, true);
+
+  const reset = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    baseRevision: centered.revision,
+    layout: {
+      ...centered.layout,
+      viewport: { x: 0, y: 0, zoom: 1 },
+    },
+  });
+  assert.equal(reset.ok, true);
+  const afterReset = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(afterReset.needsInitialCenter, false);
+  assert.equal(afterReset.layout.viewport.x, 0);
+  assert.equal(afterReset.layout.viewport.y, 0);
+});
+
+test('custom layout and imported viewport never request initial centering', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 12, y: 24, zoom: 1 },
+    positions: { [ITEM_ID]: { x: 420, y: 360, w: 220, h: 170, z: 0 } },
+  });
+
+  const custom = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(custom.needsInitialCenter, false);
+
+  const backup = {
+    format: 'tabwall-backup',
+    version: 4,
+    media: 'none',
+    parkedItems: [tab(SOURCE_ID)],
+    parkedTabs: [tab(SOURCE_ID)],
+    settings: {},
+    tagCatalog: [],
+    canvasLayout: {
+      version: 1,
+      viewport: { x: 900, y: 700, zoom: 0.8 },
+      positions: { [SOURCE_ID]: { x: 20, y: 30, w: 220, h: 170, z: 0 } },
+    },
+  };
+  const imported = await dispatchMessage(runtime, { type: 'IMPORT_BACKUP', backup, mode: 'replace' });
+  assert.equal(imported.ok, true);
+  const afterImport = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(afterImport.needsInitialCenter, false);
+  assert.equal(afterImport.layout.viewport.x, 900);
+  assert.equal(afterImport.layout.viewport.y, 700);
+  const exported = await dispatchMessage(runtime, { type: 'EXPORT_BACKUP', mode: 'lite' });
+  assert.equal(exported.ok, true);
+  assert.equal('canvasInitialCenterMigratedV1' in exported.backup, false);
+});
+
+test('canvas layout migrates the legacy default zoom only once', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  delete runtime.store.canvasZoomDefaultMigratedV1;
+  runtime.store.canvasLayout = {
+    version: 1,
+    viewport: { x: 12, y: 24, zoom: 0.76 },
+    positions: {},
+  };
+
+  const migrated = await runtime.api.getCanvasLayout();
+  assert.equal(migrated.viewport.zoom, 1);
+  assert.equal(runtime.store.canvasZoomDefaultMigratedV1, true);
+
+  runtime.store.canvasLayout.viewport.zoom = 0.76;
+  const preserved = await runtime.api.getCanvasLayout();
+  assert.equal(preserved.viewport.zoom, 0.76);
+
+  delete runtime.store.canvasLayoutRevision;
+  const markerWins = await runtime.api.getCanvasLayout();
+  assert.equal(markerWins.viewport.zoom, 0.76);
+});
+
+test('canvas layout preserves a custom zoom during default migration', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  delete runtime.store.canvasZoomDefaultMigratedV1;
+  runtime.store.canvasLayout = {
+    version: 1,
+    viewport: { x: 12, y: 24, zoom: 1.35 },
+    positions: {},
+  };
+
+  const layout = await runtime.api.getCanvasLayout();
+  assert.equal(layout.viewport.zoom, 1.35);
+  assert.equal(runtime.store.canvasZoomDefaultMigratedV1, true);
+});
+
+test('canvas layout GET and PATCH use a monotonic compare-and-set revision', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  const initial = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(initial.ok, true);
+  assert.equal(typeof initial.revision, 'number');
+
+  const first = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    baseRevision: initial.revision,
+    layout: {
+      version: 1,
+      viewport: { x: 40, y: 20, zoom: 1.25 },
+      positions: { [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 0 } },
+    },
+  });
+  assert.equal(first.ok, true);
+  assert.equal(first.revision, initial.revision + 1);
+
+  const beforeConflict = JSON.parse(JSON.stringify(runtime.store.canvasLayout));
+  const conflict = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    baseRevision: initial.revision,
+    layout: {
+      version: 1,
+      viewport: { x: 999, y: 999, zoom: 2 },
+      positions: {},
+    },
+  });
+  assert.equal(conflict.ok, false);
+  assert.equal(conflict.error, 'canvas_conflict');
+  assert.equal(conflict.revision, first.revision);
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.canvasLayout)), beforeConflict);
+
+  const legacy = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    layout: first.layout,
+  });
+  assert.equal(legacy.ok, true);
+  assert.equal(legacy.revision, first.revision + 1);
+
+  const backup = await dispatchMessage(runtime, { type: 'EXPORT_BACKUP', mode: 'lite' });
+  assert.equal(backup.ok, true);
+  assert.equal('canvasLayoutRevision' in backup.backup, false);
+});
+
+test('CREATE_STACK keeps item metadata and remaps the canvas anchor', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const first = tab(ITEM_ID);
+  first.note = 'first note';
+  first.tags = ['one'];
+  const second = tab(SOURCE_ID, 'https://second.example/');
+  await runtime.api.setParkedItems([first, second]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 20, y: 30, zoom: 0.9 },
+    positions: {
+      [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 },
+      [SOURCE_ID]: { x: 420, y: 240, w: 220, h: 170, z: 2 },
+    },
+  });
+
+  const result = await runtime.api.createStack([ITEM_ID, SOURCE_ID], '工作 Stack');
+  assert.equal(result.ok, true);
+  assert.equal(result.item.title, '工作 Stack');
+  assert.equal(result.item.tabs.length, 2);
+  assert.equal(result.item.tabs[0].note, 'first note');
+  assert.deepEqual([...result.item.tabs[0].tags], ['one']);
+
+  const layout = await runtime.api.getCanvasLayout();
+  assert.equal(layout.viewport.x, 20);
+  assert.equal(layout.viewport.y, 30);
+  assert.equal(layout.viewport.zoom, 0.9);
+  assert.deepEqual(Object.keys(layout.positions), [result.groupId]);
+  assert.equal(layout.positions[result.groupId].x, 120);
+  assert.equal(layout.positions[result.groupId].y, 240);
+  assert.equal(layout.positions[result.groupId].w, 220);
+  assert.equal(layout.positions[result.groupId].h, 170);
+  assert.equal(layout.positions[result.groupId].z, 1);
+});
+
+test('overlay quick save uses the content sender tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 90, windowId: 1, url: 'https://wrong.example/' }];
+
+  const result = await dispatchMessage(
+    runtime,
+    { type: 'SAVE_TAB_FROM_CONTENT' },
+    { tab: { id: 91, windowId: 1, url: 'https://sender.example/', title: 'Sender tab' } }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(runtime.store.parkedItems[0].url, 'https://sender.example/');
+});
+
+test('standalone quick save rejects TabWall and restricted URLs', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 92, windowId: 1, url: 'chrome-extension://test/park.html?surface=standalone' }];
+  let result = await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB' });
+  assert.equal(result.error, 'self_tab');
+  assert.equal(runtime.store.parkedItems.length, 0);
+
+  runtime.runtime.activeTabs = [{ id: 93, windowId: 1, url: 'chrome://extensions/' }];
+  result = await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB' });
+  assert.equal(result.error, 'restricted_url');
+  assert.equal(runtime.store.parkedItems.length, 0);
 });
 
 test('toggle keeps the overlay path for regular HTTPS tabs', async () => {
@@ -415,6 +707,47 @@ test('replace import removes stale media for an ID with no incoming image', asyn
   assert.equal(result.ok, true);
   assert.equal(runtime.media.has(`t:${ITEM_ID}`), false);
   assert.equal(runtime.store.parkedItems[0].hasThumb, false);
+});
+
+test('append import keeps the current viewport and offsets incoming canvas items', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 88, y: 144, zoom: 1.1 },
+    positions: { [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 } },
+  });
+
+  const incoming = tab(TARGET_ID, 'https://incoming.example/');
+  const result = await runtime.api.importBackup({
+    format: 'tabwall-backup',
+    version: runtime.Build.FORMAT_VERSION,
+    media: 'none',
+    parkedItems: [incoming],
+    parkedTabs: [incoming],
+    settings: {},
+    tagCatalog: [],
+    canvasLayout: {
+      version: 1,
+      viewport: { x: 900, y: 900, zoom: 0.4 },
+      positions: { [TARGET_ID]: { x: 720, y: 360, w: 220, h: 170, z: 7 } },
+    },
+  }, { mode: 'append' });
+  assert.equal(result.ok, true);
+
+  const items = await runtime.api.getParkedItems();
+  const appended = items.find((item) => item.url === 'https://incoming.example/');
+  assert.ok(appended);
+  const layout = await runtime.api.getCanvasLayout();
+  assert.equal(layout.viewport.x, 88);
+  assert.equal(layout.viewport.y, 144);
+  assert.equal(layout.viewport.zoom, 1.1);
+  assert.equal(layout.positions[appended.id].x, 1140);
+  assert.equal(layout.positions[appended.id].y, 480);
+  assert.equal(layout.positions[appended.id].w, 220);
+  assert.equal(layout.positions[appended.id].h, 170);
+  assert.equal(layout.positions[appended.id].z, 7);
 });
 
 test('staged replace import commits IndexedDB media without inline message data', async () => {
@@ -745,6 +1078,22 @@ test('Stack storage failure rolls copied media back and preserves old keys', asy
   assert.equal(runtime.media.has(`t:${SOURCE_ID}`), true);
   assert.equal(runtime.media.has(`t:${TARGET_ID}`), true);
   assert.equal([...runtime.media.keys()].filter((key) => key.startsWith('g:')).length, 0);
+});
+
+test('CREATE_STACK is atomic when a multi-select write fails', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(SOURCE_ID), tab(TARGET_ID), tab(ITEM_ID)]);
+  runtime.media.set(`t:${SOURCE_ID}`, { thumb: 'source', snap: 'source' });
+  runtime.media.set(`t:${TARGET_ID}`, { thumb: 'target', snap: 'target' });
+  runtime.media.set(`t:${ITEM_ID}`, { thumb: 'item', snap: 'item' });
+  const before = JSON.parse(JSON.stringify(runtime.store.parkedItems));
+  runtime.runtime.failNextStorageSet = true;
+
+  const result = await runtime.api.createStack([SOURCE_ID, TARGET_ID, ITEM_ID], 'Merged');
+  assert.equal(result.ok, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.parkedItems)), before);
+  assert.deepEqual([...runtime.media.keys()].sort(), [`t:${ITEM_ID}`, `t:${SOURCE_ID}`, `t:${TARGET_ID}`].sort());
 });
 
 test('auto-backup pruning only deletes exact folder and mode names', async () => {

@@ -678,6 +678,33 @@
     return '';
   }
 
+  function validateCanvasLayout(layout, itemIds) {
+    if (layout == null) return true;
+    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) return false;
+    if (layout.version != null && Number(layout.version) !== 1) return false;
+    const viewport = layout.viewport;
+    if (viewport != null) {
+      if (!viewport || typeof viewport !== 'object' || Array.isArray(viewport)) return false;
+      if (!Number.isFinite(Number(viewport.x)) || !Number.isFinite(Number(viewport.y))) return false;
+      if (!Number.isFinite(Number(viewport.zoom)) || Number(viewport.zoom) < 0.25 || Number(viewport.zoom) > 2) {
+        return false;
+      }
+    }
+    const positions = layout.positions;
+    if (positions != null && (typeof positions !== 'object' || Array.isArray(positions))) return false;
+    const ids = itemIds instanceof Set ? itemIds : new Set(itemIds || []);
+    for (const [id, position] of Object.entries(positions || {})) {
+      if (ids.size && !ids.has(id)) continue;
+      if (!position || typeof position !== 'object' || Array.isArray(position)) return false;
+      for (const key of ['x', 'y', 'w', 'h', 'z']) {
+        if (position[key] != null && !Number.isFinite(Number(position[key]))) return false;
+      }
+      if (position.w != null && (Number(position.w) < 160 || Number(position.w) > 640)) return false;
+      if (position.h != null && (Number(position.h) < 120 || Number(position.h) > 560)) return false;
+    }
+    return true;
+  }
+
   function validateBackup(
     backup,
     { maxJsonBytes = LIMITS.MAX_JSON_BYTES, allowStoredOnlyUrls = false } = {}
@@ -708,6 +735,9 @@
           return validationError('duplicate_or_invalid_id');
         }
         ids.add(item.id);
+        if (item.pinned != null && typeof item.pinned !== 'boolean') {
+          return validationError('invalid_pinned', item.id);
+        }
         if (!Number.isFinite(item.savedAt) || item.savedAt < 0 || item.savedAt > Date.now() + 86400000) {
           return validationError('invalid_timestamp');
         }
@@ -751,6 +781,10 @@
           );
           if (error) return validationError(error, member.id);
         }
+      }
+
+      if (!validateCanvasLayout(backup.canvasLayout, ids)) {
+        return validationError('invalid_canvas_layout');
       }
 
       if (backup.tagCatalog != null) {

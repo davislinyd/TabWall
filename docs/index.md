@@ -10,7 +10,7 @@ permalink: /
 
 [中文](#中文)
 
-TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups as a visual photo wall. Data stays on the device.
+TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a spatial canvas. Data stays on the device.
 
 **Current version:** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
 
@@ -26,7 +26,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups as a 
 - Thumbnails and full snapshots are stored as `IndexedDB` blobs.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
-- Group covers use a fixed `16:10` ratio so large images do not stretch cards.
+- Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
 
 ### Shortcuts
 
@@ -36,7 +36,7 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 |----------|--------|
 | `Option/Alt+S` | Park the current tab |
 | `Option/Alt+Shift+G` | Park the current Tab Group |
-| `Option/Alt+O` | Toggle the TabWall photo wall |
+| `Option/Alt+O` | Toggle the TabWall canvas |
 | `/` | Focus search |
 | `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
 | Plain search | `||` means OR; spaces and `&&` mean AND |
@@ -56,17 +56,21 @@ The other shortcuts are built-in wall-navigation behavior and cannot be customiz
 
 After an extension reload or update, reopen or refresh existing tabs when a page still has an older injected overlay.
 
-### Card interaction
+### Canvas interaction
 
 | Action | Result |
 |--------|--------|
 | Click a thumbnail | Restore a tab or group; groups ask for confirmation first |
 | Click a title or metadata area | Copy the saved URL or the member URLs |
-| Drag from a thumbnail | Reorder cards |
-| Drag onto another card's title or metadata area | Stack the cards into a group |
+| Click the pin control | Pin or unpin the top-level item; use the toolbar filter to show pinned items |
+| Select a node | Show contextual actions; hold `Shift` / `Control` for multi-select |
+| Drag a node | Move it on the canvas; positions are saved automatically |
+| Drag one node onto another | Stack the items into a group |
+| Drag on empty canvas / use Pan | Move the canvas; wheel controls zoom |
+| Frame-select tool | Select nodes in a rectangular area |
 | Restore a stack or group | Recreate a Chrome Tab Group |
 
-List view supports copying from titles and URLs. Card dragging and stacking are available in card view.
+List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering.
 
 ### Search
 
@@ -82,8 +86,12 @@ List view supports copying from titles and URLs. Card dragging and stacking are 
 - **Static themes:** Backgrounds use static themes; video backgrounds and user-imported videos are not supported.
 - Park and restore groups, with member notes and tags.
 - Multi-selection and batch operations.
-- **Stack:** merge cards by dropping one card onto another card's title area.
-- Floating settings, tag, and help panels; click outside to close them.
+- **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap, and automatic layout by Stack or date.
+- **Stack:** select two or more items or drop one node onto another to create a Chrome Tab Group-backed Stack.
+- New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
+- Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
+- Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
+- Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
 - **Backup export:** lite JSON without images or a full ZIP with binary media. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
 - **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
@@ -93,6 +101,7 @@ List view supports copying from titles and URLs. Card dragging and stacking are 
 - **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups can run on a schedule or after data changes, and 1–99 copies can be retained.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
 - **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
+- **Desktop workbench:** the interface uses a fixed 1200px desktop layout. Narrow windows keep the full desktop geometry and expose horizontal scrolling; there is no mobile reflow or touch toolbar.
 
 ### Installation
 
@@ -131,7 +140,7 @@ docs/privacy.md docs/CHANGELOG.md
 
 [English](#english)
 
-TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存為照片牆，資料留在本機裝置。
+TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存到空間畫布，資料留在本機裝置。
 
 **目前版本：** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
 
@@ -145,9 +154,9 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 
 - 網址、標題、備註、標籤與排序等中繼資料儲存在 `chrome.storage.local`。
 - 縮圖與完整快照以 `IndexedDB` 二進位資料儲存。
-- 開啟照片牆時先載入中繼資料，縮圖再於照片牆框架中延遲載入。
+- 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
-- 群組封面固定使用 `16:10` 比例，避免大圖拉伸卡片。
+- 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
 
 ### 快捷鍵
 
@@ -157,9 +166,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 |--------|------|
 | `Option/Alt+S` | 暫存目前分頁 |
 | `Option/Alt+Shift+G` | 暫存目前 Tab Group |
-| `Option/Alt+O` | 開關 TabWall 照片牆 |
+| `Option/Alt+O` | 開關 TabWall 空間畫布 |
 | `/` | 聚焦搜尋框 |
-| Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉照片牆設定 |
+| Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉畫布設定 |
 | 一般搜尋 | `||` 表示或；空格與 `&&` 表示且 |
 | `t` 或 `tag` 加 Tab | 只搜尋標籤 |
 | `n` 或 `note` 加 Tab | 只搜尋備註 |
@@ -168,26 +177,29 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `all` 加 Tab | 重設搜尋欄位範圍 |
 | 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組或正規表示式模式 |
 | 工具列中的 `.*` | 開關正規表示式搜尋，支援 `/pattern/flags` |
-| `Esc` | 關閉面板或照片牆 |
+| `Esc` | 關閉面板或空間畫布 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
 前三項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
 
-其餘快捷鍵是照片牆內建的操作，不可在 TabWall 中自訂。
+其餘快捷鍵是畫布內建的操作，不可在 TabWall 中自訂。
 
 擴充功能重新載入或更新後，若頁面仍保留舊版浮層，請重新開啟或重新整理該分頁。
 
-### 卡片操作
+### 畫布操作
 
 | 操作 | 結果 |
 |------|------|
 | 點擊縮圖 | 還原分頁或群組；群組會先要求確認 |
 | 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
-| 從縮圖拖曳 | 重新排列卡片 |
-| 拖到另一張卡片的標題或中繼資料區 | 將卡片堆疊成群組 |
+| 點擊固定控制項 | 固定／取消固定頂層項目；可用工具列篩選已固定項目 |
+| 選取節點 | 顯示上下文操作；按住 `Shift`／`Control` 可多選 |
+| 拖曳節點 | 在畫布上移動；位置會自動儲存 |
+| 將節點拖到另一節點 | 將項目堆疊成群組 |
+| 使用平移／框選工具 | 平移畫布或框選多個節點 |
 | 還原堆疊或群組 | 重新建立 Chrome Tab Group |
 
-列表檢視支援從標題與網址複製內容；卡片拖曳與堆疊只在卡片檢視提供。
+列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。
 
 ### 搜尋
 
@@ -203,8 +215,12 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **靜態主題：** 背景使用靜態主題，不支援影片背景或使用者匯入影片。
 - 暫存與還原群組，支援成員備註與標籤。
 - 多選與批次操作。
-- **堆疊：** 將一張卡片拖到另一張卡片的標題區即可合併。
-- 設定、標籤與說明使用浮動面板；點擊外部即可關閉。
+- **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、minimap，以及依 Stack／日期整理。
+- **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併。
+- 新安裝預設淺色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
+- 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
+- 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
+- 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
 - **備份匯出：** 可匯出不含圖片的精簡 JSON，或包含二進位媒體的完整 ZIP；檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
 - **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
@@ -214,6 +230,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
+- **響應式操作：** 窄視窗 rail 會變成至少 44px 的觸控工具列；畫布操作不依賴 hover，並支援 reduced-motion 與鍵盤 focus ring。
 
 ### 安裝
 
@@ -234,7 +251,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 ### 開發
 
 - 完成一組相關修改後，使用 Chrome 的原生「重新載入」。
-- 只修改 `park.html` 或 `park.js` 也需要重新載入擴充功能，或重新開啟照片牆。
+- 只修改 `park.html` 或 `park.js` 也需要重新載入擴充功能，或重新開啟畫布。
 - 版本與打包規則請遵循 `AGENTS.md`。
 - 發布說明請查看 [CHANGELOG](CHANGELOG.html)。
 

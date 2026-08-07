@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.14.0",
-  "description": "Park tabs and Tab Groups as a screenshot photo wall. Search, stack, restore—data stays on your device.",
+  "version": "2.17.0",
+  "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -39,6 +39,7 @@
       "resources": [
         "park.html",
         "park.js",
+        "canvasStore.js",
         "mediaDb.js"
       ],
       "matches": [

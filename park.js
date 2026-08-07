@@ -1,8 +1,11 @@
 /**
- * TabWall — Photo wall UI
+ * TabWall — Spatial canvas UI
  */
 
 const SETTINGS_KEY = 'settings';
+const CANVAS_LAYOUT_VERSION = 1;
+const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
+const CANVAS_NODE_CLICK_DELAY = 300;
 
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
@@ -23,18 +26,20 @@ const DEFAULT_SETTINGS = {
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
-  viewMode: 'cards',
+  viewMode: 'canvas',
   sortBy: 'newest',
   theme: 'dark',
   cardCols: 4,
   locale: 'zh',
-  defaultViewMode: 'cards',
+  defaultViewMode: 'canvas',
   openWithSearchFocus: false,
   searchRegex: false,
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
+  canvasSnap: true,
 };
 
 const Build = self.TabWallBackupBuild;
+const CanvasStoreApi = self.TabWallCanvasStore;
 
 function classifyStoredUrl(url) {
   if (Build?.classifyUrl) return Build.classifyUrl(url, { allowStoredOnly: true });
@@ -201,10 +206,14 @@ async function fetchMediaUrl(key, kind) {
   if (kind === 'thumb' && thumbUrlCache.has(key)) {
     return thumbUrlCache.get(key) || '';
   }
+  if (kind === 'snap' && snapCache.has(key)) {
+    return snapCache.get(key) || '';
+  }
   if (!Media) {
     const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
     const url = res.ok ? res.dataUrl || '' : '';
     if (kind === 'thumb' && url) cacheThumbUrl(key, url);
+    if (kind === 'snap' && url) cacheSnap(key, url);
     return url;
   }
   try {
@@ -212,11 +221,13 @@ async function fetchMediaUrl(key, kind) {
     if (!blob) return '';
     const url = trackObjectUrl(URL.createObjectURL(blob));
     if (kind === 'thumb') cacheThumbUrl(key, url);
+    if (kind === 'snap') cacheSnap(key, url);
     return url;
   } catch {
     const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
     const url = res.ok ? res.dataUrl || '' : '';
     if (kind === 'thumb' && url) cacheThumbUrl(key, url);
+    if (kind === 'snap' && url) cacheSnap(key, url);
     return url;
   }
 }
@@ -233,7 +244,8 @@ function getThumbObserver() {
         if (!entry.isIntersecting) continue;
         const img = entry.target;
         thumbObserver.unobserve(img);
-        loadThumbInto(img);
+        if (img.dataset.canvasMedia === 'true') loadCanvasMediaInto(img);
+        else loadThumbInto(img);
       }
     },
     { root: null, rootMargin: '240px 0px', threshold: 0.01 }
@@ -253,6 +265,64 @@ function loadThumbInto(img) {
   fetchMediaUrl(key, 'thumb').then((url) => {
     if (url && img.isConnected) img.src = url;
   });
+}
+
+function canvasPreferredMediaKind() {
+  return canvasLayout.viewport.zoom > 1 ? 'snap' : 'thumb';
+}
+
+function loadCanvasMediaInto(img) {
+  if (!img) return;
+  const key = img.dataset.mediaKey;
+  if (!key) return;
+  const preferred = canvasPreferredMediaKind();
+  const fallback = preferred === 'snap' ? 'thumb' : 'snap';
+  const token = String((Number(img.dataset.canvasLoadToken) || 0) + 1);
+  img.dataset.canvasLoadToken = token;
+  img.dataset.canvasLoadingKind = preferred;
+  (async () => {
+    let loadedKind = preferred;
+    let url = await fetchMediaUrl(key, preferred);
+    if (!url) {
+      loadedKind = fallback;
+      url = await fetchMediaUrl(key, fallback);
+    }
+    if (img.dataset.canvasLoadToken !== token) return;
+    if (!url) {
+      delete img.dataset.canvasLoadingKind;
+      return;
+    }
+    if (!img.isConnected) return;
+    img.src = url;
+    img.dataset.canvasLoadedKind = loadedKind;
+    delete img.dataset.canvasLoadingKind;
+  })().catch(() => {
+    if (img.dataset.canvasLoadToken === token) delete img.dataset.canvasLoadingKind;
+  });
+}
+
+function observeCanvasMedia(img) {
+  if (!img) return;
+  const key = img.dataset.mediaKey;
+  if (!key) return;
+  const preferred = canvasPreferredMediaKind();
+  if (
+    img.dataset.canvasLoadedKind === preferred ||
+    img.dataset.canvasLoadingKind === preferred
+  ) {
+    return;
+  }
+  const obs = getThumbObserver();
+  if (!obs) {
+    loadCanvasMediaInto(img);
+    return;
+  }
+  obs.unobserve(img);
+  obs.observe(img);
+}
+
+function refreshCanvasMediaQuality() {
+  canvasNodesEl?.querySelectorAll('img[data-canvas-media="true"]').forEach(observeCanvasMedia);
 }
 
 function observeThumb(img) {
@@ -286,6 +356,34 @@ function mediaKeyForMember(groupId, memberId) {
 const I18N = {
   zh: {
     appName: 'TabWall',
+    quickAddTab: '儲存目前分頁',
+    quickAddGroup: '儲存目前 Group',
+    quickAddUrl: '貼上 URL',
+    quickAddMenuTitle: '新增選項',
+    quickAddSaved: '已送出存檔',
+    quickAddGroupSaved: '已送出 Group 存檔',
+    quickAddNoTarget: '目前沒有可存檔的分頁',
+    quickAddNoGroup: '目前分頁不在 Group 中',
+    quickAddRestricted: '此頁面受 Chrome 限制，無法直接存檔',
+    quickAddSelf: '目前已是 TabWall，請貼上 URL 或使用 Chrome 快捷鍵存檔',
+    quickAddFailed: '存檔失敗：{error}',
+    pinnedOnly: '已固定',
+    pin: '固定項目',
+    unpin: '取消固定',
+    pinnedOn: '已固定項目',
+    pinnedOff: '已取消固定',
+    pinFailed: '固定狀態儲存失敗',
+    tagApplyFilter: '套用此 tag 篩選',
+    moreTools: '更多工具',
+    savedAt: '儲存於 {time}',
+    settingsGeneral: '一般',
+    settingsDisplay: '顯示',
+    settingsTools: '整理',
+    settingsBackup: '備份',
+    settingsShortcuts: '快捷鍵',
+    settingsDiagnostic: '診斷',
+    settingsAutoSaved: '已自動儲存',
+    done: '完成',
     loadFailed: '資料讀取失敗，已保留目前畫面。',
     searchPh: '搜尋…  空格/&& 且、|| 或（不分大小寫）',
     searchRegexPh: '正規表示式（預設 i；或 /pattern/flags）',
@@ -307,6 +405,32 @@ const I18N = {
     stackHint: '拖曳卡片到另一張的標題區可組成 Stack，還原為 Tab Group',
     stackMerged: '已合併為 Stack',
     stackFailed: '無法合併',
+    canvasNeedTwo: '至少選取兩個項目才能建立 Stack',
+    canvasNewStack: '新 Stack',
+    canvasStackHint: '為選取的項目命名，之後會以 Tab Group 還原。',
+    canvasStackPlaceholder: 'Stack 名稱',
+    canvasSnapshot: '快照',
+    canvasNodeHint: '單擊預覽快照；雙擊還原；按住拖曳移動',
+    canvasArrange: '整理畫布',
+    canvasArrangeStack: '依 Stack',
+    canvasArrangeDate: '依日期',
+    canvasArrangeGrid: '棋盤排列',
+    canvasArrangeCircle: '圓形排列',
+    canvasArrangeManual: '手動',
+    canvasSnap: '吸附格線',
+    canvasResetView: '重設視角',
+    canvasDropStack: '拖曳到這裡建立 Stack',
+    canvasSelect: '選取',
+    canvasPan: '平移',
+    canvasArea: '框選區域',
+    canvasLink: '連結',
+    settingsCanvas: '畫布',
+    canvasSettingsTitle: '畫布設定',
+    canvasSettingsHint: '調整畫布的操作方式；位置與視角會自動儲存。',
+    canvasOpen: '開啟',
+    canvasMoveToStack: '移至 Stack',
+    canvasCreateStack: '建立 Stack',
+    canvasView: '畫布',
     cards: '卡片',
     list: '列表',
     sort: '排序',
@@ -460,11 +584,11 @@ const I18N = {
     helpShortcutsTitle: '快捷鍵',
     helpShortcutSave: '儲存目前分頁（截圖）',
     helpShortcutGroup: '儲存目前 Tab Group',
-    helpShortcutWall: '開關 TabWall 照片牆',
-    helpShortcutChrome: '儲存分頁、儲存 Tab Group 與開關照片牆的快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。',
+    helpShortcutWall: '開關 TabWall 空間畫布',
+    helpShortcutChrome: '儲存分頁、儲存 Tab Group 與開關空間畫布的快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。',
     helpShortcutSearch: '聚焦搜尋',
     helpShortcutSettings: '開啟／關閉設定（⌥⌘S）',
-    helpShortcutEsc: '關閉浮層／照片牆',
+    helpShortcutEsc: '關閉浮層／空間畫布',
     helpShortcutArrows: '快照上一張／下一張',
     shortcutsTitle: 'Chrome 快捷鍵',
     shortcutsHint:
@@ -496,10 +620,10 @@ const I18N = {
       '存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。',
     helpBasicTitle: '基本使用',
     helpBasicBody:
-      '點縮圖還原、標題複製連結；✎ note／tags；⤢ 快照；× 刪除。拖曳可重排；拖到另一張卡片標題區稍停可組成 Stack（還原為 Tab Group）。',
+      '點縮圖還原、標題複製連結；編輯按鈕管理 note／tags；展開按鈕查看快照；刪除按鈕移除項目。拖曳可重排；拖到另一張卡片標題區稍停可組成 Stack（還原為 Tab Group）。',
     helpGroupTitle: 'Tab Group / Stack',
     helpGroupBody:
-      'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。▦ 成員面板可預覽、編輯、還原單一或整個 group。',
+      'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。成員面板可預覽、編輯、還原單一或整個 group。',
     helpSelectTitle: '複選',
     helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
     helpBackupTitle: '備份',
@@ -533,6 +657,34 @@ const I18N = {
   },
   en: {
     appName: 'TabWall',
+    quickAddTab: 'Save current tab',
+    quickAddGroup: 'Save current Group',
+    quickAddUrl: 'Paste URL',
+    quickAddMenuTitle: 'Add options',
+    quickAddSaved: 'Save request sent',
+    quickAddGroupSaved: 'Group save request sent',
+    quickAddNoTarget: 'There is no tab available to save',
+    quickAddNoGroup: 'The current tab is not in a Group',
+    quickAddRestricted: 'Chrome restricts this page from being saved directly',
+    quickAddSelf: 'TabWall is the current page; paste a URL or use a Chrome shortcut',
+    quickAddFailed: 'Save failed: {error}',
+    pinnedOnly: 'Pinned',
+    pin: 'Pin item',
+    unpin: 'Unpin item',
+    pinnedOn: 'Item pinned',
+    pinnedOff: 'Item unpinned',
+    pinFailed: 'Could not save pinned state',
+    tagApplyFilter: 'Filter by this tag',
+    moreTools: 'More tools',
+    savedAt: 'Saved {time}',
+    settingsGeneral: 'General',
+    settingsDisplay: 'Display',
+    settingsTools: 'Organize',
+    settingsBackup: 'Backup',
+    settingsShortcuts: 'Shortcuts',
+    settingsDiagnostic: 'Diagnostics',
+    settingsAutoSaved: 'Saved automatically',
+    done: 'Done',
     loadFailed: 'Data could not be loaded; the current view was kept.',
     searchPh: 'Search…  space/&& AND, || OR (case-insensitive)',
     searchRegexPh: 'Regex (default i; or /pattern/flags)',
@@ -554,6 +706,32 @@ const I18N = {
     stackHint: 'Drag a card onto another card’s title area to stack; restore as a Tab Group',
     stackMerged: 'Stacked',
     stackFailed: 'Could not stack',
+    canvasNeedTwo: 'Select at least two items to create a Stack',
+    canvasNewStack: 'New Stack',
+    canvasStackHint: 'Name the selected items; the Stack can be restored as a Tab Group.',
+    canvasStackPlaceholder: 'Stack name',
+    canvasSnapshot: 'Snapshot',
+    canvasNodeHint: 'Click to preview; double-click to restore; drag to move',
+    canvasArrange: 'Arrange canvas',
+    canvasArrangeStack: 'By Stack',
+    canvasArrangeDate: 'By date',
+    canvasArrangeGrid: 'Grid',
+    canvasArrangeCircle: 'Circle',
+    canvasArrangeManual: 'Manual',
+    canvasSnap: 'Snap to grid',
+    canvasResetView: 'Reset view',
+    canvasDropStack: 'Drop here to create a Stack',
+    canvasSelect: 'Select',
+    canvasPan: 'Pan',
+    canvasArea: 'Select area',
+    canvasLink: 'Link',
+    settingsCanvas: 'Canvas',
+    canvasSettingsTitle: 'Canvas settings',
+    canvasSettingsHint: 'Adjust canvas behavior; positions and viewport are saved automatically.',
+    canvasOpen: 'Open',
+    canvasMoveToStack: 'Move to Stack',
+    canvasCreateStack: 'Create Stack',
+    canvasView: 'Canvas',
     cards: 'Cards',
     list: 'List',
     sort: 'Sort',
@@ -707,11 +885,11 @@ const I18N = {
     helpShortcutsTitle: 'Shortcuts',
     helpShortcutSave: 'Park current tab (screenshot)',
     helpShortcutGroup: 'Park current Tab Group',
-    helpShortcutWall: 'Toggle TabWall overlay',
-    helpShortcutChrome: 'Shortcuts for parking a tab, parking a Tab Group, and toggling the wall are managed by Chrome. Configure them in Chrome shortcut settings.',
+    helpShortcutWall: 'Toggle TabWall canvas',
+    helpShortcutChrome: 'Shortcuts for parking a tab, parking a Tab Group, and toggling the canvas are managed by Chrome. Configure them in Chrome shortcut settings.',
     helpShortcutSearch: 'Focus search',
     helpShortcutSettings: 'Open / close settings (⌥⌘S / Alt+Win+S)',
-    helpShortcutEsc: 'Close panels / TabWall',
+    helpShortcutEsc: 'Close panels / canvas',
     helpShortcutArrows: 'Previous / next snapshot',
     shortcutsTitle: 'Chrome Shortcuts',
     shortcutsHint:
@@ -743,10 +921,10 @@ const I18N = {
       'Saving a tab with an existing URL asks you how to proceed. Use the toolbar “Scan duplicates” to clean the wall.',
     helpBasicTitle: 'Basics',
     helpBasicBody:
-      'Thumbnail restores; title copies link; ✎ note/tags; ⤢ snapshot; × delete. Drag to reorder, or drop onto another card’s title area to stack (restores as a Tab Group).',
+      'Thumbnail restores; title copies the link; use Edit for notes/tags, Expand for snapshots, and Delete to remove. Drag to reorder, or drop onto another card’s title area to stack (restores as a Tab Group).',
     helpGroupTitle: 'Tab Groups / Stacks',
     helpGroupBody:
-      'Alt+Shift+G parks a group; stacking tabs also builds a group. ▦ opens members for preview, edit, and restore one or all.',
+      'Alt+Shift+G parks a group; stacking tabs also builds a group. The member panel previews, edits, and restores one or all members.',
     helpSelectTitle: 'Multi-select',
     helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
     helpBackupTitle: 'Backup',
@@ -781,13 +959,38 @@ const I18N = {
 };
 
 const gridEl = document.getElementById('grid');
+const canvasView = document.getElementById('canvasView');
+const canvasViewportEl = document.getElementById('canvasViewport');
+const canvasWorldEl = document.getElementById('canvasWorld');
+const canvasNodesEl = document.getElementById('canvasNodes');
+const canvasSelectionEl = document.getElementById('canvasSelection');
+const canvasContextBar = document.getElementById('canvasContextBar');
+const canvasArrangePanel = document.getElementById('canvasArrangePanel');
+const canvasMinimap = document.getElementById('canvasMinimap');
+const canvasDropZone = document.getElementById('canvasDropZone');
+const canvasStackDialog = document.getElementById('canvasStackDialog');
+const canvasStackTitle = document.getElementById('canvasStackTitle');
+const canvasStackConfirm = document.getElementById('canvasStackConfirm');
+const canvasStackCancel = document.getElementById('canvasStackCancel');
 const countEl = document.getElementById('count');
 const loadStatusEl = document.getElementById('loadStatus');
 const searchEl = document.getElementById('search');
 const searchRegexBtn = document.getElementById('searchRegexBtn');
 const searchWrap = document.getElementById('searchWrap');
 const searchScopeChip = document.getElementById('searchScopeChip');
+const quickAddBtn = document.getElementById('quickAddBtn');
+const quickAddMenuBtn = document.getElementById('quickAddMenuBtn');
+const quickAddMenu = document.getElementById('quickAddMenu');
+const quickAddTabMenu = document.getElementById('quickAddTabMenu');
+const quickAddGroupMenu = document.getElementById('quickAddGroupMenu');
+const quickAddUrlMenu = document.getElementById('quickAddUrlMenu');
+const moreToolsBtn = document.getElementById('moreToolsBtn');
+const moreToolsMenu = document.getElementById('moreToolsMenu');
+const pinnedOnlyBtn = document.getElementById('pinnedOnlyBtn');
 const settingsEl = document.getElementById('settings');
+const settingsNav = document.getElementById('settingsNav');
+const settingsSaveStatus = document.getElementById('settingsSaveStatus');
+const settingsDoneBtn = document.getElementById('settingsDoneBtn');
 const floatBackdrop = document.getElementById('floatBackdrop');
 const settingsBox = document.getElementById('settingsBox');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -950,8 +1153,10 @@ const importPreviewCloseBtn = document.getElementById('importPreviewCloseBtn');
 let pendingImportPick = null;
 const closeBtn = document.getElementById('closeBtn');
 const themeBtn = document.getElementById('themeBtn');
-const viewCardsBtn = document.getElementById('viewCards');
-const viewListBtn = document.getElementById('viewList');
+const viewModeBtn = document.getElementById('viewModeBtn');
+const viewModeLabel = document.getElementById('viewModeLabel');
+const viewModeListIcon = document.getElementById('viewModeListIcon');
+const viewModeCanvasIcon = document.getElementById('viewModeCanvasIcon');
 const sortByEl = document.getElementById('sortBy');
 const colsControl = document.getElementById('colsControl');
 const cardColsEl = document.getElementById('cardCols');
@@ -971,6 +1176,7 @@ const lbClose = document.getElementById('lbClose');
 const lbPrev = document.getElementById('lbPrev');
 const lbNext = document.getElementById('lbNext');
 const lbCounter = document.getElementById('lbCounter');
+const lbGroupMosaic = document.getElementById('lbGroupMosaic');
 
 const editBox = document.getElementById('editBox');
 const editDrag = document.getElementById('editDrag');
@@ -994,6 +1200,31 @@ const membersDelete = document.getElementById('membersDelete');
 
 /** @type {Array<any>} */
 let allTabs = []; // ParkItem[] (kind tab | group)
+/** Store-owned read projection; canvas mutations must go through canvasStore. */
+let canvasLayout = {
+  version: CANVAS_LAYOUT_VERSION,
+  viewport: { ...DEFAULT_CANVAS_VIEWPORT },
+  positions: {},
+};
+let canvasStore = null;
+const canvasNodeElements = new Map();
+const canvasMinimapElements = new Map();
+let canvasLoadGeneration = 0;
+let canvasPointerRaf = 0;
+let canvasQueuedPointerEvent = null;
+let canvasLastPointerEvent = null;
+let canvasInteractionGeneration = 0;
+let canvasSessionFallback = false;
+let canvasNeedsInitialCenter = false;
+let canvasInitialCenterRaf = 0;
+let canvasGeometryObserver = null;
+let canvasSaveTimer = null;
+let canvasPointerState = null;
+let canvasActiveTool = 'select';
+let canvasSnapToGrid = true;
+let canvasSpacePressed = false;
+const canvasNodeClickTimers = new Map();
+const canvasNodeClickSuppressUntil = new Map();
 let query = '';
 /** @type {'all'|'tag'|'note'} */
 let searchScope = 'all';
@@ -1003,7 +1234,7 @@ let compiledSearch = { raw: '', re: null, err: null };
 let settings = { ...DEFAULT_SETTINGS };
 /** @type {string|null} */
 let expandedId = null;
-/** @type {{ groupId?: string } | null} */
+/** @type {{ type?: 'member' | 'group', groupId?: string } | null} */
 let expandedMeta = null;
 /** @type {{ list: any[], index: number } | null} */
 let lightboxNav = null;
@@ -1018,12 +1249,89 @@ let editTagList = [];
 /** @type {Array<{ name: string, count: number }>} */
 let tagStats = [];
 let tagFilter = '';
+let pinnedOnly = false;
+let canvasIndexFilter = 'all';
+let settingsSection = 'general';
 let selectMode = false;
 /** @type {Set<string>} */
 let selectedIds = new Set();
 /** @type {string|null} */
 let lastAnchorId = null;
 let copyToastTimer = null;
+
+function canvasStoreSnapshot() {
+  return canvasStore?.getState?.() || {
+    items: allTabs,
+    layout: canvasLayout,
+    baseLayout: canvasLayout,
+    viewport: { ...canvasLayout.viewport },
+    revision: 0,
+    selectedIds: new Set(selectedIds),
+    interaction: null,
+    pendingOperations: [],
+    sync: { status: 'idle', attempt: 0, error: '' },
+  };
+}
+
+function activeCanvasSelection() {
+  return canvasStoreSnapshot().selectedIds;
+}
+
+function clearAllSelections() {
+  ensureCanvasStore()?.setSelection([]);
+  selectedIds.clear();
+}
+
+function updateCanvasSyncStatus(sync = canvasStoreSnapshot().sync) {
+  const el = document.getElementById('canvasSyncStatus');
+  if (!el) return;
+  const labels = {
+    dirty: '未同步',
+    saving: '儲存中',
+    retrying: '重試中',
+    error: '同步失敗',
+  };
+  el.textContent = labels[sync?.status] || '';
+  if (sync?.status) el.dataset.state = sync.status;
+  else delete el.dataset.state;
+  if (sync?.error) el.title = String(sync.error);
+  else el.removeAttribute('title');
+}
+
+function handleCanvasStoreChange(snapshot, action = {}) {
+  canvasLayout = snapshot.layout;
+  if (settings.viewMode === 'canvas') selectedIds = new Set(snapshot.selectedIds);
+  updateCanvasSyncStatus(snapshot.sync);
+  const fullRender = new Set(['ITEMS_SET', 'HYDRATE', 'REMOTE_LAYOUT']).has(action.type);
+  if (fullRender && settings.viewMode === 'canvas' && !canvasSessionFallback) renderCanvas();
+  else if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
+    updateCanvasTransform();
+    updateCanvasNodePositions(snapshot);
+    updateCanvasNodeSelection();
+    renderCanvasMinimap(getCanvasVisibleTabs());
+    updateBatchBar();
+    if (action.type === 'OPERATION_COMMIT' || action.type === 'SYNC_ERROR' || action.type === 'SYNC_FAILED') {
+      refreshCanvasMediaQuality();
+    }
+  }
+}
+
+function ensureCanvasStore() {
+  if (canvasStore || !CanvasStoreApi?.createCanvasStore) return canvasStore;
+  canvasStore = CanvasStoreApi.createCanvasStore({
+    items: allTabs,
+    layout: canvasLayout,
+    sendPatch: ({ layout, baseRevision }) => sendMessage({
+      type: 'PATCH_CANVAS_LAYOUT',
+      layout,
+      baseRevision,
+    }),
+    onChange: handleCanvasStoreChange,
+  });
+  return canvasStore;
+}
+
+ensureCanvasStore();
 
 /** @type {null | object} */
 let dragState = null;
@@ -1056,6 +1364,10 @@ window.addEventListener('message', (event) => {
   if (event.source !== window.parent || !PARENT_ORIGIN || event.origin !== PARENT_ORIGIN) return;
   if (event.data?.type === 'TABWALL_FOCUS_SEARCH') {
     focusSearch();
+    return;
+  }
+  if (event.data?.type === 'TABWALL_SAVE_RESULT') {
+    handleQuickCaptureResult(event.data.result);
     return;
   }
   if (event.data?.type === 'TABWALL_SAVE_CONFLICT' && event.data.conflict) {
@@ -1106,6 +1418,8 @@ function applyI18n() {
     if (key) opt.textContent = t(key);
   });
   applyTheme(settings.theme);
+  syncQuickCaptureAvailability();
+  syncPinnedFilterUi();
   if (selectModeBtn) {
     selectModeBtn.textContent = selectMode ? t('selectModeOn') : t('selectMode');
   }
@@ -1161,6 +1475,112 @@ function sendMessage(payload) {
       });
     } catch (err) {
       resolve({ ok: false, error: String(err) });
+    }
+  });
+}
+
+function quickCaptureErrorText(error) {
+  switch (String(error || '')) {
+    case 'self_tab':
+      return t('quickAddSelf');
+    case 'restricted_url':
+      return t('quickAddRestricted');
+    case 'not_in_group':
+      return t('quickAddNoGroup');
+    case 'no_tab':
+      return t('quickAddNoTarget');
+    default:
+      return t('quickAddFailed', { error: error || 'unknown' });
+  }
+}
+
+async function handleQuickCaptureResult(result) {
+  if (!result) return;
+  if (!result.ok) {
+    showCopyToast(quickCaptureErrorText(result.error));
+    return;
+  }
+  if (result.conflict) {
+    showCopyToast(t('quickAddSaved'));
+    return;
+  }
+  showCopyToast(result.tabCount ? t('quickAddGroupSaved') : t('quickAddSaved'));
+  await loadList();
+}
+
+function closeQuickMenus() {
+  if (quickAddMenu) quickAddMenu.hidden = true;
+  if (quickAddMenuBtn) quickAddMenuBtn.setAttribute('aria-expanded', 'false');
+  if (moreToolsMenu) moreToolsMenu.hidden = true;
+  if (moreToolsBtn) moreToolsBtn.setAttribute('aria-expanded', 'false');
+}
+
+function syncQuickCaptureAvailability() {
+  const hasHost = Boolean(PARENT_ORIGIN);
+  if (quickAddBtn) {
+    quickAddBtn.disabled = !hasHost;
+    quickAddBtn.title = hasHost ? t('quickAddTab') : t('quickAddSelf');
+    quickAddBtn.setAttribute('aria-label', t('quickAddTab'));
+  }
+  if (quickAddTabMenu) {
+    quickAddTabMenu.disabled = !hasHost;
+    quickAddTabMenu.title = hasHost ? t('quickAddTab') : t('quickAddSelf');
+  }
+  if (quickAddGroupMenu) {
+    quickAddGroupMenu.disabled = !hasHost;
+    quickAddGroupMenu.title = hasHost ? t('quickAddGroup') : t('quickAddSelf');
+  }
+}
+
+async function requestQuickCapture(kind) {
+  closeQuickMenus();
+  if (kind === 'url') {
+    openSettingsBox();
+    applySettingsSection('tools');
+    setTimeout(() => manualAddText?.focus(), 0);
+    return;
+  }
+  if (kind === 'tab' && !PARENT_ORIGIN) {
+    showCopyToast(t('quickAddSelf'));
+    return;
+  }
+  if (kind === 'tab' && PARENT_ORIGIN) {
+    if (!postToParent({ type: 'TABWALL_SAVE_ACTIVE' })) {
+      showCopyToast(t('quickAddNoTarget'));
+    }
+    return;
+  }
+  const result = await sendMessage({ type: 'SAVE_ACTIVE_GROUP' });
+  await handleQuickCaptureResult(result);
+}
+
+function initQuickCaptureUi() {
+  syncQuickCaptureAvailability();
+  quickAddBtn?.addEventListener('click', () => requestQuickCapture('tab'));
+  quickAddTabMenu?.addEventListener('click', () => requestQuickCapture('tab'));
+  quickAddGroupMenu?.addEventListener('click', () => requestQuickCapture('group'));
+  quickAddUrlMenu?.addEventListener('click', () => requestQuickCapture('url'));
+  quickAddMenuBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = Boolean(quickAddMenu && quickAddMenu.hidden);
+    closeQuickMenus();
+    if (quickAddMenu && open) {
+      quickAddMenu.hidden = false;
+      quickAddMenuBtn.setAttribute('aria-expanded', 'true');
+    }
+  });
+  moreToolsBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = Boolean(moreToolsMenu && moreToolsMenu.hidden);
+    closeQuickMenus();
+    if (moreToolsMenu && open) {
+      moreToolsMenu.hidden = false;
+      moreToolsBtn.setAttribute('aria-expanded', 'true');
+    }
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (!event.target.closest?.('#quickAddWrap, #moreToolsMenu, #moreToolsBtn')) {
+      closeQuickMenus();
     }
   });
 }
@@ -1283,7 +1703,10 @@ async function loadSettings() {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
   const merged = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
   merged.cardCols = clampCols(merged.cardCols);
-  if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'cards';
+  if (merged.viewMode === 'cards') merged.viewMode = 'canvas';
+  if (merged.viewMode !== 'list') merged.viewMode = 'canvas';
+  if (merged.defaultViewMode === 'cards') merged.defaultViewMode = 'canvas';
+  if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'canvas';
   if (merged.locale !== 'en') merged.locale = 'zh';
   // Local shortcut settings were removed; discard the legacy field on the next write.
   delete merged.shortcuts;
@@ -1291,6 +1714,7 @@ async function loadSettings() {
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
   });
+  merged.canvasSnap = merged.canvasSnap !== false;
   return merged;
 }
 
@@ -1314,6 +1738,10 @@ async function saveSettings(partial) {
     }
     settings = { ...settings, ...res.settings };
     if (settings.autoBackup) settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
+    if (settingsSaveStatus) {
+      settingsSaveStatus.textContent = t('settingsAutoSaved');
+      settingsSaveStatus.dataset.state = 'saved';
+    }
     return settings;
   } finally {
     // chrome.storage.onChanged may fire async after set resolves
@@ -1329,13 +1757,30 @@ function applyTheme(theme) {
   themeBtn.textContent = theme === 'light' ? 'Dark' : 'Light';
 }
 
+function syncViewModeButton(mode) {
+  if (!viewModeBtn) return;
+  const target = mode === 'canvas' ? 'list' : 'canvas';
+  const label = t(target === 'list' ? 'list' : 'canvasView');
+  if (viewModeLabel) viewModeLabel.textContent = label;
+  if (viewModeListIcon) viewModeListIcon.hidden = target !== 'list';
+  if (viewModeCanvasIcon) viewModeCanvasIcon.hidden = target !== 'canvas';
+  viewModeBtn.dataset.viewTarget = target;
+  viewModeBtn.title = label;
+  viewModeBtn.setAttribute('aria-label', label);
+}
+
 function applyViewMode(mode) {
+  if (mode !== 'list' && mode !== 'canvas') mode = 'canvas';
   const isList = mode === 'list';
+  const isCanvas = mode === 'canvas';
   gridEl.classList.toggle('cards', !isList);
   gridEl.classList.toggle('list', isList);
-  viewCardsBtn.classList.toggle('active', !isList);
-  viewListBtn.classList.toggle('active', isList);
-  colsControl.classList.toggle('visible', !isList);
+  syncViewModeButton(mode);
+  colsControl.classList.toggle('visible', !isList && !isCanvas);
+  if (canvasView) canvasView.hidden = !isCanvas;
+  if (canvasView) canvasView.setAttribute('aria-hidden', isCanvas ? 'false' : 'true');
+  document.body.classList.toggle('canvas-mode', isCanvas);
+  if (isCanvas) scheduleInitialCanvasCenter();
 }
 
 function applyCardCols(cols) {
@@ -1351,17 +1796,31 @@ function applyCardCols(cols) {
 
 function updateSavedBadge() {
   const n = allTabs.length;
-  const visible = getVisibleTabs().length;
+  const isCanvasUi = settings.viewMode === 'canvas' && !canvasSessionFallback;
+  const visible = isCanvasUi ? getCanvasVisibleTabs().length : getVisibleTabs().length;
+  const canvasFiltered = isCanvasUi && canvasIndexFilter !== 'all';
   countEl.textContent =
-    query && visible !== n
+    (query || pinnedOnly || canvasFiltered) && visible !== n
       ? t('countFiltered', { shown: visible, total: n })
       : t('countTabs', { n });
+}
+
+function syncPinnedFilterUi() {
+  if (!pinnedOnlyBtn) return;
+  pinnedOnlyBtn.classList.toggle('active', pinnedOnly);
+  pinnedOnlyBtn.setAttribute('aria-pressed', pinnedOnly ? 'true' : 'false');
 }
 
 function syncSettingsUi() {
   applyTheme(settings.theme);
   applyViewMode(settings.viewMode);
   applyCardCols(settings.cardCols);
+  canvasSnapToGrid = settings.canvasSnap !== false;
+  const canvasSnapInput = document.getElementById('settingsCanvasSnap');
+  if (canvasSnapInput) canvasSnapInput.checked = canvasSnapToGrid;
+  const canvasSnapToggle = document.getElementById('canvasSnapToggle');
+  if (canvasSnapToggle) canvasSnapToggle.checked = canvasSnapToGrid;
+  syncPinnedFilterUi();
   sortByEl.value = settings.sortBy || 'newest';
   openWithSearchFocusEl.checked = Boolean(settings.openWithSearchFocus);
 
@@ -1400,8 +1859,8 @@ function syncSettingsUi() {
 
   const viewRadio =
     settingsEl.querySelector(
-      `input[name="defaultViewMode"][value="${settings.defaultViewMode || 'cards'}"]`
-    ) || settingsEl.querySelector('input[name="defaultViewMode"][value="cards"]');
+      `input[name="defaultViewMode"][value="${settings.defaultViewMode || 'canvas'}"]`
+    ) || settingsEl.querySelector('input[name="defaultViewMode"][value="canvas"]');
   if (viewRadio) viewRadio.checked = true;
 
   syncAutoBackupUi();
@@ -1536,7 +1995,7 @@ async function initSettingsUi() {
   // On open: apply default view if we want fresh open behavior
   // Use stored viewMode if user toggled; defaultViewMode applied when viewMode missing
   if (!settings.viewMode) {
-    settings.viewMode = settings.defaultViewMode || 'cards';
+    settings.viewMode = settings.defaultViewMode || 'canvas';
   }
 
   syncSettingsUi();
@@ -1634,6 +2093,7 @@ async function initSettingsUi() {
       if (input.checked) {
         await saveSettings({ locale: input.value });
         applyI18n();
+        syncViewModeButton(settings.viewMode);
         renderGrid();
       }
     });
@@ -1652,6 +2112,17 @@ async function initSettingsUi() {
     });
   });
 
+  const settingsCanvasSnap = document.getElementById('settingsCanvasSnap');
+  settingsCanvasSnap?.addEventListener('change', async () => {
+    canvasSnapToGrid = settingsCanvasSnap.checked;
+    const arrangeSnap = document.getElementById('canvasSnapToggle');
+    if (arrangeSnap) arrangeSnap.checked = canvasSnapToGrid;
+    await saveSettings({ canvasSnap: canvasSnapToGrid });
+  });
+  document.getElementById('settingsCanvasResetView')?.addEventListener('click', () => {
+    document.getElementById('canvasResetView')?.click();
+  });
+
   openWithSearchFocusEl.addEventListener('change', async () => {
     await saveSettings({ openWithSearchFocus: openWithSearchFocusEl.checked });
   });
@@ -1665,6 +2136,8 @@ async function initSettingsUi() {
 
   initChromeShortcutsUi();
   initDedupeUi();
+  initQuickCaptureUi();
+  initSettingsSections();
 
   if (settings.openWithSearchFocus) {
     setTimeout(() => searchEl.focus(), 50);
@@ -1711,7 +2184,7 @@ function appendDedupePreviewBtn(parent, item) {
   btn.className = 'icon-btn dedupe-preview-btn';
   btn.title = t('expand');
   btn.setAttribute('aria-label', t('expand'));
-  btn.textContent = '⤢';
+  btn.innerHTML = iconSvg('expand');
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1791,8 +2264,8 @@ function closeDedupeBox(sync = true) {
 }
 
 function centerDedupeBox() {
-  if (!dedupeBox || !dedupeBox.classList.contains('open')) return;
-  placeFloatBox(dedupeBox);
+  // Dedupe is a right-side drawer in the redesigned wall; keep the legacy
+  // call sites harmless without writing inline left/top coordinates.
 }
 
 async function openDedupeBox() {
@@ -1964,6 +2437,8 @@ function placeFloatBox(el) {
 }
 
 function setupFloatDrag(handle, box) {
+  if (!handle || !box) return;
+  if (box.matches('#settingsBox, #tagsBox, #helpBox, #dedupeBox')) return;
   let dragging = false;
   let startX = 0;
   let startY = 0;
@@ -1998,6 +2473,27 @@ function setupFloatDrag(handle, box) {
   handle.addEventListener('pointercancel', end);
 }
 
+function applySettingsSection(section = 'general') {
+  const allowed = new Set(['general', 'canvas', 'display', 'tools', 'backup', 'shortcuts', 'diagnostic']);
+  settingsSection = allowed.has(section) ? section : 'general';
+  settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
+    block.hidden = block.dataset.settingsSection !== settingsSection;
+  });
+  settingsNav?.querySelectorAll('.settings-nav-btn[data-settings-section]').forEach((button) => {
+    const active = button.dataset.settingsSection === settingsSection;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+}
+
+function initSettingsSections() {
+  settingsNav?.querySelectorAll('.settings-nav-btn[data-settings-section]').forEach((button) => {
+    button.addEventListener('click', () => applySettingsSection(button.dataset.settingsSection));
+  });
+  settingsDoneBtn?.addEventListener('click', () => closeSettingsBox());
+  applySettingsSection(settingsSection);
+}
+
 function anyFloatOpen() {
   return (
     settingsBox.classList.contains('open') ||
@@ -2006,7 +2502,8 @@ function anyFloatOpen() {
     editBox.classList.contains('open') ||
     membersBox.classList.contains('open') ||
     (dedupeBox && dedupeBox.classList.contains('open')) ||
-    (importPickBox && importPickBox.classList.contains('open'))
+    (importPickBox && importPickBox.classList.contains('open')) ||
+    (canvasStackDialog && canvasStackDialog.classList.contains('open'))
   );
 }
 
@@ -2028,6 +2525,7 @@ function closeAllFloatsExcept(except) {
   if (except !== 'members') closeMembersBox();
   if (except !== 'dedupe') closeDedupeBox(false);
   if (except !== 'importPick') closeImportPickBox(false);
+  if (except !== 'canvasStack') closeCanvasStackDialog();
   syncFloatBackdrop();
 }
 
@@ -2036,7 +2534,7 @@ function openSettingsBox() {
   settingsBox.classList.add('open');
   settingsBox.setAttribute('aria-hidden', 'false');
   settingsBtn.classList.add('active');
-  placeFloatBox(settingsBox);
+  applySettingsSection(settingsSection);
   syncFloatBackdrop();
   refreshChromeCommandLabels();
   syncAutoBackupUi();
@@ -2055,7 +2553,6 @@ async function openTagsBox() {
   tagsBox.classList.add('open');
   tagsBox.setAttribute('aria-hidden', 'false');
   tagsBtn.classList.add('active');
-  placeFloatBox(tagsBox);
   syncFloatBackdrop();
   await refreshTagManager();
   tagSearch.focus();
@@ -2073,7 +2570,6 @@ function openHelpBox() {
   helpBox.classList.add('open');
   helpBox.setAttribute('aria-hidden', 'false');
   helpBtn.classList.add('active');
-  placeFloatBox(helpBox);
   syncFloatBackdrop();
 }
 
@@ -2109,6 +2605,10 @@ helpCloseX.addEventListener('click', () => closeHelpBox());
 setupFloatDrag(helpDrag, helpBox);
 
 floatBackdrop.addEventListener('click', () => {
+  if (canvasStackDialog?.classList.contains('open')) {
+    closeCanvasStackDialog();
+    return;
+  }
   if (editBox.classList.contains('open')) {
     closeEditBox();
     syncFloatBackdrop();
@@ -2144,20 +2644,22 @@ themeBtn.addEventListener('click', async () => {
   if (radio) radio.checked = true;
 });
 
-viewCardsBtn.addEventListener('click', async () => {
-  await saveSettings({ viewMode: 'cards' });
-  applyViewMode('cards');
-  renderGrid();
-});
-
-viewListBtn.addEventListener('click', async () => {
-  await saveSettings({ viewMode: 'list' });
-  applyViewMode('list');
+viewModeBtn?.addEventListener('click', async () => {
+  const nextMode = settings.viewMode === 'canvas' ? 'list' : 'canvas';
+  if (nextMode === 'canvas') canvasSessionFallback = false;
+  await saveSettings({ viewMode: nextMode });
+  applyViewMode(nextMode);
   renderGrid();
 });
 
 sortByEl.addEventListener('change', async () => {
   await saveSettings({ sortBy: sortByEl.value });
+  renderGrid();
+});
+
+pinnedOnlyBtn?.addEventListener('click', () => {
+  pinnedOnly = !pinnedOnly;
+  syncPinnedFilterUi();
   renderGrid();
 });
 
@@ -2170,7 +2672,7 @@ cardColsEl.addEventListener('change', async () => {
 });
 
 closeBtn.addEventListener('click', requestHostClose);
-closeBtn.textContent = '×';
+closeBtn.innerHTML = iconSvg('close');
 closeBtn.setAttribute('aria-label', t('close'));
 closeBtn.title = t('close');
 
@@ -2248,7 +2750,7 @@ function clearSearchInputKeepFocus() {
   }
 }
 
-/** Empty query matches everything — no need to rebuild the photo wall. */
+/** Empty query matches everything — no need to rebuild the canvas. */
 function refilterSearchIfNeeded() {
   if (searchRenderTimer) {
     clearTimeout(searchRenderTimer);
@@ -2462,6 +2964,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
+    if (canvasStackDialog?.classList.contains('open')) {
+      closeCanvasStackDialog();
+      return;
+    }
     if (conflictModal?.classList.contains('open')) {
       resolveConflict('cancel');
       return;
@@ -2678,9 +3184,60 @@ function handleCardSelectClick(itemId, e) {
 
 function getVisibleTabs() {
   return sortTabs(
-    allTabs.filter((item) => matchesQuery(item, query)),
+    allTabs.filter((item) => (!pinnedOnly || item.pinned === true) && matchesQuery(item, query)),
     settings.sortBy || 'newest'
   );
+}
+
+function getCanvasVisibleTabs() {
+  const visible = getVisibleTabs();
+  if (canvasIndexFilter === 'unsorted') return visible.filter((item) => item.kind !== 'group');
+  if (canvasIndexFilter === 'pinned') return visible.filter((item) => item.pinned === true);
+  if (canvasIndexFilter.startsWith('stack:')) {
+    const id = canvasIndexFilter.slice(6);
+    return visible.filter((item) => item.id === id);
+  }
+  return visible;
+}
+
+function syncCanvasIndexUi() {
+  const allButton = document.getElementById('canvasAllBtn');
+  const unsortedButton = document.getElementById('canvasUnsortedBtn');
+  const pinnedButton = document.getElementById('canvasPinnedBtn');
+  const buttons = [allButton, unsortedButton, pinnedButton, ...document.querySelectorAll('[data-canvas-stack-filter]')].filter(Boolean);
+  buttons.forEach((button) => button.classList.remove('active'));
+  const active = canvasIndexFilter === 'unsorted'
+    ? unsortedButton
+    : canvasIndexFilter === 'pinned'
+      ? pinnedButton
+      : canvasIndexFilter.startsWith('stack:')
+        ? document.querySelector(`[data-canvas-stack-filter="${CSS.escape(canvasIndexFilter.slice(6))}"]`)
+        : allButton;
+  active?.classList.add('active');
+  const count = document.querySelector('[data-canvas-count]');
+  if (count) count.textContent = String(getCanvasVisibleTabs().length);
+}
+
+function renderCanvasStackIndex() {
+  const root = document.getElementById('canvasStackIndex');
+  if (!root) return;
+  const groups = allTabs.filter((item) => item.kind === 'group');
+  if (canvasIndexFilter.startsWith('stack:') && !groups.some((group) => group.id === canvasIndexFilter.slice(6))) {
+    canvasIndexFilter = 'all';
+  }
+  root.innerHTML = groups
+    .map((group) => `<button type="button" data-canvas-stack-filter="${escapeAttr(group.id)}" title="${escapeAttr(itemTitle(group))}">${escapeHtml(itemTitle(group))}</button>`)
+    .join('');
+  root.querySelectorAll('[data-canvas-stack-filter]').forEach((button) => {
+    button.addEventListener('click', () => setCanvasIndexFilter(`stack:${button.dataset.canvasStackFilter}`));
+  });
+  syncCanvasIndexUi();
+}
+
+function setCanvasIndexFilter(filter) {
+  canvasIndexFilter = String(filter || 'all');
+  syncCanvasIndexUi();
+  renderCanvas();
 }
 
 function itemHaystack(item, scope = searchScope) {
@@ -2901,7 +3458,7 @@ function appendGroupSearchHits(parentEl, group) {
       prevBtn.type = 'button';
       prevBtn.className = 'icon-btn sm';
       prevBtn.title = t('expand');
-      prevBtn.textContent = '⤢';
+      prevBtn.innerHTML = iconSvg('expand');
       prevBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2912,7 +3469,7 @@ function appendGroupSearchHits(parentEl, group) {
       restBtn.type = 'button';
       restBtn.className = 'icon-btn sm';
       restBtn.title = t('memberRestore');
-      restBtn.textContent = '↩';
+      restBtn.innerHTML = iconSvg('restore');
       restBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2986,10 +3543,21 @@ function buildLightboxNavList() {
 async function showLightboxEntry(entry, index, list) {
   expandedId = entry.restore.type === 'member' ? entry.restore.memberId : entry.restore.id;
   expandedMeta =
-    entry.restore.type === 'member' ? { groupId: entry.restore.groupId } : null;
+    entry.restore.type === 'member' ? { type: 'member', groupId: entry.restore.groupId } : null;
   lightboxNav = { list, index };
   lbTitle.textContent = entry.title;
   lbUrl.textContent = entry.url;
+  lbImage.hidden = false;
+  if (lbGroupMosaic) {
+    lbGroupMosaic.hidden = true;
+    lbGroupMosaic.replaceChildren();
+  }
+  if (lbPrev) lbPrev.hidden = false;
+  if (lbNext) lbNext.hidden = false;
+  if (lbRestore) {
+    lbRestore.dataset.i18n = 'restore';
+    lbRestore.textContent = t('restore');
+  }
   if (lbCounter) {
     lbCounter.textContent = list.length ? `${index + 1} / ${list.length}` : '—';
   }
@@ -3079,6 +3647,30 @@ function openLightbox(item, meta = null) {
   showLightboxEntry(list[index], index, list);
 }
 
+function openCanvasGroupLightbox(group) {
+  if (!group || group.kind !== 'group' || !lbGroupMosaic) return;
+  expandedId = group.id;
+  expandedMeta = { type: 'group' };
+  lightboxNav = null;
+  lbTitle.textContent = itemTitle(group);
+  lbUrl.textContent = t('groupTabs', { n: (group.tabs || []).length });
+  if (lbCounter) lbCounter.textContent = '—';
+  if (lbPrev) lbPrev.hidden = true;
+  if (lbNext) lbNext.hidden = true;
+  if (lbRestore) {
+    lbRestore.dataset.i18n = 'restoreGroup';
+    lbRestore.textContent = t('restoreGroup');
+  }
+  lbImage.removeAttribute('src');
+  lbImage.hidden = true;
+  lbGroupMosaic.innerHTML = groupCoverHtml(group);
+  lbGroupMosaic.hidden = false;
+  lbGroupMosaic.querySelectorAll('img.lazy-thumb').forEach((img) => observeThumb(img));
+  lbSnapHint.hidden = true;
+  lightbox.classList.add('open');
+  lightbox.setAttribute('aria-hidden', 'false');
+}
+
 function navigateLightbox(delta) {
   if (!lightboxNav || !lightboxNav.list.length) return;
   const n = lightboxNav.list.length;
@@ -3092,7 +3684,18 @@ function closeLightbox() {
   lightboxNav = null;
   lightbox.classList.remove('open');
   lightbox.setAttribute('aria-hidden', 'true');
+  lbImage.hidden = false;
   lbImage.removeAttribute('src');
+  if (lbGroupMosaic) {
+    lbGroupMosaic.hidden = true;
+    lbGroupMosaic.replaceChildren();
+  }
+  if (lbPrev) lbPrev.hidden = false;
+  if (lbNext) lbNext.hidden = false;
+  if (lbRestore) {
+    lbRestore.dataset.i18n = 'restore';
+    lbRestore.textContent = t('restore');
+  }
   if (lbCounter) lbCounter.textContent = '—';
 }
 
@@ -3102,6 +3705,10 @@ if (lbNext) lbNext.addEventListener('click', () => navigateLightbox(1));
 
 lbRestore.addEventListener('click', async () => {
   if (!expandedId) return;
+  if (expandedMeta?.type === 'group') {
+    await restoreItem(expandedId);
+    return;
+  }
   if (expandedMeta?.groupId) {
     const res = await sendMessage({
       type: 'RESTORE_GROUP_MEMBER',
@@ -3129,7 +3736,7 @@ function renderEditChips() {
   editTagList.forEach((tag) => {
     const chip = document.createElement('span');
     chip.className = 'tag-chip';
-    chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">×</button>`;
+    chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">${iconSvg('close')}</button>`;
     chip.querySelector('button').addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -3177,11 +3784,19 @@ function renderTagManager() {
     const row = document.createElement('div');
     row.className = 'tag-chip-card';
     row.innerHTML = `
-      <span class="name" title="${escapeAttr(item.name)}">${escapeHtml(item.name)}</span>
+      <button type="button" class="name tag-filter-btn" title="${escapeAttr(t('tagApplyFilter'))}" aria-label="${escapeAttr(t('tagApplyFilter'))}">${escapeHtml(item.name)}</button>
       <span class="count">${escapeHtml(String(item.count))}</span>
-      <button type="button" class="chip-btn rename-btn" title="${escapeAttr(t('rename'))}">✎</button>
-      <button type="button" class="chip-btn delete-btn" title="${escapeAttr(t('delete'))}">×</button>
+      <button type="button" class="chip-btn rename-btn" title="${escapeAttr(t('rename'))}">${iconSvg('edit')}</button>
+      <button type="button" class="chip-btn delete-btn" title="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
     `;
+
+    row.querySelector('.tag-filter-btn').addEventListener('click', () => {
+      searchScope = 'tag';
+      searchEl.value = item.name;
+      setSearchQueryFromInput({ immediate: true });
+      syncSearchScopeUi();
+      closeTagsBox();
+    });
 
     row.querySelector('.rename-btn').addEventListener('click', async () => {
       const next = window.prompt(t('tagRenamePrompt'), item.name);
@@ -3852,8 +4467,29 @@ manualAddBtn?.addEventListener('click', async () => {
 // ─── Multi-select ──────────────────────────────────────────────────
 
 function updateBatchBar() {
-  const n = selectedIds.size;
+  const isCanvasUi = settings.viewMode === 'canvas' && !canvasSessionFallback;
+  const selection = isCanvasUi ? activeCanvasSelection() : selectedIds;
+  const n = selection.size;
   batchCount.textContent = t('batchCount', { n });
+  if (isCanvasUi) {
+    if (canvasContextBar) {
+      canvasContextBar.classList.toggle('open', n > 0);
+      canvasContextBar.setAttribute('aria-hidden', n > 0 ? 'false' : 'true');
+      const count = canvasContextBar.querySelector('[data-canvas-selection-count]');
+      if (count) count.textContent = t('batchCount', { n });
+      const selectedItem = n === 1 ? canvasItemById([...selection][0]) : null;
+      const snapshotButton = canvasContextBar.querySelector('[data-canvas-action="snapshot"]');
+      const membersButton = canvasContextBar.querySelector('[data-canvas-action="members"]');
+      const editButton = canvasContextBar.querySelector('[data-canvas-action="edit"]');
+      if (snapshotButton) snapshotButton.hidden = selectedItem?.kind !== 'tab';
+      if (membersButton) membersButton.hidden = selectedItem?.kind !== 'group';
+      if (editButton) editButton.hidden = n !== 1;
+    }
+    if (canvasDropZone) canvasDropZone.hidden = n < 2;
+    batchBar.classList.remove('open');
+    batchBar.setAttribute('aria-hidden', 'true');
+    return;
+  }
   if (selectMode && n > 0) {
     batchBar.classList.add('open');
     batchBar.setAttribute('aria-hidden', 'false');
@@ -3869,7 +4505,8 @@ function setSelectMode(on) {
   selectModeBtn.classList.toggle('active', on);
   selectModeBtn.textContent = on ? t('selectModeOn') : t('selectMode');
   if (!on) {
-    selectedIds.clear();
+    if (settings.viewMode === 'canvas') ensureCanvasStore()?.setSelection([]);
+    else selectedIds.clear();
     lastAnchorId = null;
   }
   updateBatchBar();
@@ -3877,11 +4514,17 @@ function setSelectMode(on) {
 }
 
 function toggleSelect(id) {
+  if (settings.viewMode === 'canvas') {
+    ensureCanvasStore()?.toggleSelection(id, true);
+    lastAnchorId = id;
+    return;
+  }
   if (selectedIds.has(id)) selectedIds.delete(id);
   else selectedIds.add(id);
   lastAnchorId = id;
   updateBatchBar();
-  const card = gridEl.querySelector(`[data-id="${id.replace(/"/g, '')}"]`);
+  const root = settings.viewMode === 'canvas' ? canvasNodesEl : gridEl;
+  const card = root?.querySelector(`[data-id="${id.replace(/"/g, '')}"]`);
   if (card) {
     card.classList.toggle('selected', selectedIds.has(id));
     const check = card.querySelector('.card-check');
@@ -3915,6 +4558,11 @@ async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
   const parkedTabs = parkedItems
     .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
     .map(({ kind, hasThumb, hasSnap, thumbnail, snapshot, ...rest }) => rest);
+  const selectedIds = new Set(items.map((item) => item.id));
+  const partialLayout = normalizeCanvasLayoutLocal(canvasLayout, items);
+  partialLayout.positions = Object.fromEntries(
+    Object.entries(partialLayout.positions).filter(([id]) => selectedIds.has(id))
+  );
   return {
     format: 'tabwall-backup',
     version: Build.FORMAT_VERSION || 4,
@@ -3932,6 +4580,7 @@ async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
     parkedTabs,
     settings: { ...settings },
     tagCatalog: [], // filled async if needed
+    canvasLayout: partialLayout,
   };
 }
 
@@ -3984,7 +4633,7 @@ batchRestore.addEventListener('click', async () => {
   await withUiActionLock('batch-restore', async () => {
     const ids = [...selectedIds];
     for (const id of ids) await restoreItem(id);
-    selectedIds.clear();
+    clearAllSelections();
     updateBatchBar();
     await loadList();
   });
@@ -3996,7 +4645,7 @@ batchDelete.addEventListener('click', async () => {
     if (!ids.length) return;
     if (!window.confirm(t('batchDeleteConfirm', { n: ids.length }))) return;
     await sendMessage({ type: 'BATCH_DELETE_ITEMS', ids });
-    selectedIds.clear();
+    clearAllSelections();
     updateBatchBar();
     await loadList();
   });
@@ -4129,7 +4778,7 @@ editSave.addEventListener('click', async () => {
     });
     if (res.ok) {
       closeEditBox();
-      selectedIds.clear();
+      clearAllSelections();
       updateBatchBar();
       await loadList();
     } else {
@@ -4629,6 +5278,7 @@ function normalizeParkedList(raw) {
       return {
         ...item,
         kind: 'group',
+        pinned: Boolean(item.pinned),
         note: typeof item.note === 'string' ? item.note : '',
         tags: Array.isArray(item.tags) ? item.tags : [],
         tabs: Array.isArray(item.tabs) ? item.tabs : [],
@@ -4637,6 +5287,7 @@ function normalizeParkedList(raw) {
     return {
       ...item,
       kind: 'tab',
+      pinned: Boolean(item.pinned),
       note: typeof item.note === 'string' ? item.note : '',
       tags: Array.isArray(item.tags) ? item.tags : [],
     };
@@ -4896,30 +5547,58 @@ document.addEventListener(
 
 // ─── Cards / List ──────────────────────────────────────────────────
 
-function groupCoverHtml(item) {
+function iconSvg(name) {
+  const paths = {
+    edit: '<path d="m4 16.5-.7 3.2 3.2-.7L18.1 7.4a2 2 0 0 0-2.8-2.8L3.7 16.5z"></path><path d="m13.8 6.2 4 4"></path>',
+    expand: '<path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"></path>',
+    members: '<rect x="4" y="5" width="12" height="14" rx="2"></rect><path d="M8 3h10a2 2 0 0 1 2 2v12M8 9h4M8 13h5"></path>',
+    pin: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"></path>',
+    delete: '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path>',
+    restore: '<path d="M5 8h9a5 5 0 1 1-3.5 8.5L8 14"></path><path d="M5 8V4M5 8l4-2"></path>',
+    copy: '<rect x="8" y="8" width="11" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"></path>',
+    snapshot: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle><path d="M8 5 9.2 3h5.6L16 5"></path>',
+    close: '<path d="m6 6 12 12M18 6 6 18"></path>',
+  };
+  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${paths[name] || ''}</svg>`;
+}
+
+async function togglePinned(item) {
+  const next = !Boolean(item?.pinned);
+  const res = await withUiActionLock(`pin:${item?.id || ''}`, () =>
+    sendMessage({ type: 'UPDATE_ITEM', id: item.id, pinned: next })
+  );
+  if (!res?.ok) {
+    showCopyToast(t('pinFailed'));
+    return;
+  }
+  const stored = allTabs.find((candidate) => candidate.id === item.id);
+  if (stored) stored.pinned = next;
+  showCopyToast(t(next ? 'pinnedOn' : 'pinnedOff'));
+  renderGrid();
+}
+
+function groupCoverHtml(item, { canvas = false } = {}) {
+  const mediaClass = canvas ? ' canvas-thumb' : '';
+  const mediaAttribute = canvas ? ' data-canvas-media="true"' : '';
+  const imageHtml = (member, className = '') =>
+    `<img class="${className}${className ? ' ' : ''}lazy-thumb${mediaClass}" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, member.id))}"${mediaAttribute} />`;
   const members = (item.tabs || []).filter((m) => m.hasThumb || m.thumbnail).slice(0, 4);
   if (members.length === 0) {
     // still try first few for keys even without hasThumb flag (migration)
     const any = (item.tabs || []).slice(0, 4);
     if (!any.length) return `<div class="group-cover empty-cover"></div>`;
     if (any.length === 1) {
-      return `<img class="thumb lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, any[0].id))}" />`;
+      return imageHtml(any[0], 'thumb');
     }
     return `<div class="group-mosaic mosaic-${Math.min(any.length, 4)}">${any
-      .map(
-        (m) =>
-          `<img class="lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, m.id))}" />`
-      )
+      .map((m) => imageHtml(m))
       .join('')}</div>`;
   }
   if (members.length === 1) {
-    return `<img class="thumb lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, members[0].id))}" />`;
+    return imageHtml(members[0], 'thumb');
   }
   return `<div class="group-mosaic mosaic-${Math.min(members.length, 4)}">${members
-    .map(
-      (m) =>
-        `<img class="lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, m.id))}" />`
-    )
+    .map((m) => imageHtml(m))
     .join('')}</div>`;
 }
 
@@ -4937,6 +5616,7 @@ function createGroupCard(item) {
   const color = GROUP_COLORS[item.color] || GROUP_COLORS.grey;
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
+  const savedAt = formatSavedAt(item.savedAt);
 
   const selected = selectedIds.has(item.id);
   if (selected) card.classList.add('selected');
@@ -4947,10 +5627,11 @@ function createGroupCard(item) {
     <div class="thumb-wrap">
       ${groupCoverHtml(item)}
       <div class="card-actions">
-        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}">✎</button>
-        <button type="button" class="icon-btn lg members-btn" title="${escapeAttr(t('expandGroup'))}">▦</button>
+        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
+        <button type="button" class="icon-btn lg members-btn" title="${escapeAttr(t('expandGroup'))}">${iconSvg('members')}<span>${escapeHtml(t('expandGroup'))}</span></button>
       </div>
-      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}">×</button>
+      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
+      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
       <span class="group-badge">${escapeHtml(t('groupTabs', { n }))}</span>
     </div>
     <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
@@ -4962,6 +5643,7 @@ function createGroupCard(item) {
         </div>
       </div>
       <div class="url">${escapeHtml(t('groupTabs', { n }))}</div>
+      <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
       ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
       ${
         tags.length
@@ -4983,7 +5665,7 @@ function createGroupCard(item) {
   bindMetaCopy(card.querySelector('.meta'), item);
 
   card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-    if (e.target.closest('.card-actions, .delete-btn, .members-btn, .card-check')) return;
+    if (e.target.closest('.card-actions, .delete-btn, .members-btn, .pin-btn, .card-check')) return;
     if (dragState?.active) return;
     if (selectMode || isMultiSelectModifier(e)) {
       handleCardSelectClick(item.id, e);
@@ -4999,6 +5681,10 @@ function createGroupCard(item) {
   card.querySelector('.edit-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     openEditBox(item);
+  });
+  card.querySelector('.pin-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePinned(item);
   });
   card.querySelector('.delete-btn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -5025,6 +5711,7 @@ function createCard(item) {
   const storedOnly = isStoredOnlyUrl(url);
   const note = item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
+  const savedAt = formatSavedAt(item.savedAt);
 
   if (selectedIds.has(item.id)) card.classList.add('selected');
 
@@ -5033,10 +5720,11 @@ function createCard(item) {
     <div class="thumb-wrap">
       <img class="thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
       <div class="card-actions">
-        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">✎</button>
-        <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">⤢</button>
+        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
+        <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}<span>${escapeHtml(t('expand'))}</span></button>
       </div>
-      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">×</button>
+      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
+      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
     </div>
     <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
       <div class="title-row">
@@ -5051,6 +5739,7 @@ function createCard(item) {
         </div>
       </div>
       <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
+      <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
       ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${escapeHtml(note)}</div>` : ''}
       ${
         tags.length
@@ -5077,6 +5766,11 @@ function createCard(item) {
     if (selectMode) return;
     openEditBox(item);
   });
+  card.querySelector('.pin-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (selectMode) return;
+    togglePinned(item);
+  });
   card.querySelector('.delete-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     if (selectMode) return;
@@ -5084,7 +5778,7 @@ function createCard(item) {
   });
   bindMetaCopy(card.querySelector('.meta'), item);
   card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-    if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .card-check')) return;
+    if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .card-check')) return;
     if (dragState?.active) return;
     if (selectMode || isMultiSelectModifier(e)) {
       handleCardSelectClick(item.id, e);
@@ -5124,6 +5818,7 @@ function createRow(item) {
         ${storedOnlyCount ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
       </div>
       <div class="url copy-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
+      <div class="saved-at">${escapeHtml(t('savedAt', { time: formatSavedAt(item.savedAt) }))}</div>
     </div>
     <div class="row-note" title="${escapeAttr(note)}">${note ? escapeHtml(note) : '—'}</div>
     <div class="row-tags">
@@ -5134,13 +5829,14 @@ function createRow(item) {
       }
     </div>
     <div class="row-actions">
-      <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}">✎</button>
+      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
+      <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
       ${
         isGroup
           ? ''
-          : `<button type="button" class="icon-btn expand-btn" title="${escapeAttr(t('expand'))}">⤢</button>`
+          : `<button type="button" class="icon-btn expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}</button>`
       }
-      <button type="button" class="icon-btn danger delete-btn" title="${escapeAttr(t('delete'))}">×</button>
+      <button type="button" class="icon-btn danger delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
     </div>
   `;
 
@@ -5169,8 +5865,1097 @@ function createRow(item) {
     expandBtn.addEventListener('click', () => openLightbox(item));
   }
   row.querySelector('.edit-btn').addEventListener('click', () => openEditBox(item));
+  row.querySelector('.pin-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (selectMode) return;
+    togglePinned(item);
+  });
   row.querySelector('.delete-btn').addEventListener('click', () => deleteItem(item.id));
   return row;
+}
+
+// ─── Spatial Canvas ────────────────────────────────────────────────
+
+function canvasDefaultPosition(index) {
+  const i = Math.max(0, Number(index) || 0);
+  return { x: 96 + (i % 4) * 300, y: 96 + Math.floor(i / 4) * 238, w: 220, h: 170, z: i };
+}
+
+function normalizeCanvasLayoutLocal(raw, items = allTabs) {
+  const value = raw && typeof raw === 'object' ? raw : {};
+  const itemList = Array.isArray(items) ? items : [];
+  const source = value.positions && typeof value.positions === 'object' ? value.positions : {};
+  const positions = {};
+  let index = 0;
+  const finite = (v, min, max, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+  for (const item of itemList) {
+    const id = String(item.id);
+    const rawPosition = source[id];
+    const fallback = canvasDefaultPosition(index++);
+    const p = rawPosition && typeof rawPosition === 'object' ? rawPosition : {};
+    positions[id] = {
+      x: finite(p.x, -100000, 100000, fallback.x),
+      y: finite(p.y, -100000, 100000, fallback.y),
+      w: finite(p.w, 160, 640, fallback.w),
+      h: finite(p.h, 120, 560, fallback.h),
+      z: finite(p.z, 0, 1000000, fallback.z),
+    };
+  }
+  if (!itemList.length) {
+    for (const [id, rawPosition] of Object.entries(source)) {
+      const fallback = canvasDefaultPosition(index++);
+      const p = rawPosition && typeof rawPosition === 'object' ? rawPosition : {};
+      positions[id] = {
+        x: finite(p.x, -100000, 100000, fallback.x),
+        y: finite(p.y, -100000, 100000, fallback.y),
+        w: finite(p.w, 160, 640, fallback.w),
+        h: finite(p.h, 120, 560, fallback.h),
+        z: finite(p.z, 0, 1000000, fallback.z),
+      };
+    }
+  }
+  return {
+    version: CANVAS_LAYOUT_VERSION,
+    viewport: {
+      x: finite(value.viewport?.x, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.x),
+      y: finite(value.viewport?.y, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.y),
+      zoom: finite(value.viewport?.zoom, 0.25, 2, DEFAULT_CANVAS_VIEWPORT.zoom),
+    },
+    positions,
+  };
+}
+
+function canvasPositionFor(id, index = 0) {
+  return canvasLayout.positions[id] || canvasDefaultPosition(index);
+}
+
+function canvasLayoutSnapshot() {
+  return CanvasStoreApi?.normalizeLayout
+    ? CanvasStoreApi.normalizeLayout(canvasStoreSnapshot().layout, allTabs)
+    : normalizeCanvasLayoutLocal(canvasStoreSnapshot().layout, allTabs);
+}
+
+function cancelCanvasLayoutSave() {
+  if (canvasSaveTimer) clearTimeout(canvasSaveTimer);
+  canvasSaveTimer = null;
+  canvasStore?.flush?.().catch?.(() => {});
+}
+
+function scheduleCanvasLayoutSave() {
+  // Store owns debounce, revision and retry. Keep this wrapper for legacy
+  // callers that still use the old save hook.
+  canvasStore?.flush?.().catch((err) => uiLog('warn', 'canvas', 'layout save failed', err));
+}
+
+function canvasPointFromEvent(event) {
+  const rect = canvasViewportEl?.getBoundingClientRect();
+  if (!rect) return { x: 0, y: 0 };
+  const { viewport } = canvasLayout;
+  const zoom = viewport.zoom || DEFAULT_CANVAS_VIEWPORT.zoom;
+  return {
+    x: (event.clientX - rect.left) / zoom + viewport.x,
+    y: (event.clientY - rect.top) / zoom + viewport.y,
+  };
+}
+
+function updateCanvasTransform() {
+  if (!canvasWorldEl) return;
+  const { x, y, zoom } = canvasLayout.viewport;
+  canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px) scale(${zoom})`;
+  const zoomValue = document.getElementById('canvasZoomValue');
+  if (zoomValue) zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+  if (canvasMinimap) canvasMinimap.dataset.zoom = String(zoom);
+}
+
+function setCanvasZoom(next, clientX = null, clientY = null) {
+  const state = canvasStoreSnapshot();
+  const oldZoom = state.layout.viewport.zoom;
+  const zoom = Math.min(2, Math.max(0.25, Number(next) || oldZoom));
+  if (zoom === oldZoom) return;
+  const rect = canvasViewportEl?.getBoundingClientRect();
+  let anchor = null;
+  if (rect && clientX != null && clientY != null) {
+    anchor = {
+      world: {
+        x: (clientX - rect.left) / oldZoom + state.layout.viewport.x,
+        y: (clientY - rect.top) / oldZoom + state.layout.viewport.y,
+      },
+      offset: {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      },
+    };
+  }
+  canvasStore?.commitZoom(zoom, anchor);
+}
+
+function centerCanvasInitialView() {
+  if (!canvasNeedsInitialCenter || settings.viewMode !== 'canvas' || canvasSessionFallback || !canvasViewportEl) return;
+  const width = canvasViewportEl.clientWidth || canvasViewportEl.getBoundingClientRect?.().width || 0;
+  const height = canvasViewportEl.clientHeight || canvasViewportEl.getBoundingClientRect?.().height || 0;
+  if (!width || !height) return;
+  const state = canvasStoreSnapshot();
+  if (state.pendingOperations?.length || state.interaction) {
+    canvasNeedsInitialCenter = false;
+    return;
+  }
+  if (!allTabs.length) {
+    canvasNeedsInitialCenter = false;
+    return;
+  }
+  const positions = allTabs.map((item, index) => state.layout.positions?.[item.id] || canvasDefaultPosition(index));
+  const minX = Math.min(...positions.map((position) => Number(position.x) || 0));
+  const minY = Math.min(...positions.map((position) => Number(position.y) || 0));
+  const maxX = Math.max(...positions.map((position) => (Number(position.x) || 0) + Math.max(1, Number(position.w) || 1)));
+  const maxY = Math.max(...positions.map((position) => (Number(position.y) || 0) + Math.max(1, Number(position.h) || 1)));
+  const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
+  canvasNeedsInitialCenter = false;
+  canvasStore?.commitViewport({
+    x: (minX + maxX) / 2 - width / (2 * zoom),
+    y: (minY + maxY) / 2 - height / (2 * zoom),
+    zoom,
+  });
+}
+
+function scheduleInitialCanvasCenter() {
+  if (!canvasNeedsInitialCenter || canvasInitialCenterRaf) return;
+  const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+  canvasInitialCenterRaf = schedule(() => {
+    canvasInitialCenterRaf = 0;
+    centerCanvasInitialView();
+  });
+}
+
+function canvasThumbHtml(item) {
+  if (item.kind === 'group') return groupCoverHtml(item, { canvas: true });
+  return `<img class="canvas-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKeyForItem(item))}" data-canvas-media="true" />`;
+}
+
+function canvasNodeHtml(item) {
+  const title = itemTitle(item);
+  const selected = activeCanvasSelection().has(item.id);
+  const position = canvasPositionFor(item.id);
+  const pin = item.pinned ? `<span class="canvas-pin" title="${escapeAttr(t('pinnedOnly'))}" aria-label="${escapeAttr(t('pinnedOnly'))}">${iconSvg('pin')}</span>` : '';
+  const meta = item.kind === 'group'
+    ? t('groupTabs', { n: (item.tabs || []).length })
+    : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
+  const actions = item.kind === 'group'
+    ? [
+        ['restore', t('restoreGroup'), 'restore'],
+        ['members', t('expandGroup'), 'members'],
+        ['edit', t('edit'), 'edit'],
+        ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
+        ['delete', t('delete'), 'delete'],
+      ]
+    : [
+        ['restore', t('restore'), 'restore'],
+        ['snapshot', t('canvasSnapshot'), 'snapshot'],
+        ['edit', t('edit'), 'edit'],
+        ['copy', t('copyLink'), 'copy'],
+        ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
+        ['delete', t('delete'), 'delete'],
+      ];
+  const actionHtml = actions
+    .map(([action, label, icon]) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
+    .join('');
+  return `
+    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${selected ? ' selected' : ''}"
+      data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
+      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}">
+      <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
+      <div class="canvas-node-copy">
+        <div class="canvas-node-title">
+          ${item.kind === 'tab' && item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : ''}
+          <span>${escapeHtml(title)}</span>${pin}
+        </div>
+        <div class="canvas-node-meta">${escapeHtml(meta)}</div>
+        ${item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
+        ${item.tags?.length ? `<div class="canvas-node-tags">${item.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ')}</div>` : ''}
+      </div>
+      <div class="canvas-node-actions" aria-label="${escapeAttr(title)}">${actionHtml}</div>
+    </article>`;
+}
+
+function canvasItemById(id) {
+  return allTabs.find((item) => item.id === id) || null;
+}
+
+function cancelCanvasNodeClick(id) {
+  const timer = canvasNodeClickTimers.get(id);
+  if (timer) clearTimeout(timer);
+  canvasNodeClickTimers.delete(id);
+}
+
+function scheduleCanvasNodePreview(item) {
+  if (!item?.id) return;
+  cancelCanvasNodeClick(item.id);
+  const timer = setTimeout(() => {
+    canvasNodeClickTimers.delete(item.id);
+    const current = canvasItemById(item.id);
+    if (!current) return;
+    if (current.kind === 'group') openCanvasGroupLightbox(current);
+    else openLightbox(current);
+  }, CANVAS_NODE_CLICK_DELAY);
+  canvasNodeClickTimers.set(item.id, timer);
+}
+
+function suppressCanvasNodeClick(id) {
+  if (!id) return;
+  canvasNodeClickSuppressUntil.set(id, Date.now() + CANVAS_NODE_CLICK_DELAY);
+}
+
+function wireCanvasNodeActions(node) {
+  if (!node || node.dataset.canvasWired === '1') return;
+  const item = canvasItemById(node.dataset.id);
+  if (!item) return;
+  node.dataset.canvasWired = '1';
+  node.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.detail === 0 || isCanvasControlTarget(event.target)) return;
+    if (canvasActiveTool !== 'select') return;
+    const suppressedUntil = canvasNodeClickSuppressUntil.get(item.id) || 0;
+    if (suppressedUntil) {
+      canvasNodeClickSuppressUntil.delete(item.id);
+      if (Date.now() <= suppressedUntil) return;
+    }
+    if (event.detail > 1) {
+      cancelCanvasNodeClick(item.id);
+      return;
+    }
+    scheduleCanvasNodePreview(item);
+  });
+  node.querySelectorAll('[data-canvas-node-action]').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => event.stopPropagation());
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = button.dataset.canvasNodeAction;
+      if (action === 'restore') await restoreItem(item.id);
+      else if (action === 'snapshot') openLightbox(item);
+      else if (action === 'copy') await copySavedLink(item);
+      else if (action === 'members') openMembersBox(item);
+      else if (action === 'edit') openEditBox(item);
+      else if (action === 'pin') await togglePinned(item);
+      else if (action === 'delete') await deleteItem(item.id);
+    });
+  });
+}
+
+function updateCanvasNodeSelection() {
+  const selection = activeCanvasSelection();
+  canvasNodesEl?.querySelectorAll('.canvas-node').forEach((node) => {
+    const active = selection.has(node.dataset.id);
+    node.classList.toggle('selected', active);
+    node.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+}
+
+function updateCanvasNodePositions(snapshot = canvasStoreSnapshot()) {
+  const positions = snapshot.layout?.positions || {};
+  for (const [id, node] of canvasNodeElements) {
+    const position = positions[id];
+    if (!position) continue;
+    node.style.left = `${position.x}px`;
+    node.style.top = `${position.y}px`;
+    node.style.width = `${position.w}px`;
+    node.style.minHeight = `${position.h}px`;
+    node.style.zIndex = String(Math.round(position.z || 0));
+  }
+}
+
+function renderCanvasMinimap(items) {
+  if (!canvasMinimap) return;
+  const map = canvasMinimap.querySelector('.canvas-minimap-world');
+  if (!map) return;
+  const frame = map.querySelector('.canvas-minimap-viewport');
+  const mapRect = map.getBoundingClientRect?.();
+  const mapWidth = map.clientWidth || mapRect?.width || 0;
+  const mapHeight = map.clientHeight || mapRect?.height || 0;
+  const state = canvasStoreSnapshot();
+  const layout = state.layout || canvasLayout;
+  const zoom = Math.max(0.25, Number(layout.viewport?.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
+  const viewportWidth = Math.max(1, canvasViewportEl?.clientWidth || canvasViewportEl?.getBoundingClientRect?.().width || mapWidth);
+  const viewportHeight = Math.max(1, canvasViewportEl?.clientHeight || canvasViewportEl?.getBoundingClientRect?.().height || mapHeight);
+  const nodeRects = (Array.isArray(items) ? items : []).map((item, index) => {
+    const position = layout.positions?.[item.id] || canvasDefaultPosition(index);
+    return {
+      id: String(item.id),
+      kind: item.kind,
+      x: Number(position.x) || 0,
+      y: Number(position.y) || 0,
+      w: Math.max(1, Number(position.w) || 1),
+      h: Math.max(1, Number(position.h) || 1),
+    };
+  });
+  const viewportRect = {
+    x: Number(layout.viewport?.x) || 0,
+    y: Number(layout.viewport?.y) || 0,
+    w: viewportWidth / zoom,
+    h: viewportHeight / zoom,
+  };
+  const allRects = [...nodeRects, viewportRect];
+  if (!mapWidth || !mapHeight || !allRects.length) {
+    for (const [id, element] of canvasMinimapElements) {
+      element.remove();
+      canvasMinimapElements.delete(id);
+    }
+    if (frame) frame.hidden = true;
+    return;
+  }
+  const minX = Math.min(...allRects.map((rect) => rect.x));
+  const minY = Math.min(...allRects.map((rect) => rect.y));
+  const maxX = Math.max(...allRects.map((rect) => rect.x + rect.w));
+  const maxY = Math.max(...allRects.map((rect) => rect.y + rect.h));
+  const padding = Math.max(24, Math.max(maxX - minX, maxY - minY) * 0.06);
+  const worldX = minX - padding;
+  const worldY = minY - padding;
+  const worldWidth = Math.max(1, maxX - minX + padding * 2);
+  const worldHeight = Math.max(1, maxY - minY + padding * 2);
+  const scale = Math.min((mapWidth - 2) / worldWidth, (mapHeight - 2) / worldHeight);
+  const offsetX = (mapWidth - worldWidth * scale) / 2 - worldX * scale;
+  const offsetY = (mapHeight - worldHeight * scale) / 2 - worldY * scale;
+  const toMinimapRect = (rect) => ({
+    left: rect.x * scale + offsetX,
+    top: rect.y * scale + offsetY,
+    width: Math.max(2, rect.w * scale),
+    height: Math.max(2, rect.h * scale),
+  });
+  const selection = activeCanvasSelection();
+  const visibleIds = new Set(nodeRects.map((rect) => rect.id));
+  for (const [id, element] of canvasMinimapElements) {
+    if (visibleIds.has(id)) continue;
+    element.remove();
+    canvasMinimapElements.delete(id);
+  }
+  for (const rect of nodeRects) {
+    let element = canvasMinimapElements.get(rect.id);
+    if (!element) {
+      element = document.createElement('span');
+      element.className = 'minimap-node';
+      element.dataset.minimapId = rect.id;
+      canvasMinimapElements.set(rect.id, element);
+      map.appendChild(element);
+    }
+    element.className = `minimap-node${rect.kind === 'group' ? ' group' : ''}${selection.has(rect.id) ? ' selected' : ''}`;
+    const mapped = toMinimapRect(rect);
+    element.style.left = `${mapped.left}px`;
+    element.style.top = `${mapped.top}px`;
+    element.style.width = `${mapped.width}px`;
+    element.style.height = `${mapped.height}px`;
+  }
+  if (frame) {
+    const mapped = toMinimapRect(viewportRect);
+    frame.hidden = false;
+    frame.style.left = `${Math.max(0, mapped.left)}px`;
+    frame.style.top = `${Math.max(0, mapped.top)}px`;
+    frame.style.width = `${Math.min(mapWidth, mapped.width)}px`;
+    frame.style.height = `${Math.min(mapHeight, mapped.height)}px`;
+  }
+}
+
+function canvasNodeRenderKey(item) {
+  return JSON.stringify({
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    url: item.url,
+    note: item.note,
+    tags: item.tags,
+    pinned: item.pinned,
+    savedAt: item.savedAt,
+    favIconUrl: item.favIconUrl,
+    tabs: item.kind === 'group'
+      ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
+      : undefined,
+    query,
+    locale: settings.locale,
+  });
+}
+
+function createCanvasNodeElement(item) {
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = canvasNodeHtml(item);
+  const node = wrapper.firstElementChild;
+  if (item.kind === 'group') appendGroupSearchHits(node, item);
+  node.dataset.canvasRenderKey = canvasNodeRenderKey(item);
+  wireCanvasNodeActions(node);
+  node.querySelectorAll('img[data-canvas-media="true"]').forEach((img) => observeCanvasMedia(img));
+  node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
+  return node;
+}
+
+function removeCanvasNode(id, node) {
+  cancelCanvasNodeClick(id);
+  canvasNodeClickSuppressUntil.delete(id);
+  node?.querySelectorAll('img[data-canvas-media="true"]').forEach((img) => thumbObserver?.unobserve?.(img));
+  node?.remove();
+  canvasNodeElements.delete(id);
+}
+
+function renderCanvas() {
+  if (!canvasNodesEl) return;
+  ensureCanvasStore();
+  const filtered = getCanvasVisibleTabs();
+  const visibleIds = new Set(filtered.map((item) => item.id));
+  updateSavedBadge();
+  syncCanvasIndexUi();
+  if (canvasDropZone) canvasDropZone.hidden = activeCanvasSelection().size < 2;
+
+  for (const [id, node] of canvasNodeElements) {
+    if (!visibleIds.has(id)) removeCanvasNode(id, node);
+  }
+
+  const empty = canvasNodesEl.querySelector('.canvas-empty');
+  if (!allTabs.length || !filtered.length) {
+    for (const [id, node] of canvasNodeElements) removeCanvasNode(id, node);
+    if (!empty) {
+      const message = document.createElement('div');
+      message.className = 'canvas-empty';
+      message.innerHTML = `<strong>${escapeHtml(t(allTabs.length ? 'noResultsTitle' : 'emptyTitle'))}</strong><span>${escapeHtml(t(allTabs.length ? 'noResultsBody' : 'emptyBody'))}</span>`;
+      canvasNodesEl.appendChild(message);
+    } else {
+      empty.querySelector('strong').textContent = t(allTabs.length ? 'noResultsTitle' : 'emptyTitle');
+      empty.querySelector('span').textContent = t(allTabs.length ? 'noResultsBody' : 'emptyBody');
+    }
+    updateCanvasTransform();
+    renderCanvasMinimap(filtered);
+    updateBatchBar();
+    return;
+  }
+  empty?.remove();
+
+  const fragment = document.createDocumentFragment();
+  filtered.forEach((item, index) => {
+    let node = canvasNodeElements.get(item.id);
+    const renderKey = canvasNodeRenderKey(item);
+    if (!node || node.dataset.canvasRenderKey !== renderKey) {
+      const replacement = createCanvasNodeElement(item);
+      if (node) node.replaceWith(replacement);
+      node = replacement;
+      canvasNodeElements.set(item.id, node);
+    }
+    const position = canvasLayout.positions[item.id] || canvasDefaultPosition(index);
+    node.dataset.id = item.id;
+    node.dataset.kind = item.kind;
+    node.classList.toggle('canvas-group', item.kind === 'group');
+    node.style.left = `${position.x}px`;
+    node.style.top = `${position.y}px`;
+    node.style.width = `${position.w}px`;
+    node.style.minHeight = `${position.h}px`;
+    node.style.zIndex = String(Math.round(position.z || 0));
+    // Moving an existing node through the fragment keeps DOM order without
+    // recreating its listeners, focus target, or media loader state.
+    fragment.appendChild(node);
+  });
+  canvasNodesEl.appendChild(fragment);
+  updateCanvasTransform();
+  updateCanvasNodePositions();
+  updateCanvasNodeSelection();
+  canvasNodesEl.querySelectorAll('img[data-canvas-media="true"]').forEach((img) => observeCanvasMedia(img));
+  renderCanvasMinimap(filtered);
+  updateCanvasArrangeState();
+  updateBatchBar();
+}
+
+function updateCanvasArrangeState() {
+  canvasArrangePanel?.classList.toggle('open', canvasArrangePanel.dataset.open === 'true');
+}
+
+function setCanvasSelection(ids, additive = false) {
+  ensureCanvasStore()?.setSelection(ids || [], additive);
+  selectMode = activeCanvasSelection().size > 0;
+}
+
+function canvasSelectNode(id, event) {
+  const additive = Boolean(event?.metaKey || event?.ctrlKey || event?.shiftKey);
+  const selection = activeCanvasSelection();
+  if (additive) ensureCanvasStore()?.toggleSelection(id, true);
+  else if (!selection.has(id) || selection.size > 1) ensureCanvasStore()?.setSelection([id]);
+  selectMode = activeCanvasSelection().size > 0;
+  lastAnchorId = id;
+}
+
+function canvasMoveSelected(dx, dy) {
+  ensureCanvasStore()?.commitMove([...activeCanvasSelection()], dx, dy, canvasSnapToGrid);
+}
+
+function snapCanvasPosition(position) {
+  if (!canvasSnapToGrid) return position;
+  const grid = 24;
+  position.x = Math.round(position.x / grid) * grid;
+  position.y = Math.round(position.y / grid) * grid;
+  return position;
+}
+
+function canvasWorldViewportCenter() {
+  const state = canvasStoreSnapshot();
+  const viewport = state.layout?.viewport || DEFAULT_CANVAS_VIEWPORT;
+  const rect = canvasViewportEl?.getBoundingClientRect?.();
+  const width = Math.max(1, canvasViewportEl?.clientWidth || rect?.width || 1000);
+  const height = Math.max(1, canvasViewportEl?.clientHeight || rect?.height || 700);
+  const zoom = Math.max(0.25, Number(viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
+  return {
+    x: (Number(viewport.x) || 0) + width / (2 * zoom),
+    y: (Number(viewport.y) || 0) + height / (2 * zoom),
+  };
+}
+
+function canvasArrangementEntries(items, layout = canvasStoreSnapshot().layout) {
+  return items.map((item, index) => ({
+    item,
+    position: {
+      ...(layout.positions?.[item.id] || canvasDefaultPosition(index)),
+    },
+  }));
+}
+
+function arrangeCanvasGrid(items, layout) {
+  const entries = canvasArrangementEntries(items, layout);
+  if (!entries.length) return {};
+  const columns = Math.max(1, Math.ceil(Math.sqrt(entries.length)));
+  const rows = Math.ceil(entries.length / columns);
+  const gapX = 48;
+  const gapY = 48;
+  const slotWidth = Math.max(...entries.map(({ position }) => Number(position.w) || 220), 220) + gapX;
+  const slotHeight = Math.max(...entries.map(({ position }) => Number(position.h) || 170), 170) + gapY;
+  const boardWidth = columns * slotWidth - gapX;
+  const boardHeight = rows * slotHeight - gapY;
+  const center = canvasWorldViewportCenter();
+  const positions = {};
+
+  entries.forEach(({ item, position }, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    position.x = center.x - boardWidth / 2 + column * slotWidth + (slotWidth - gapX - position.w) / 2;
+    position.y = center.y - boardHeight / 2 + row * slotHeight + (slotHeight - gapY - position.h) / 2;
+    position.z = index;
+    snapCanvasPosition(position);
+    positions[item.id] = position;
+  });
+  return positions;
+}
+
+function arrangeCanvasCircle(items, layout) {
+  const entries = canvasArrangementEntries(items, layout);
+  if (!entries.length) return {};
+  const center = canvasWorldViewportCenter();
+  const positions = {};
+  if (entries.length === 1) {
+    const { item, position } = entries[0];
+    position.x = center.x - position.w / 2;
+    position.y = center.y - position.h / 2;
+    position.z = 0;
+    positions[item.id] = position;
+    return positions;
+  }
+
+  const maxDimension = Math.max(
+    ...entries.map(({ position }) => Math.max(Number(position.w) || 220, Number(position.h) || 170)),
+    220
+  );
+  const gap = 72;
+  const angleStep = (Math.PI * 2) / entries.length;
+  const radius = Math.max(260, (maxDimension + gap) / (2 * Math.max(0.05, Math.sin(Math.PI / entries.length))));
+  const startAngle = -Math.PI / 2;
+
+  entries.forEach(({ item, position }, index) => {
+    const angle = startAngle + index * angleStep;
+    position.x = center.x + Math.cos(angle) * radius - position.w / 2;
+    position.y = center.y + Math.sin(angle) * radius - position.h / 2;
+    position.z = index;
+    positions[item.id] = position;
+  });
+  return positions;
+}
+
+function arrangeCanvas(mode = 'manual') {
+  if (mode === 'manual') {
+    canvasArrangePanel?.classList.remove('open');
+    if (canvasArrangePanel) canvasArrangePanel.dataset.open = 'false';
+    return;
+  }
+  const items = sortTabs(allTabs, mode === 'date' ? 'newest' : mode === 'stack' ? 'group-first' : settings.sortBy);
+  const layout = canvasStoreSnapshot().layout || canvasLayout;
+  let positions;
+  if (mode === 'grid') {
+    positions = arrangeCanvasGrid(items, layout);
+  } else if (mode === 'circle') {
+    positions = arrangeCanvasCircle(items, layout);
+  } else {
+    positions = {};
+    items.forEach((item, index) => {
+      const p = { ...(layout.positions?.[item.id] || canvasDefaultPosition(index)) };
+      const column = index % 4;
+      const row = Math.floor(index / 4);
+      p.x = 96 + column * 300;
+      p.y = 144 + row * 238;
+      p.z = index;
+      snapCanvasPosition(p);
+      positions[item.id] = p;
+    });
+  }
+  ensureCanvasStore()?.commitPositions(positions);
+  canvasArrangePanel?.classList.remove('open');
+  if (canvasArrangePanel) canvasArrangePanel.dataset.open = 'false';
+  renderCanvas();
+}
+
+function openCanvasStackDialog() {
+  if (activeCanvasSelection().size < 2) {
+    showCopyToast(t('canvasNeedTwo'));
+    return;
+  }
+  if (!canvasStackDialog) return;
+  closeAllFloatsExcept('canvasStack');
+  canvasStackDialog.classList.add('open');
+  canvasStackDialog.setAttribute('aria-hidden', 'false');
+  if (canvasStackTitle) {
+    canvasStackTitle.value = '';
+    setTimeout(() => canvasStackTitle.focus(), 0);
+  }
+  syncFloatBackdrop();
+}
+
+function closeCanvasStackDialog() {
+  canvasStackDialog?.classList.remove('open');
+  canvasStackDialog?.setAttribute('aria-hidden', 'true');
+  syncFloatBackdrop();
+}
+
+async function createCanvasStackFromSelection() {
+  const ids = [...activeCanvasSelection()];
+  const title = canvasStackTitle?.value?.trim() || t('canvasNewStack');
+  closeCanvasStackDialog();
+  const res = await sendMessage({ type: 'CREATE_STACK', ids, title });
+  if (!res?.ok) {
+    showCopyToast(t('stackFailed'));
+    return;
+  }
+  ensureCanvasStore()?.setSelection([]);
+  await loadList();
+  showCopyToast(t('stackMerged'));
+}
+
+async function canvasAction(action) {
+  const ids = [...activeCanvasSelection()];
+  if (!ids.length) return;
+  if (action === 'restore') {
+    if (ids.length === 1) await restoreItem(ids[0]);
+    else batchRestore?.click();
+    return;
+  }
+  if (action === 'snapshot' && ids.length === 1) {
+    const item = allTabs.find((candidate) => candidate.id === ids[0]);
+    if (item?.kind === 'tab') openLightbox(item);
+    return;
+  }
+  if (action === 'edit' && ids.length === 1) {
+    const item = allTabs.find((candidate) => candidate.id === ids[0]);
+    if (item) openEditBox(item);
+    return;
+  }
+  if (action === 'members' && ids.length === 1) {
+    const item = allTabs.find((candidate) => candidate.id === ids[0]);
+    if (item?.kind === 'group') openMembersBox(item);
+    return;
+  }
+  if (action === 'pin') {
+    for (const id of ids) {
+      const item = allTabs.find((candidate) => candidate.id === id);
+      if (item) await togglePinned(item);
+    }
+    return;
+  }
+  if (action === 'stack') {
+    openCanvasStackDialog();
+    return;
+  }
+  if (action === 'delete') {
+    batchDelete?.click();
+  }
+}
+
+function canvasNodeWorldRect(node) {
+  const viewportRect = canvasViewportEl?.getBoundingClientRect();
+  const nodeRect = node?.getBoundingClientRect();
+  if (!viewportRect || !nodeRect) return null;
+  const { viewport } = canvasLayout;
+  const zoom = viewport.zoom || 1;
+  return {
+    x: (nodeRect.left - viewportRect.left) / zoom + viewport.x,
+    y: (nodeRect.top - viewportRect.top) / zoom + viewport.y,
+    w: nodeRect.width / zoom,
+    h: nodeRect.height / zoom,
+    z: Number(node.style.zIndex) || 0,
+  };
+}
+
+function canvasTargetAt(point, excludeId = '') {
+  const nodes = [...(canvasNodesEl?.querySelectorAll('.canvas-node') || [])]
+    .map((node) => ({ id: node.dataset.id || '', rect: canvasNodeWorldRect(node) }))
+    .filter(({ id, rect }) => id && id !== excludeId && rect)
+    .sort((a, b) => b.rect.z - a.rect.z);
+  for (const { id, rect } of nodes) {
+    if (point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h) {
+      return id;
+    }
+  }
+  return '';
+}
+
+function isCanvasControlTarget(target) {
+  return Boolean(
+    target?.closest?.(
+      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-arrange-panel, .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .search-hits'
+    )
+  );
+}
+
+function isCanvasWheelControlTarget(target) {
+  return Boolean(
+    target?.closest?.(
+      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-arrange-panel, .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .search-hits'
+    )
+  );
+}
+
+function normalizeCanvasWheelDelta(event) {
+  const mode = Number(event?.deltaMode) || 0;
+  const unit = mode === 1
+    ? 16
+    : mode === 2
+      ? Math.max(1, canvasViewportEl?.clientHeight || 800)
+      : 1;
+  const limit = 480;
+  const clampDelta = (value) => Math.max(-limit, Math.min(limit, (Number(value) || 0) * unit));
+  return { dx: clampDelta(event?.deltaX), dy: clampDelta(event?.deltaY) };
+}
+
+function canvasWheelZoomFactor(deltaY) {
+  const bounded = Math.max(-120, Math.min(120, Number(deltaY) || 0));
+  return Math.exp(-bounded * 0.0015);
+}
+
+function beginCanvasPointer(event, kind, id = '') {
+  if (event.button != null && event.button !== 0) return;
+  const point = canvasPointFromEvent(event);
+  if (kind === 'node') {
+    cancelCanvasNodeClick(id);
+    canvasNodeClickSuppressUntil.delete(id);
+    canvasSelectNode(id, event);
+  }
+  const ids = kind === 'node' ? [...activeCanvasSelection()] : [];
+  ensureCanvasStore()?.beginPointer(kind, {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    ids,
+  });
+  canvasPointerState = {
+    kind,
+    id,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startPoint: point,
+    moved: false,
+    selectionAdditive: Boolean(event.metaKey || event.ctrlKey || event.shiftKey),
+    initialSelection: [...activeCanvasSelection()],
+  };
+  canvasInteractionGeneration += 1;
+  canvasViewportEl?.setPointerCapture?.(event.pointerId);
+  canvasViewportEl?.classList.toggle('is-panning', kind === 'pan');
+  if (kind !== 'node') event.preventDefault();
+}
+
+function applyCanvasPointer(event) {
+  const state = canvasPointerState;
+  if (!state || state.pointerId !== event.pointerId) return;
+  const dx = event.clientX - state.startX;
+  const dy = event.clientY - state.startY;
+  if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) state.moved = true;
+  if (state.kind === 'node') {
+    const zoom = canvasStoreSnapshot().layout.viewport.zoom || 1;
+    ensureCanvasStore()?.previewPointer({ dx: dx / zoom, dy: dy / zoom, moved: state.moved });
+    return;
+  }
+  if (state.kind === 'pan') {
+    const zoom = canvasStoreSnapshot().layout.viewport.zoom || 1;
+    ensureCanvasStore()?.previewPointer({ dx: -dx / zoom, dy: -dy / zoom, moved: state.moved });
+    return;
+  }
+  if (state.kind === 'lasso') {
+    const current = canvasPointFromEvent(event);
+    const x = Math.min(state.startPoint.x, current.x);
+    const y = Math.min(state.startPoint.y, current.y);
+    const w = Math.abs(current.x - state.startPoint.x);
+    const h = Math.abs(current.y - state.startPoint.y);
+    if (canvasSelectionEl) {
+      canvasSelectionEl.hidden = false;
+      canvasSelectionEl.style.left = `${x}px`;
+      canvasSelectionEl.style.top = `${y}px`;
+      canvasSelectionEl.style.width = `${w}px`;
+      canvasSelectionEl.style.height = `${h}px`;
+    }
+    const ids = [...(canvasNodesEl?.querySelectorAll('.canvas-node') || [])]
+      .map((node) => ({ id: node.dataset.id || '', rect: canvasNodeWorldRect(node) }))
+      .filter(({ rect }) => rect && rect.x < x + w && rect.x + rect.w > x && rect.y < y + h && rect.y + rect.h > y)
+      .map(({ id }) => id)
+      .filter(Boolean);
+    const nextSelection = state.selectionAdditive
+      ? [...new Set([...state.initialSelection, ...ids])]
+      : ids;
+    setCanvasSelection(nextSelection);
+  }
+}
+
+function updateCanvasPointer(event) {
+  canvasLastPointerEvent = event;
+  canvasQueuedPointerEvent = event;
+  if (canvasPointerRaf) return;
+  const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 16);
+  canvasPointerRaf = schedule(() => {
+    canvasPointerRaf = 0;
+    const next = canvasQueuedPointerEvent;
+    canvasQueuedPointerEvent = null;
+    if (next) applyCanvasPointer(next);
+  });
+}
+
+function flushCanvasPointerFrame(event = canvasLastPointerEvent) {
+  if (canvasPointerRaf) {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(canvasPointerRaf);
+    else clearTimeout(canvasPointerRaf);
+    canvasPointerRaf = 0;
+  }
+  canvasQueuedPointerEvent = null;
+  if (event) applyCanvasPointer(event);
+}
+
+function clearCanvasPointerUi(pointerId = null) {
+  canvasPointerState = null;
+  canvasLastPointerEvent = null;
+  canvasSelectionEl?.setAttribute('hidden', 'true');
+  try {
+    if (pointerId != null) canvasViewportEl?.releasePointerCapture?.(pointerId);
+  } catch {
+    // ignore
+  }
+  canvasViewportEl?.classList.remove('is-panning');
+}
+
+function cancelCanvasPointer() {
+  const state = canvasPointerState;
+  if (!state) return;
+  flushCanvasPointerFrame();
+  if (state.kind === 'node' && state.moved) {
+    cancelCanvasNodeClick(state.id);
+    suppressCanvasNodeClick(state.id);
+  }
+  ensureCanvasStore()?.cancelPointer();
+  clearCanvasPointerUi(state.pointerId);
+}
+
+async function endCanvasPointer(event) {
+  const state = canvasPointerState;
+  if (!state || state.pointerId !== event.pointerId) return;
+  flushCanvasPointerFrame(event);
+  if (!state.moved && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) >= DRAG_THRESHOLD) state.moved = true;
+  const pointerGeneration = canvasInteractionGeneration;
+  const finalPoint = canvasPointFromEvent(event);
+  const operation = ensureCanvasStore()?.finishPointer({
+    commit: state.moved,
+    snap: state.kind === 'node' && canvasSnapToGrid,
+  });
+  clearCanvasPointerUi(event.pointerId);
+  if (state.kind === 'node') {
+    if (state.moved) {
+      cancelCanvasNodeClick(state.id);
+      suppressCanvasNodeClick(state.id);
+    }
+    if (!state.moved) {
+      const item = canvasItemById(state.id);
+      if (item && canvasActiveTool === 'select') scheduleCanvasNodePreview(item);
+      updateCanvasNodeSelection();
+      updateBatchBar();
+      return;
+    }
+    let stacked = false;
+    if (activeCanvasSelection().size === 1) {
+      const targetId = canvasTargetAt(finalPoint, state.id);
+      if (targetId) {
+        await ensureCanvasStore()?.flush?.();
+        if (pointerGeneration !== canvasInteractionGeneration) return;
+        const result = await sendMessage({ type: 'STACK_ITEMS', sourceId: state.id, targetId });
+        if (result?.ok) {
+          stacked = true;
+          ensureCanvasStore()?.setSelection([]);
+          selectMode = false;
+          await loadList();
+        }
+      }
+    }
+    if (!stacked) ensureCanvasStore()?.flush?.();
+    updateCanvasNodeSelection();
+    updateBatchBar();
+  } else if (state.kind === 'pan' && state.moved) {
+    ensureCanvasStore()?.flush?.();
+  }
+}
+
+function initCanvasInteractions() {
+  if (!canvasViewportEl) return;
+  canvasViewportEl.addEventListener('pointerdown', (event) => {
+    if (isCanvasControlTarget(event.target)) return;
+    const node = event.target.closest?.('.canvas-node');
+    if (node && canvasActiveTool === 'select' && !canvasSpacePressed) {
+      beginCanvasPointer(event, 'node', node.dataset.id);
+      node.focus({ preventScroll: true });
+      return;
+    }
+    if (canvasActiveTool === 'area') {
+      beginCanvasPointer(event, 'lasso');
+      return;
+    }
+    if (canvasActiveTool === 'pan' || canvasActiveTool === 'select' || canvasSpacePressed) {
+      beginCanvasPointer(event, 'pan');
+    }
+  });
+  canvasViewportEl.addEventListener('pointermove', updateCanvasPointer);
+  canvasViewportEl.addEventListener('pointerup', endCanvasPointer);
+  canvasViewportEl.addEventListener('pointercancel', cancelCanvasPointer);
+  canvasViewportEl.addEventListener('lostpointercapture', () => {
+    if (canvasPointerState) cancelCanvasPointer();
+  });
+  window.addEventListener('blur', cancelCanvasPointer);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') cancelCanvasPointer();
+  });
+  canvasViewportEl.addEventListener('wheel', (event) => {
+    if (isCanvasWheelControlTarget(event.target)) return;
+    const { dx, dy } = normalizeCanvasWheelDelta(event);
+    if (!dx && !dy) return;
+    const modifierZoom = Boolean(event.ctrlKey || event.metaKey) && dy !== 0;
+    event.preventDefault();
+    if (modifierZoom) {
+      const zoom = canvasStoreSnapshot().layout.viewport.zoom * canvasWheelZoomFactor(dy);
+      setCanvasZoom(zoom, event.clientX, event.clientY);
+      return;
+    }
+    const zoom = canvasStoreSnapshot().layout.viewport.zoom || DEFAULT_CANVAS_VIEWPORT.zoom;
+    ensureCanvasStore()?.commitPan(dx / zoom, dy / zoom);
+  }, { passive: false });
+  const refreshCanvasGeometry = () => {
+    if (settings.viewMode !== 'canvas' || canvasSessionFallback) return;
+    renderCanvasMinimap(getCanvasVisibleTabs());
+    scheduleInitialCanvasCenter();
+  };
+  window.addEventListener('resize', refreshCanvasGeometry);
+  if (typeof ResizeObserver === 'function') {
+    canvasGeometryObserver = new ResizeObserver(refreshCanvasGeometry);
+    canvasGeometryObserver.observe(canvasViewportEl);
+    if (canvasMinimap) canvasGeometryObserver.observe(canvasMinimap);
+  }
+  canvasViewportEl.addEventListener('dblclick', (event) => {
+    if (isCanvasControlTarget(event.target)) return;
+    const node = event.target.closest?.('.canvas-node');
+    const id = node?.dataset.id || canvasTargetAt(canvasPointFromEvent(event));
+    if (id) {
+      cancelCanvasNodeClick(id);
+      restoreItem(id);
+    }
+  });
+  canvasViewportEl.addEventListener('keydown', (event) => {
+    const focusedNode = event.target.closest?.('.canvas-node');
+    if (focusedNode && event.target === focusedNode) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        restoreItem(focusedNode.dataset.id);
+        return;
+      }
+      if (event.key === ' ' || event.code === 'Space') {
+        event.preventDefault();
+        canvasSelectNode(focusedNode.dataset.id, event);
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        deleteItem(focusedNode.dataset.id);
+        return;
+      }
+    }
+    if (event.key === 'Escape') {
+      ensureCanvasStore()?.setSelection([]);
+      updateCanvasNodeSelection();
+      updateBatchBar();
+      return;
+    }
+    if (event.key === 'Enter' && activeCanvasSelection().size === 1) {
+      event.preventDefault();
+      restoreItem([...activeCanvasSelection()][0]);
+      return;
+    }
+    if (event.key === 'Delete' && activeCanvasSelection().size) {
+      event.preventDefault();
+      batchDelete?.click();
+      return;
+    }
+    if (event.key.startsWith('Arrow') && activeCanvasSelection().size) {
+      event.preventDefault();
+      const amount = event.shiftKey ? 24 : 8;
+      const dx = event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;
+      const dy = event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0;
+      canvasMoveSelected(dx, dy);
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.code !== 'Space' || isTypingTarget(event.target)) return;
+    canvasSpacePressed = true;
+    if (document.activeElement === canvasViewportEl) event.preventDefault();
+  });
+  document.addEventListener('keyup', (event) => {
+    if (event.code === 'Space') canvasSpacePressed = false;
+  });
+  document.querySelectorAll('[data-canvas-tool]').forEach((button) => {
+    button.addEventListener('click', () => {
+      canvasActiveTool = button.dataset.canvasTool || 'select';
+      document.querySelectorAll('[data-canvas-tool]').forEach((tool) => tool.classList.toggle('active', tool === button));
+    });
+  });
+  document.getElementById('canvasZoomOut')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom - 0.1));
+  document.getElementById('canvasZoomIn')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom + 0.1));
+  document.getElementById('canvasResetView')?.addEventListener('click', () => {
+    ensureCanvasStore()?.commitViewport({ ...DEFAULT_CANVAS_VIEWPORT });
+  });
+  document.getElementById('canvasArrangeBtn')?.addEventListener('click', () => {
+    if (!canvasArrangePanel) return;
+    canvasArrangePanel.dataset.open = canvasArrangePanel.dataset.open === 'true' ? 'false' : 'true';
+    canvasArrangePanel.classList.toggle('open', canvasArrangePanel.dataset.open === 'true');
+  });
+  document.querySelectorAll('[data-canvas-arrange]').forEach((button) => {
+    button.addEventListener('click', () => arrangeCanvas(button.dataset.canvasArrange));
+  });
+  document.getElementById('canvasSnapToggle')?.addEventListener('change', (event) => {
+    canvasSnapToGrid = event.target.checked;
+    const settingsSnap = document.getElementById('settingsCanvasSnap');
+    if (settingsSnap) settingsSnap.checked = canvasSnapToGrid;
+    saveSettings({ canvasSnap: canvasSnapToGrid }).catch(() => {});
+  });
+  document.getElementById('canvasAllBtn')?.addEventListener('click', () => setCanvasIndexFilter('all'));
+  document.getElementById('canvasUnsortedBtn')?.addEventListener('click', () => setCanvasIndexFilter('unsorted'));
+  document.getElementById('canvasPinnedBtn')?.addEventListener('click', () => setCanvasIndexFilter('pinned'));
+  document.getElementById('canvasLinkBtn')?.addEventListener('click', () => quickAddUrlMenu?.click());
+  document.querySelectorAll('[data-canvas-action]').forEach((button) => {
+    button.addEventListener('click', () => canvasAction(button.dataset.canvasAction));
+  });
+  canvasStackConfirm?.addEventListener('click', createCanvasStackFromSelection);
+  canvasStackCancel?.addEventListener('click', closeCanvasStackDialog);
+  canvasStackTitle?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') createCanvasStackFromSelection();
+  });
+  canvasDropZone?.addEventListener('click', openCanvasStackDialog);
 }
 
 function renderEmpty(message) {
@@ -5183,6 +6968,10 @@ function renderEmpty(message) {
 }
 
 function renderGrid() {
+  if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
+    renderCanvas();
+    return;
+  }
   // Always release observations before replacing or emptying the grid.
   if (thumbObserver) {
     try {
@@ -5210,7 +6999,7 @@ function renderGrid() {
   gridEl.innerHTML = '';
   applyCardCols(settings.cardCols);
   const frag = document.createDocumentFragment();
-  const isList = settings.viewMode === 'list';
+  const isList = settings.viewMode === 'list' || canvasSessionFallback;
   filtered.forEach((item) => {
     frag.appendChild(isList ? createRow(item) : createCard(item));
   });
@@ -5221,10 +7010,20 @@ function renderGrid() {
 let loadListTimer = null;
 
 async function loadList() {
-  const res = await sendMessage({ type: 'GET_PARKED_ITEMS' });
+  const generation = ++canvasLoadGeneration;
+  const [res, layoutRes] = await Promise.all([
+    sendMessage({ type: 'GET_PARKED_ITEMS' }),
+    sendMessage({ type: 'GET_CANVAS_LAYOUT' }),
+  ]);
+  if (generation !== canvasLoadGeneration) return false;
   if (!res?.ok || (!Array.isArray(res.items) && !Array.isArray(res.tabs))) {
     if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
     uiLog('error', 'load', 'parked items unavailable', res?.error || 'invalid_response');
+    if (settings.viewMode === 'canvas') {
+      canvasSessionFallback = true;
+      applyViewMode('list');
+      renderGrid();
+    }
     return false;
   }
   if (loadStatusEl) loadStatusEl.textContent = '';
@@ -5239,6 +7038,7 @@ async function loadList() {
       return {
         ...item,
         kind: 'group',
+        pinned: Boolean(item.pinned),
         note: typeof item.note === 'string' ? item.note : '',
         tags: Array.isArray(item.tags) ? item.tags : [],
         tabs: Array.isArray(item.tabs) ? item.tabs : [],
@@ -5247,11 +7047,39 @@ async function loadList() {
     return {
       ...item,
       kind: 'tab',
+      pinned: Boolean(item.pinned),
       note: typeof item.note === 'string' ? item.note : '',
       tags: Array.isArray(item.tags) ? item.tags : [],
     };
   });
+  if (!layoutRes?.ok && settings.viewMode === 'canvas') {
+    ensureCanvasStore()?.setItems(allTabs);
+    canvasNeedsInitialCenter = false;
+    canvasSessionFallback = true;
+    applyViewMode('list');
+    renderGrid();
+    uiLog('error', 'canvas', 'layout unavailable', layoutRes?.error || 'invalid_response');
+    return false;
+  }
+  const store = ensureCanvasStore();
+  const current = store?.getState?.();
+  if (current?.pendingOperations?.length || current?.interaction) {
+    canvasNeedsInitialCenter = false;
+    store.setItems(allTabs);
+    if (layoutRes?.ok) store.applyRemote(layoutRes.layout, layoutRes.revision);
+  } else {
+    store.hydrate(
+      allTabs,
+      layoutRes?.ok ? layoutRes.layout : canvasLayout,
+      layoutRes?.ok ? layoutRes.revision : current?.revision || 0,
+    );
+    canvasNeedsInitialCenter = Boolean(layoutRes?.ok && layoutRes.needsInitialCenter);
+  }
+  canvasSessionFallback = false;
+  applyViewMode(settings.viewMode);
+  renderCanvasStackIndex();
   renderGrid();
+  scheduleInitialCanvasCenter();
   return true;
 }
 
@@ -5262,6 +7090,11 @@ function scheduleLoadList() {
     loadList().catch((err) => {
       if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
       uiLog('error', 'load', 'exception', err?.message || err);
+      if (settings.viewMode === 'canvas') {
+        canvasSessionFallback = true;
+        applyViewMode('list');
+        renderGrid();
+      }
     });
   }, 150);
 }
@@ -5269,6 +7102,15 @@ function scheduleLoadList() {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.parkedTabs || changes.parkedItems) scheduleLoadList();
+  if (changes.canvasLayout || changes.canvasLayoutRevision) {
+    const layout = changes.canvasLayout?.newValue;
+    const revision = changes.canvasLayoutRevision?.newValue;
+    if (layout && ensureCanvasStore()) {
+      ensureCanvasStore().applyRemote(layout, revision);
+    } else {
+      scheduleLoadList();
+    }
+  }
   if (changes.settings) {
     // Ignore echo from this page's saveSettings (was rebuilding entire grid + thumbs)
     if (suppressSettingsOnChanged) return;
@@ -5276,6 +7118,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     delete settings.shortcuts;
     settings.cardCols = clampCols(settings.cardCols);
     settings.searchRegex = Boolean(settings.searchRegex);
+    settings.canvasSnap = settings.canvasSnap !== false;
     settings.autoBackup = normalizeAutoBackup({
       ...DEFAULT_AUTO_BACKUP,
       ...(settings.autoBackup || {}),
@@ -5284,6 +7127,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     renderGrid();
   }
 });
+
+initCanvasInteractions();
 
 initSettingsUi().then(async () => {
   if (Media?.openDb) Media.openDb().catch(() => {});

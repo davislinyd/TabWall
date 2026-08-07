@@ -32,6 +32,11 @@ const STORAGE_TABS = 'parkedTabs'; // legacy
 const STORAGE_ITEMS = 'parkedItems';
 const SETTINGS_KEY = 'settings';
 const TAG_CATALOG_KEY = 'tagCatalog';
+const CANVAS_LAYOUT_KEY = 'canvasLayout';
+const CANVAS_LAYOUT_REVISION_KEY = 'canvasLayoutRevision';
+const CANVAS_ZOOM_DEFAULT_MIGRATION_KEY = 'canvasZoomDefaultMigratedV1';
+const CANVAS_INITIAL_CENTER_MIGRATION_KEY = 'canvasInitialCenterMigratedV1';
+const CANVAS_LAYOUT_VERSION = 1;
 const DATA_VERSION_KEY = 'dataVersion';
 const DATA_VERSION = Build?.FORMAT_VERSION || 4;
 const DATA_LIMITS = Build?.LIMITS || {
@@ -113,6 +118,7 @@ function normalizeTabItem(raw) {
     url: safeText(raw.url, DATA_LIMITS.MAX_URL_LENGTH),
     title: safeText(raw.title || raw.url || 'Untitled', DATA_LIMITS.MAX_TITLE_LENGTH) || 'Untitled',
     favIconUrl: safeText(raw.favIconUrl, 4096),
+    pinned: Boolean(raw.pinned),
     note: safeText(raw.note, DATA_LIMITS.MAX_NOTE_LENGTH),
     tags,
     savedAt: safeTimestamp(raw.savedAt),
@@ -155,6 +161,7 @@ function normalizeGroupItem(raw) {
       ? raw.color
       : 'grey',
     collapsed: Boolean(raw.collapsed),
+    pinned: Boolean(raw.pinned),
     note: safeText(raw.note, DATA_LIMITS.MAX_NOTE_LENGTH),
     tags: normalizeTags(raw.tags),
     savedAt: safeTimestamp(raw.savedAt),
@@ -181,6 +188,239 @@ function normalizeTags(tags) {
   )].slice(0, DATA_LIMITS.MAX_TAGS);
 }
 
+const LEGACY_DEFAULT_CANVAS_ZOOM = 0.76;
+const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
+
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function defaultCanvasPosition(index) {
+  const i = Math.max(0, Number(index) || 0);
+  return {
+    x: 96 + (i % 4) * 300,
+    y: 96 + Math.floor(i / 4) * 238,
+    w: 220,
+    h: 170,
+    z: i,
+  };
+}
+
+function normalizeCanvasPosition(raw, fallback) {
+  const value = raw && typeof raw === 'object' ? raw : {};
+  const base = fallback || defaultCanvasPosition(0);
+  return {
+    x: clampNumber(value.x, -100000, 100000, base.x),
+    y: clampNumber(value.y, -100000, 100000, base.y),
+    w: clampNumber(value.w, 160, 640, base.w),
+    h: clampNumber(value.h, 120, 560, base.h),
+    z: clampNumber(value.z, 0, 1000000, base.z),
+  };
+}
+
+function normalizeCanvasLayout(raw, itemIds = []) {
+  const value = raw && typeof raw === 'object' ? raw : {};
+  const ids = new Set((Array.isArray(itemIds) ? itemIds : []).map(String));
+  const positions = {};
+  const source = value.positions && typeof value.positions === 'object' ? value.positions : {};
+  let index = 0;
+  if (ids.size) {
+    for (const id of ids) {
+      const fallback = defaultCanvasPosition(index++);
+      positions[id] = normalizeCanvasPosition(source[id], fallback);
+    }
+  } else {
+    for (const [id, position] of Object.entries(source)) {
+      positions[String(id)] = normalizeCanvasPosition(position, defaultCanvasPosition(index++));
+    }
+  }
+  return {
+    version: CANVAS_LAYOUT_VERSION,
+    viewport: {
+      x: clampNumber(value.viewport?.x, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.x),
+      y: clampNumber(value.viewport?.y, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.y),
+      zoom: clampNumber(value.viewport?.zoom, 0.25, 2, DEFAULT_CANVAS_VIEWPORT.zoom),
+    },
+    positions,
+  };
+}
+
+function normalizeCanvasRevision(value) {
+  const revision = Number(value);
+  return Number.isFinite(revision) && revision >= 0 ? Math.floor(revision) : 0;
+}
+
+function canvasLayoutsEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isDefaultCanvasLayout(layout, itemIds = []) {
+  const ids = Array.isArray(itemIds) ? itemIds.map(String) : [];
+  const normalized = normalizeCanvasLayout(layout, ids);
+  const viewport = normalized.viewport;
+  if (viewport.x !== DEFAULT_CANVAS_VIEWPORT.x || viewport.y !== DEFAULT_CANVAS_VIEWPORT.y || viewport.zoom !== DEFAULT_CANVAS_VIEWPORT.zoom) {
+    return false;
+  }
+  if (!ids.length) return Object.keys(normalized.positions).length === 0;
+  return ids.every((id, index) => canvasLayoutsEqual(normalized.positions[id], defaultCanvasPosition(index)));
+}
+
+async function getCanvasLayoutRecord() {
+  const [data, rawItems] = await Promise.all([
+    chrome.storage.local.get([
+      CANVAS_LAYOUT_KEY,
+      CANVAS_LAYOUT_REVISION_KEY,
+      CANVAS_ZOOM_DEFAULT_MIGRATION_KEY,
+      CANVAS_INITIAL_CENTER_MIGRATION_KEY,
+    ]),
+    getParkedItemsRaw(),
+  ]);
+  const itemIds = rawItems.map((item) => item.id);
+  const raw = data[CANVAS_LAYOUT_KEY];
+  let layout = normalizeCanvasLayout(raw, itemIds);
+  const revision = normalizeCanvasRevision(data[CANVAS_LAYOUT_REVISION_KEY]);
+  const needsMarker = data[CANVAS_ZOOM_DEFAULT_MIGRATION_KEY] !== true;
+  const needsRevision = data[CANVAS_LAYOUT_REVISION_KEY] == null;
+  if (needsMarker || needsRevision) {
+    const legacyZoom = Number(raw?.viewport?.zoom);
+    if (needsMarker && Number.isFinite(legacyZoom) && Math.abs(legacyZoom - LEGACY_DEFAULT_CANVAS_ZOOM) < 0.001) {
+      layout = normalizeCanvasLayout({
+        ...raw,
+        viewport: { ...(raw?.viewport || {}), zoom: DEFAULT_CANVAS_VIEWPORT.zoom },
+      }, itemIds);
+    }
+    await chrome.storage.local.set({
+      [CANVAS_LAYOUT_KEY]: layout,
+      [CANVAS_ZOOM_DEFAULT_MIGRATION_KEY]: true,
+      [CANVAS_LAYOUT_REVISION_KEY]: revision,
+    });
+  }
+  const needsInitialCenter = data[CANVAS_INITIAL_CENTER_MIGRATION_KEY] !== true && isDefaultCanvasLayout(layout, itemIds);
+  return { layout, revision, needsInitialCenter };
+}
+
+async function getCanvasLayout() {
+  return (await getCanvasLayoutRecord()).layout;
+}
+
+async function setCanvasLayout(layout, itemIds = null) {
+  let ids = itemIds;
+  if (!Array.isArray(ids)) {
+    const items = await getParkedItems();
+    ids = items.map((item) => item.id);
+  }
+  const current = await getCanvasLayoutRecord();
+  const normalized = normalizeCanvasLayout(layout, ids);
+  await chrome.storage.local.set({
+    [CANVAS_LAYOUT_KEY]: normalized,
+    [CANVAS_LAYOUT_REVISION_KEY]: current.revision + 1,
+    [CANVAS_ZOOM_DEFAULT_MIGRATION_KEY]: true,
+    [CANVAS_INITIAL_CENTER_MIGRATION_KEY]: true,
+  });
+  return normalized;
+}
+
+async function syncCanvasLayoutItems(items) {
+  const ids = (Array.isArray(items) ? items : []).map((item) => item.id);
+  const current = await getCanvasLayoutRecord();
+  const layout = normalizeCanvasLayout(current.layout, ids);
+  const revision = canvasLayoutsEqual(layout, current.layout) ? current.revision : current.revision + 1;
+  await chrome.storage.local.set({
+    [CANVAS_LAYOUT_KEY]: layout,
+    [CANVAS_LAYOUT_REVISION_KEY]: revision,
+    [CANVAS_ZOOM_DEFAULT_MIGRATION_KEY]: true,
+    [CANVAS_INITIAL_CENTER_MIGRATION_KEY]: true,
+  });
+  return layout;
+}
+
+async function commitItemsAndCanvas(items, layout, options = {}) {
+  const stored = (Array.isArray(items) ? items : [])
+    .map(normalizeItem)
+    .filter(Boolean)
+    .map(toStoredMeta);
+  const current = options.currentRecord || await getCanvasLayoutRecord();
+  const normalized = normalizeCanvasLayout(
+    layout == null ? current.layout : layout,
+    stored.map((item) => item.id)
+  );
+  const revision = canvasLayoutsEqual(normalized, current.layout) ? current.revision : current.revision + 1;
+  const initialCenterMigrated = options.canvasInitialCenterMigrated === true
+    || !current.needsInitialCenter
+    || !isDefaultCanvasLayout(normalized, stored.map((item) => item.id));
+  const payload = {
+    [STORAGE_ITEMS]: stored,
+    [STORAGE_TABS]: stored
+      .filter((item) => item.kind === 'tab')
+      .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
+    [DATA_VERSION_KEY]: DATA_VERSION,
+    [CANVAS_LAYOUT_KEY]: normalized,
+    [CANVAS_LAYOUT_REVISION_KEY]: revision,
+    [CANVAS_ZOOM_DEFAULT_MIGRATION_KEY]: true,
+    [CANVAS_INITIAL_CENTER_MIGRATION_KEY]: initialCenterMigrated,
+  };
+  if (Array.isArray(options.tagCatalog)) payload[TAG_CATALOG_KEY] = options.tagCatalog;
+  if (options.settings && typeof options.settings === 'object') payload[SETTINGS_KEY] = options.settings;
+  await chrome.storage.local.set(payload);
+  await markAutoBackupDirty();
+  return { items: stored, layout: normalized, revision };
+}
+
+async function patchCanvasLayout(layout, baseRevision = null) {
+  const current = await getCanvasLayoutRecord();
+  if (baseRevision != null && normalizeCanvasRevision(baseRevision) !== current.revision) {
+    return {
+      ok: false,
+      error: 'canvas_conflict',
+      layout: current.layout,
+      revision: current.revision,
+    };
+  }
+  const items = await getParkedItemsRaw();
+  const normalized = normalizeCanvasLayout(layout, items.map((item) => item.id));
+  const revision = current.revision + 1;
+  await chrome.storage.local.set({
+    [CANVAS_LAYOUT_KEY]: normalized,
+    [CANVAS_LAYOUT_REVISION_KEY]: revision,
+    [CANVAS_ZOOM_DEFAULT_MIGRATION_KEY]: true,
+    [CANVAS_INITIAL_CENTER_MIGRATION_KEY]: true,
+  });
+  return { ok: true, layout: normalized, revision };
+}
+
+function remapCanvasLayout(layout, removedIds, newId, anchorIds = []) {
+  const next = normalizeCanvasLayout(layout);
+  const anchors = Array.isArray(anchorIds) ? anchorIds : [];
+  const anchor = anchors.map((id) => next.positions[id]).find(Boolean);
+  for (const id of removedIds || []) delete next.positions[id];
+  if (newId && anchor) next.positions[newId] = { ...anchor };
+  return next;
+}
+
+function mergeAppendedCanvasLayout(baseLayout, incomingLayout, incomingItems, allItems) {
+  const ids = (Array.isArray(allItems) ? allItems : []).map((item) => item.id);
+  const next = normalizeCanvasLayout(baseLayout, ids);
+  const sourcePositions = incomingLayout?.positions && typeof incomingLayout.positions === 'object'
+    ? incomingLayout.positions
+    : {};
+  let index = Object.keys(next.positions).length;
+  for (const item of incomingItems || []) {
+    const sourceId = item.__stageItemId || item.__stageGroupId;
+    const source = sourceId ? sourcePositions[sourceId] : null;
+    if (source) {
+      next.positions[item.id] = normalizeCanvasPosition({
+        ...source,
+        x: Number(source.x) + 420,
+        y: Number(source.y) + 120,
+      }, defaultCanvasPosition(index));
+    }
+    index += 1;
+  }
+  return next;
+}
+
 function normalizeItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.kind === 'group' || Array.isArray(raw.tabs)) return normalizeGroupItem(raw);
@@ -196,6 +436,7 @@ function toStoredMeta(item) {
       title: item.title || '',
       color: item.color || 'grey',
       collapsed: Boolean(item.collapsed),
+      pinned: Boolean(item.pinned),
       note: item.note || '',
       tags: Array.isArray(item.tags) ? item.tags : [],
       savedAt: item.savedAt || Date.now(),
@@ -219,6 +460,7 @@ function toStoredMeta(item) {
     url: item.url || '',
     title: item.title || '',
     favIconUrl: item.favIconUrl || '',
+    pinned: Boolean(item.pinned),
     note: item.note || '',
     tags: Array.isArray(item.tags) ? item.tags : [],
     savedAt: item.savedAt || Date.now(),
@@ -239,19 +481,12 @@ async function getParkedItemsRaw() {
 }
 
 async function setParkedItems(items, options = {}) {
-  const stored = items.map(normalizeItem).filter(Boolean).map(toStoredMeta);
-  const payload = {
-    [STORAGE_ITEMS]: stored,
-    [STORAGE_TABS]: stored
-      .filter((i) => i.kind === 'tab')
-      .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
-    [DATA_VERSION_KEY]: DATA_VERSION,
-  };
-  if (Array.isArray(options.tagCatalog)) payload[TAG_CATALOG_KEY] = options.tagCatalog;
-  if (options.settings && typeof options.settings === 'object') payload[SETTINGS_KEY] = options.settings;
-  await chrome.storage.local.set(payload);
-  await markAutoBackupDirty();
-  return stored;
+  const current = await getCanvasLayoutRecord();
+  const result = await commitItemsAndCanvas(items, options.canvasLayout ?? current.layout, {
+    ...options,
+    currentRecord: current,
+  });
+  return result.items;
 }
 
 async function getParkedItems() {
@@ -926,10 +1161,11 @@ async function hydrateItemMedia(item) {
  * @param {{ hydrate?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
  */
 async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
-  const [parkedItems, settingsData, tagCatalog] = await Promise.all([
+  const [parkedItems, settingsData, tagCatalog, canvasLayout] = await Promise.all([
     getParkedItems(),
     chrome.storage.local.get(SETTINGS_KEY),
     getTagCatalog(),
+    getCanvasLayout(),
   ]);
 
   let items = parkedItems;
@@ -960,6 +1196,7 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
       parkedTabs,
       settings: settingsData[SETTINGS_KEY] || {},
       tagCatalog,
+      canvasLayout,
     },
   };
 }
@@ -1157,6 +1394,8 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
 
   const append = mode === 'append';
   const existing = await getParkedItems();
+  const existingCanvasLayout = append ? await getCanvasLayout() : null;
+  const incomingCanvasLayout = backup.canvasLayout;
   if (append) {
     items = remintItemIds(items);
   }
@@ -1174,7 +1413,11 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
 
     try {
       if (append) {
-        await setParkedItems([...existing, ...items]);
+        const combined = [...existing, ...items];
+        await setParkedItems(combined, {
+          canvasLayout: mergeAppendedCanvasLayout(existingCanvasLayout, incomingCanvasLayout, items, combined),
+          canvasInitialCenterMigrated: true,
+        });
         metadataCommitted = true;
         const catalog = await getTagCatalog();
         const incoming = Array.isArray(backup.tagCatalog) ? backup.tagCatalog : [];
@@ -1189,7 +1432,14 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
       const importedSettings = backup.settings && typeof backup.settings === 'object'
         ? normalizeSettings(backup.settings)
         : undefined;
-      await setParkedItems(items, { tagCatalog, settings: importedSettings });
+      await setParkedItems(items, {
+        tagCatalog,
+        settings: importedSettings,
+        canvasLayout: backup.canvasLayout && typeof backup.canvasLayout === 'object'
+          ? backup.canvasLayout
+          : undefined,
+        canvasInitialCenterMigrated: true,
+      });
       metadataCommitted = true;
       const staleKeys = [...oldKeys].filter((key) => !writtenKeys.has(key));
       try {
@@ -1998,6 +2248,7 @@ async function commitSaveTab(tabLike, opts = {}) {
     url: tabLike.url || '',
     title: tabLike.title || tabLike.url || 'Untitled',
     favIconUrl: tabLike.favIconUrl || '',
+    pinned: false,
     note: restoreHint?.note || '',
     tags: Array.isArray(restoreHint?.tags) ? restoreHint.tags : [],
     savedAt: Date.now(),
@@ -2069,6 +2320,15 @@ async function saveCurrentTab(tab) {
     await flashBadge('!');
     return { ok: false, error: String(err) };
   }
+}
+
+async function saveActiveTab() {
+  const tab = await getActiveTab();
+  if (isOwnParkPageUrl(tab?.url)) {
+    await flashBadge('!');
+    return { ok: false, error: 'self_tab' };
+  }
+  return saveCurrentTab(tab);
 }
 
 async function resolveSaveConflict(decision) {
@@ -2217,7 +2477,7 @@ function replaceListKeepingOrder(list, removeIds, insertAtId, insertItem) {
  * Stack source onto target (iOS-folder style).
  * tab+tab → new group; tab+group / group+tab → add tab; group+group → merge into target.
  */
-async function stackItems(sourceId, targetId) {
+async function stackItems(sourceId, targetId, options = {}) {
   if (!sourceId || !targetId || sourceId === targetId) {
     return { ok: false, error: 'invalid_ids' };
   }
@@ -2225,6 +2485,7 @@ async function stackItems(sourceId, targetId) {
   const source = list.find((i) => i.id === sourceId);
   const target = list.find((i) => i.id === targetId);
   if (!source || !target) return { ok: false, error: 'not_found' };
+  const canvasBefore = await getCanvasLayout();
 
   const srcGroup = source.kind === 'group';
   const tgtGroup = target.kind === 'group';
@@ -2233,12 +2494,17 @@ async function stackItems(sourceId, targetId) {
   const markObsolete = (item) => {
     for (const key of Media.keysForItem(item)) obsoleteMediaKeys.add(key);
   };
-  const finalize = async (next) => {
-    await setParkedItems(next);
-    try {
-      await Media.removeMany([...obsoleteMediaKeys]);
-    } catch (err) {
-      appLogPush('warn', 'stack', 'old media cleanup deferred', err?.message || err);
+  const finalize = async (next, groupId, anchors, removedIds) => {
+    await commitItemsAndCanvas(
+      next,
+      remapCanvasLayout(canvasBefore, removedIds, groupId, anchors),
+    );
+    if (!options.deferMediaCleanup) {
+      try {
+        await Media.removeMany([...obsoleteMediaKeys]);
+      } catch (err) {
+        appLogPush('warn', 'stack', 'old media cleanup deferred', err?.message || err);
+      }
     }
   };
 
@@ -2256,13 +2522,14 @@ async function stackItems(sourceId, targetId) {
         title: target.title || source.title || '',
         color: 'grey',
         collapsed: false,
+        pinned: false,
         note: '',
         tags: [],
         savedAt: Date.now(),
         tabs: [mTarget, mSource],
       };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, group);
-      await finalize(next);
+      await finalize(next, groupId, [targetId, sourceId], [sourceId, targetId]);
       return { ok: true, items: next, groupId };
     }
 
@@ -2278,7 +2545,7 @@ async function stackItems(sourceId, targetId) {
       const next = list
         .map((i) => (i.id === target.id ? updated : i))
         .filter((i) => i.id !== source.id);
-      await finalize(next);
+      await finalize(next, target.id, [target.id, sourceId], [sourceId]);
       return { ok: true, items: next, groupId: target.id };
     }
 
@@ -2292,7 +2559,7 @@ async function stackItems(sourceId, targetId) {
         savedAt: Date.now(),
       };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, updated);
-      await finalize(next);
+      await finalize(next, source.id, [source.id, targetId], [targetId]);
       return { ok: true, items: next, groupId: source.id };
     }
 
@@ -2308,7 +2575,7 @@ async function stackItems(sourceId, targetId) {
       const next = list
         .map((i) => (i.id === target.id ? updated : i))
         .filter((i) => i.id !== source.id);
-      await finalize(next);
+      await finalize(next, target.id, [target.id, sourceId], [sourceId]);
       return { ok: true, items: next, groupId: target.id };
     }
 
@@ -2320,6 +2587,102 @@ async function stackItems(sourceId, targetId) {
       // best effort rollback of copied media
     }
     console.warn('[TabWall] stackItems failed:', err);
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function createStack(ids, title = '') {
+  const uniqueIds = [...new Set(Array.isArray(ids) ? ids.map(String) : [])];
+  if (uniqueIds.length < 2) return { ok: false, error: 'need_two_items' };
+  const initial = await getParkedItems();
+  if (uniqueIds.some((id) => !initial.some((item) => item.id === id))) {
+    return { ok: false, error: 'not_found' };
+  }
+  const initialLayout = await getCanvasLayout();
+  const mediaState = { created: new Set() };
+  const obsoleteMediaKeys = new Set();
+  const markObsolete = (item) => {
+    for (const key of Media.keysForItem(item)) obsoleteMediaKeys.add(key);
+  };
+
+  try {
+    let workingLayout = initialLayout;
+    let list = initial;
+    let targetId = uniqueIds[0];
+    for (const sourceId of uniqueIds.slice(1)) {
+      const source = list.find((item) => item.id === sourceId);
+      const target = list.find((item) => item.id === targetId);
+      if (!source || !target || source.id === target.id) return { ok: false, error: 'not_found' };
+      const srcGroup = source.kind === 'group';
+      const tgtGroup = target.kind === 'group';
+      let next;
+      let groupId;
+      let anchors;
+      let removedIds;
+
+      if (!srcGroup && !tgtGroup) {
+        groupId = crypto.randomUUID();
+        markObsolete(source);
+        markObsolete(target);
+        const mTarget = await tabItemToMember(target, groupId, 0, mediaState);
+        const mSource = await tabItemToMember(source, groupId, 1, mediaState);
+        const group = {
+          kind: 'group', id: groupId, title: target.title || source.title || '', color: 'grey',
+          collapsed: false, pinned: false, note: '', tags: [], savedAt: Date.now(),
+          tabs: [mTarget, mSource],
+        };
+        next = replaceListKeepingOrder(list, [source.id, target.id], target.id, group);
+        anchors = [target.id, source.id];
+        removedIds = [source.id, target.id];
+      } else if (!srcGroup && tgtGroup) {
+        groupId = target.id;
+        markObsolete(source);
+        const member = await tabItemToMember(source, groupId, (target.tabs || []).length, mediaState);
+        const updated = { ...target, tabs: [...(target.tabs || []), member], savedAt: Date.now() };
+        next = list.map((item) => (item.id === target.id ? updated : item)).filter((item) => item.id !== source.id);
+        anchors = [target.id, source.id];
+        removedIds = [source.id];
+      } else if (srcGroup && !tgtGroup) {
+        groupId = source.id;
+        markObsolete(target);
+        const member = await tabItemToMember(target, groupId, (source.tabs || []).length, mediaState);
+        const updated = { ...source, tabs: [...(source.tabs || []), member], savedAt: Date.now() };
+        next = replaceListKeepingOrder(list, [source.id, target.id], target.id, updated);
+        anchors = [source.id, target.id];
+        removedIds = [target.id];
+      } else if (srcGroup && tgtGroup) {
+        groupId = target.id;
+        markObsolete(source);
+        const extra = await rekeyGroupMembers(source, groupId, (target.tabs || []).length, mediaState);
+        const updated = { ...target, tabs: [...(target.tabs || []), ...extra], savedAt: Date.now() };
+        next = list.map((item) => (item.id === target.id ? updated : item)).filter((item) => item.id !== source.id);
+        anchors = [target.id, source.id];
+        removedIds = [source.id];
+      } else {
+        return { ok: false, error: 'unsupported' };
+      }
+
+      workingLayout = remapCanvasLayout(workingLayout, removedIds, groupId, anchors);
+      list = next;
+      targetId = groupId;
+    }
+
+    const target = list.find((item) => item.id === targetId);
+    if (!target) return { ok: false, error: 'not_found' };
+    const nextTitle = safeText(title, DATA_LIMITS.MAX_TITLE_LENGTH).trim() || '新 Stack';
+    const next = list.map((item) => (item.id === targetId ? { ...item, title: nextTitle } : item));
+    // Metadata and the final canvas layout are committed together. If this
+    // write fails, no partial multi-select result is observable.
+    await commitItemsAndCanvas(next, workingLayout);
+    await cleanupOrphanMedia(next);
+    return { ok: true, groupId: targetId, item: next.find((item) => item.id === targetId) };
+  } catch (err) {
+    try {
+      await Media.removeMany([...mediaState.created]);
+    } catch {
+      // best effort rollback of copied media
+    }
+    console.warn('[TabWall] CREATE_STACK failed:', err);
     return { ok: false, error: String(err) };
   }
 }
@@ -2422,6 +2785,7 @@ async function saveActiveGroup() {
       collapsed: Boolean(meta.collapsed),
       note: restoreGroupHint?.note || '',
       tags: Array.isArray(restoreGroupHint?.tags) ? restoreGroupHint.tags : [],
+      pinned: false,
       savedAt: Date.now(),
       tabs: groupTabs,
     };
@@ -2703,6 +3067,7 @@ async function updateItem(id, patch) {
   const idx = list.findIndex((t) => t.id === id);
   if (idx === -1) return { ok: false, error: 'not_found' };
   const item = { ...list[idx] };
+  if (typeof patch.pinned === 'boolean') item.pinned = patch.pinned;
   if (typeof patch.note === 'string') item.note = patch.note;
   if (Array.isArray(patch.tags)) {
     item.tags = patch.tags
@@ -2755,6 +3120,10 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'REORDER_TABS',
   'REORDER_ITEMS',
   'STACK_ITEMS',
+  'PATCH_CANVAS_LAYOUT',
+  'CREATE_STACK',
+  'SAVE_ACTIVE_TAB',
+  'SAVE_TAB_FROM_CONTENT',
   'SAVE_ACTIVE_GROUP',
   'ADD_TAG',
   'RENAME_TAG',
@@ -2769,7 +3138,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'APPLY_DEDUPE',
 ]);
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handle = async () => {
     switch (message?.type) {
       case 'GET_PARKED_ITEMS':
@@ -2780,6 +3149,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       case 'GET_MEDIA':
         return getMediaMessage(message.key, message.kind || 'thumb');
+      case 'GET_CANVAS_LAYOUT':
+        return { ok: true, ...(await getCanvasLayoutRecord()) };
       case 'RESTORE_TAB':
         return restoreTab(message.id);
       case 'RESTORE_GROUP':
@@ -2796,12 +3167,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return deleteItem(message.id);
       case 'UPDATE_TAB':
       case 'UPDATE_ITEM':
-        return updateItem(message.id, { note: message.note, tags: message.tags });
+        return updateItem(message.id, {
+          note: message.note,
+          tags: message.tags,
+          pinned: message.pinned,
+        });
       case 'REORDER_TABS':
       case 'REORDER_ITEMS':
         return reorderItems(message.ids);
       case 'STACK_ITEMS':
         return stackItems(message.sourceId, message.targetId);
+      case 'PATCH_CANVAS_LAYOUT':
+        return patchCanvasLayout(message.layout, message.baseRevision);
+      case 'CREATE_STACK':
+        return createStack(message.ids, message.title);
+      case 'SAVE_ACTIVE_TAB':
+        return saveActiveTab();
+      case 'SAVE_TAB_FROM_CONTENT':
+        return saveCurrentTab(sender?.tab || null);
       case 'SAVE_ACTIVE_GROUP':
         return saveActiveGroup();
       case 'GET_TAGS':
@@ -2947,8 +3330,16 @@ if (globalThis.__TABWALL_TEST__) {
     importBackup,
     pruneDownloadedAutoBackups,
     stackItems,
+    createStack,
+    getCanvasLayout,
+    getCanvasLayoutRecord,
+    setCanvasLayout,
+    patchCanvasLayout,
+    commitItemsAndCanvas,
     commitSaveTab,
     saveCurrentTab,
+    saveActiveTab,
+    updateItem,
     saveActiveGroup,
     restoreTab,
     restoreGroup,

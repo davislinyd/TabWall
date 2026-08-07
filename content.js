@@ -1,6 +1,6 @@
 /**
  * TabWall — Content shell
- * 全屏 blur 背景 + 置中約 95% 面板（iframe park UI）
+ * 低對比遮罩 + 全視窗畫布（iframe park UI）
  */
 
 (() => {
@@ -92,20 +92,18 @@
         align-items: center;
         justify-content: center;
         padding: 0;
-        background: rgba(15, 23, 42, 0.5);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
+        background: rgba(32, 38, 41, 0.2);
       }
       .panel {
-        width: 95vw;
-        height: 95vh;
-        max-width: 95vw;
-        max-height: 95vh;
-        border-radius: 16px;
+        width: 100vw;
+        height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
         overflow: hidden;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
-        background: #0b1220;
+        border: 0;
+        box-shadow: none;
+        background: #e8ecee;
       }
       iframe {
         width: 100%;
@@ -114,6 +112,7 @@
         display: block;
         background: transparent;
       }
+
     `;
 
     const shell = document.createElement('div');
@@ -185,6 +184,14 @@
       if (event.source !== iframe.contentWindow) return;
       if (event.origin !== EXTENSION_ORIGIN) return;
       if (event.data?.type === 'TABWALL_CLOSE') destroy();
+      if (event.data?.type === 'TABWALL_SAVE_ACTIVE') {
+        chrome.runtime.sendMessage({ type: 'SAVE_TAB_FROM_CONTENT' }, (response) => {
+          const result = chrome.runtime.lastError
+            ? { ok: false, error: chrome.runtime.lastError.message }
+            : response || { ok: false, error: 'empty_response' };
+          postToPark({ type: 'TABWALL_SAVE_RESULT', result });
+        });
+      }
       if (event.data?.type === 'TABWALL_PARK_READY') {
         iframeReady = true;
         flushPendingConflict();
