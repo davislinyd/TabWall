@@ -702,6 +702,30 @@
       if (position.w != null && (Number(position.w) < 160 || Number(position.w) > 640)) return false;
       if (position.h != null && (Number(position.h) < 120 || Number(position.h) > 560)) return false;
     }
+    if (layout.connections != null && !Array.isArray(layout.connections)) return false;
+    const seenConnections = new Set();
+    for (const connection of layout.connections || []) {
+      if (!connection || typeof connection !== 'object' || Array.isArray(connection)) return false;
+      const sourceId = connection.sourceId;
+      const targetId = connection.targetId;
+      if (typeof sourceId !== 'string' || typeof targetId !== 'string' || !sourceId || !targetId) return false;
+      if (sourceId === targetId) return false;
+      if (ids.size && (!ids.has(sourceId) || !ids.has(targetId))) return false;
+      const [source, target] = sourceId < targetId ? [sourceId, targetId] : [targetId, sourceId];
+      const key = `${source}\u0000${target}`;
+      if (seenConnections.has(key)) return false;
+      seenConnections.add(key);
+      if (connection.curveOffset != null) {
+        const offset = connection.curveOffset;
+        if (!offset || typeof offset !== 'object' || Array.isArray(offset)) return false;
+        for (const axis of ['x', 'y']) {
+          if (offset[axis] != null && (!Number.isFinite(Number(offset[axis]))
+            || Number(offset[axis]) < -2000 || Number(offset[axis]) > 2000)) {
+            return false;
+          }
+        }
+      }
+    }
     return true;
   }
 

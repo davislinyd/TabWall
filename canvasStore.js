@@ -11,6 +11,11 @@
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 2;
   const GRID_SIZE = 24;
+  const DEFAULT_CARD_WIDTH = 220;
+  const DEFAULT_CARD_HEIGHT = 170;
+  const DEFAULT_CARD_DISPLAY_SCALE = 1.1;
+  const DEFAULT_CARD_GAP = 96;
+  const MAX_CURVE_OFFSET = 2000;
   const DEFAULT_RETRY_DELAYS = Object.freeze([250, 1000, 3000, 10000, 30000]);
 
   function finite(value, min, max, fallback) {
@@ -20,11 +25,13 @@
 
   function defaultPosition(index = 0) {
     const i = Math.max(0, Number(index) || 0);
+    const stepX = Math.round(DEFAULT_CARD_WIDTH * DEFAULT_CARD_DISPLAY_SCALE) + DEFAULT_CARD_GAP;
+    const stepY = Math.round(DEFAULT_CARD_HEIGHT * DEFAULT_CARD_DISPLAY_SCALE) + DEFAULT_CARD_GAP;
     return {
-      x: 96 + (i % 4) * 300,
-      y: 96 + Math.floor(i / 4) * 238,
-      w: 220,
-      h: 170,
+      x: 96 + (i % 4) * stepX,
+      y: 96 + Math.floor(i / 4) * stepY,
+      w: DEFAULT_CARD_WIDTH,
+      h: DEFAULT_CARD_HEIGHT,
       z: i,
     };
   }
@@ -40,6 +47,52 @@
     };
   }
 
+  function normalizeCurveOffset(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const x = finite(raw.x, -MAX_CURVE_OFFSET, MAX_CURVE_OFFSET, 0);
+    const y = finite(raw.y, -MAX_CURVE_OFFSET, MAX_CURVE_OFFSET, 0);
+    return x || y ? { x, y } : null;
+  }
+
+  function normalizeConnections(rawConnections, validIds = []) {
+    const ids = new Set((Array.isArray(validIds) ? validIds : [...(validIds || [])])
+      .map((id) => String(id || ''))
+      .filter(Boolean));
+    const seen = new Set();
+    const connections = [];
+    for (const entry of Array.isArray(rawConnections) ? rawConnections : []) {
+      const sourceId = String(entry?.sourceId || '');
+      const targetId = String(entry?.targetId || '');
+      if (!sourceId || !targetId || sourceId === targetId) continue;
+      if (ids.size && (!ids.has(sourceId) || !ids.has(targetId))) continue;
+      const [source, target] = sourceId < targetId
+        ? [sourceId, targetId]
+        : [targetId, sourceId];
+      const key = `${source}\u0000${target}`;
+      const curveOffset = normalizeCurveOffset(entry?.curveOffset);
+      if (seen.has(key)) {
+        if (curveOffset) {
+          const existing = connections.find((connection) => (
+            connection.sourceId === source && connection.targetId === target
+          ));
+          if (existing && !existing.curveOffset) existing.curveOffset = curveOffset;
+        }
+        continue;
+      }
+      seen.add(key);
+      connections.push({
+        sourceId: source,
+        targetId: target,
+        ...(curveOffset ? { curveOffset } : {}),
+      });
+    }
+    connections.sort((left, right) => {
+      const sourceOrder = left.sourceId.localeCompare(right.sourceId);
+      return sourceOrder || left.targetId.localeCompare(right.targetId);
+    });
+    return connections;
+  }
+
   function normalizeLayout(raw, items = []) {
     const value = raw && typeof raw === 'object' ? raw : {};
     const itemList = Array.isArray(items) ? items : [];
@@ -50,6 +103,7 @@
     orderedIds.forEach((id, index) => {
       positions[id] = clonePosition(source[id], defaultPosition(index));
     });
+    const connectionIds = orderedIds.length ? orderedIds : Object.keys(positions);
     return {
       version: LAYOUT_VERSION,
       viewport: {
@@ -58,6 +112,7 @@
         zoom: finite(value.viewport?.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_VIEWPORT.zoom),
       },
       positions,
+      connections: normalizeConnections(value.connections, connectionIds),
     };
   }
 
@@ -75,6 +130,12 @@
       copy.positions = Object.fromEntries(
         Object.entries(operation.positions).map(([id, position]) => [id, { ...position }])
       );
+    }
+    if (Array.isArray(operation.connections)) {
+      copy.connections = operation.connections.map((connection) => ({
+        ...connection,
+        ...(connection?.curveOffset ? { curveOffset: { ...connection.curveOffset } } : {}),
+      }));
     }
     return copy;
   }
@@ -127,6 +188,10 @@
       for (const [id, position] of Object.entries(op.positions || {})) {
         next.positions[id] = clonePosition(position, next.positions[id] || defaultPosition(0));
       }
+      return next;
+    }
+    if (op.type === 'setConnections') {
+      next.connections = normalizeConnections(op.connections, Object.keys(next.positions));
       return next;
     }
     return next;
@@ -296,6 +361,9 @@
             next.positions = Object.fromEntries(
               Object.entries(next.positions || {}).filter(([id]) => validIds.has(String(id)))
             );
+          }
+          if (next.type === 'setConnections') {
+            next.connections = normalizeConnections(next.connections, validIds);
           }
           return next;
         })
@@ -505,6 +573,22 @@
     function commitZoom(zoom, anchor = null) {
       const oldZoom = state.layout.viewport.zoom;
       const nextZoom = finite(zoom, MIN_ZOOM, MAX_ZOOM, oldZoom);
+      const last = state.pendingOperations[state.pendingOperations.length - 1];
+      if (!inFlight && !state.interaction && last?.type === 'zoom') {
+        last.zoom = nextZoom;
+        if (anchor?.world && anchor?.offset) {
+          last.anchorWorld = { ...anchor.world };
+          last.anchorOffset = { ...anchor.offset };
+        } else {
+          delete last.anchorWorld;
+          delete last.anchorOffset;
+        }
+        recomputeLayout();
+        setSync('dirty', '', state.sync.attempt);
+        emit({ type: 'OPERATION_COMMIT', operation: cloneOperation(last), coalesced: true });
+        schedulePersist();
+        return last;
+      }
       const operation = { type: 'zoom', zoom: nextZoom };
       if (anchor?.world && anchor?.offset) {
         operation.anchorWorld = { ...anchor.world };
@@ -515,6 +599,10 @@
 
     function commitPositions(positions) {
       return commitOperation({ type: 'setPositions', positions });
+    }
+
+    function commitConnections(connections) {
+      return commitOperation({ type: 'setConnections', connections });
     }
 
     function commitViewport(viewport) {
@@ -560,6 +648,7 @@
       commitMove,
       commitZoom,
       commitPositions,
+      commitConnections,
       commitViewport,
       markSync,
       flush: () => flushPersist(),
@@ -570,7 +659,10 @@
   global.TabWallCanvasStore = {
     DEFAULT_VIEWPORT,
     DEFAULT_RETRY_DELAYS,
+    MAX_CURVE_OFFSET,
     normalizeLayout,
+    normalizeConnections,
+    normalizeCurveOffset,
     applyOperation,
     replayOperations,
     createCanvasStore,

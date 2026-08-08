@@ -23,6 +23,7 @@ function loadBuild() {
 const Build = loadBuild();
 const ITEM_ID = '11111111-1111-4111-8111-111111111111';
 const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
+const SECOND_ID = '33333333-3333-4333-8333-333333333333';
 const LEGACY_ZIP = new URL(
   '../backup/tabwall-backup-full-2026-08-05T14-49-39+0800.zip',
   import.meta.url
@@ -200,11 +201,15 @@ test('backup keeps optional top-level pinned state and accepts legacy omission',
 });
 
 test('backup preserves optional canvas layout and validates its bounds', async () => {
-  const backup = sampleBackup();
+  const backup = sampleBackup([sampleItem(), sampleItem({ id: SECOND_ID, image: false })]);
   backup.canvasLayout = {
     version: 1,
     viewport: { x: 12, y: 24, zoom: 0.76 },
-    positions: { [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 } },
+    positions: {
+      [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 },
+      [SECOND_ID]: { x: 420, y: 240, w: 220, h: 170, z: 2 },
+    },
+    connections: [{ sourceId: SECOND_ID, targetId: ITEM_ID, curveOffset: { x: 44, y: -22 } }],
   };
   assert.equal(Build.validateBackup(backup).ok, true);
 
@@ -216,6 +221,24 @@ test('backup preserves optional canvas layout and validates its bounds', async (
   const files = Build.unzipStore(new Uint8Array(await full.blob.arrayBuffer()));
   const fullMetadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
   assert.deepEqual(fullMetadata.canvasLayout, backup.canvasLayout);
+
+  const invalidConnection = {
+    ...backup,
+    canvasLayout: {
+      ...backup.canvasLayout,
+      connections: [{ sourceId: ITEM_ID, targetId: 'not-an-item' }],
+    },
+  };
+  assert.equal(Build.validateBackup(invalidConnection).error, 'invalid_canvas_layout');
+
+  const invalidCurveOffset = {
+    ...backup,
+    canvasLayout: {
+      ...backup.canvasLayout,
+      connections: [{ sourceId: SECOND_ID, targetId: ITEM_ID, curveOffset: { x: 2001, y: 0 } }],
+    },
+  };
+  assert.equal(Build.validateBackup(invalidCurveOffset).error, 'invalid_canvas_layout');
 
   const invalid = {
     ...backup,

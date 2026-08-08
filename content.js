@@ -71,6 +71,46 @@
     postToPark({ type: 'TABWALL_SAVE_CONFLICT', conflict: pendingConflict });
   }
 
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      const schedule = typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 0);
+      schedule(() => schedule(resolve));
+    });
+  }
+
+  function sendSaveMessage() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'SAVE_TAB_FROM_CONTENT' }, (response) => {
+          const result = chrome.runtime.lastError
+            ? { ok: false, error: chrome.runtime.lastError.message }
+            : response || { ok: false, error: 'empty_response' };
+          resolve(result);
+        });
+      } catch (err) {
+        resolve({ ok: false, error: String(err) });
+      }
+    });
+  }
+
+  async function saveActiveWithoutOverlay() {
+    const overlay = rootEl;
+    const previousVisibility = overlay?.style?.visibility || '';
+    if (overlay) overlay.style.visibility = 'hidden';
+    let result;
+    try {
+      await waitForPaint();
+      result = await sendSaveMessage();
+    } catch (err) {
+      result = { ok: false, error: String(err) };
+    } finally {
+      if (overlay && rootEl === overlay) overlay.style.visibility = previousVisibility;
+    }
+    postToPark({ type: 'TABWALL_SAVE_RESULT', result });
+  }
+
   function open() {
     if (isOpen) return;
     isOpen = true;
@@ -185,12 +225,7 @@
       if (event.origin !== EXTENSION_ORIGIN) return;
       if (event.data?.type === 'TABWALL_CLOSE') destroy();
       if (event.data?.type === 'TABWALL_SAVE_ACTIVE') {
-        chrome.runtime.sendMessage({ type: 'SAVE_TAB_FROM_CONTENT' }, (response) => {
-          const result = chrome.runtime.lastError
-            ? { ok: false, error: chrome.runtime.lastError.message }
-            : response || { ok: false, error: 'empty_response' };
-          postToPark({ type: 'TABWALL_SAVE_RESULT', result });
-        });
+        saveActiveWithoutOverlay();
       }
       if (event.data?.type === 'TABWALL_PARK_READY') {
         iframeReady = true;

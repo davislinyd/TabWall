@@ -14,6 +14,22 @@ function loadStore() {
 
 const ITEM = { id: 'a', kind: 'tab' };
 
+test('canvas fallback positions keep logical card size and use the wider 96px grid gap', () => {
+  const api = loadStore();
+  const layout = api.normalizeLayout({}, [
+    { id: 'a' },
+    { id: 'b' },
+    { id: 'c' },
+    { id: 'd' },
+    { id: 'e' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions.a)), { x: 96, y: 96, w: 220, h: 170, z: 0 });
+  assert.equal(layout.positions.b.x - layout.positions.a.x, 338);
+  assert.equal(layout.positions.e.y - layout.positions.a.y, 283);
+  assert.equal(layout.positions.e.w, 220);
+  assert.equal(layout.positions.e.h, 170);
+});
+
 test('canvas store keeps pointer preview transient and commits semantic pan', () => {
   const api = loadStore();
   const store = api.createCanvasStore({ items: [ITEM] });
@@ -88,6 +104,20 @@ test('zoom keeps the requested screen anchor and selection is reducer state', ()
   assert.equal(store.getState().layout.viewport.y, 60);
 });
 
+test('consecutive pending zoom commits coalesce without changing the final anchor', () => {
+  const api = loadStore();
+  const store = api.createCanvasStore({ items: [ITEM] });
+  store.commitZoom(1.25, { world: { x: 100, y: 80 }, offset: { x: 50, y: 40 } });
+  store.commitZoom(1.5, { world: { x: 100, y: 80 }, offset: { x: 50, y: 40 } });
+  const state = store.getState();
+  assert.equal(state.pendingOperations.length, 1);
+  assert.equal(state.pendingOperations[0].type, 'zoom');
+  assert.equal(state.pendingOperations[0].zoom, 1.5);
+  assert.equal(state.layout.viewport.zoom, 1.5);
+  assert.equal(state.layout.viewport.x, 100 - 50 / 1.5);
+  assert.equal(state.layout.viewport.y, 80 - 40 / 1.5);
+});
+
 test('remote revisions replay pending operations and ignore stale responses', () => {
   const api = loadStore();
   const store = api.createCanvasStore({ items: [ITEM] });
@@ -152,4 +182,90 @@ test('conflict replay and bounded retry eventually acknowledge the latest operat
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(calls, 2);
   assert.equal(retryStore.getState().pendingOperations.length, 0);
+});
+
+test('canvas connections normalize direction, deduplicate, and reject unknown endpoints', () => {
+  const api = loadStore();
+  const layout = api.normalizeLayout({
+    connections: [
+      { sourceId: 'b', targetId: 'a' },
+      { sourceId: 'a', targetId: 'b' },
+      { sourceId: 'a', targetId: 'a' },
+      { sourceId: 'a', targetId: 'missing' },
+    ],
+  }, [{ id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.connections)), [{ sourceId: 'a', targetId: 'b' }]);
+});
+
+test('canvas connection curve offsets normalize, clamp, and preserve the first valid duplicate', () => {
+  const api = loadStore();
+  const layout = api.normalizeLayout({
+    connections: [
+      { sourceId: 'a', targetId: 'b', curveOffset: { x: 0, y: 0 } },
+      { sourceId: 'b', targetId: 'a', curveOffset: { x: 48, y: -24 } },
+      { sourceId: 'a', targetId: 'b', curveOffset: { x: 96, y: 96 } },
+      { sourceId: 'b', targetId: 'c', curveOffset: { x: 3000, y: -3000 } },
+      { sourceId: 'a', targetId: 'c', curveOffset: { x: Infinity, y: 20 } },
+    ],
+  }, [{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.connections)), [
+    { sourceId: 'a', targetId: 'b', curveOffset: { x: 48, y: -24 } },
+    { sourceId: 'a', targetId: 'c', curveOffset: { x: 0, y: 20 } },
+    { sourceId: 'b', targetId: 'c', curveOffset: { x: 2000, y: -2000 } },
+  ]);
+  assert.deepEqual(api.normalizeCurveOffset({ x: 0, y: 0 }), null);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.normalizeCurveOffset({ x: -2001, y: 2001 }))), { x: -2000, y: 2000 });
+});
+
+test('connection operations persist and replay through remote canvas revisions', () => {
+  const api = loadStore();
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const store = api.createCanvasStore({ items });
+  store.commitConnections([{ sourceId: 'b', targetId: 'a', curveOffset: { x: 32, y: -16 } }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.connections)), [{
+    sourceId: 'a',
+    targetId: 'b',
+    curveOffset: { x: 32, y: -16 },
+  }]);
+  assert.equal(store.getState().pendingOperations[0].type, 'setConnections');
+
+  store.applyRemote({ connections: [{ sourceId: 'b', targetId: 'c' }] }, 3);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.connections)), [{
+    sourceId: 'a',
+    targetId: 'b',
+    curveOffset: { x: 32, y: -16 },
+  }]);
+
+  store.commitConnections([]);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.connections)), []);
+});
+
+test('connection endpoint rewires remain canonical and deduplicated', () => {
+  const api = loadStore();
+  const store = api.createCanvasStore({
+    items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+    layout: { connections: [{ sourceId: 'a', targetId: 'b' }] },
+  });
+  store.commitConnections([
+    { sourceId: 'c', targetId: 'a' },
+    { sourceId: 'b', targetId: 'c' },
+    { sourceId: 'a', targetId: 'c' },
+    { sourceId: 'd', targetId: 'missing' },
+    { sourceId: 'd', targetId: 'd' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.connections)), [
+    { sourceId: 'a', targetId: 'c' },
+    { sourceId: 'b', targetId: 'c' },
+  ].sort((left, right) => left.sourceId.localeCompare(right.sourceId) || left.targetId.localeCompare(right.targetId)));
+});
+
+test('removing canvas items filters connection endpoints without touching the data shape', () => {
+  const api = loadStore();
+  const store = api.createCanvasStore({
+    items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    layout: { connections: [{ sourceId: 'a', targetId: 'b' }, { sourceId: 'b', targetId: 'c' }] },
+  });
+  store.setItems([{ id: 'a' }, { id: 'c' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.connections)), []);
+  assert.deepEqual(Object.keys(store.getState().layout.positions), ['a', 'c']);
 });

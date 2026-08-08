@@ -3888,17 +3888,17 @@
       }
 
       body.canvas-mode .quick-add-main {
-        border: 1px solid var(--accent) !important;
+        border: 1px solid transparent !important;
         border-radius: 4px;
-        background: var(--accent-soft) !important;
-        color: var(--accent);
+        background: var(--btn-bg) !important;
+        color: var(--muted);
       }
 
       body.canvas-mode .quick-add-main:hover,
       body.canvas-mode .quick-add-main:focus-visible {
-        border-color: var(--accent) !important;
+        border-color: transparent !important;
         background: var(--btn-hover) !important;
-        color: var(--accent);
+        color: var(--text);
       }
 
       body.canvas-mode main {
@@ -4089,6 +4089,37 @@
       .canvas-nodes {
         position: absolute;
         inset: 0;
+        z-index: 1;
+      }
+
+      .canvas-connections {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+
+      .canvas-connection {
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke;
+        pointer-events: stroke;
+        cursor: pointer;
+      }
+
+      .canvas-connection:hover,
+      .canvas-connection.selected {
+        stroke: var(--accent);
+        stroke-width: 3;
+      }
+
+      .canvas-connection.source {
+        stroke: var(--accent);
+        stroke-dasharray: 5 4;
       }
 
       .canvas-node {
@@ -4308,54 +4339,6 @@
         background: var(--accent-soft);
       }
 
-      .canvas-arrange-panel {
-        position: absolute;
-        top: 18px;
-        left: 22px;
-        z-index: 20;
-        display: none;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 150px;
-        padding: 10px;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        background: var(--panel);
-        box-shadow: var(--shadow);
-      }
-
-      .canvas-arrange-panel.open {
-        display: flex;
-      }
-
-      .canvas-arrange-panel strong {
-        padding: 4px 7px 8px;
-        font-size: 12px;
-      }
-
-      .canvas-arrange-panel button,
-      .canvas-arrange-panel label {
-        display: flex;
-        min-height: 36px;
-        align-items: center;
-        gap: 7px;
-        padding: 7px;
-        border: 0;
-        border-radius: 3px;
-        background: transparent;
-        color: var(--muted);
-        font: inherit;
-        font-size: 11px;
-        text-align: left;
-        cursor: pointer;
-      }
-
-      .canvas-arrange-panel button:hover,
-      .canvas-arrange-panel label:hover {
-        background: var(--btn-hover);
-        color: var(--text);
-      }
-
       .canvas-context-bar {
         position: absolute;
         left: 50%;
@@ -4419,6 +4402,7 @@
         border-radius: 4px;
         background: var(--panel);
         box-shadow: var(--shadow);
+        touch-action: none;
       }
 
       .canvas-minimap-world {
@@ -4456,7 +4440,14 @@
         border: 1px solid var(--accent);
         border-radius: 2px;
         background: rgba(186, 104, 74, 0.08);
-        pointer-events: none;
+        pointer-events: auto;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .canvas-minimap-viewport:active,
+      .canvas-minimap.is-dragging .canvas-minimap-viewport {
+        cursor: grabbing;
       }
 
       .canvas-minimap > button {
@@ -4860,7 +4851,6 @@
       @media (prefers-reduced-motion: reduce) {
         .canvas-node,
         .canvas-context-bar,
-        .canvas-arrange-panel,
         .canvas-stack-dialog {
           transition: none !important;
         }
@@ -4991,6 +4981,7 @@
         height: auto;
         min-width: 1200px;
         min-height: 56px;
+        flex-wrap: nowrap;
         padding: 0 24px;
         border: 0;
         background: var(--bg-header);
@@ -5019,7 +5010,7 @@
         width: 36px;
         height: 36px;
         place-items: center;
-        border: 1px solid var(--text);
+        border: 0;
         border-radius: 0;
         background: transparent;
         box-shadow: none;
@@ -5027,9 +5018,10 @@
       }
 
       .brand-mark svg {
-        width: 22px;
-        height: 22px;
-        stroke-width: 1.4;
+        width: 30px;
+        height: 30px;
+        fill: currentColor;
+        stroke: none;
       }
 
       .brand-copy {
@@ -5104,23 +5096,20 @@
         stroke-width: 1.55;
       }
 
-      .btn.primary.quick-add-main,
-      .btn.primary.quick-add-menu-btn,
-      body.canvas-mode .quick-add-main {
-        border-color: var(--accent) !important;
-        background: var(--accent-soft) !important;
-        color: var(--accent) !important;
+      .quick-add-main,
+      .quick-add-menu-btn {
+        border-color: transparent !important;
+        background: var(--btn-bg) !important;
+        color: var(--muted) !important;
       }
 
-      .btn.primary.quick-add-main:hover,
-      .btn.primary.quick-add-main:focus-visible,
-      .btn.primary.quick-add-menu-btn:hover,
-      .btn.primary.quick-add-menu-btn:focus-visible,
-      body.canvas-mode .quick-add-main:hover,
-      body.canvas-mode .quick-add-main:focus-visible {
-        border-color: var(--accent) !important;
+      .quick-add-main:hover,
+      .quick-add-main:focus-visible,
+      .quick-add-menu-btn:hover,
+      .quick-add-menu-btn:focus-visible {
+        border-color: transparent !important;
         background: var(--btn-hover) !important;
-        color: var(--accent) !important;
+        color: var(--text) !important;
       }
 
       .quick-add-main {
@@ -5324,18 +5313,120 @@
       }
 
       .canvas-view {
+        position: relative;
         width: 100%;
         min-width: 1200px;
         height: calc(100vh - 56px);
+        --canvas-rail-width: 188px;
         background: var(--bg);
       }
 
       .canvas-rail {
-        flex: 0 0 188px;
-        gap: 18px;
+        position: relative;
+        box-sizing: border-box;
+        flex: 0 0 var(--canvas-rail-width);
+        width: var(--canvas-rail-width);
+        gap: 0;
         padding: 18px 14px 16px;
+        overflow: visible;
         border: 0;
         background: var(--panel);
+      }
+
+      .canvas-rail-content {
+        display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 0;
+        flex-direction: column;
+        gap: 18px;
+        overflow: hidden;
+      }
+
+      .canvas-rail-edge {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: calc(var(--canvas-rail-width) - 8px);
+        z-index: 30;
+        width: 16px;
+        pointer-events: none;
+      }
+
+      .canvas-rail-resize {
+        position: absolute;
+        inset: 0 3px;
+        width: 10px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: col-resize;
+        pointer-events: auto;
+        touch-action: none;
+      }
+
+      .canvas-rail-resize:hover {
+        background: var(--border);
+        opacity: 0.45;
+      }
+
+      .canvas-rail-resize:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .canvas-rail-toggle {
+        position: absolute;
+        top: 50%;
+        right: -6px;
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        padding: 0;
+        border: 1px solid var(--border-strong);
+        border-radius: 50%;
+        background: var(--panel);
+        color: var(--muted);
+        transform: translateY(-50%);
+        pointer-events: auto;
+      }
+
+      .canvas-rail-toggle:hover {
+        border-color: var(--text);
+        color: var(--text);
+      }
+
+      .canvas-rail-toggle svg {
+        width: 15px;
+        height: 15px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+        transition: transform 120ms ease;
+      }
+
+      #canvasView[data-canvas-rail-collapsed='true'] .canvas-rail-content {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #canvasView[data-canvas-rail-collapsed='true'] .canvas-rail {
+        padding-inline: 0;
+      }
+
+      #canvasView[data-canvas-rail-collapsed='true'] .canvas-rail-toggle svg {
+        transform: rotate(180deg);
+      }
+
+      #canvasView.is-rail-resizing,
+      #canvasView.is-rail-resizing * {
+        cursor: col-resize !important;
+        user-select: none;
       }
 
       .canvas-rail-tools,
@@ -5403,6 +5494,7 @@
 
       .canvas-node {
         min-height: 120px;
+        overflow: visible;
         border-color: var(--border-strong);
         border-radius: 3px;
         background: var(--panel);
@@ -5424,6 +5516,168 @@
       .canvas-node.selected {
         border-color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent);
+      }
+
+      .canvas-node.connection-source {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent), inset 0 0 0 1px var(--accent-soft);
+      }
+
+      .canvas-connections {
+        z-index: 0;
+      }
+
+      .canvas-connection {
+        stroke: var(--border-strong);
+        pointer-events: none;
+      }
+
+      .canvas-connection-hit {
+        fill: none;
+        stroke: transparent;
+        stroke-width: 16px;
+        vector-effect: non-scaling-stroke;
+        pointer-events: stroke;
+      }
+
+      .canvas-connection-hit.source,
+      .canvas-connection-hit.target {
+        cursor: crosshair;
+      }
+
+      .canvas-connection-hit.curve {
+        cursor: grab;
+      }
+
+      .canvas-connection-hit.curve:active,
+      .canvas-viewport.is-connection-dragging .canvas-connection-hit.curve {
+        cursor: grabbing;
+      }
+
+      .canvas-connection.dragging {
+        stroke: var(--accent);
+      }
+
+      .canvas-connection:hover,
+      .canvas-connection.selected,
+      .canvas-connection.source {
+        stroke: var(--accent);
+      }
+
+      .canvas-connection.search-related,
+      .canvas-node.search-related {
+        opacity: 0.58;
+      }
+
+      .canvas-connection.search-related:hover,
+      .canvas-connection.search-related.selected,
+      .canvas-connection.search-related.source,
+      .canvas-connection-draft,
+      .canvas-node.search-related:hover,
+      .canvas-node.search-related:focus-within,
+      .canvas-node.search-related.selected,
+      .canvas-node.search-related.connection-source,
+      .canvas-node.search-related.connection-target {
+        opacity: 1;
+      }
+
+      .canvas-connection-draft {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        stroke-dasharray: 6 5;
+        vector-effect: non-scaling-stroke;
+        pointer-events: none;
+      }
+
+      .canvas-connection-zone-highlight {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 5px;
+        vector-effect: non-scaling-stroke;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 90ms ease-out;
+      }
+
+      .canvas-connection-zone-highlight.is-visible {
+        opacity: 0.9;
+      }
+
+      .canvas-node.connection-target {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent-soft);
+      }
+
+      .canvas-link-handles {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+
+      .canvas-link-handle {
+        position: absolute;
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        padding: 3px;
+        border: 1px solid var(--accent);
+        border-radius: 50%;
+        background: var(--panel-raised);
+        color: var(--accent);
+        opacity: 0;
+        pointer-events: none;
+        cursor: crosshair;
+        transform: translate(-50%, -50%);
+        transition: opacity 90ms ease, transform 90ms ease, background 90ms ease;
+      }
+
+      .canvas-link-handle-top {
+        top: 0;
+        left: 50%;
+      }
+
+      .canvas-link-handle-right {
+        top: 50%;
+        left: 100%;
+      }
+
+      .canvas-link-handle-bottom {
+        top: 100%;
+        left: 50%;
+      }
+
+      .canvas-link-handle-left {
+        top: 50%;
+        left: 0;
+      }
+
+      .canvas-node:hover .canvas-link-handle,
+      .canvas-node:focus-within .canvas-link-handle,
+      .canvas-node.selected .canvas-link-handle,
+      .canvas-node.connection-source .canvas-link-handle,
+      .canvas-node.connection-target .canvas-link-handle {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .canvas-link-handle:hover,
+      .canvas-link-handle:focus-visible {
+        background: var(--accent-soft);
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        transform: translate(-50%, -50%) scale(1.08);
+      }
+
+      .canvas-link-handle svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-width: 2;
       }
 
       .canvas-node-action {
@@ -5453,7 +5707,6 @@
         color: var(--muted);
       }
 
-      .canvas-arrange-panel,
       .canvas-context-bar,
       .canvas-minimap,
       .canvas-zoom-controls {
@@ -5463,8 +5716,6 @@
         box-shadow: none;
       }
 
-      .canvas-arrange-panel button:hover,
-      .canvas-arrange-panel label:hover,
       .canvas-context-bar button:hover,
       .canvas-zoom-controls button:hover {
         background: var(--btn-hover);
@@ -5551,7 +5802,7 @@
       <div class="header-primary">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="3" width="16" height="18" rx="3"></rect><path d="M8 7h8M8 11h8M8 15h5"></path></svg>
+            <svg viewBox="0 0 36 36" focusable="false"><path d="M4 8 11 5v21l-7 3z"></path><path d="M14 6 21 2v21l-7 3z"></path><path d="M24 8 31 5v21l-7 3z"></path></svg>
           </span>
           <div class="brand-copy">
             <h1 data-i18n="appName">TabWall</h1>
@@ -5589,11 +5840,11 @@
         </div>
         <div class="header-actions">
           <div class="quick-add-wrap" id="quickAddWrap">
-            <button type="button" class="btn primary quick-add-main" id="quickAddBtn" data-i18n-aria="quickAddTab" aria-label="儲存目前分頁">
+            <button type="button" class="btn quick-add-main" id="quickAddBtn" data-i18n-aria="quickAddTab" aria-label="儲存目前分頁">
               <svg viewBox="0 0 24 24" focusable="false"><path d="M12 5v14M5 12h14"></path></svg>
               <span data-i18n="quickAddTab">儲存目前分頁</span>
             </button>
-            <button type="button" class="btn primary quick-add-menu-btn" id="quickAddMenuBtn" aria-expanded="false" aria-controls="quickAddMenu" data-i18n-title="quickAddMenuTitle" title="新增選項" aria-label="新增選項">
+            <button type="button" class="btn quick-add-menu-btn" id="quickAddMenuBtn" aria-expanded="false" aria-controls="quickAddMenu" data-i18n-title="quickAddMenuTitle" title="新增選項" aria-label="新增選項">
               <svg viewBox="0 0 24 24" focusable="false"><path d="m7 10 5 5 5-5"></path></svg>
             </button>
             <div class="quick-menu" id="quickAddMenu" hidden>
@@ -5611,21 +5862,13 @@
           </button>
           <button type="button" class="btn header-text-btn" id="tagsBtn" data-i18n-title="tagsManage" data-i18n-aria="tagsManage" title="Tags" aria-label="Tags"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path><path d="M8 9h8M8 12h5"></path></svg><span data-i18n="tagsManage">Tags</span></button>
           <button type="button" class="btn header-text-btn" id="settingsBtn" data-i18n-title="settings" data-i18n-aria="settings" title="設定" aria-label="設定"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path><circle cx="12" cy="12" r="4"></circle></svg><span data-i18n="settings">設定</span></button>
+          <button type="button" class="btn header-text-btn" id="themeBtn" data-i18n-title="themeToggle" data-i18n-aria="themeToggle" title="切換主題" aria-label="切換主題">Light</button>
           <button type="button" class="btn header-text-btn" id="helpBtn" data-i18n-title="help" data-i18n-aria="help" title="說明" aria-label="說明"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.7 9a2.4 2.4 0 1 1 3.9 1.8c-1.1.8-1.6 1.2-1.6 2.7M12 17h.01"></path></svg><span data-i18n="help">說明</span></button>
           <button type="button" class="btn icon-close" id="closeBtn" data-i18n-title="close" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
       </div>
       <div class="toolbar-secondary">
         <div class="toolbar-group">
-          <select id="sortBy" data-i18n-aria="sort" aria-label="排序" title="排序">
-            <option value="newest" data-i18n="sortNewest">儲存時間（新→舊）</option>
-            <option value="oldest" data-i18n="sortOldest">儲存時間（舊→新）</option>
-            <option value="group-first" data-i18n="sortGroupFirst">Group 優先</option>
-            <option value="title" data-i18n="sortTitle">名稱 A→Z</option>
-            <option value="title-desc" data-i18n="sortTitleDesc">名稱 Z→A</option>
-            <option value="domain" data-i18n="sortDomain">網域 A→Z</option>
-            <option value="manual" data-i18n="sortManual">手動排列</option>
-          </select>
           <label class="cols-control" id="colsControl" data-i18n-title="colsTitle" title="卡片欄數 4–10">
             <span data-i18n="cols">欄數</span>
             <input id="cardCols" type="range" min="4" max="10" step="1" value="4" />
@@ -5638,7 +5881,6 @@
           <button type="button" class="btn" id="moreToolsBtn" data-i18n="moreTools">更多工具</button>
           <div class="tools-menu" id="moreToolsMenu" hidden>
             <button type="button" class="menu-item" id="openDedupeBtn" data-i18n="dedupeScan" data-i18n-title="dedupeScanTitle" title="掃描重複">掃描重複</button>
-            <button type="button" class="menu-item" id="themeBtn" data-i18n-title="themeToggle" title="切換主題">Light</button>
           </div>
         </div>
       </div>
@@ -5646,12 +5888,13 @@
 
     <main>
       <section id="canvasView" class="canvas-view" aria-label="Spatial Canvas" aria-hidden="true" hidden>
-        <aside class="canvas-rail" aria-label="畫布工具">
+        <aside id="canvasRail" class="canvas-rail" aria-label="畫布工具">
+          <div class="canvas-rail-content">
           <div class="canvas-rail-tools">
-            <button type="button" class="canvas-tool active" data-canvas-tool="select" title="選取"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 5 15 3.2-6.2L19 16 20 15l-5.8-5.8L20 6z"></path></svg><span data-i18n="canvasSelect">選取</span></button>
-            <button type="button" class="canvas-tool" data-canvas-tool="pan" title="平移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V6a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-5a1.5 1.5 0 0 1 3 0v7-3a1.5 1.5 0 0 1 3 0v6c0 4-2.4 6-6 6h-2.5c-2 0-3.3-.8-4.5-2.3L5 14a1.8 1.8 0 0 1 3-2.1Z"></path></svg><span data-i18n="canvasPan">平移</span></button>
-            <button type="button" class="canvas-tool" data-canvas-tool="area" title="框選區域"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8V5h3M16 5h3v3M19 16v3h-3M8 19H5v-3"></path></svg><span data-i18n="canvasArea">框選</span></button>
-            <button type="button" class="canvas-tool" id="canvasLinkBtn" title="連結"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5 14 10M8.5 16.5l-1.2 1.2a3.2 3.2 0 0 1-4.5-4.5l3.5-3.5a3.2 3.2 0 0 1 4.5 0"></path><path d="m15.5 7.5 1.2-1.2a3.2 3.2 0 0 1 4.5 4.5l-3.5 3.5a3.2 3.2 0 0 1-4.5 0"></path></svg><span data-i18n="canvasLink">連結</span></button>
+            <button type="button" class="canvas-tool active" data-canvas-tool="select" title="選取" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 5 15 3.2-6.2L19 16 20 15l-5.8-5.8L20 6z"></path></svg><span data-i18n="canvasSelect">選取</span></button>
+            <button type="button" class="canvas-tool" data-canvas-tool="pan" title="平移" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V6a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-5a1.5 1.5 0 0 1 3 0v7-3a1.5 1.5 0 0 1 3 0v6c0 4-2.4 6-6 6h-2.5c-2 0-3.3-.8-4.5-2.3L5 14a1.8 1.8 0 0 1 3-2.1Z"></path></svg><span data-i18n="canvasPan">平移</span></button>
+            <button type="button" class="canvas-tool" data-canvas-tool="area" title="框選區域" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8V5h3M16 5h3v3M19 16v3h-3M8 19H5v-3"></path></svg><span data-i18n="canvasArea">框選</span></button>
+            <button type="button" class="canvas-tool" id="canvasLinkBtn" data-canvas-tool="link" title="連結" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5 14 10M8.5 16.5l-1.2 1.2a3.2 3.2 0 0 1-4.5-4.5l3.5-3.5a3.2 3.2 0 0 1 4.5 0"></path><path d="m15.5 7.5 1.2-1.2a3.2 3.2 0 0 1 4.5 4.5l-3.5 3.5a3.2 3.2 0 0 1-4.5 0"></path></svg><span data-i18n="canvasLink">連結</span></button>
           </div>
           <div class="canvas-rail-section">
             <div class="canvas-rail-label">索引</div>
@@ -5660,21 +5903,41 @@
             <button type="button" class="canvas-index" id="canvasPinnedBtn">已固定</button>
             <div id="canvasStackIndex" class="canvas-stack-index"></div>
           </div>
+          </div>
+          <div id="canvasRailEdge" class="canvas-rail-edge">
+            <div
+              id="canvasRailResize"
+              class="canvas-rail-resize"
+              role="separator"
+              tabindex="0"
+              aria-orientation="vertical"
+              aria-valuemin="34"
+              aria-valuemax="360"
+              aria-valuenow="188"
+              data-i18n-title="canvasRailResize"
+              data-i18n-aria="canvasRailResize"
+              title="調整畫布側邊欄寬度"
+              aria-label="調整畫布側邊欄寬度"
+            ></div>
+            <button
+              type="button"
+              id="canvasRailToggle"
+              class="canvas-rail-toggle"
+              aria-controls="canvasRail"
+              aria-expanded="true"
+              data-i18n-title="canvasRailCollapse"
+              data-i18n-aria="canvasRailCollapse"
+              title="收合畫布側邊欄"
+              aria-label="收合畫布側邊欄"
+            ><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m14 5-7 7 7 7"></path></svg></button>
+          </div>
         </aside>
         <div id="canvasViewport" class="canvas-viewport" tabindex="0" role="application" aria-label="TabWall 無限畫布">
           <div id="canvasWorld" class="canvas-world">
+            <svg id="canvasConnections" class="canvas-connections" role="group" data-i18n-aria="canvasConnectionsLabel" aria-label="畫布連線" focusable="false"></svg>
             <div id="canvasNodes" class="canvas-nodes"></div>
             <div id="canvasSelection" class="canvas-selection" hidden></div>
             <button type="button" id="canvasDropZone" class="canvas-drop-zone" hidden data-i18n="canvasDropStack">拖曳到這裡建立 Stack</button>
-          </div>
-          <div id="canvasArrangePanel" class="canvas-arrange-panel" data-open="false">
-            <strong data-i18n="canvasArrange">整理畫布</strong>
-            <button type="button" data-canvas-arrange="stack" data-i18n="canvasArrangeStack">依 Stack</button>
-            <button type="button" data-canvas-arrange="date" data-i18n="canvasArrangeDate">依日期</button>
-            <button type="button" data-canvas-arrange="grid" data-i18n="canvasArrangeGrid">棋盤排列</button>
-            <button type="button" data-canvas-arrange="circle" data-i18n="canvasArrangeCircle">圓形排列</button>
-            <button type="button" data-canvas-arrange="manual" data-i18n="canvasArrangeManual">手動</button>
-            <label><input type="checkbox" id="canvasSnapToggle" checked /> <span data-i18n="canvasSnap">吸附格線</span></label>
           </div>
           <div id="canvasContextBar" class="canvas-context-bar" aria-hidden="true">
             <span class="canvas-selection-count"><span data-canvas-selection-count>0</span> 個項目</span>
@@ -5686,9 +5949,9 @@
             <button type="button" data-canvas-action="stack" data-i18n="canvasMoveToStack">移至 Stack</button>
             <button type="button" class="danger" data-canvas-action="delete" data-i18n="delete">刪除</button>
           </div>
-          <div id="canvasMinimap" class="canvas-minimap" aria-hidden="true">
+          <div id="canvasMinimap" class="canvas-minimap" role="group" aria-label="畫布預覽" data-i18n-aria="canvasMinimapLabel">
             <div class="canvas-minimap-world">
-              <span class="canvas-minimap-viewport" hidden aria-hidden="true"></span>
+              <span id="canvasMinimapViewport" class="canvas-minimap-viewport" hidden role="button" tabindex="0" data-i18n-aria="canvasMinimapViewport" aria-label="拖曳以平移畫布"></span>
             </div>
             <button type="button" id="canvasResetView" data-i18n="canvasResetView">重設視角</button>
           </div>
@@ -5696,7 +5959,6 @@
             <button type="button" id="canvasZoomOut" aria-label="縮小">−</button>
             <span id="canvasZoomValue">100%</span>
             <button type="button" id="canvasZoomIn" aria-label="放大">＋</button>
-            <button type="button" id="canvasArrangeBtn" data-i18n-title="canvasArrange" title="整理畫布">整理</button>
             <span id="canvasSyncStatus" class="canvas-sync-status" aria-live="polite"></span>
           </div>
         </div>
@@ -5818,6 +6080,26 @@
           </div>
           <div class="settings-row" style="margin-top:10px">
             <button type="button" class="btn" id="settingsCanvasResetView" data-i18n="canvasResetView">重設視角</button>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="canvas">
+          <h2 data-i18n="canvasSortTitle">排序</h2>
+          <div class="settings-row">
+            <label class="inline" for="sortBy">
+              <span data-i18n="canvasSortLabel">排序方式</span>
+              <select id="sortBy" data-i18n-aria="sort" aria-label="排序">
+                <option value="newest" data-i18n="sortDate">日期</option>
+                <option value="domain" data-i18n="sortFqdn">FQDN</option>
+                <option value="group-first" data-i18n="sortGroup">Group</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="canvas">
+          <h2 data-i18n="canvasArrangeTitle">排列</h2>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px">
+            <button type="button" class="btn" data-settings-arrange="grid" data-i18n="canvasArrangeGrid">棋盤</button>
+            <button type="button" class="btn" data-settings-arrange="align" data-i18n="canvasArrangeAlign">對齊格式</button>
           </div>
         </div>
         <div class="settings-block" data-settings-section="display">

@@ -68,6 +68,9 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Drag one node onto another | Stack the items into a group |
 | Drag on empty canvas / use Pan | Move the canvas; wheel controls zoom |
 | Frame-select tool | Select nodes in a rectangular area |
+| Drag the minimap viewport frame | Pan the current canvas view; release commits one pan operation |
+| Link tool | Hover a node to reveal four `+` handles, then drag from any side; connections snap to the nearest side handle, and clicking two nodes or groups remains available as a fallback |
+| Drag a connection line | The first and last thirds reconnect an endpoint; the middle third bends or lengthens the curve. The line uses a 16px near-hit area, and double-click resets its custom curve |
 | Restore a stack or group | Recreate a Chrome Tab Group |
 
 List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering.
@@ -78,6 +81,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
 - Field scope: use `tag`, `note`, or `group` followed by Tab.
 - When a group matches, the card lists the member tabs that matched.
+- When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
 - Search input is debounced, and thumbnails load near the visible area.
 
 ### Features
@@ -86,7 +90,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Static themes:** Backgrounds use static themes; video backgrounds and user-imported videos are not supported.
 - Park and restore groups, with member notes and tags.
 - Multi-selection and batch operations.
-- **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap, and automatic layout by Stack or date.
+- **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible.
+- **Canvas settings:** sort by date, FQDN, or Group; arrange with Grid or Aligned Rows using a 96px card gap while preserving stored node sizes.
 - **Stack:** select two or more items or drop one node onto another to create a Chrome Tab Group-backed Stack.
 - New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
 - Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
@@ -197,6 +202,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 拖曳節點 | 在畫布上移動；位置會自動儲存 |
 | 將節點拖到另一節點 | 將項目堆疊成群組 |
 | 使用平移／框選工具 | 平移畫布或框選多個節點 |
+| 拖曳 minimap 視角框 | 平移目前畫布；放開後提交單次視角操作 |
+| 連結工具 | 將滑鼠移到卡片即可顯示四側 `+` handle，從任一側拖曳；連線會貼齊相對方向的側邊 handle，也可點擊兩張卡片或群組建立無方向持久連線 |
+| 拖曳連線線段 | 前／後三分之一可重接端點，中間三分之一可彎曲或拉長線段；線段提供 16px 近距離命中範圍，雙擊可重設自訂曲線 |
 | 還原堆疊或群組 | 重新建立 Chrome Tab Group |
 
 列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。
@@ -207,6 +215,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
 - 欄位範圍：輸入 `tag`、`note` 或 `group` 後按 Tab。
 - 群組命中時，卡片會列出符合條件的成員分頁。
+- 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
 - 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
 
 ### 功能
@@ -215,9 +224,10 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **靜態主題：** 背景使用靜態主題，不支援影片背景或使用者匯入影片。
 - 暫存與還原群組，支援成員備註與標籤。
 - 多選與批次操作。
-- **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、minimap，以及依 Stack／日期整理。
+- **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。
+- **畫布設定：** 可依日期、FQDN 或 Group 排序；排列提供棋盤與對齊格式，使用 96px 卡片間距並保留儲存的卡片尺寸。
 - **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併。
-- 新安裝預設淺色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
+- 新安裝預設深色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
 - 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
@@ -230,7 +240,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
-- **響應式操作：** 窄視窗 rail 會變成至少 44px 的觸控工具列；畫布操作不依賴 hover，並支援 reduced-motion 與鍵盤 focus ring。
+- **桌面工作台：** 固定 1200px 桌面幾何；窄視窗保留完整版面並使用水平捲動，不重新排版為手機工具列。
 
 ### 安裝
 

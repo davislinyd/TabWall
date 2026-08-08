@@ -302,7 +302,19 @@ function tab(id, url = 'https://example.com/') {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.17.0');
+  assert.equal(MANIFEST.version, '2.19.3');
+});
+
+test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const updated = await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: { canvasRailWidth: 240, canvasRailCollapsed: true },
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(updated.settings.canvasRailWidth, 240);
+  assert.equal(updated.settings.canvasRailCollapsed, true);
 });
 
 function dispatchMessage(runtime, message, sender = {}) {
@@ -366,7 +378,7 @@ test('canvas layout defaults missing positions and normalizes bounds', async () 
   assert.equal(normalized.positions[ITEM_ID].w, 640);
   assert.equal(normalized.positions[ITEM_ID].h, 120);
   assert.equal(normalized.positions[ITEM_ID].z, 0);
-  assert.equal(normalized.positions[SOURCE_ID].x, 396);
+  assert.equal(normalized.positions[SOURCE_ID].x, 434);
   assert.equal(normalized.positions['unknown-id'], undefined);
 });
 
@@ -567,6 +579,65 @@ test('CREATE_STACK keeps item metadata and remaps the canvas anchor', async () =
   assert.equal(layout.positions[result.groupId].z, 1);
 });
 
+test('canvas layout PATCH normalizes persistent connections', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID), tab(TARGET_ID)]);
+  const result = await runtime.api.patchCanvasLayout({
+    version: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    positions: {},
+    connections: [
+      { sourceId: SOURCE_ID, targetId: ITEM_ID, curveOffset: { x: 32, y: -16 } },
+      { sourceId: ITEM_ID, targetId: SOURCE_ID },
+      { sourceId: ITEM_ID, targetId: ITEM_ID },
+      { sourceId: ITEM_ID, targetId: 'not-an-item' },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.layout.connections)), [{
+    sourceId: ITEM_ID,
+    targetId: SOURCE_ID,
+    curveOffset: { x: 32, y: -16 },
+  }]);
+});
+
+test('Stack merge remaps connection endpoints and removes self or duplicate links', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID), tab(TARGET_ID), tab(GROUP_HTTP_MEMBER_ID)]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    positions: {
+      [ITEM_ID]: { x: 100, y: 100, w: 220, h: 170, z: 0 },
+      [SOURCE_ID]: { x: 400, y: 100, w: 220, h: 170, z: 1 },
+      [TARGET_ID]: { x: 700, y: 100, w: 220, h: 170, z: 2 },
+      [GROUP_HTTP_MEMBER_ID]: { x: 1000, y: 100, w: 220, h: 170, z: 3 },
+    },
+    connections: [
+      { sourceId: ITEM_ID, targetId: TARGET_ID, curveOffset: { x: 48, y: 12 } },
+      { sourceId: SOURCE_ID, targetId: TARGET_ID, curveOffset: { x: -24, y: 16 } },
+      { sourceId: ITEM_ID, targetId: SOURCE_ID },
+      { sourceId: TARGET_ID, targetId: GROUP_HTTP_MEMBER_ID, curveOffset: { x: 60, y: -30 } },
+    ],
+  });
+  const result = await runtime.api.stackItems(ITEM_ID, SOURCE_ID);
+  assert.equal(result.ok, true);
+  const layout = await runtime.api.getCanvasLayout();
+  const [sourceId, targetId] = [result.groupId, TARGET_ID].sort();
+  const normalizedConnections = JSON.parse(JSON.stringify(layout.connections));
+  assert.deepEqual(normalizedConnections.find((connection) => (
+    [connection.sourceId, connection.targetId].includes(result.groupId)
+      && [connection.sourceId, connection.targetId].includes(TARGET_ID)
+  )), { sourceId, targetId });
+  assert.deepEqual(normalizedConnections.find((connection) => connection.sourceId === GROUP_HTTP_MEMBER_ID || connection.targetId === GROUP_HTTP_MEMBER_ID), {
+    sourceId: TARGET_ID,
+    targetId: GROUP_HTTP_MEMBER_ID,
+    curveOffset: { x: 60, y: -30 },
+  });
+});
+
 test('overlay quick save uses the content sender tab', async () => {
   const runtime = createRuntime();
   await runtime.ready;
@@ -720,25 +791,32 @@ test('append import keeps the current viewport and offsets incoming canvas items
   });
 
   const incoming = tab(TARGET_ID, 'https://incoming.example/');
+  const incomingSecond = tab(SOURCE_ID, 'https://incoming-second.example/');
   const result = await runtime.api.importBackup({
     format: 'tabwall-backup',
     version: runtime.Build.FORMAT_VERSION,
     media: 'none',
-    parkedItems: [incoming],
-    parkedTabs: [incoming],
+    parkedItems: [incoming, incomingSecond],
+    parkedTabs: [incoming, incomingSecond],
     settings: {},
     tagCatalog: [],
     canvasLayout: {
       version: 1,
       viewport: { x: 900, y: 900, zoom: 0.4 },
-      positions: { [TARGET_ID]: { x: 720, y: 360, w: 220, h: 170, z: 7 } },
+      positions: {
+        [TARGET_ID]: { x: 720, y: 360, w: 220, h: 170, z: 7 },
+        [SOURCE_ID]: { x: 1020, y: 360, w: 220, h: 170, z: 8 },
+      },
+      connections: [{ sourceId: TARGET_ID, targetId: SOURCE_ID, curveOffset: { x: 36, y: -18 } }],
     },
   }, { mode: 'append' });
   assert.equal(result.ok, true);
 
   const items = await runtime.api.getParkedItems();
   const appended = items.find((item) => item.url === 'https://incoming.example/');
+  const appendedSecond = items.find((item) => item.url === 'https://incoming-second.example/');
   assert.ok(appended);
+  assert.ok(appendedSecond);
   const layout = await runtime.api.getCanvasLayout();
   assert.equal(layout.viewport.x, 88);
   assert.equal(layout.viewport.y, 144);
@@ -748,6 +826,12 @@ test('append import keeps the current viewport and offsets incoming canvas items
   assert.equal(layout.positions[appended.id].w, 220);
   assert.equal(layout.positions[appended.id].h, 170);
   assert.equal(layout.positions[appended.id].z, 7);
+  const [sourceId, targetId] = [appended.id, appendedSecond.id].sort();
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.connections)), [{
+    sourceId,
+    targetId,
+    curveOffset: { x: 36, y: -18 },
+  }]);
 });
 
 test('staged replace import commits IndexedDB media without inline message data', async () => {

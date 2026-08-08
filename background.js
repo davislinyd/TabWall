@@ -190,6 +190,9 @@ function normalizeTags(tags) {
 
 const LEGACY_DEFAULT_CANVAS_ZOOM = 0.76;
 const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
+const DEFAULT_CANVAS_CARD_GAP = 96;
+const DEFAULT_CANVAS_CARD_STEP_X = 338;
+const DEFAULT_CANVAS_CARD_STEP_Y = 283;
 
 function clampNumber(value, min, max, fallback) {
   const n = Number(value);
@@ -200,8 +203,8 @@ function clampNumber(value, min, max, fallback) {
 function defaultCanvasPosition(index) {
   const i = Math.max(0, Number(index) || 0);
   return {
-    x: 96 + (i % 4) * 300,
-    y: 96 + Math.floor(i / 4) * 238,
+    x: DEFAULT_CANVAS_CARD_GAP + (i % 4) * DEFAULT_CANVAS_CARD_STEP_X,
+    y: DEFAULT_CANVAS_CARD_GAP + Math.floor(i / 4) * DEFAULT_CANVAS_CARD_STEP_Y,
     w: 220,
     h: 170,
     z: i,
@@ -220,6 +223,52 @@ function normalizeCanvasPosition(raw, fallback) {
   };
 }
 
+function normalizeCanvasConnections(rawConnections, validIds = []) {
+  const maxCurveOffset = 2000;
+  const normalizeCurveOffset = (raw) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const x = clampNumber(raw.x, -maxCurveOffset, maxCurveOffset, 0);
+    const y = clampNumber(raw.y, -maxCurveOffset, maxCurveOffset, 0);
+    return x || y ? { x, y } : null;
+  };
+  const ids = new Set((Array.isArray(validIds) ? validIds : [...(validIds || [])])
+    .map((id) => String(id || ''))
+    .filter(Boolean));
+  const seen = new Set();
+  const connections = [];
+  for (const entry of Array.isArray(rawConnections) ? rawConnections : []) {
+    const sourceId = String(entry?.sourceId || '');
+    const targetId = String(entry?.targetId || '');
+    if (!sourceId || !targetId || sourceId === targetId) continue;
+    if (ids.size && (!ids.has(sourceId) || !ids.has(targetId))) continue;
+    const [source, target] = sourceId < targetId
+      ? [sourceId, targetId]
+      : [targetId, sourceId];
+    const key = `${source}\u0000${target}`;
+    const curveOffset = normalizeCurveOffset(entry?.curveOffset);
+    if (seen.has(key)) {
+      if (curveOffset) {
+        const existing = connections.find((connection) => (
+          connection.sourceId === source && connection.targetId === target
+        ));
+        if (existing && !existing.curveOffset) existing.curveOffset = curveOffset;
+      }
+      continue;
+    }
+    seen.add(key);
+    connections.push({
+      sourceId: source,
+      targetId: target,
+      ...(curveOffset ? { curveOffset } : {}),
+    });
+  }
+  connections.sort((left, right) => {
+    const sourceOrder = left.sourceId.localeCompare(right.sourceId);
+    return sourceOrder || left.targetId.localeCompare(right.targetId);
+  });
+  return connections;
+}
+
 function normalizeCanvasLayout(raw, itemIds = []) {
   const value = raw && typeof raw === 'object' ? raw : {};
   const ids = new Set((Array.isArray(itemIds) ? itemIds : []).map(String));
@@ -236,6 +285,7 @@ function normalizeCanvasLayout(raw, itemIds = []) {
       positions[String(id)] = normalizeCanvasPosition(position, defaultCanvasPosition(index++));
     }
   }
+  const connectionIds = ids.size ? [...ids] : Object.keys(positions);
   return {
     version: CANVAS_LAYOUT_VERSION,
     viewport: {
@@ -244,6 +294,7 @@ function normalizeCanvasLayout(raw, itemIds = []) {
       zoom: clampNumber(value.viewport?.zoom, 0.25, 2, DEFAULT_CANVAS_VIEWPORT.zoom),
     },
     positions,
+    connections: normalizeCanvasConnections(value.connections, connectionIds),
   };
 }
 
@@ -394,8 +445,24 @@ function remapCanvasLayout(layout, removedIds, newId, anchorIds = []) {
   const next = normalizeCanvasLayout(layout);
   const anchors = Array.isArray(anchorIds) ? anchorIds : [];
   const anchor = anchors.map((id) => next.positions[id]).find(Boolean);
-  for (const id of removedIds || []) delete next.positions[id];
+  const removed = new Set((removedIds || []).map(String));
+  const remapId = (id) => removed.has(id) && newId ? String(newId) : id;
+  next.connections = normalizeCanvasConnections(
+    next.connections.map((connection) => {
+      const sourceId = remapId(connection.sourceId);
+      const targetId = remapId(connection.targetId);
+      const remapped = sourceId !== connection.sourceId || targetId !== connection.targetId;
+      return {
+        sourceId,
+        targetId,
+        ...(!remapped && connection.curveOffset ? { curveOffset: connection.curveOffset } : {}),
+      };
+    }),
+    [...Object.keys(next.positions).filter((id) => !removed.has(id)), ...(newId ? [String(newId)] : [])],
+  );
+  for (const id of removed) delete next.positions[id];
   if (newId && anchor) next.positions[newId] = { ...anchor };
+  next.connections = normalizeCanvasConnections(next.connections, Object.keys(next.positions));
   return next;
 }
 
@@ -406,8 +473,10 @@ function mergeAppendedCanvasLayout(baseLayout, incomingLayout, incomingItems, al
     ? incomingLayout.positions
     : {};
   let index = Object.keys(next.positions).length;
+  const incomingIdMap = new Map();
   for (const item of incomingItems || []) {
     const sourceId = item.__stageItemId || item.__stageGroupId;
+    if (sourceId) incomingIdMap.set(String(sourceId), String(item.id));
     const source = sourceId ? sourcePositions[sourceId] : null;
     if (source) {
       next.positions[item.id] = normalizeCanvasPosition({
@@ -418,6 +487,17 @@ function mergeAppendedCanvasLayout(baseLayout, incomingLayout, incomingItems, al
     }
     index += 1;
   }
+  const incomingConnections = Array.isArray(incomingLayout?.connections)
+    ? incomingLayout.connections.map((connection) => ({
+        sourceId: incomingIdMap.get(String(connection?.sourceId || '')) || String(connection?.sourceId || ''),
+        targetId: incomingIdMap.get(String(connection?.targetId || '')) || String(connection?.targetId || ''),
+        ...(connection?.curveOffset ? { curveOffset: connection.curveOffset } : {}),
+      }))
+    : [];
+  next.connections = normalizeCanvasConnections(
+    [...next.connections, ...incomingConnections],
+    ids,
+  );
   return next;
 }
 
@@ -3335,6 +3415,9 @@ if (globalThis.__TABWALL_TEST__) {
     getCanvasLayoutRecord,
     setCanvasLayout,
     patchCanvasLayout,
+    normalizeCanvasLayout,
+    remapCanvasLayout,
+    mergeAppendedCanvasLayout,
     commitItemsAndCanvas,
     commitSaveTab,
     saveCurrentTab,
