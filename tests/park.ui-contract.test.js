@@ -244,6 +244,35 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.match(HTML_SOURCE, /id="autoBackupStatus"[\s\S]*?<\/div>\s*<\/div>\s*<div class="settings-footer"/);
 });
 
+test('Automatic note and tag save rules expose a localized settings editor', () => {
+  assert.match(HTML_SOURCE, /data-settings-section="automation"[^>]*data-i18n="settingsAutomation"/);
+  assert.match(HTML_SOURCE, /id="autoSaveMetadataEnabled"/);
+  assert.match(HTML_SOURCE, /id="autoSaveMetadataRules"/);
+  assert.match(HTML_SOURCE, /id="autoSaveMetadataAddRuleBtn"/);
+  for (const field of ['domain', 'title']) {
+    assert.match(PARK_SOURCE, new RegExp(`['\\"]${field}['\\"]`));
+  }
+  for (const operator of ['match', 'contains', 'startsWith', 'endsWith', 'regex']) {
+    assert.match(PARK_SOURCE, new RegExp(`['\\"]${operator}['\\"]`));
+  }
+  for (const key of [
+    'autoSaveMetadataTitle',
+    'autoSaveMetadataHint',
+    'autoSaveMetadataEnable',
+    'autoSaveMetadataAddRule',
+    'autoSaveMetadataRuleEnable',
+    'autoSaveMetadataAddCondition',
+    'autoSaveMetadataNote',
+    'autoSaveMetadataTags',
+  ]) {
+    assert.match(PARK_SOURCE, new RegExp(`${key}:`));
+  }
+  assert.match(PARK_SOURCE, /settings\.autoSaveMetadata/);
+  assert.match(PARK_SOURCE, /type: 'PATCH_SETTINGS'/);
+  assert.match(PARK_SOURCE, /data-auto-save-rule-prop/);
+  assert.match(PARK_SOURCE, /data-auto-save-condition-prop/);
+});
+
 test('Spatial Canvas uses the single store and keyed interaction lifecycle', () => {
   assert.match(HTML_SOURCE, /<script src="canvasStore\.js"><\/script>/);
   assert.match(STORE_SOURCE, /function createCanvasStore\(options = \{\}\)/);
@@ -348,6 +377,38 @@ test('Canvas display geometry and connection endpoints use the four side handles
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle svg\s*\{[\s\S]*?width:\s*14px[\s\S]*?height:\s*14px/);
   assert.match(WORKBENCH_CSS, /\.canvas-node:hover \.canvas-link-handle/);
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle:hover,[\s\S]*?transform:\s*translate\(-50%, -50%\) scale\(1\.08\)/);
+});
+
+test('Canvas search results use a transient grid layout without persisting positions', () => {
+  assert.match(PARK_SOURCE, /let canvasSearchPreview = null/);
+  assert.match(PARK_SOURCE, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
+  assert.match(PARK_SOURCE, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
+  assert.match(PARK_SOURCE, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
+  assert.match(PARK_SOURCE, /if \(!isCanvasSearchPreviewActive\(searchContext\)\) \{[\s\S]*?canvasSearchPreview = null/);
+
+  const renderSource = PARK_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(renderSource, /const renderLayout = canvasSearchLayoutFor\(searchContext\)/);
+  assert.match(renderSource, /renderLayout\.positions\[item\.id\]/);
+  assert.match(renderSource, /renderCanvasMinimap\(filtered, renderLayout\)/);
+
+  const arrangeSource = PARK_SOURCE.match(/function arrangeCanvas\(mode = ''\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(arrangeSource, /if \(isCanvasSearchPreviewActive\(searchContext\)\)/);
+  assert.match(arrangeSource, /canvasSearchPreview\.positions =/);
+  const transientArrangeBranch = arrangeSource.split('if (isCanvasSearchPreviewActive(searchContext))')[1]?.split('const items =')[0] || '';
+  assert.doesNotMatch(transientArrangeBranch, /commitPositions|flush|sendMessage/);
+
+  const moveSource = PARK_SOURCE.match(/function canvasMoveSelected\(dx, dy\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(moveSource, /isCanvasSearchPreviewActive\(searchContext\)/);
+  assert.match(moveSource, /moveCanvasSearchPreview\(/);
+  const pointerSource = PARK_SOURCE.match(/function beginCanvasPointer\([\s\S]*?\n\}/)?.[0] || '';
+  assert.match(pointerSource, /const searchPreview = kind === 'node' && isCanvasSearchPreviewActive\(\)/);
+  assert.match(pointerSource, /if \(searchPreview\)[\s\S]*?searchStartPositions/);
+
+  const endPointerSource = PARK_SOURCE.match(/async function endCanvasPointer\(event\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(endPointerSource, /const operation = state\.searchPreview\s*\? null/);
+  assert.match(endPointerSource, /if \(state\.searchPreview\) finishCanvasSearchPointer\(state, state\.moved\)/);
+  const transientEndBranch = endPointerSource.match(/if \(state\.searchPreview\) \{[\s\S]*?return;/)?.[0] || '';
+  assert.doesNotMatch(transientEndBranch, /STACK_ITEMS|commitPositions|flush/);
 });
 
 test('Canvas zoom uses a layout-scaled inner world and translation-only outer transform', () => {

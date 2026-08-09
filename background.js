@@ -62,12 +62,28 @@ const DEFAULT_AUTO_BACKUP = {
   dirtyAt: 0,
 };
 
+const AUTO_SAVE_METADATA_MAX_RULES = 50;
+const AUTO_SAVE_METADATA_MAX_CONDITIONS = 20;
+const AUTO_SAVE_METADATA_OPERATORS = new Set([
+  'match',
+  'contains',
+  'startsWith',
+  'endsWith',
+  'regex',
+]);
+
+const DEFAULT_AUTO_SAVE_METADATA = {
+  enabled: false,
+  rules: [],
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
+  autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
 };
 
 const AUTO_BACKUP_ALARM = 'tabwall-auto-backup-schedule';
@@ -228,6 +244,43 @@ function normalizeTags(tags) {
       .map((tag) => safeText(tag, DATA_LIMITS.MAX_TAG_LENGTH).trim())
       .filter(Boolean)
   )].slice(0, DATA_LIMITS.MAX_TAGS);
+}
+
+function normalizeAutoSaveCondition(raw) {
+  const condition = raw && typeof raw === 'object' ? raw : {};
+  return {
+    field: condition.field === 'title' ? 'title' : 'domain',
+    operator: AUTO_SAVE_METADATA_OPERATORS.has(condition.operator)
+      ? condition.operator
+      : 'match',
+    negate: Boolean(condition.negate),
+    value: safeText(condition.value, DATA_LIMITS.MAX_TITLE_LENGTH).trim(),
+  };
+}
+
+function normalizeAutoSaveRule(raw) {
+  const rule = raw && typeof raw === 'object' ? raw : {};
+  const conditions = Array.isArray(rule.conditions)
+    ? rule.conditions.slice(0, AUTO_SAVE_METADATA_MAX_CONDITIONS).map(normalizeAutoSaveCondition)
+    : [];
+  return {
+    id: typeof rule.id === 'string' && rule.id ? rule.id : crypto.randomUUID(),
+    enabled: rule.enabled !== false,
+    logic: rule.logic === 'OR' ? 'OR' : 'AND',
+    conditions,
+    note: safeText(rule.note, DATA_LIMITS.MAX_NOTE_LENGTH),
+    tags: normalizeTags(rule.tags),
+  };
+}
+
+function normalizeAutoSaveMetadata(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    enabled: Boolean(source.enabled),
+    rules: Array.isArray(source.rules)
+      ? source.rules.slice(0, AUTO_SAVE_METADATA_MAX_RULES).map(normalizeAutoSaveRule)
+      : [],
+  };
 }
 
 const LEGACY_DEFAULT_CANVAS_ZOOM = 0.76;
@@ -936,6 +989,7 @@ function normalizeSettings(raw) {
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
   });
+  merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
   return merged;
 }
 
@@ -948,6 +1002,15 @@ async function patchSettings(partial) {
     autoBackup: patch.autoBackup
       ? { ...current.autoBackup, ...patch.autoBackup }
       : current.autoBackup,
+    autoSaveMetadata: patch.autoSaveMetadata
+      ? {
+          ...current.autoSaveMetadata,
+          ...patch.autoSaveMetadata,
+          rules: Array.isArray(patch.autoSaveMetadata.rules)
+            ? patch.autoSaveMetadata.rules
+            : current.autoSaveMetadata.rules,
+        }
+      : current.autoSaveMetadata,
   });
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
   if (patch.autoBackup) await syncAutoBackupAlarms(next.autoBackup);
@@ -2849,6 +2912,82 @@ async function deleteTabItemsByIds(ids) {
 
 // ─── Save tab ──────────────────────────────────────────────────────
 
+function autoSaveMetadataSource(tabLike, field) {
+  if (field === 'title') return typeof tabLike?.title === 'string' ? tabLike.title : '';
+  try {
+    return new URL(String(tabLike?.url || '')).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function matchesAutoSaveCondition(tabLike, rawCondition) {
+  const condition = normalizeAutoSaveCondition(rawCondition);
+  const source = autoSaveMetadataSource(tabLike, condition.field);
+  const value = condition.value;
+  if (!source || !value) return false;
+
+  let matched = false;
+  if (condition.operator === 'regex') {
+    try {
+      matched = new RegExp(value, 'i').test(source);
+    } catch {
+      return false;
+    }
+  } else {
+    const sourceLower = source.toLowerCase();
+    const valueLower = value.toLowerCase();
+    if (condition.operator === 'contains') matched = sourceLower.includes(valueLower);
+    else if (condition.operator === 'startsWith') matched = sourceLower.startsWith(valueLower);
+    else if (condition.operator === 'endsWith') matched = sourceLower.endsWith(valueLower);
+    else matched = sourceLower === valueLower;
+  }
+  return condition.negate ? !matched : matched;
+}
+
+function matchesAutoSaveRule(tabLike, rawRule) {
+  const rule = normalizeAutoSaveRule(rawRule);
+  if (!rule.enabled || !rule.conditions.length) return false;
+  const results = rule.conditions.map((condition) => matchesAutoSaveCondition(tabLike, condition));
+  return rule.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+}
+
+function appendUniqueAutoSaveNote(baseNote, additions) {
+  let note = safeText(baseNote, DATA_LIMITS.MAX_NOTE_LENGTH);
+  const seen = new Set(
+    note
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+  );
+  for (const addition of additions || []) {
+    for (const line of String(addition || '').split(/\r?\n/)) {
+      const value = line.trim();
+      if (!value || seen.has(value)) continue;
+      if (note && !note.endsWith('\n')) note += '\n';
+      note += value;
+      seen.add(value);
+    }
+  }
+  return note.slice(0, DATA_LIMITS.MAX_NOTE_LENGTH);
+}
+
+function applyAutoSaveMetadata(tabLike, base = {}, rawSettings = DEFAULT_AUTO_SAVE_METADATA) {
+  const metadata = normalizeAutoSaveMetadata(rawSettings);
+  let note = safeText(base.note, DATA_LIMITS.MAX_NOTE_LENGTH);
+  let tags = normalizeTags(base.tags);
+  if (!metadata.enabled) return { note, tags };
+
+  const matchedNotes = [];
+  for (const rule of metadata.rules) {
+    if (!matchesAutoSaveRule(tabLike, rule)) continue;
+    if (rule.note) matchedNotes.push(rule.note);
+    tags = normalizeTags([...tags, ...rule.tags]);
+  }
+  note = appendUniqueAutoSaveNote(note, matchedNotes);
+  return { note, tags };
+}
+
 function normalizeAfterSaveMode(value, fallback = 'close') {
   if (value === 'keep' || value === 'close') return value;
   return fallback === 'keep' ? 'keep' : 'close';
@@ -2862,6 +3001,15 @@ function normalizeAfterSaveMode(value, fallback = 'close') {
 async function commitSaveTab(tabLike, opts = {}) {
   const replaceMatchIds = opts.replaceMatchIds || [];
   const restoreHint = await findRestoreHint(tabLike.url);
+  const settings = await getSettings();
+  const metadata = applyAutoSaveMetadata(
+    tabLike,
+    {
+      note: restoreHint?.note || '',
+      tags: restoreHint?.tags || [],
+    },
+    settings.autoSaveMetadata
+  );
   if (replaceMatchIds.length) {
     await deleteTabItemsByIds(replaceMatchIds);
   }
@@ -2910,8 +3058,8 @@ async function commitSaveTab(tabLike, opts = {}) {
     title: tabLike.title || tabLike.url || 'Untitled',
     favIconUrl: tabLike.favIconUrl || '',
     pinned: false,
-    note: restoreHint?.note || '',
-    tags: Array.isArray(restoreHint?.tags) ? restoreHint.tags : [],
+    note: metadata.note,
+    tags: metadata.tags,
     savedAt: Date.now(),
     hasThumb,
     hasSnap,
@@ -2920,13 +3068,13 @@ async function commitSaveTab(tabLike, opts = {}) {
   const list = await getParkedItems();
   list.unshift(entry);
   await setParkedItems(list);
+  await mergeTagsIntoCatalog(entry.tags);
   try {
     await consumeRestoreHint(restoreHint?.id);
   } catch (err) {
     console.warn('[TabWall] restore hint cleanup failed:', err);
   }
 
-  const settings = await getSettings();
   const afterSave = normalizeAfterSaveMode(opts.afterSave, settings.afterSave);
   if (afterSave === 'close' && tabLike.id != null) {
     try {
@@ -3479,6 +3627,15 @@ async function saveActiveGroup(opts = {}) {
         }
       }
 
+      const metadata = applyAutoSaveMetadata(
+        {
+          url: m.url || '',
+          title: m.title || m.url || '',
+        },
+        { note: '', tags: [] },
+        settings.autoSaveMetadata
+      );
+
       groupTabs.push({
         id: memberId,
         url: m.url || '',
@@ -3486,8 +3643,8 @@ async function saveActiveGroup(opts = {}) {
         favIconUrl: m.favIconUrl || '',
         pinned: Boolean(m.pinned),
         indexInGroup: i,
-        note: '',
-        tags: [],
+        note: metadata.note,
+        tags: metadata.tags,
         hasThumb,
         hasSnap,
       });
@@ -3515,6 +3672,7 @@ async function saveActiveGroup(opts = {}) {
     const list = await getParkedItems();
     list.unshift(groupItem);
     await setParkedItems(list);
+    await mergeTagsIntoCatalog(groupTabs.flatMap((member) => member.tags || []));
     try {
       await consumeRestoreHint(restoreGroupHint?.id);
     } catch (err) {
@@ -4102,6 +4260,10 @@ if (globalThis.__TABWALL_TEST__) {
     remapCanvasLayout,
     mergeAppendedCanvasLayout,
     commitItemsAndCanvas,
+    normalizeAutoSaveMetadata,
+    matchesAutoSaveCondition,
+    matchesAutoSaveRule,
+    applyAutoSaveMetadata,
     commitSaveTab,
     saveCurrentTab,
     saveActiveTab,

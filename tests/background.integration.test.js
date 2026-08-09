@@ -390,10 +390,174 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.24.1');
+  assert.equal(MANIFEST.version, '2.25.0');
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
+});
+
+test('automatic save metadata rules support matchers, negation, and accumulation', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const config = {
+    enabled: true,
+    rules: [
+      {
+        id: 'docs',
+        logic: 'AND',
+        conditions: [
+          { field: 'domain', operator: 'contains', value: 'EXAMPLE.COM' },
+          { field: 'title', operator: 'startsWith', value: 'guide' },
+        ],
+        note: 'docs\nshared',
+        tags: ['docs', 'shared'],
+      },
+      {
+        id: 'or-rule',
+        logic: 'OR',
+        conditions: [
+          { field: 'domain', operator: 'endsWith', value: '.example.com' },
+          { field: 'title', operator: 'regex', value: '^unmatched$' },
+        ],
+        note: 'shared\nor',
+        tags: ['shared', 'or'],
+      },
+      {
+        id: 'not-blocked',
+        logic: 'AND',
+        conditions: [{ field: 'domain', operator: 'contains', value: 'blocked', negate: true }],
+        note: 'safe',
+        tags: ['safe'],
+      },
+    ],
+  };
+
+  const applied = runtime.api.applyAutoSaveMetadata(
+    { url: 'https://Docs.Example.com/path?q=1', title: 'Guide to docs' },
+    { note: 'existing', tags: ['shared', 'legacy'] },
+    config
+  );
+  assert.equal(applied.note, 'existing\ndocs\nshared\nor\nsafe');
+  assert.deepEqual([...applied.tags], ['shared', 'legacy', 'docs', 'or', 'safe']);
+
+  assert.equal(runtime.api.matchesAutoSaveCondition(
+    { url: 'https://Docs.Example.com/path', title: 'Guide' },
+    { field: 'domain', operator: 'match', value: 'docs.example.com' }
+  ), true);
+  assert.equal(runtime.api.matchesAutoSaveCondition(
+    { url: 'https://docs.example.com/path', title: 'Guide' },
+    { field: 'domain', operator: 'regex', value: '[' }
+  ), false);
+  assert.equal(runtime.api.matchesAutoSaveCondition(
+    { url: 'https://docs.example.com/path', title: 'Guide' },
+    { field: 'domain', operator: 'contains', value: 'blocked', negate: true }
+  ), true);
+  assert.equal(runtime.api.matchesAutoSaveCondition(
+    { url: 'file:///tmp/page.html', title: 'Guide' },
+    { field: 'domain', operator: 'contains', value: 'blocked', negate: true }
+  ), false);
+});
+
+test('automatic save metadata merges restored hints and updates the tag catalog', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    ...tab(ITEM_ID, 'https://merge-rules.example/'),
+    note: 'restored note',
+    tags: ['legacy'],
+  }]);
+  const restored = await runtime.api.restoreTab(ITEM_ID);
+  assert.equal(restored.ok, true);
+
+  runtime.store.settings = {
+    autoSaveMetadata: {
+      enabled: true,
+      rules: [{
+        id: 'merge',
+        logic: 'AND',
+        conditions: [{ field: 'domain', operator: 'match', value: 'merge-rules.example' }],
+        note: 'automatic note',
+        tags: ['automatic', 'legacy'],
+      }],
+    },
+  };
+  const saved = await runtime.api.saveCurrentTab({
+    id: 301,
+    windowId: null,
+    url: 'https://merge-rules.example/',
+    title: 'Merged',
+    favIconUrl: '',
+  });
+  assert.equal(saved.ok, true);
+  const item = (await runtime.api.getParkedItems())[0];
+  assert.equal(item.note, 'restored note\nautomatic note');
+  assert.deepEqual([...item.tags], ['legacy', 'automatic']);
+  assert.deepEqual([...runtime.store.tagCatalog].sort(), ['automatic', 'legacy']);
+});
+
+test('automatic save metadata applies independently to Group members', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    saveGroupCapture: 'none',
+    autoSaveMetadata: {
+      enabled: true,
+      rules: [
+        {
+          id: 'docs',
+          conditions: [{ field: 'domain', operator: 'contains', value: 'docs.example' }],
+          note: 'Documentation',
+          tags: ['work'],
+        },
+        {
+          id: 'news',
+          conditions: [{ field: 'title', operator: 'contains', value: 'news' }],
+          note: 'Read later',
+          tags: ['reading'],
+        },
+      ],
+    },
+  };
+  runtime.runtime.groupTabs = [
+    { id: 401, windowId: 1, groupId: 77, index: 0, url: 'https://docs.example/a', title: 'API docs' },
+    { id: 402, windowId: 1, groupId: 77, index: 1, url: 'https://news.example/a', title: 'Daily News' },
+  ];
+  runtime.runtime.activeTabs = [runtime.runtime.groupTabs[0]];
+
+  const saved = await runtime.api.saveActiveGroup({ afterSaveGroup: 'keep' });
+  assert.equal(saved.ok, true);
+  const group = (await runtime.api.getParkedItems())[0];
+  assert.deepEqual([...group.tabs].map((member) => member.note), ['Documentation', 'Read later']);
+  assert.deepEqual([...group.tabs].map((member) => [...member.tags]), [['work'], ['reading']]);
+  assert.equal(group.note, '');
+  assert.deepEqual([...group.tags], []);
+  assert.deepEqual(runtime.removedTabs, []);
+});
+
+test('PATCH_SETTINGS normalizes automatic save metadata rules', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const result = await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: {
+      autoSaveMetadata: {
+        enabled: true,
+        rules: [{
+          id: 'normalized',
+          enabled: false,
+          logic: 'invalid',
+          conditions: Array.from({ length: 25 }, () => ({ field: 'bad', operator: 'bad', value: 'x' })),
+          tags: ['  one  ', 'one'],
+        }],
+      },
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.settings.autoSaveMetadata.enabled, true);
+  assert.equal(result.settings.autoSaveMetadata.rules[0].enabled, false);
+  assert.equal(result.settings.autoSaveMetadata.rules[0].logic, 'AND');
+  assert.equal(result.settings.autoSaveMetadata.rules[0].conditions.length, 20);
+  assert.deepEqual([...result.settings.autoSaveMetadata.rules[0].tags], ['one']);
 });
 
 test('Chrome keep shortcut saves the current tab or group without closing it', async () => {
@@ -551,6 +715,46 @@ test('popup save mode survives duplicate conflict resolution', async () => {
     decision: 'keep',
   })).ok, true);
   assert.deepEqual(closeRuntime.removedTabs, [702]);
+});
+
+test('automatic save metadata is applied after duplicate conflict resolution', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-rules.example/')]);
+  runtime.store.settings = {
+    autoSaveMetadata: {
+      enabled: true,
+      rules: [{
+        id: 'conflict-rule',
+        conditions: [{ field: 'domain', operator: 'match', value: 'conflict-rules.example' }],
+        note: 'conflict note',
+        tags: ['conflict'],
+      }],
+    },
+  };
+  runtime.runtime.activeTabs = [{
+    id: 703,
+    windowId: 1,
+    url: 'https://conflict-rules.example/',
+    title: 'Incoming rule tab',
+    favIconUrl: '',
+  }];
+
+  const pending = await dispatchMessage(runtime, {
+    type: 'SAVE_ACTIVE_TAB',
+    afterSave: 'keep',
+  });
+  assert.equal(pending.conflict, true);
+  const resolved = await dispatchMessage(runtime, {
+    type: 'RESOLVE_SAVE_CONFLICT',
+    decision: 'keep',
+  });
+  assert.equal(resolved.ok, true);
+  const items = await runtime.api.getParkedItems();
+  const incoming = items.find((item) => item.id !== ITEM_ID);
+  assert.equal(incoming.note, 'conflict note');
+  assert.deepEqual([...incoming.tags], ['conflict']);
+  assert.deepEqual(runtime.removedTabs, []);
 });
 
 test('open panel action opens overlay, standalone fallback, or reuses TabWall', async () => {

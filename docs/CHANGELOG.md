@@ -13,6 +13,11 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.25.0 — 2026-08-10
+
+- 新增可在設定中管理的自動 Note／Tag 儲存規則；支援 domain／FQDN、page title、match／contains／starts with／ends with／regex、not，以及每條規則的 AND／OR。
+- 儲存 Tab Group 時會逐一判斷成員；命中後 note 逐行附加去重、tag 合併去重，並同步 tag catalog。
+
 ## 2.24.1 — 2026-08-10
 
 - 修正 Chrome `commands` 超過最多 4 個導致 extension 無法 reload 的問題。
@@ -31,6 +36,13 @@ permalink: /CHANGELOG.html
 
 - extension icon 改為操作選單，可分別選擇儲存目前分頁／Tab Group 並保留或關閉分頁。
 - 非 Tab Group 分頁會停用 Group 操作；新增「打開 TabWall 面板」並保留既有 Chrome 快捷鍵行為。
+
+---
+
+## 2.22.0 — 2026-08-10
+
+- Canvas 搜尋結果改以暫時棋盤排列；直接命中與一層關聯卡片會同步更新連線與 minimap，清空搜尋後恢復原本布局。
+- 搜尋期間的卡片拖曳、方向鍵移動與棋盤／對齊排列只作用於搜尋預覽，不保存位置，也不會因拖放建立 Stack。
 
 ---
 

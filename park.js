@@ -41,6 +41,20 @@ const DEFAULT_AUTO_BACKUP = {
   dirtyAt: 0,
 };
 
+const AUTO_SAVE_METADATA_MAX_RULES = 50;
+const AUTO_SAVE_METADATA_MAX_CONDITIONS = 20;
+const AUTO_SAVE_METADATA_OPERATORS = [
+  'match',
+  'contains',
+  'startsWith',
+  'endsWith',
+  'regex',
+];
+const DEFAULT_AUTO_SAVE_METADATA = {
+  enabled: false,
+  rules: [],
+};
+
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
@@ -55,6 +69,7 @@ const DEFAULT_SETTINGS = {
   openWithSearchFocus: false,
   searchRegex: false,
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
+  autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
   canvasSnap: true,
   canvasRailWidth: CANVAS_RAIL_DEFAULT_WIDTH,
   canvasRailCollapsed: false,
@@ -701,6 +716,7 @@ const I18N = {
     moreTools: '更多工具',
     savedAt: '儲存於 {time}',
     settingsGeneral: '一般',
+    settingsAutomation: '儲存規則',
     settingsDisplay: '顯示',
     settingsTools: '整理',
     settingsBackup: '備份',
@@ -819,6 +835,37 @@ const I18N = {
     afterSaveTitle: '儲存分頁後的行為',
     afterSaveClose: '關閉該分頁',
     afterSaveKeep: '不額外執行動作（僅儲存）',
+    autoSaveMetadataTitle: '自動 Note／Tag',
+    autoSaveMetadataHint: '儲存目前分頁或 Group 成員時，依 domain／page title 自動附加 note 與 tag。條件不分大小寫；note 逐行去重，tag 合併去重。',
+    autoSaveMetadataEnable: '啟用自動 Note／Tag 規則',
+    autoSaveMetadataAddRule: '新增規則',
+    autoSaveMetadataRule: '規則 {n}',
+    autoSaveMetadataRuleEnable: '啟用此規則',
+    autoSaveMetadataLogic: '條件運算',
+    autoSaveMetadataAnd: '全部符合（AND）',
+    autoSaveMetadataOr: '任一符合（OR）',
+    autoSaveMetadataCondition: '條件',
+    autoSaveMetadataAddCondition: '新增條件',
+    autoSaveMetadataDeleteCondition: '刪除條件',
+    autoSaveMetadataDeleteRule: '刪除規則',
+    autoSaveMetadataField: '欄位',
+    autoSaveMetadataDomain: 'Domain／FQDN',
+    autoSaveMetadataTitleField: 'Page title',
+    autoSaveMetadataOperator: '判斷式',
+    autoSaveMetadataMatch: 'Match',
+    autoSaveMetadataContains: 'Contains',
+    autoSaveMetadataStartsWith: 'Starts with',
+    autoSaveMetadataEndsWith: 'Ends with',
+    autoSaveMetadataRegex: 'Regex',
+    autoSaveMetadataNot: 'Not',
+    autoSaveMetadataValuePh: '輸入文字或正規表示式',
+    autoSaveMetadataActions: '命中後附加',
+    autoSaveMetadataNote: 'Note（每行一段）',
+    autoSaveMetadataNotePh: '要附加的 note…',
+    autoSaveMetadataTags: 'Tags',
+    autoSaveMetadataTagPh: '輸入 tag 後按 Enter／Tab',
+    autoSaveMetadataRemoveTag: '移除 tag',
+    autoSaveMetadataEmpty: '尚未建立規則。',
     themeTitle: '主題',
     langTitle: '語言 / Language',
     defaultColsTitle: '預設欄數',
@@ -1046,6 +1093,7 @@ const I18N = {
     moreTools: 'More tools',
     savedAt: 'Saved {time}',
     settingsGeneral: 'General',
+    settingsAutomation: 'Save rules',
     settingsDisplay: 'Display',
     settingsTools: 'Organize',
     settingsBackup: 'Backup',
@@ -1164,6 +1212,37 @@ const I18N = {
     afterSaveTitle: 'After saving a tab',
     afterSaveClose: 'Close the tab',
     afterSaveKeep: 'Keep the tab open (save only)',
+    autoSaveMetadataTitle: 'Automatic note / tag',
+    autoSaveMetadataHint: 'When saving a tab or Group member, append notes and tags based on its domain or page title. Matching is case-insensitive; notes and tags are deduplicated.',
+    autoSaveMetadataEnable: 'Enable automatic note / tag rules',
+    autoSaveMetadataAddRule: 'Add rule',
+    autoSaveMetadataRule: 'Rule {n}',
+    autoSaveMetadataRuleEnable: 'Enable this rule',
+    autoSaveMetadataLogic: 'Condition logic',
+    autoSaveMetadataAnd: 'All conditions (AND)',
+    autoSaveMetadataOr: 'Any condition (OR)',
+    autoSaveMetadataCondition: 'Conditions',
+    autoSaveMetadataAddCondition: 'Add condition',
+    autoSaveMetadataDeleteCondition: 'Delete condition',
+    autoSaveMetadataDeleteRule: 'Delete rule',
+    autoSaveMetadataField: 'Field',
+    autoSaveMetadataDomain: 'Domain / FQDN',
+    autoSaveMetadataTitleField: 'Page title',
+    autoSaveMetadataOperator: 'Matcher',
+    autoSaveMetadataMatch: 'Match',
+    autoSaveMetadataContains: 'Contains',
+    autoSaveMetadataStartsWith: 'Starts with',
+    autoSaveMetadataEndsWith: 'Ends with',
+    autoSaveMetadataRegex: 'Regex',
+    autoSaveMetadataNot: 'Not',
+    autoSaveMetadataValuePh: 'Text or regular expression',
+    autoSaveMetadataActions: 'Append when matched',
+    autoSaveMetadataNote: 'Note (one entry per line)',
+    autoSaveMetadataNotePh: 'Note to append…',
+    autoSaveMetadataTags: 'Tags',
+    autoSaveMetadataTagPh: 'Type a tag, then press Enter / Tab',
+    autoSaveMetadataRemoveTag: 'Remove tag',
+    autoSaveMetadataEmpty: 'No rules yet.',
     themeTitle: 'Theme',
     langTitle: 'Language',
     defaultColsTitle: 'Default columns',
@@ -1560,6 +1639,9 @@ const autoBackupMaxKeepEl = document.getElementById('autoBackupMaxKeep');
 const autoBackupNowBtn = document.getElementById('autoBackupNowBtn');
 const autoBackupShowFolderBtn = document.getElementById('autoBackupShowFolderBtn');
 const autoBackupStatusEl = document.getElementById('autoBackupStatus');
+const autoSaveMetadataEnabledEl = document.getElementById('autoSaveMetadataEnabled');
+const autoSaveMetadataRulesEl = document.getElementById('autoSaveMetadataRules');
+const autoSaveMetadataAddRuleBtn = document.getElementById('autoSaveMetadataAddRuleBtn');
 const selectModeBtn = document.getElementById('selectModeBtn');
 const batchBar = document.getElementById('batchBar');
 const batchCount = document.getElementById('batchCount');
@@ -1708,6 +1790,8 @@ let tagStats = [];
 let tagFilter = '';
 let pinnedOnly = false;
 let canvasIndexFilter = 'all';
+/** @type {{ key: string, revision: number, positions: Record<string, any>, mode: 'grid'|'align' } | null} */
+let canvasSearchPreview = null;
 let settingsSection = 'general';
 let selectMode = false;
 /** @type {Set<string>} */
@@ -1887,6 +1971,7 @@ function applyI18n() {
   if (typeof updateBatchBar === 'function') updateBatchBar();
   if (typeof refreshChromeCommandLabels === 'function') refreshChromeCommandLabels();
   if (typeof syncSearchRegexUi === 'function') syncSearchRegexUi();
+  if (typeof renderAutoSaveMetadataRules === 'function') renderAutoSaveMetadataRules();
 }
 
 async function closeStandaloneTab() {
@@ -2102,6 +2187,73 @@ function normalizeCanvasRailSettings(target) {
   return target;
 }
 
+function newAutoSaveMetadataRuleId() {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  } catch {
+    // Fall through to an opaque local id.
+  }
+  return `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizeAutoSaveMetadataTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(
+    tags
+      .map((tag) => String(tag ?? '').trim().slice(0, 128))
+      .filter(Boolean)
+  )].slice(0, 100);
+}
+
+function normalizeAutoSaveMetadataCondition(raw) {
+  const condition = raw && typeof raw === 'object' ? raw : {};
+  return {
+    field: condition.field === 'title' ? 'title' : 'domain',
+    operator: AUTO_SAVE_METADATA_OPERATORS.includes(condition.operator)
+      ? condition.operator
+      : 'match',
+    negate: condition.negate === true,
+    value: String(condition.value ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 2048).trim(),
+  };
+}
+
+function normalizeAutoSaveMetadataRule(raw) {
+  const rule = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id: typeof rule.id === 'string' && rule.id ? rule.id.slice(0, 128) : newAutoSaveMetadataRuleId(),
+    enabled: rule.enabled !== false,
+    logic: rule.logic === 'OR' ? 'OR' : 'AND',
+    conditions: Array.isArray(rule.conditions)
+      ? rule.conditions
+          .slice(0, AUTO_SAVE_METADATA_MAX_CONDITIONS)
+          .map(normalizeAutoSaveMetadataCondition)
+      : [],
+    note: String(rule.note ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, 20000),
+    tags: normalizeAutoSaveMetadataTags(rule.tags),
+  };
+}
+
+function normalizeAutoSaveMetadata(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    enabled: source.enabled === true,
+    rules: Array.isArray(source.rules)
+      ? source.rules.slice(0, AUTO_SAVE_METADATA_MAX_RULES).map(normalizeAutoSaveMetadataRule)
+      : [],
+  };
+}
+
+function newAutoSaveMetadataRule() {
+  return {
+    id: newAutoSaveMetadataRuleId(),
+    enabled: true,
+    logic: 'AND',
+    conditions: [{ field: 'domain', operator: 'contains', negate: false, value: '' }],
+    note: '',
+    tags: [],
+  };
+}
+
 function sanitizeSubfolder(raw) {
   let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/');
   s = s.replace(/^\/+/, '');
@@ -2190,6 +2342,7 @@ async function loadSettings() {
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
   });
+  merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
   merged.canvasSnap = merged.canvasSnap !== false;
   normalizeCanvasRailSettings(merged);
   return merged;
@@ -2207,6 +2360,9 @@ async function saveSettings(partial) {
   if (patch.canvasRailCollapsed != null) patch.canvasRailCollapsed = patch.canvasRailCollapsed === true;
   if (patch.autoBackup) {
     patch.autoBackup = normalizeAutoBackup({ ...settings.autoBackup, ...patch.autoBackup });
+  }
+  if (patch.autoSaveMetadata) {
+    patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);
   }
   suppressSettingsOnChanged = true;
   if (suppressSettingsTimer) clearTimeout(suppressSettingsTimer);
@@ -2280,6 +2436,7 @@ function applyViewMode(mode) {
   if (mode !== 'list' && mode !== 'canvas') mode = 'canvas';
   const isList = mode === 'list';
   const isCanvas = mode === 'canvas';
+  if (!isCanvas) canvasSearchPreview = null;
   gridEl.classList.toggle('cards', !isList);
   gridEl.classList.toggle('list', isList);
   syncViewModeButton(mode);
@@ -2371,6 +2528,7 @@ function syncSettingsUi() {
   if (viewRadio) viewRadio.checked = true;
 
   syncAutoBackupUi();
+  syncAutoSaveMetadataUi();
 
   applyI18n();
   refreshChromeCommandLabels();
@@ -2457,6 +2615,194 @@ function syncAutoBackupUi() {
   }
 }
 
+function autoSaveMetadataFieldOptions(selected) {
+  return [
+    ['domain', 'autoSaveMetadataDomain'],
+    ['title', 'autoSaveMetadataTitleField'],
+  ]
+    .map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${escapeHtml(t(key))}</option>`)
+    .join('');
+}
+
+function autoSaveMetadataOperatorOptions(selected) {
+  return [
+    ['match', 'autoSaveMetadataMatch'],
+    ['contains', 'autoSaveMetadataContains'],
+    ['startsWith', 'autoSaveMetadataStartsWith'],
+    ['endsWith', 'autoSaveMetadataEndsWith'],
+    ['regex', 'autoSaveMetadataRegex'],
+  ]
+    .map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${escapeHtml(t(key))}</option>`)
+    .join('');
+}
+
+function renderAutoSaveMetadataRules() {
+  if (!autoSaveMetadataRulesEl) return;
+  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
+  const rules = settings.autoSaveMetadata.rules;
+  if (!rules.length) {
+    autoSaveMetadataRulesEl.innerHTML = `<div class="auto-save-rule-empty">${escapeHtml(t('autoSaveMetadataEmpty'))}</div>`;
+    return;
+  }
+
+  autoSaveMetadataRulesEl.innerHTML = rules.map((rule, ruleIndex) => `
+    <article class="auto-save-rule-card" data-auto-save-rule="${ruleIndex}">
+      <div class="auto-save-rule-header">
+        <label class="inline auto-save-rule-enabled">
+          <input type="checkbox" data-auto-save-rule-prop="enabled" ${rule.enabled ? 'checked' : ''} />
+          <span>${escapeHtml(t('autoSaveMetadataRuleEnable'))}</span>
+        </label>
+        <strong>${escapeHtml(t('autoSaveMetadataRule', { n: ruleIndex + 1 }))}</strong>
+        <button type="button" class="btn auto-save-rule-delete" data-auto-save-action="delete-rule" title="${escapeAttr(t('autoSaveMetadataDeleteRule'))}">${escapeHtml(t('delete'))}</button>
+      </div>
+      <div class="auto-save-rule-row">
+        <label class="inline">
+          <span>${escapeHtml(t('autoSaveMetadataLogic'))}</span>
+          <select data-auto-save-rule-prop="logic" aria-label="${escapeAttr(t('autoSaveMetadataLogic'))}">
+            <option value="AND"${rule.logic === 'AND' ? ' selected' : ''}>${escapeHtml(t('autoSaveMetadataAnd'))}</option>
+            <option value="OR"${rule.logic === 'OR' ? ' selected' : ''}>${escapeHtml(t('autoSaveMetadataOr'))}</option>
+          </select>
+        </label>
+      </div>
+      <div class="auto-save-condition-heading">
+        <span>${escapeHtml(t('autoSaveMetadataCondition'))}</span>
+        <button type="button" class="btn" data-auto-save-action="add-condition">${escapeHtml(t('autoSaveMetadataAddCondition'))}</button>
+      </div>
+      <div class="auto-save-condition-list">
+        ${rule.conditions.map((condition, conditionIndex) => `
+          <div class="auto-save-condition-row" data-auto-save-condition="${conditionIndex}">
+            <select data-auto-save-condition-prop="field" aria-label="${escapeAttr(t('autoSaveMetadataField'))}">${autoSaveMetadataFieldOptions(condition.field)}</select>
+            <select data-auto-save-condition-prop="operator" aria-label="${escapeAttr(t('autoSaveMetadataOperator'))}">${autoSaveMetadataOperatorOptions(condition.operator)}</select>
+            <label class="inline auto-save-condition-not">
+              <input type="checkbox" data-auto-save-condition-prop="negate" ${condition.negate ? 'checked' : ''} />
+              <span>${escapeHtml(t('autoSaveMetadataNot'))}</span>
+            </label>
+            <input type="text" class="settings-input auto-save-condition-value" data-auto-save-condition-prop="value" value="${escapeAttr(condition.value)}" placeholder="${escapeAttr(t('autoSaveMetadataValuePh'))}" />
+            <button type="button" class="btn auto-save-condition-delete" data-auto-save-action="delete-condition" title="${escapeAttr(t('autoSaveMetadataDeleteCondition'))}">${escapeHtml(t('delete'))}</button>
+          </div>
+        `).join('')}
+      </div>
+      <div class="auto-save-actions-heading">${escapeHtml(t('autoSaveMetadataActions'))}</div>
+      <label class="auto-save-note-field">
+        <span>${escapeHtml(t('autoSaveMetadataNote'))}</span>
+        <textarea class="settings-textarea" rows="3" data-auto-save-rule-prop="note" placeholder="${escapeAttr(t('autoSaveMetadataNotePh'))}">${escapeHtml(rule.note)}</textarea>
+      </label>
+      <div class="auto-save-tags-field">
+        <span>${escapeHtml(t('autoSaveMetadataTags'))}</span>
+        <div class="auto-save-tag-editor">
+          <div class="auto-save-tag-list">
+            ${rule.tags.map((tag, tagIndex) => `
+              <span class="tag-chip auto-save-tag-chip">${escapeHtml(tag)}<button type="button" aria-label="${escapeAttr(t('autoSaveMetadataRemoveTag'))}" data-auto-save-action="remove-tag" data-auto-save-tag-index="${tagIndex}">${iconSvg('close')}</button></span>
+            `).join('')}
+            <input type="text" class="settings-input auto-save-tag-input" data-auto-save-tag-input data-rule-index="${ruleIndex}" placeholder="${escapeAttr(t('autoSaveMetadataTagPh'))}" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+    </article>
+  `).join('');
+}
+
+function syncAutoSaveMetadataUi() {
+  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
+  if (autoSaveMetadataEnabledEl) autoSaveMetadataEnabledEl.checked = settings.autoSaveMetadata.enabled;
+  renderAutoSaveMetadataRules();
+}
+
+async function persistAutoSaveMetadata() {
+  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
+  await saveSettings({ autoSaveMetadata: settings.autoSaveMetadata });
+}
+
+async function commitAutoSaveMetadataTag(input) {
+  const raw = input?.value?.trim() || '';
+  if (!raw) return;
+  const ruleIndex = Number(input.dataset.ruleIndex);
+  const rule = settings.autoSaveMetadata.rules[ruleIndex];
+  if (!rule) return;
+  if (!rule.tags.includes(raw)) rule.tags.push(raw);
+  input.value = '';
+  renderAutoSaveMetadataRules();
+  await persistAutoSaveMetadata();
+}
+
+function initAutoSaveMetadataUi() {
+  autoSaveMetadataEnabledEl?.addEventListener('change', async () => {
+    settings.autoSaveMetadata.enabled = autoSaveMetadataEnabledEl.checked;
+    await persistAutoSaveMetadata();
+  });
+
+  autoSaveMetadataAddRuleBtn?.addEventListener('click', async () => {
+    if (settings.autoSaveMetadata.rules.length >= AUTO_SAVE_METADATA_MAX_RULES) return;
+    settings.autoSaveMetadata.rules.push(newAutoSaveMetadataRule());
+    await persistAutoSaveMetadata();
+    renderAutoSaveMetadataRules();
+  });
+
+  autoSaveMetadataRulesEl?.addEventListener('click', async (event) => {
+    const action = event.target.closest?.('[data-auto-save-action]');
+    if (!action) return;
+    const card = action.closest('[data-auto-save-rule]');
+    if (!card) return;
+    const ruleIndex = Number(card.dataset.autoSaveRule);
+    const rule = settings.autoSaveMetadata.rules[ruleIndex];
+    if (!rule) return;
+
+    if (action.dataset.autoSaveAction === 'add-condition') {
+      if (rule.conditions.length >= AUTO_SAVE_METADATA_MAX_CONDITIONS) return;
+      rule.conditions.push({ field: 'domain', operator: 'contains', negate: false, value: '' });
+    } else if (action.dataset.autoSaveAction === 'delete-condition') {
+      const conditionRow = action.closest('[data-auto-save-condition]');
+      const conditionIndex = Number(conditionRow?.dataset.autoSaveCondition);
+      if (Number.isInteger(conditionIndex)) rule.conditions.splice(conditionIndex, 1);
+    } else if (action.dataset.autoSaveAction === 'delete-rule') {
+      settings.autoSaveMetadata.rules.splice(ruleIndex, 1);
+    } else if (action.dataset.autoSaveAction === 'remove-tag') {
+      const tagIndex = Number(action.dataset.autoSaveTagIndex);
+      if (Number.isInteger(tagIndex)) rule.tags.splice(tagIndex, 1);
+    } else {
+      return;
+    }
+    await persistAutoSaveMetadata();
+    renderAutoSaveMetadataRules();
+  });
+
+  autoSaveMetadataRulesEl?.addEventListener('change', async (event) => {
+    const tagInput = event.target.closest?.('[data-auto-save-tag-input]');
+    if (tagInput) {
+      await commitAutoSaveMetadataTag(tagInput);
+      return;
+    }
+    const card = event.target.closest?.('[data-auto-save-rule]');
+    if (!card) return;
+    const ruleIndex = Number(card.dataset.autoSaveRule);
+    const rule = settings.autoSaveMetadata.rules[ruleIndex];
+    if (!rule) return;
+    const ruleProp = event.target.closest?.('[data-auto-save-rule-prop]')?.dataset.autoSaveRuleProp;
+    if (ruleProp) {
+      rule[ruleProp] = ruleProp === 'enabled' ? event.target.checked : event.target.value;
+      await persistAutoSaveMetadata();
+      return;
+    }
+    const condition = event.target.closest?.('[data-auto-save-condition]');
+    const conditionProp = event.target.closest?.('[data-auto-save-condition-prop]')?.dataset.autoSaveConditionProp;
+    if (!condition || !conditionProp) return;
+    const conditionIndex = Number(condition.dataset.autoSaveCondition);
+    if (!rule.conditions[conditionIndex]) return;
+    rule.conditions[conditionIndex][conditionProp] = conditionProp === 'negate'
+      ? event.target.checked
+      : event.target.value;
+    await persistAutoSaveMetadata();
+  });
+
+  autoSaveMetadataRulesEl?.addEventListener('keydown', async (event) => {
+    const input = event.target.closest?.('[data-auto-save-tag-input]');
+    if (!input || (event.key !== 'Enter' && event.key !== 'Tab')) return;
+    if (!input.value.trim()) return;
+    event.preventDefault();
+    await commitAutoSaveMetadataTag(input);
+  });
+}
+
 async function refreshChromeCommandLabels() {
   const res = await sendMessage({ type: 'GET_COMMANDS' });
   const byName = new Map(
@@ -2506,6 +2852,7 @@ async function initSettingsUi() {
   }
 
   syncSettingsUi();
+  initAutoSaveMetadataUi();
 
   try {
     versionBadge.textContent = `v${chrome.runtime.getManifest().version}`;
@@ -2989,7 +3336,7 @@ function setupFloatDrag(handle, box) {
 }
 
 function applySettingsSection(section = 'general') {
-  const allowed = new Set(['general', 'canvas', 'display', 'tools', 'backup', 'shortcuts', 'diagnostic']);
+  const allowed = new Set(['general', 'automation', 'canvas', 'display', 'tools', 'backup', 'shortcuts', 'diagnostic']);
   settingsSection = allowed.has(section) ? section : 'general';
   settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
     block.hidden = block.dataset.settingsSection !== settingsSection;
@@ -3758,6 +4105,56 @@ function getCanvasSearchContext() {
 
 function getCanvasVisibleTabs() {
   return getCanvasSearchContext().items;
+}
+
+function isCanvasSearchPreviewActive(searchContext = getCanvasSearchContext()) {
+  return Boolean(
+    settings.viewMode === 'canvas'
+    && !canvasSessionFallback
+    && searchContext?.queryActive
+  );
+}
+
+function canvasSearchPreviewKey(searchContext) {
+  return JSON.stringify({
+    query,
+    scope: searchScope,
+    regex: Boolean(settings.searchRegex),
+    pinnedOnly,
+    canvasIndexFilter,
+    ids: (searchContext?.items || []).map((item) => item.id),
+  });
+}
+
+function canvasSearchLayoutFor(searchContext = getCanvasSearchContext()) {
+  const state = canvasStoreSnapshot();
+  const layout = state.layout || canvasLayout;
+  if (!isCanvasSearchPreviewActive(searchContext)) {
+    canvasSearchPreview = null;
+    return layout;
+  }
+
+  const key = canvasSearchPreviewKey(searchContext);
+  if (
+    !canvasSearchPreview
+    || canvasSearchPreview.key !== key
+    || canvasSearchPreview.revision !== state.revision
+  ) {
+    canvasSearchPreview = {
+      key,
+      revision: state.revision,
+      positions: arrangeCanvasGrid(searchContext.items, layout),
+      mode: 'grid',
+    };
+  }
+
+  return {
+    ...layout,
+    positions: {
+      ...(layout.positions || {}),
+      ...canvasSearchPreview.positions,
+    },
+  };
 }
 
 function syncCanvasIndexUi() {
@@ -7511,9 +7908,9 @@ function canvasFitViewport(mode) {
   if (mode !== 'width' && mode !== 'screen') return false;
   const { width, height } = canvasViewportSize();
   const items = getCanvasVisibleTabs();
+  const searchContext = getCanvasSearchContext();
   if (!width || !height || !items.length) return false;
-  const state = canvasStoreSnapshot();
-  const layout = state.layout || canvasLayout;
+  const layout = canvasSearchLayoutFor(searchContext);
   const bounds = canvasBoundsForItems(items, layout);
   if (!bounds) return false;
   const contentWidth = Math.max(1, bounds.maxX - bounds.minX);
@@ -8443,7 +8840,11 @@ function renderCanvasConnections() {
 }
 
 function updateCanvasNodePositions(snapshot = canvasStoreSnapshot()) {
-  const positions = snapshot.layout?.positions || {};
+  const searchContext = getCanvasSearchContext();
+  const layout = isCanvasSearchPreviewActive(searchContext)
+    ? canvasSearchLayoutFor(searchContext)
+    : (snapshot.layout || canvasLayout);
+  const positions = layout.positions || {};
   for (const [id, node] of canvasNodeElements) {
     const position = positions[id] ? canvasDisplayPosition(positions[id]) : null;
     if (!position) continue;
@@ -8481,7 +8882,7 @@ function canvasMinimapProjectionFor(nodeRects, viewportRect, mapWidth, mapHeight
   };
 }
 
-function renderCanvasMinimap(items) {
+function renderCanvasMinimap(items, renderLayout = null) {
   if (!canvasMinimap) return;
   const map = canvasMinimap.querySelector('.canvas-minimap-world');
   if (!map) return;
@@ -8489,8 +8890,7 @@ function renderCanvasMinimap(items) {
   const mapRect = map.getBoundingClientRect?.();
   const mapWidth = map.clientWidth || mapRect?.width || 0;
   const mapHeight = map.clientHeight || mapRect?.height || 0;
-  const state = canvasStoreSnapshot();
-  const layout = state.layout || canvasLayout;
+  const layout = renderLayout || canvasSearchLayoutFor();
   const zoom = Math.max(0.25, Number(layout.viewport?.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
   const viewportWidth = Math.max(1, canvasViewportEl?.clientWidth || canvasViewportEl?.getBoundingClientRect?.().width || mapWidth);
   const viewportHeight = Math.max(1, canvasViewportEl?.clientHeight || canvasViewportEl?.getBoundingClientRect?.().height || mapHeight);
@@ -8618,6 +9018,7 @@ function renderCanvas() {
   if (!canvasNodesEl) return;
   ensureCanvasStore();
   const searchContext = getCanvasSearchContext();
+  const renderLayout = canvasSearchLayoutFor(searchContext);
   const filtered = searchContext.items;
   const visibleIds = new Set(filtered.map((item) => item.id));
   updateSavedBadge();
@@ -8658,7 +9059,7 @@ function renderCanvas() {
       node = replacement;
       canvasNodeElements.set(item.id, node);
     }
-    const position = canvasDisplayPosition(canvasLayout.positions[item.id] || canvasDefaultPosition(index));
+    const position = canvasDisplayPosition(renderLayout.positions[item.id] || canvasDefaultPosition(index));
     node.dataset.id = item.id;
     node.dataset.kind = item.kind;
     node.classList.toggle('canvas-group', item.kind === 'group');
@@ -8685,7 +9086,7 @@ function renderCanvas() {
   updateCanvasNodeSelection();
   renderCanvasConnections();
   canvasNodesEl.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-  renderCanvasMinimap(filtered);
+  renderCanvasMinimap(filtered, renderLayout);
   updateBatchBar();
 }
 
@@ -8708,7 +9109,91 @@ function canvasSelectNode(id, event) {
   lastAnchorId = id;
 }
 
+function refreshCanvasSearchPreview(items = getCanvasVisibleTabs()) {
+  updateCanvasNodePositions();
+  updateCanvasNodeSelection();
+  renderCanvasConnections();
+  renderCanvasMinimap(items);
+  updateBatchBar();
+}
+
+function canvasSearchPreviewSelectedIds(searchContext = getCanvasSearchContext()) {
+  const visibleIds = new Set((searchContext?.items || []).map((item) => item.id));
+  return [...activeCanvasSelection()].filter((id) => visibleIds.has(id));
+}
+
+function moveCanvasSearchPreview(ids, dx, dy, { snap = false } = {}) {
+  const searchContext = getCanvasSearchContext();
+  if (!isCanvasSearchPreviewActive(searchContext)) return false;
+  canvasSearchLayoutFor(searchContext);
+  if (!canvasSearchPreview) return false;
+  let changed = false;
+  for (const id of ids || []) {
+    const current = canvasSearchPreview.positions[id];
+    if (!current) continue;
+    const next = {
+      ...current,
+      x: current.x + (Number(dx) || 0),
+      y: current.y + (Number(dy) || 0),
+    };
+    if (snap) snapCanvasPosition(next);
+    canvasSearchPreview.positions[id] = next;
+    changed = true;
+  }
+  if (changed) refreshCanvasSearchPreview(searchContext.items);
+  return changed;
+}
+
+function applyCanvasSearchPointerPreview(state, dx, dy) {
+  if (!state?.searchPreview) return false;
+  const searchContext = getCanvasSearchContext();
+  if (!isCanvasSearchPreviewActive(searchContext)) return false;
+  canvasSearchLayoutFor(searchContext);
+  if (!canvasSearchPreview) return false;
+  let changed = false;
+  for (const id of state.searchIds || []) {
+    const start = state.searchStartPositions?.[id];
+    if (!start) continue;
+    canvasSearchPreview.positions[id] = {
+      ...start,
+      x: start.x + (Number(dx) || 0),
+      y: start.y + (Number(dy) || 0),
+    };
+    changed = true;
+  }
+  if (changed) refreshCanvasSearchPreview(searchContext.items);
+  return changed;
+}
+
+function finishCanvasSearchPointer(state, commit = true) {
+  if (!state?.searchPreview || !canvasSearchPreview) return;
+  const searchContext = getCanvasSearchContext();
+  if (!isCanvasSearchPreviewActive(searchContext)) return;
+  if (!commit) {
+    for (const id of state.searchIds || []) {
+      const start = state.searchStartPositions?.[id];
+      if (start) canvasSearchPreview.positions[id] = { ...start };
+    }
+  } else if (canvasSnapToGrid) {
+    for (const id of state.searchIds || []) {
+      const position = canvasSearchPreview.positions[id];
+      if (position) snapCanvasPosition(position);
+    }
+  }
+  refreshCanvasSearchPreview(searchContext.items);
+}
+
 function canvasMoveSelected(dx, dy) {
+  const searchContext = getCanvasSearchContext();
+  if (isCanvasSearchPreviewActive(searchContext)) {
+    moveCanvasSearchPreview(
+      canvasSearchPreviewSelectedIds(searchContext),
+      dx,
+      dy,
+      { snap: canvasSnapToGrid },
+    );
+    return;
+  }
   ensureCanvasStore()?.commitMove([...activeCanvasSelection()], dx, dy, canvasSnapToGrid);
 }
 
@@ -8805,6 +9290,16 @@ function arrangeCanvasAlign(items, layout) {
 
 function arrangeCanvas(mode = '') {
   if (mode !== 'grid' && mode !== 'align') return;
+  const searchContext = getCanvasSearchContext();
+  if (isCanvasSearchPreviewActive(searchContext)) {
+    const layout = canvasSearchLayoutFor(searchContext);
+    canvasSearchPreview.positions = mode === 'grid'
+      ? arrangeCanvasGrid(searchContext.items, layout)
+      : arrangeCanvasAlign(searchContext.items, layout);
+    canvasSearchPreview.mode = mode;
+    refreshCanvasSearchPreview(searchContext.items);
+    return;
+  }
   const items = sortTabs(allTabs, normalizeSortBy(settings.sortBy));
   const layout = canvasStoreSnapshot().layout || canvasLayout;
   const positions = mode === 'grid'
@@ -9047,12 +9542,25 @@ function beginCanvasPointer(event, kind, id = '') {
     canvasSelectNode(id, event);
   }
   const ids = kind === 'node' ? [...activeCanvasSelection()] : [];
-  ensureCanvasStore()?.beginPointer(kind, {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    ids,
-  });
+  const searchPreview = kind === 'node' && isCanvasSearchPreviewActive();
+  let searchIds = [];
+  let searchStartPositions = {};
+  if (searchPreview) {
+    const searchContext = getCanvasSearchContext();
+    const renderLayout = canvasSearchLayoutFor(searchContext);
+    const visibleIds = new Set(searchContext.items.map((item) => item.id));
+    searchIds = ids.filter((selectedId) => visibleIds.has(selectedId) && renderLayout.positions?.[selectedId]);
+    searchStartPositions = Object.fromEntries(
+      searchIds.map((selectedId) => [selectedId, { ...renderLayout.positions[selectedId] }])
+    );
+  } else {
+    ensureCanvasStore()?.beginPointer(kind, {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      ids,
+    });
+  }
   canvasPointerState = {
     kind,
     id,
@@ -9063,6 +9571,9 @@ function beginCanvasPointer(event, kind, id = '') {
     moved: false,
     selectionAdditive: Boolean(event.metaKey || event.ctrlKey || event.shiftKey),
     initialSelection: [...activeCanvasSelection()],
+    searchPreview,
+    searchIds,
+    searchStartPositions,
   };
   canvasInteractionGeneration += 1;
   canvasViewportEl?.setPointerCapture?.(event.pointerId);
@@ -9078,6 +9589,10 @@ function applyCanvasPointer(event) {
   if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) state.moved = true;
   if (state.kind === 'node') {
     const zoom = canvasStoreSnapshot().layout.viewport.zoom || 1;
+    if (state.searchPreview) {
+      applyCanvasSearchPointerPreview(state, dx / zoom, dy / zoom);
+      return;
+    }
     ensureCanvasStore()?.previewPointer({ dx: dx / zoom, dy: dy / zoom, moved: state.moved });
     return;
   }
@@ -9154,7 +9669,8 @@ function cancelCanvasPointer() {
     cancelCanvasNodeClick(state.id);
     suppressCanvasNodeClick(state.id);
   }
-  ensureCanvasStore()?.cancelPointer();
+  if (state.searchPreview) finishCanvasSearchPointer(state, false);
+  else ensureCanvasStore()?.cancelPointer();
   clearCanvasPointerUi(state.pointerId);
 }
 
@@ -9165,10 +9681,13 @@ async function endCanvasPointer(event) {
   if (!state.moved && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) >= DRAG_THRESHOLD) state.moved = true;
   const pointerGeneration = canvasInteractionGeneration;
   const finalPoint = canvasPointFromEvent(event);
-  const operation = ensureCanvasStore()?.finishPointer({
-    commit: state.moved,
-    snap: state.kind === 'node' && canvasSnapToGrid,
-  });
+  const operation = state.searchPreview
+    ? null
+    : ensureCanvasStore()?.finishPointer({
+        commit: state.moved,
+        snap: state.kind === 'node' && canvasSnapToGrid,
+      });
+  if (state.searchPreview) finishCanvasSearchPointer(state, state.moved);
   clearCanvasPointerUi(event.pointerId);
   if (state.kind === 'node') {
     if (state.moved) {
@@ -9178,6 +9697,11 @@ async function endCanvasPointer(event) {
     if (!state.moved) {
       const item = canvasItemById(state.id);
       if (item && canvasActiveTool === 'select' && !state.selectionAdditive) scheduleCanvasNodePreview(item);
+      updateCanvasNodeSelection();
+      updateBatchBar();
+      return;
+    }
+    if (state.searchPreview) {
       updateCanvasNodeSelection();
       updateBatchBar();
       return;
@@ -9666,6 +10190,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       ...DEFAULT_AUTO_BACKUP,
       ...(settings.autoBackup || {}),
     });
+    settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
     normalizeCanvasRailSettings(settings);
     syncSettingsUi();
     renderGrid();

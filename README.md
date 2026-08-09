@@ -95,6 +95,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Stack:** select two or more items or drop one node onto another to create a Stack; tab members restore as a Chrome Tab Group while note members remain on the Canvas.
 - New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
 - Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
+- **Automatic save metadata rules:** Settings can match a tab's hostname or page title with match, contains, starts with, ends with, regex, and not conditions. Rules support AND/OR, append note lines without duplicates, and merge tags without duplicates. Group saves evaluate each member independently.
 - Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
 - Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
 - **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Full export is refused when its estimated ZIP exceeds 256 MiB. Note attachments are capped at 96 MiB per note and 512 MiB across the extension. Existing attachments are not migrated automatically; the limits apply to new uploads and imports. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
@@ -235,6 +236,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併；分頁成員可還原為 Chrome Tab Group，note 成員留在 Canvas。
 - 新安裝預設深色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
 - 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
+- **自動儲存規則：** 設定可依分頁 hostname／FQDN 或 page title，使用 match、contains、starts with、ends with、regex 與 not 判斷；每條規則支援 AND／OR。命中後 note 逐行附加去重、tag 合併去重；儲存 Group 時會逐一判斷成員。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
 - **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片，預估超過 256 MiB 時會拒絕並提示改用精簡備份或分批匯出。附件容量上限為單一 note 96 MiB、全 extension 512 MiB；既有附件不會自動遷移，新上傳與匯入才套用圖片限制。檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。

@@ -5990,6 +5990,27 @@
       .sticker-note-preview-pane { min-height: 280px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(127,127,127,.06); }
       .sticker-note-preview { min-height: 0; overflow: auto; font-size: 13px; }
       .sticker-note-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
+      .auto-save-rule-list { display: grid; gap: 12px; margin-top: 12px; }
+      .auto-save-rule-empty { padding: 12px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: 12px; }
+      .auto-save-rule-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-raised); }
+      .auto-save-rule-header, .auto-save-condition-heading { display: flex; align-items: center; gap: 8px; }
+      .auto-save-rule-header strong { margin-right: auto; color: var(--text); font-size: 12px; }
+      .auto-save-rule-enabled { margin-right: 4px; }
+      .auto-save-rule-delete, .auto-save-condition-delete { color: var(--danger, #f87171); }
+      .auto-save-rule-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .auto-save-condition-heading { justify-content: space-between; color: var(--muted); font-size: 11px; font-weight: 700; }
+      .auto-save-condition-list { display: grid; gap: 7px; }
+      .auto-save-condition-row { display: grid; grid-template-columns: minmax(130px, .8fr) minmax(130px, .9fr) auto minmax(180px, 1.6fr) auto; align-items: center; gap: 7px; }
+      .auto-save-condition-row select, .auto-save-condition-row input { min-width: 0; }
+      .auto-save-condition-not { white-space: nowrap; }
+      .auto-save-actions-heading { color: var(--muted); font-size: 11px; font-weight: 700; }
+      .auto-save-note-field, .auto-save-tags-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12px; }
+      .auto-save-note-field textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+      .auto-save-tag-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 38px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); }
+      .auto-save-tag-chip { display: inline-flex; align-items: center; gap: 4px; }
+      .auto-save-tag-chip button { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; background: transparent; color: currentColor; cursor: pointer; }
+      .auto-save-tag-chip button svg { width: 12px; height: 12px; }
+      .auto-save-tag-input { flex: 1 1 160px; min-width: 160px; border: 0 !important; background: transparent !important; }
     </style>
   </head>
   <body>
@@ -6236,6 +6257,7 @@
       <div class="settings-layout">
         <nav class="settings-nav" id="settingsNav" aria-label="設定分類">
           <button type="button" class="settings-nav-btn active" data-settings-section="general" data-i18n="settingsGeneral">一般</button>
+          <button type="button" class="settings-nav-btn" data-settings-section="automation" data-i18n="settingsAutomation">儲存規則</button>
           <button type="button" class="settings-nav-btn" data-settings-section="canvas" data-i18n="settingsCanvas">畫布</button>
           <button type="button" class="settings-nav-btn" data-settings-section="display" data-i18n="settingsDisplay">顯示</button>
           <button type="button" class="settings-nav-btn" data-settings-section="tools" data-i18n="settingsTools">整理</button>
@@ -6271,6 +6293,22 @@
           <div class="radios">
             <label><input type="radio" name="restoreGroupIn" value="currentWindow" /> <span data-i18n="restoreCurrentWindow">目前視窗</span></label>
             <label><input type="radio" name="restoreGroupIn" value="newWindow" /> <span data-i18n="restoreNewWindow">新視窗</span></label>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="automation">
+          <h2 data-i18n="autoSaveMetadataTitle">自動 Note／Tag</h2>
+          <p class="hint" style="margin:0 0 12px;font-size:12px;color:var(--muted)" data-i18n="autoSaveMetadataHint">
+            儲存目前分頁或 Group 成員時，依 domain／page title 自動附加 note 與 tag。條件不分大小寫；note 逐行去重，tag 合併去重。
+          </p>
+          <div class="settings-row">
+            <label class="inline">
+              <input type="checkbox" id="autoSaveMetadataEnabled" />
+              <span data-i18n="autoSaveMetadataEnable">啟用自動 Note／Tag 規則</span>
+            </label>
+          </div>
+          <div id="autoSaveMetadataRules" class="auto-save-rule-list"></div>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <button type="button" class="btn primary" id="autoSaveMetadataAddRuleBtn" data-i18n="autoSaveMetadataAddRule">新增規則</button>
           </div>
         </div>
         <div class="settings-block" data-settings-section="display">
