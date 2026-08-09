@@ -31,7 +31,9 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(PARK_SOURCE, /node\.focus\(\{ preventScroll: true \}\)/);
   assert.match(PARK_SOURCE, /getBoundingClientRect\(\)/);
   assert.match(PARK_SOURCE, /canvasActiveTool === 'area'[\s\S]*?beginCanvasPointer\(event, 'lasso'\)/);
-  assert.match(PARK_SOURCE, /canvasActiveTool === 'pan' \|\| canvasActiveTool === 'select' \|\| canvasSpacePressed[\s\S]*?beginCanvasPointer\(event, 'pan'\)/);
+  assert.match(PARK_SOURCE, /canvasActiveTool === 'select' \|\| canvasSpacePressed[\s\S]*?beginCanvasPointer\(event, 'pan'\)/);
+  assert.doesNotMatch(PARK_SOURCE, /canvasActiveTool === 'pan'/);
+  assert.doesNotMatch(HTML_SOURCE, /data-canvas-tool="pan"/);
   assert.match(PARK_SOURCE, /classList\.toggle\('is-panning', kind === 'pan'\)/);
   assert.match(PARK_SOURCE, /normalizeCanvasWheelDelta\(event\)/);
   assert.match(PARK_SOURCE, /event\.ctrlKey \|\| event\.metaKey/);
@@ -47,10 +49,12 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   const pointerControlSource = PARK_SOURCE.match(/function isCanvasControlTarget\(target\)[\s\S]*?\n\}/)?.[0] || '';
   assert.doesNotMatch(pointerControlSource, /\.canvas-node-thumb/);
   assert.match(HTML_SOURCE, /\.canvas-viewport\s*\{[\s\S]*?cursor: grab;/);
+  assert.doesNotMatch(WORKBENCH_CSS, /\.canvas-viewport:focus-visible\s*\{[\s\S]*?box-shadow/);
   assert.match(HTML_SOURCE, /class="canvas-minimap-viewport"/);
   assert.doesNotMatch(HTML_SOURCE, /id="canvasMinimap"[^>]*aria-hidden="true"/);
   assert.match(PARK_SOURCE, /function renderCanvasConnections()/);
   assert.match(PARK_SOURCE, /function handleCanvasConnectionNodeClick\(id\)/);
+  assert.match(PARK_SOURCE, /if \(event\.button === 0 && !node && \(selectedCanvasConnectionId \|\| canvasConnectionSourceId\)\) \{[\s\S]*?clearCanvasConnectionSelection\(\)/);
   assert.match(PARK_SOURCE, /canvasActiveTool === 'link'/);
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
@@ -116,6 +120,10 @@ test('Top-level actions are consolidated in the header', () => {
   assert.doesNotMatch(HTML_SOURCE, /class="btn primary quick-add-main"/);
   assert.doesNotMatch(HTML_SOURCE, /class="btn primary quick-add-menu-btn"/);
   assert.match(PARK_SOURCE, /function resetCanvasView\(\)/);
+  assert.match(PARK_SOURCE, /function setCanvasActiveTool\(nextTool\)/);
+  assert.match(PARK_SOURCE, /event\.button !== 0 \|\| isCanvasControlTarget\(event\.target\)/);
+  assert.match(PARK_SOURCE, /if \(id\) \{[\s\S]*?restoreItem\(id\);[\s\S]*?\} else \{[\s\S]*?setCanvasActiveTool\(canvasActiveTool === 'area' \? 'select' : 'area'\)/);
+  assert.match(PARK_SOURCE, /canvasActiveTool = nextTool === 'area' \|\| nextTool === 'link' \|\| nextTool === 'note'/);
   assert.match(PARK_SOURCE, /function handleCanvasMiddleClick\(event\)/);
   assert.match(PARK_SOURCE, /const CANVAS_MIDDLE_CLICK_DELAY = 300/);
   assert.match(PARK_SOURCE, /event\.button === 1[\s\S]*?handleCanvasMiddleClick\(event\)/);
@@ -140,6 +148,8 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_MAX_WIDTH = 360/);
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSE_THRESHOLD = 120/);
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSED_WIDTH = 34/);
+  assert.match(PARK_SOURCE, /document\.body\?\.style\.setProperty\('--canvas-version-left', `\$\{visibleWidth \+ 16\}px`\)/);
+  assert.match(HTML_SOURCE, /body\.canvas-mode #versionBadge\s*\{[\s\S]*?left:\s*var\(--canvas-version-left, 16px\)/);
   assert.match(PARK_SOURCE, /function normalizeCanvasRailSettings\(target\)/);
   assert.match(PARK_SOURCE, /function applyCanvasRailUi\(/);
   assert.match(PARK_SOURCE, /function initCanvasRailResize\(\)/);
@@ -282,6 +292,14 @@ test('Canvas search relations and connection gestures have a stable UI contract'
   assert.match(PARK_SOURCE, /movingEndpoint/);
   assert.match(PARK_SOURCE, /path\.addEventListener\('dblclick'/);
   assert.match(PARK_SOURCE, /canvasConnectionClickSuppressUntil/);
+  const endConnectionSource = PARK_SOURCE.match(/function endCanvasConnectionDrag\([\s\S]*?\n\}/)?.[0] || '';
+  assert.match(endConnectionSource, /const shouldSelect = commit && !moved && Boolean\(connectionId\)/);
+  assert.match(endConnectionSource, /if \(shouldSelect\) \{[\s\S]*?selectCanvasConnection\(connectionId\)/);
+  assert.match(HTML_SOURCE, /data-canvas-selection-connection[^>]*data-i18n="canvasConnectionSelected"/);
+  assert.match(HTML_SOURCE, /data-canvas-action="delete-connection"[^>]*data-i18n="canvasDeleteConnection"[^>]*hidden/);
+  assert.match(PARK_SOURCE, /canvasViewportEl\?\.focus\?\.\(\{ preventScroll: true \}\)/);
+  assert.match(PARK_SOURCE, /if \(action === 'delete-connection'\) \{[\s\S]*?deleteCanvasConnection\(\);/);
+  assert.match(PARK_SOURCE, /function deleteCanvasConnection\(connectionId = selectedCanvasConnectionId\)/);
   assert.match(PARK_SOURCE, /function handleCanvasConnectionNodeClick\(id\)/);
   assert.match(PARK_SOURCE, /isMultiSelectModifier\(event\)/);
   assert.match(PARK_SOURCE, /!state\.selectionAdditive/);
@@ -339,13 +357,26 @@ test('Canvas zoom controls expose a hover slider and accessible fit menu', () =>
   assert.match(HTML_SOURCE, /class="canvas-zoom-value-wrap"[^>]*data-menu-open="false"/);
   assert.match(HTML_SOURCE, /id="canvasZoomSlider"[^>]*type="range"[^>]*min="0\.25"[^>]*max="2"[^>]*step="0\.05"/);
   assert.match(HTML_SOURCE, /id="canvasZoomMenu"[^>]*role="menu"[^>]*hidden/);
+  assert.match(HTML_SOURCE, /class="canvas-zoom-value-wrap"[^>]*data-menu-open="false"[^>]*data-pointer-outside="false"/);
   for (const action of ['width', 'screen', 'reset']) {
     assert.match(HTML_SOURCE, new RegExp(`data-canvas-zoom-action="${action}"`));
   }
   assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap:hover \.canvas-zoom-slider-popover/);
-  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap:focus-within \.canvas-zoom-slider-popover/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap:focus-within:not\(\[data-pointer-outside="true"\]\) \.canvas-zoom-slider-popover/);
   assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap\[data-menu-open="true"\] \.canvas-zoom-slider-popover/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap\[data-pointer-outside="true"\] \.canvas-zoom-slider-popover/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap::after[\s\S]*?height:\s*11px/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-controls \.canvas-sync-status\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*50%;[\s\S]*?right:\s*calc\(100% \+ 8px\);[\s\S]*?transform:\s*translateY\(-50%\)/);
+  const sliderPopoverCss = HTML_SOURCE.match(/\.canvas-zoom-slider-popover\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
+  assert.match(sliderPopoverCss, /display:\s*flex/);
+  assert.match(sliderPopoverCss, /justify-content:\s*center/);
+  assert.match(sliderPopoverCss, /width:\s*44px/);
+  const sliderCss = HTML_SOURCE.match(/\.canvas-zoom-slider\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
+  assert.match(sliderCss, /writing-mode:\s*vertical-lr/);
+  assert.match(sliderCss, /direction:\s*rtl/);
   assert.match(PARK_SOURCE, /canvasZoomSlider\.addEventListener\('input'/);
+  assert.match(PARK_SOURCE, /canvasZoomValueWrap\?\.addEventListener\('pointerenter'/);
+  assert.match(PARK_SOURCE, /canvasZoomValueWrap\?\.addEventListener\('pointerleave'/);
   assert.match(PARK_SOURCE, /canvasZoomValue\?\.addEventListener\('click'/);
   assert.match(PARK_SOURCE, /function toggleCanvasZoomMenu\(\)/);
   assert.match(PARK_SOURCE, /function closeCanvasZoomMenu\(/);
@@ -356,9 +387,14 @@ test('Canvas zoom controls expose a hover slider and accessible fit menu', () =>
 test('Canvas fit actions use visible card bounds and preserve the viewport schema', () => {
   assert.match(PARK_SOURCE, /const CANVAS_FIT_PADDING = 24/);
   assert.match(PARK_SOURCE, /function canvasFitViewport\(mode\)/);
+  assert.match(PARK_SOURCE, /function canvasBoundsForItems\(items, layout\)/);
+  assert.match(PARK_SOURCE, /const bounds = canvasBoundsForItems\(allTabs, state\.layout \|\| canvasLayout\)/);
+  assert.match(PARK_SOURCE, /x: \(bounds\.minX \+ bounds\.maxX\) \/ 2 - width \/ \(2 \* zoom\)/);
+  assert.match(PARK_SOURCE, /y: \(bounds\.minY \+ bounds\.maxY\) \/ 2 - height \/ \(2 \* zoom\)/);
+  const boundsSource = PARK_SOURCE.match(/function canvasBoundsForItems\(items, layout\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(boundsSource, /canvasDisplayPosition\(layout\.positions\?\.\[item\.id\] \|\| canvasDefaultPosition\(index\)\)/);
   const fitSource = PARK_SOURCE.match(/function canvasFitViewport\(mode\)[\s\S]*?\n\}/)?.[0] || '';
   assert.match(fitSource, /const items = getCanvasVisibleTabs\(\)/);
-  assert.match(fitSource, /canvasDisplayPosition\(layout\.positions\?\.\[item\.id\] \|\| canvasDefaultPosition\(index\)\)/);
   assert.match(fitSource, /const widthZoom = availableWidth \/ contentWidth/);
   assert.match(fitSource, /const requestedZoom = mode === 'width' \? widthZoom : Math\.min\(widthZoom, heightZoom\)/);
   assert.match(fitSource, /ensureCanvasStore\(\)\?\.commitViewport\(\{/);

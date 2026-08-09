@@ -62,7 +62,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Select a node | Show the contextual actions; hold `Shift` / `Control` for multi-select |
 | Drag a node | Move it on the canvas; positions are saved automatically |
 | Drag one node onto another | Stack the items into a group |
-| Drag on empty canvas / use Pan | Move the canvas; wheel controls zoom |
+| Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
 | Frame-select tool | Select nodes in a rectangular area |
 | Drag the minimap viewport frame | Pan the current canvas view; release commits one pan operation |
 | Link tool | Hover a node to reveal four `+` handles, then drag from any side; connections snap to the nearest side handle, and clicking two nodes or groups remains available as a fallback |

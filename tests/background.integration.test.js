@@ -390,7 +390,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.20.1');
+  assert.equal(MANIFEST.version, '2.21.4');
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {

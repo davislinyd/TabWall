@@ -781,6 +781,8 @@ const I18N = {
     canvasMinimapLabel: '畫布預覽',
     canvasMinimapViewport: '拖曳以平移畫布',
     canvasConnectionsLabel: '畫布連線',
+    canvasConnectionSelected: '已選取 1 條線段',
+    canvasDeleteConnection: '刪除線段',
     settingsCanvas: '畫布',
     canvasSettingsTitle: '畫布設定',
     canvasSettingsHint: '調整畫布的操作方式；位置與視角會自動儲存。',
@@ -1123,6 +1125,8 @@ const I18N = {
     canvasMinimapLabel: 'Canvas preview',
     canvasMinimapViewport: 'Drag to pan the canvas',
     canvasConnectionsLabel: 'Canvas connections',
+    canvasConnectionSelected: '1 connection selected',
+    canvasDeleteConnection: 'Delete connection',
     settingsCanvas: 'Canvas',
     canvasSettingsTitle: 'Canvas settings',
     canvasSettingsHint: 'Adjust canvas behavior; positions and viewport are saved automatically.',
@@ -2237,6 +2241,7 @@ function applyCanvasRailUi({ width = settings.canvasRailWidth, collapsed = setti
   const isCollapsed = collapsed === true;
   const visibleWidth = isCollapsed ? CANVAS_RAIL_COLLAPSED_WIDTH : normalizedWidth;
   canvasView.style.setProperty('--canvas-rail-width', `${visibleWidth}px`);
+  document.body?.style.setProperty('--canvas-version-left', `${visibleWidth + 16}px`);
   canvasView.dataset.canvasRailCollapsed = isCollapsed ? 'true' : 'false';
   if (canvasRailResize) {
     canvasRailResize.title = t('canvasRailResize');
@@ -5395,29 +5400,43 @@ function updateBatchBar() {
   const isCanvasUi = settings.viewMode === 'canvas' && !canvasSessionFallback;
   const selection = isCanvasUi ? activeCanvasSelection() : selectedIds;
   const n = selection.size;
+  const connectionSelected = isCanvasUi && Boolean(selectedCanvasConnectionId);
   batchCount.textContent = t('batchCount', { n });
   if (isCanvasUi) {
     if (canvasContextBar) {
-      canvasContextBar.classList.toggle('open', n > 0);
-      canvasContextBar.setAttribute('aria-hidden', n > 0 ? 'false' : 'true');
+      const hasCanvasAction = connectionSelected || n > 0;
+      canvasContextBar.classList.toggle('open', hasCanvasAction);
+      canvasContextBar.setAttribute('aria-hidden', hasCanvasAction ? 'false' : 'true');
+      const itemsLabel = canvasContextBar.querySelector('[data-canvas-selection-items]');
+      const connectionLabel = canvasContextBar.querySelector('[data-canvas-selection-connection]');
+      if (itemsLabel) itemsLabel.hidden = connectionSelected;
+      if (connectionLabel) connectionLabel.hidden = !connectionSelected;
       const count = canvasContextBar.querySelector('[data-canvas-selection-count]');
-      if (count) count.textContent = t('batchCount', { n });
-      const selectedItem = n === 1 ? canvasItemById([...selection][0]) : null;
+      if (count && !connectionSelected) count.textContent = t('batchCount', { n });
+      const selectedItem = !connectionSelected && n === 1 ? canvasItemById([...selection][0]) : null;
       const snapshotButton = canvasContextBar.querySelector('[data-canvas-action="snapshot"]');
       const membersButton = canvasContextBar.querySelector('[data-canvas-action="members"]');
       const editButton = canvasContextBar.querySelector('[data-canvas-action="edit"]');
       const restoreButton = canvasContextBar.querySelector('[data-canvas-action="restore"]');
-      if (snapshotButton) snapshotButton.hidden = selectedItem?.kind !== 'tab';
-      if (membersButton) membersButton.hidden = selectedItem?.kind !== 'group';
-      if (editButton) editButton.hidden = n !== 1;
+      const pinButton = canvasContextBar.querySelector('[data-canvas-action="pin"]');
+      const stackButton = canvasContextBar.querySelector('[data-canvas-action="stack"]');
+      const deleteButton = canvasContextBar.querySelector('[data-canvas-action="delete"]');
+      const deleteConnectionButton = canvasContextBar.querySelector('[data-canvas-action="delete-connection"]');
+      if (snapshotButton) snapshotButton.hidden = connectionSelected || selectedItem?.kind !== 'tab';
+      if (membersButton) membersButton.hidden = connectionSelected || selectedItem?.kind !== 'group';
+      if (editButton) editButton.hidden = connectionSelected || n !== 1;
       if (restoreButton) {
-        restoreButton.hidden = n === 1 && (
+        restoreButton.hidden = connectionSelected || (n === 1 && (
           selectedItem?.kind === 'note'
           || (selectedItem?.kind === 'group' && !(selectedItem.tabs || []).length)
-        );
+        ));
       }
+      if (pinButton) pinButton.hidden = connectionSelected;
+      if (stackButton) stackButton.hidden = connectionSelected;
+      if (deleteButton) deleteButton.hidden = connectionSelected;
+      if (deleteConnectionButton) deleteConnectionButton.hidden = !connectionSelected;
     }
-    if (canvasDropZone) canvasDropZone.hidden = n < 2;
+    if (canvasDropZone) canvasDropZone.hidden = connectionSelected || n < 2;
     batchBar.classList.remove('open');
     batchBar.setAttribute('aria-hidden', 'true');
     return;
@@ -7470,6 +7489,22 @@ function canvasViewportSize() {
   };
 }
 
+function canvasBoundsForItems(items, layout) {
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  (Array.isArray(items) ? items : []).forEach((item, index) => {
+    const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
+    const x = Number(position.x) || 0;
+    const y = Number(position.y) || 0;
+    const w = Math.max(1, Number(position.w) || 1);
+    const h = Math.max(1, Number(position.h) || 1);
+    bounds.minX = Math.min(bounds.minX, x);
+    bounds.minY = Math.min(bounds.minY, y);
+    bounds.maxX = Math.max(bounds.maxX, x + w);
+    bounds.maxY = Math.max(bounds.maxY, y + h);
+  });
+  return Number.isFinite(bounds.minX) ? bounds : null;
+}
+
 function canvasFitViewport(mode) {
   if (mode !== 'width' && mode !== 'screen') return false;
   const { width, height } = canvasViewportSize();
@@ -7477,14 +7512,8 @@ function canvasFitViewport(mode) {
   if (!width || !height || !items.length) return false;
   const state = canvasStoreSnapshot();
   const layout = state.layout || canvasLayout;
-  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-  items.forEach((item, index) => {
-    const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
-    bounds.minX = Math.min(bounds.minX, position.x);
-    bounds.minY = Math.min(bounds.minY, position.y);
-    bounds.maxX = Math.max(bounds.maxX, position.x + position.w);
-    bounds.maxY = Math.max(bounds.maxY, position.y + position.h);
-  });
+  const bounds = canvasBoundsForItems(items, layout);
+  if (!bounds) return false;
   const contentWidth = Math.max(1, bounds.maxX - bounds.minX);
   const contentHeight = Math.max(1, bounds.maxY - bounds.minY);
   const availableWidth = Math.max(1, width - CANVAS_FIT_PADDING * 2);
@@ -7539,18 +7568,16 @@ function centerCanvasInitialView() {
     canvasNeedsInitialCenter = false;
     return;
   }
-  const positions = allTabs.map((item, index) => canvasDisplayPosition(
-    state.layout.positions?.[item.id] || canvasDefaultPosition(index),
-  ));
-  const minX = Math.min(...positions.map((position) => Number(position.x) || 0));
-  const minY = Math.min(...positions.map((position) => Number(position.y) || 0));
-  const maxX = Math.max(...positions.map((position) => (Number(position.x) || 0) + Math.max(1, Number(position.w) || 1)));
-  const maxY = Math.max(...positions.map((position) => (Number(position.y) || 0) + Math.max(1, Number(position.h) || 1)));
+  const bounds = canvasBoundsForItems(allTabs, state.layout);
+  if (!bounds) {
+    canvasNeedsInitialCenter = false;
+    return;
+  }
   const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
   canvasNeedsInitialCenter = false;
   canvasStore?.commitViewport({
-    x: (minX + maxX) / 2 - width / (2 * zoom),
-    y: (minY + maxY) / 2 - height / (2 * zoom),
+    x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
+    y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
     zoom,
   });
 }
@@ -8165,6 +8192,7 @@ function endCanvasConnectionDrag(event = null, commit = true) {
   if (event) updateCanvasConnectionDrag(event);
   const moved = state.moved;
   const connectionId = state.connectionId;
+  const shouldSelect = commit && !moved && Boolean(connectionId);
   if (commit) commitCanvasConnectionDrag();
   if (moved && connectionId) canvasConnectionClickSuppressUntil.set(connectionId, Date.now() + 300);
   try {
@@ -8174,6 +8202,10 @@ function endCanvasConnectionDrag(event = null, commit = true) {
   }
   canvasConnectionDragState = null;
   canvasViewportEl?.classList.remove('is-connection-dragging');
+  if (shouldSelect) {
+    selectCanvasConnection(connectionId);
+    return;
+  }
   updateCanvasNodeSelection();
   renderCanvasConnections();
 }
@@ -8198,6 +8230,7 @@ function resetCanvasConnectionCurve(connectionId) {
   if (changed) canvasStore?.commitConnections(next);
   else renderCanvasConnections();
   updateCanvasNodeSelection();
+  updateBatchBar();
 }
 
 function selectCanvasConnection(connectionId) {
@@ -8206,6 +8239,7 @@ function selectCanvasConnection(connectionId) {
   if (selectedCanvasConnectionId) ensureCanvasStore()?.setSelection([]);
   updateCanvasNodeSelection();
   renderCanvasConnections();
+  canvasViewportEl?.focus?.({ preventScroll: true });
   updateBatchBar();
 }
 
@@ -8214,6 +8248,7 @@ function clearCanvasConnectionSelection() {
   canvasConnectionSourceId = '';
   updateCanvasNodeSelection();
   renderCanvasConnections();
+  updateBatchBar();
 }
 
 function deleteCanvasConnection(connectionId = selectedCanvasConnectionId) {
@@ -8223,7 +8258,11 @@ function deleteCanvasConnection(connectionId = selectedCanvasConnectionId) {
     (connection) => canvasConnectionId(connection.sourceId, connection.targetId) !== connectionId
   );
   selectedCanvasConnectionId = '';
-  canvasStore?.commitConnections(connections);
+  const store = ensureCanvasStore();
+  if (store) store.commitConnections(connections);
+  else renderCanvasConnections();
+  updateCanvasNodeSelection();
+  updateBatchBar();
 }
 
 function handleCanvasConnectionNodeClick(id) {
@@ -8242,6 +8281,7 @@ function handleCanvasConnectionNodeClick(id) {
     selectedCanvasConnectionId = '';
     updateCanvasNodeSelection();
     renderCanvasConnections();
+    updateBatchBar();
     return;
   }
   const sourceId = canvasConnectionSourceId;
@@ -8656,6 +8696,7 @@ function canvasSelectNode(id, event) {
   if (selectedCanvasConnectionId) {
     selectedCanvasConnectionId = '';
     renderCanvasConnections();
+    updateBatchBar();
   }
   const additive = Boolean(event?.metaKey || event?.ctrlKey || event?.shiftKey);
   const selection = activeCanvasSelection();
@@ -8807,6 +8848,10 @@ async function createCanvasStackFromSelection() {
 }
 
 async function canvasAction(action) {
+  if (action === 'delete-connection') {
+    deleteCanvasConnection();
+    return;
+  }
   const ids = [...activeCanvasSelection()];
   if (!ids.length) return;
   if (action === 'restore') {
@@ -8875,7 +8920,19 @@ function canvasTargetAt(point, excludeId = '') {
 }
 
 function resetCanvasView() {
-  ensureCanvasStore()?.commitViewport({ ...DEFAULT_CANVAS_VIEWPORT });
+  const { width, height } = canvasViewportSize();
+  const state = canvasStoreSnapshot();
+  const bounds = canvasBoundsForItems(allTabs, state.layout || canvasLayout);
+  if (!width || !height || !bounds) {
+    ensureCanvasStore()?.commitViewport({ ...DEFAULT_CANVAS_VIEWPORT });
+    return;
+  }
+  const zoom = DEFAULT_CANVAS_VIEWPORT.zoom;
+  ensureCanvasStore()?.commitViewport({
+    x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
+    y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
+    zoom,
+  });
 }
 
 function clearCanvasMiddleClickSequence() {
@@ -9197,26 +9254,33 @@ function endCanvasMinimapDrag({ event = null, commit = true } = {}) {
 }
 
 function resetCanvasNotePlacement() {
-  canvasNotePlacementArmed = false;
-  if (canvasActiveTool === 'note') canvasActiveTool = 'select';
-  canvasView?.classList.remove('is-note-placement');
+  setCanvasActiveTool(canvasActiveTool === 'note' ? 'select' : canvasActiveTool);
+}
+
+function armCanvasNotePlacement() {
+  setCanvasActiveTool('note');
+  canvasViewportEl?.focus?.({ preventScroll: true });
+}
+
+function setCanvasActiveTool(nextTool) {
+  canvasActiveTool = nextTool === 'area' || nextTool === 'link' || nextTool === 'note'
+    ? nextTool
+    : 'select';
+  canvasNotePlacementArmed = canvasActiveTool === 'note';
+  canvasView?.classList.toggle('is-note-placement', canvasNotePlacementArmed);
   document.querySelectorAll('[data-canvas-tool]').forEach((tool) => {
     const active = tool.dataset.canvasTool === canvasActiveTool;
     tool.classList.toggle('active', active);
     tool.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-}
-
-function armCanvasNotePlacement() {
-  canvasActiveTool = 'note';
-  canvasNotePlacementArmed = true;
-  canvasView?.classList.add('is-note-placement');
-  document.querySelectorAll('[data-canvas-tool]').forEach((tool) => {
-    const active = tool.dataset.canvasTool === 'note';
-    tool.classList.toggle('active', active);
-    tool.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
-  canvasViewportEl?.focus?.({ preventScroll: true });
+  canvasViewportEl?.classList.toggle('is-link-tool', canvasActiveTool === 'link');
+  updateCanvasNodeSelection();
+  if (canvasActiveTool !== 'link') {
+    cancelCanvasConnectionDrag();
+    canvasConnectionSourceId = '';
+    updateCanvasNodeSelection();
+    renderCanvasConnections();
+  }
 }
 
 function placeStickerNoteAt(point) {
@@ -9234,6 +9298,9 @@ function initCanvasInteractions() {
     clearCanvasMiddleClickSequence();
     if (isCanvasControlTarget(event.target)) return;
     const node = event.target.closest?.('.canvas-node');
+    if (event.button === 0 && !node && (selectedCanvasConnectionId || canvasConnectionSourceId)) {
+      clearCanvasConnectionSelection();
+    }
     if (canvasNotePlacementArmed && event.button === 0) {
       if (node) return;
       event.preventDefault();
@@ -9255,7 +9322,7 @@ function initCanvasInteractions() {
       beginCanvasPointer(event, 'lasso');
       return;
     }
-    if (canvasActiveTool === 'pan' || canvasActiveTool === 'select' || canvasSpacePressed) {
+    if (canvasActiveTool === 'select' || canvasSpacePressed) {
       beginCanvasPointer(event, 'pan');
     }
   });
@@ -9312,12 +9379,15 @@ function initCanvasInteractions() {
     if (canvasMinimap) canvasGeometryObserver.observe(canvasMinimap);
   }
   canvasViewportEl.addEventListener('dblclick', (event) => {
-    if (isCanvasControlTarget(event.target)) return;
+    if (event.button !== 0 || isCanvasControlTarget(event.target)) return;
     const node = event.target.closest?.('.canvas-node');
     const id = node?.dataset.id || canvasTargetAt(canvasPointFromEvent(event));
     if (id) {
       cancelCanvasNodeClick(id);
       restoreItem(id);
+    } else {
+      setCanvasActiveTool(canvasActiveTool === 'area' ? 'select' : 'area');
+      canvasViewportEl.focus({ preventScroll: true });
     }
   });
   canvasViewportEl.addEventListener('keydown', (event) => {
@@ -9397,19 +9467,7 @@ function initCanvasInteractions() {
   });
   document.querySelectorAll('[data-canvas-tool]').forEach((button) => {
     button.addEventListener('click', () => {
-      canvasActiveTool = button.dataset.canvasTool || 'select';
-      canvasNotePlacementArmed = canvasActiveTool === 'note';
-      canvasView?.classList.toggle('is-note-placement', canvasNotePlacementArmed);
-      document.querySelectorAll('[data-canvas-tool]').forEach((tool) => tool.classList.toggle('active', tool === button));
-    document.querySelectorAll('[data-canvas-tool]').forEach((tool) => tool.setAttribute('aria-pressed', tool === button ? 'true' : 'false'));
-      canvasViewportEl.classList.toggle('is-link-tool', canvasActiveTool === 'link');
-      updateCanvasNodeSelection();
-      if (canvasActiveTool !== 'link') cancelCanvasConnectionDrag();
-      if (canvasActiveTool !== 'link') {
-        canvasConnectionSourceId = '';
-        updateCanvasNodeSelection();
-        renderCanvasConnections();
-      }
+      setCanvasActiveTool(button.dataset.canvasTool || 'select');
     });
   });
   canvasAddNoteBtn?.addEventListener('click', armCanvasNotePlacement);
@@ -9424,6 +9482,12 @@ function initCanvasInteractions() {
     canvasZoomSlider.step = String(CANVAS_ZOOM_STEP);
     canvasZoomSlider.addEventListener('input', (event) => setCanvasZoom(event.currentTarget.value));
   }
+  canvasZoomValueWrap?.addEventListener('pointerenter', () => {
+    canvasZoomValueWrap.dataset.pointerOutside = 'false';
+  });
+  canvasZoomValueWrap?.addEventListener('pointerleave', () => {
+    canvasZoomValueWrap.dataset.pointerOutside = 'true';
+  });
   canvasZoomValue?.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleCanvasZoomMenu();
@@ -9432,7 +9496,10 @@ function initCanvasInteractions() {
     button.addEventListener('click', () => applyCanvasZoomAction(button.dataset.canvasZoomAction || ''));
   });
   document.addEventListener('pointerdown', (event) => {
-    if (!event.target.closest?.('#canvasZoomValueWrap')) closeCanvasZoomMenu();
+    if (!event.target.closest?.('#canvasZoomValueWrap')) {
+      closeCanvasZoomMenu();
+      if (canvasZoomValueWrap) canvasZoomValueWrap.dataset.pointerOutside = 'true';
+    }
   });
   document.getElementById('canvasAllBtn')?.addEventListener('click', () => setCanvasIndexFilter('all'));
   document.getElementById('canvasUnsortedBtn')?.addEventListener('click', () => setCanvasIndexFilter('unsorted'));
