@@ -85,7 +85,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected.
 - **Static themes:** Backgrounds use static themes; video backgrounds and user-imported videos are not supported.
 - Park and restore groups, with member notes and tags.
-- **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. Notes can join Stacks but are never restored as browser tabs.
+- **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. New images are normalized to WebP (PNG fallback), capped at 4096px on the long edge, 16MP, and 24 MiB per source/output file; GIF and SVG become static images. Notes can join Stacks but are never restored as browser tabs.
 - Multi-selection and batch operations.
 - **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible.
 - **Canvas settings:** sort by date, FQDN, or Group; arrange with Grid or Aligned Rows using a 96px card gap while preserving stored node sizes.
@@ -94,7 +94,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
 - Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
 - Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
-- **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
+- **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Full export is refused when its estimated ZIP exceeds 256 MiB. Note attachments are capped at 96 MiB per note and 512 MiB across the extension. Existing attachments are not migrated automatically; the limits apply to new uploads and imports. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
 - **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
@@ -131,7 +131,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 ### Files
 
 ```text
-manifest.json   background.js   mediaDb.js   backupBuild.js
+manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
 content.js      park.html       park.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md
@@ -222,7 +222,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。
 - **靜態主題：** 背景使用靜態主題，不支援影片背景或使用者匯入影片。
 - 暫存與還原群組，支援成員備註與標籤。
-- **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件；note 可加入 Stack，但不會還原成瀏覽器分頁。
+- **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件。新圖片會自動正規化為 WebP（不可用時退回 PNG），長邊上限 4096px、總像素 16MP，原始檔與儲存檔各不得超過 24 MiB；GIF／SVG 會靜態化。note 可加入 Stack，但不會還原成瀏覽器分頁。
 - 多選與批次操作。
 - **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。
 - **畫布設定：** 可依日期、FQDN 或 Group 排序；排列提供棋盤與對齊格式，使用 96px 卡片間距並保留儲存的卡片尺寸。
@@ -231,7 +231,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
-- **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片；檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
+- **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片，預估超過 256 MiB 時會拒絕並提示改用精簡備份或分批匯出。附件容量上限為單一 note 96 MiB、全 extension 512 MiB；既有附件不會自動遷移，新上傳與匯入才套用圖片限制。檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
 - **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
@@ -268,7 +268,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 ### 檔案
 
 ```text
-manifest.json   background.js   mediaDb.js   backupBuild.js
+manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
 content.js      park.html       park.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md

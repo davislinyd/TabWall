@@ -5,6 +5,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.url), 'utf8');
+const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
 const ITEM_ID = '11111111-1111-4111-8111-111111111111';
@@ -239,7 +240,22 @@ function createRuntime() {
     async removeImportStage(stageId) {
       importStages.delete(stageId);
     },
-    dataUrlToBlob(value) { return value || null; },
+    dataUrlToBlob(value) {
+      if (typeof value !== 'string' || !value.startsWith('data:')) return null;
+      const comma = value.indexOf(',');
+      if (comma < 0) return null;
+      const header = value.slice(5, comma);
+      const body = value.slice(comma + 1);
+      const mime = header.split(';')[0] || 'image/png';
+      try {
+        const bytes = /;base64/i.test(header)
+          ? Uint8Array.from(atob(body), (char) => char.charCodeAt(0))
+          : new TextEncoder().encode(decodeURIComponent(body));
+        return new Blob([bytes], { type: mime });
+      } catch {
+        return null;
+      }
+    },
     async blobToDataUrl(value) { return value ? String(value) : ''; },
     keysForItem(item) {
       if (item.kind === 'group') {
@@ -282,7 +298,18 @@ function createRuntime() {
     },
     clearTimeout: testClearTimeout,
     fetch,
-    OffscreenCanvas: class {},
+    OffscreenCanvas: class {
+      constructor(width, height) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext() {
+        return { clearRect() {}, drawImage() {} };
+      }
+      async convertToBlob({ type = 'image/webp' } = {}) {
+        return new Blob([new Uint8Array([1, 2, 3])], { type });
+      }
+    },
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
     __TABWALL_TEST__: true,
     importScripts() {},
@@ -291,6 +318,7 @@ function createRuntime() {
   sandbox.self = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(BUILD_SOURCE, sandbox, { filename: 'backupBuild.js' });
+  vm.runInContext(NOTE_MEDIA_SOURCE, sandbox, { filename: 'noteMedia.js' });
   vm.runInContext(BACKGROUND_SOURCE, sandbox, { filename: 'background.js' });
   const ready = new Promise((resolve) => setTimeout(resolve, 0));
   return {
@@ -345,9 +373,24 @@ function note(id = NOTE_ID, { attachment = true, tags = ['idea'] } = {}) {
   };
 }
 
+function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
+  const result = note(id, { attachment: false });
+  result.attachments = Array.from({ length: attachmentCount }, (_, index) => ({
+    id: `${String(id).slice(0, 8)}-${String(index + 1).padStart(4, '0')}-4aaa-8aaa-aaaaaaaaaaaa`,
+    name: `image-${index}.webp`,
+    alt: '',
+    mime: 'image/webp',
+    size,
+    width: 4096,
+    height: 4096,
+    hasData: true,
+  }));
+  return result;
+}
+
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.20.0');
+  assert.equal(MANIFEST.version, '2.20.1');
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
@@ -427,6 +470,79 @@ test('note CRUD persists fixed metadata and cleans attachment media', async () =
   assert.equal(updatedTag?.count, 1);
   assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
   assert.equal(runtime.store.parkedItems.length, 0);
+});
+
+test('attachment usage reports note and global quotas and rejects a full note', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const rejected = await runtime.api.createNote(quotaNoteForTest(NOTE_ID, 5));
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, 'attachment_quota_exceeded');
+  assert.equal(runtime.store.parkedItems?.length || 0, 0);
+
+  const created = await runtime.api.createNote(note());
+  assert.equal(created.ok, true);
+  const usage = await dispatchMessage(runtime, {
+    type: 'GET_ATTACHMENT_USAGE',
+    noteId: NOTE_ID,
+  });
+  assert.equal(usage.ok, true);
+  assert.equal(usage.noteBytes, 3);
+  assert.equal(usage.usedBytes, 3);
+  assert.equal(usage.noteMaxBytes, 96 * 1024 * 1024);
+  assert.equal(usage.maxBytes, 512 * 1024 * 1024);
+});
+
+test('global attachment quota includes notes nested in mixed Stacks', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.createNote(note());
+  await runtime.api.setParkedItems([tab(ITEM_ID), ...(await runtime.api.getParkedItems())]);
+  const stacked = await runtime.api.stackItems(ITEM_ID, NOTE_ID);
+  assert.equal(stacked.ok, true);
+  const usage = await dispatchMessage(runtime, {
+    type: 'GET_ATTACHMENT_USAGE',
+    noteId: NOTE_ID,
+    groupId: stacked.groupId,
+  });
+  assert.equal(usage.noteBytes, 3);
+  assert.equal(usage.usedBytes, 3);
+});
+
+test('global attachment quota rejects the sixth 96MiB note', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  for (let index = 0; index < 5; index++) {
+    const id = `${String(index + 1).padStart(8, '0')}-cccc-4ccc-8ccc-cccccccccccc`;
+    assert.equal((await runtime.api.createNote(quotaNoteForTest(id))).ok, true);
+  }
+  const rejected = await runtime.api.createNote(
+    quotaNoteForTest('00000006-cccc-4ccc-8ccc-cccccccccccc')
+  );
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, 'attachment_quota_exceeded');
+  const usage = await dispatchMessage(runtime, { type: 'GET_ATTACHMENT_USAGE' });
+  assert.equal(usage.usedBytes, 5 * 96 * 1024 * 1024);
+});
+
+test('full import quota failure is atomic', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  const incoming = quotaNoteForTest(NOTE_ID, 5);
+  const result = await runtime.api.importBackup({
+    format: 'tabwall-backup',
+    version: runtime.Build.FORMAT_VERSION,
+    media: 'inline',
+    parkedItems: [incoming],
+    parkedTabs: [],
+    settings: {},
+    tagCatalog: [],
+  }, { mode: 'replace' });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'attachment_quota_exceeded');
+  assert.deepEqual(runtime.store.parkedItems.map((item) => item.id), [ITEM_ID]);
+  assert.equal(runtime.media.size, 0);
 });
 
 test('Stack supports mixed tabs and notes as Canvas-only group members', async () => {

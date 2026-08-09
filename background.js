@@ -2,10 +2,11 @@
  * TabWall — Service Worker
  * Meta in chrome.storage.local; images in IndexedDB (mediaDb.js)
  */
-importScripts('mediaDb.js', 'backupBuild.js');
+importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
+const NoteMedia = self.TabWallNoteMedia;
 
 // ─── App diagnostic log (ring buffer) ──────────────────────────────
 const APP_LOG_MAX = 300;
@@ -185,10 +186,7 @@ function normalizeNoteItem(raw) {
           name: safeText(value.name || 'image', DATA_LIMITS.MAX_TITLE_LENGTH) || 'image',
           alt: safeText(value.alt, DATA_LIMITS.MAX_NOTE_LENGTH),
           mime,
-          size: Math.max(0, Math.min(
-            Build?.LIMITS?.MAX_IMAGE_BYTES || 24 * 1024 * 1024,
-            Math.round(Number(value.size) || 0)
-          )),
+          size: Math.max(0, Math.round(Number(value.size) || 0)),
           width: Math.max(0, Math.min(100000, Math.round(Number(value.width) || 0))),
           height: Math.max(0, Math.min(100000, Math.round(Number(value.height) || 0))),
           hasData: value.hasData === true || Boolean(data),
@@ -1353,6 +1351,98 @@ function validateNoteMutation(note) {
   return validation?.ok ? '' : validation?.error || 'invalid_note';
 }
 
+function fallbackAttachmentSize(attachment) {
+  const size = Number(attachment?.size);
+  return Number.isInteger(size) && size > 0 ? size : 0;
+}
+
+async function attachmentBytesForNote(note) {
+  return mapWithConcurrency(note?.attachments || [], 4, async (attachment) => {
+    if (!attachment || (attachment.hasData !== true && !attachment.data)) return 0;
+    try {
+      const blob = await Media.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+      const size = Number(blob?.size);
+      if (Number.isFinite(size) && size >= 0) return size;
+    } catch {
+      // Metadata remains a safe fallback for legacy rows or test stores.
+    }
+    return fallbackAttachmentSize(attachment);
+  }).then((sizes) => sizes.reduce((total, size) => total + size, 0));
+}
+
+async function attachmentUsageForItems(items, focusNoteId = '', focusGroupId = '') {
+  const notes = [];
+  for (const item of items || []) {
+    if (item.kind === 'group') {
+      for (const note of item.notes || []) notes.push({ note, groupId: item.id });
+    } else if (item.kind === 'note') {
+      notes.push({ note: item, groupId: '' });
+    }
+  }
+  const values = await Promise.all(notes.map(async ({ note, groupId }) => ({
+    note,
+    groupId,
+    bytes: await attachmentBytesForNote(note),
+  })));
+  const focus = values.find(({ note, groupId }) => (
+    note.id === focusNoteId && groupId === String(focusGroupId || '')
+  ));
+  return {
+    usedBytes: values.reduce((total, value) => total + value.bytes, 0),
+    noteBytes: focus?.bytes || 0,
+    noteId: focus?.note.id || '',
+    groupId: focus?.groupId || '',
+  };
+}
+
+async function checkAttachmentQuota(items, focusNoteId = '', focusGroupId = '') {
+  const usage = await attachmentUsageForItems(items, focusNoteId, focusGroupId);
+  const noteOver = usage.noteId && usage.noteBytes > (Build?.LIMITS?.NOTE_ATTACHMENT_QUOTA_BYTES || 96 * 1024 * 1024);
+  const totalOver = usage.usedBytes > (Build?.LIMITS?.TOTAL_ATTACHMENT_QUOTA_BYTES || 512 * 1024 * 1024);
+  if (noteOver || totalOver) {
+    return {
+      ok: false,
+      error: 'attachment_quota_exceeded',
+      usedBytes: usage.usedBytes,
+      maxBytes: Build?.LIMITS?.TOTAL_ATTACHMENT_QUOTA_BYTES || 512 * 1024 * 1024,
+      noteBytes: usage.noteBytes,
+      noteMaxBytes: Build?.LIMITS?.NOTE_ATTACHMENT_QUOTA_BYTES || 96 * 1024 * 1024,
+    };
+  }
+  return {
+    ok: true,
+    usedBytes: usage.usedBytes,
+    maxBytes: Build?.LIMITS?.TOTAL_ATTACHMENT_QUOTA_BYTES || 512 * 1024 * 1024,
+    noteBytes: usage.noteBytes,
+    noteMaxBytes: Build?.LIMITS?.NOTE_ATTACHMENT_QUOTA_BYTES || 96 * 1024 * 1024,
+  };
+}
+
+async function getAttachmentUsage(noteId = '', groupId = '') {
+  const items = await getParkedItems();
+  const usage = await attachmentUsageForItems(items, String(noteId || ''), String(groupId || ''));
+  return {
+    ok: true,
+    usedBytes: usage.usedBytes,
+    maxBytes: Build?.LIMITS?.TOTAL_ATTACHMENT_QUOTA_BYTES || 512 * 1024 * 1024,
+    noteBytes: usage.noteBytes,
+    noteMaxBytes: Build?.LIMITS?.NOTE_ATTACHMENT_QUOTA_BYTES || 96 * 1024 * 1024,
+  };
+}
+
+async function normalizeInlineNoteAttachment(attachment, blob) {
+  if (!NoteMedia?.normalizeBlob) throw new Error('note_media_unavailable');
+  const normalized = await NoteMedia.normalizeBlob(blob);
+  Object.assign(attachment, {
+    mime: normalized.mime,
+    size: normalized.size,
+    width: normalized.width,
+    height: normalized.height,
+    hasData: true,
+  });
+  return normalized.blob;
+}
+
 async function createNote(raw, position = null) {
   const note = normalizeNoteItem({ ...(raw || {}), kind: 'note' });
   const list = await getParkedItems();
@@ -1366,18 +1456,43 @@ async function createNote(raw, position = null) {
   if (idAlreadyUsed) note.id = crypto.randomUUID();
   const validationError = validateNoteMutation(note);
   if (validationError) return { ok: false, error: validationError };
+  let writtenKeys = new Set();
   try {
-    await persistInlineMediaToIdb([note], { preserveMissingAttachments: true });
+    writtenKeys = await persistInlineMediaToIdb([note], { preserveMissingAttachments: true });
+    const normalizedValidationError = validateNoteMutation(note);
+    if (normalizedValidationError) throw new Error(normalizedValidationError);
+    const quota = await checkAttachmentQuota([...list, note], note.id, '');
+    if (!quota.ok) {
+      await Media.removeMany(Media.keysForItem(note));
+      return quota;
+    }
   } catch (err) {
-    return { ok: false, error: 'media_write_failed', detail: String(err?.message || err) };
+    if (writtenKeys.size) await Media.removeMany([...writtenKeys]).catch(() => {});
+    const errorCode = String(err?.code || err?.message || '');
+    return {
+      ok: false,
+      error: errorCode === 'attachment_quota_exceeded' || errorCode.startsWith('note_image_')
+        ? errorCode
+        : 'media_write_failed',
+      detail: String(err?.message || err),
+    };
   }
-  const layout = await getCanvasLayout();
-  if (position && typeof position === 'object') {
-    layout.positions = { ...(layout.positions || {}) };
-    layout.positions[note.id] = normalizeCanvasPosition(position, defaultCanvasPosition(list.length));
+  try {
+    const layout = await getCanvasLayout();
+    if (position && typeof position === 'object') {
+      layout.positions = { ...(layout.positions || {}) };
+      layout.positions[note.id] = normalizeCanvasPosition(position, defaultCanvasPosition(list.length));
+    }
+    list.push(note);
+    await setParkedItems(list, { canvasLayout: layout });
+  } catch (err) {
+    if (writtenKeys.size) await Media.removeMany([...writtenKeys]).catch(() => {});
+    return {
+      ok: false,
+      error: 'storage_write_failed',
+      detail: String(err?.message || err),
+    };
   }
-  list.push(note);
-  await setParkedItems(list, { canvasLayout: layout });
   await mergeTagsIntoCatalog(note.tags);
   return { ok: true, item: toStoredMeta(note) };
 }
@@ -1398,12 +1513,38 @@ async function updateNote(noteId, patch = {}, groupId = '') {
   });
   const validationError = validateNoteMutation(nextNote);
   if (validationError) return { ok: false, error: validationError };
+  let writtenKeys = new Set();
   try {
     if ((nextNote.attachments || []).some((attachment) => attachment.data)) {
-      await persistInlineMediaToIdb([nextNote], { preserveMissingAttachments: true });
+      writtenKeys = await persistInlineMediaToIdb([nextNote], { preserveMissingAttachments: true });
+    }
+    const normalizedValidationError = validateNoteMutation(nextNote);
+    if (normalizedValidationError) throw new Error(normalizedValidationError);
+    const previewList = [...list];
+    if (location.groupIndex != null) {
+      previewList[location.groupIndex] = {
+        ...previewList[location.groupIndex],
+        notes: [...(previewList[location.groupIndex].notes || [])],
+      };
+      previewList[location.groupIndex].notes[location.noteIndex] = nextNote;
+    } else {
+      previewList[location.itemIndex] = nextNote;
+    }
+    const quota = await checkAttachmentQuota(previewList, nextNote.id, groupId);
+    if (!quota.ok) {
+      if (writtenKeys.size) await Media.removeMany([...writtenKeys]).catch(() => {});
+      return quota;
     }
   } catch (err) {
-    return { ok: false, error: 'media_write_failed', detail: String(err?.message || err) };
+    if (writtenKeys.size) await Media.removeMany([...writtenKeys]).catch(() => {});
+    const errorCode = String(err?.code || err?.message || '');
+    return {
+      ok: false,
+      error: errorCode === 'attachment_quota_exceeded' || errorCode.startsWith('note_image_')
+        ? errorCode
+        : 'media_write_failed',
+      detail: String(err?.message || err),
+    };
   }
   const oldKeys = new Set(Media.keysForItem(current));
   const newKeys = new Set(Media.keysForItem(nextNote));
@@ -1414,7 +1555,16 @@ async function updateNote(noteId, patch = {}, groupId = '') {
   } else {
     list[location.itemIndex] = nextNote;
   }
-  await setParkedItems(list);
+  try {
+    await setParkedItems(list);
+  } catch (err) {
+    if (writtenKeys.size) await Media.removeMany([...writtenKeys]).catch(() => {});
+    return {
+      ok: false,
+      error: 'storage_write_failed',
+      detail: String(err?.message || err),
+    };
+  }
   await mergeTagsIntoCatalog(nextNote.tags);
   try {
     await Media.removeMany([...oldKeys].filter((key) => !newKeys.has(key)));
@@ -1485,7 +1635,7 @@ async function hydrateItemMedia(item) {
         return {
           ...attachment,
           data: blob ? await Media.blobToDataUrl(blob) : '',
-          hasData: Boolean(blob),
+          hasData: Boolean(blob) || attachment.hasData === true,
         };
       }),
     }));
@@ -1499,7 +1649,7 @@ async function hydrateItemMedia(item) {
         return {
           ...attachment,
           data: blob ? await Media.blobToDataUrl(blob) : '',
-          hasData: Boolean(blob),
+          hasData: Boolean(blob) || attachment.hasData === true,
         };
       }),
     };
@@ -1603,9 +1753,13 @@ async function persistInlineMediaToIdb(items, { preserveMissingAttachments = fal
         for (const note of item.notes || []) {
           for (const attachment of note.attachments || []) {
             const key = Media.mediaKeyNoteAttachment(note.id, attachment.id);
-            const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
-            if (attachment.data && !blob) throw new Error('invalid_attachment');
-            if (blob) {
+            const sourceBlob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+            if (attachment.data && !sourceBlob) throw new Error('invalid_attachment');
+            if (attachment.hasData === true && !sourceBlob && !preserveMissingAttachments) {
+              throw new Error('import_missing_media');
+            }
+            if (sourceBlob) {
+              const blob = await normalizeInlineNoteAttachment(attachment, sourceBlob);
               await Media.putAttachment(key, blob);
               attachment.hasData = true;
               writtenKeys.add(key);
@@ -1618,9 +1772,13 @@ async function persistInlineMediaToIdb(items, { preserveMissingAttachments = fal
       } else if (item.kind === 'note') {
         for (const attachment of item.attachments || []) {
           const key = Media.mediaKeyNoteAttachment(item.id, attachment.id);
-          const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
-          if (attachment.data && !blob) throw new Error('invalid_attachment');
-          if (blob) {
+          const sourceBlob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+          if (attachment.data && !sourceBlob) throw new Error('invalid_attachment');
+          if (attachment.hasData === true && !sourceBlob && !preserveMissingAttachments) {
+            throw new Error('import_missing_media');
+          }
+          if (sourceBlob) {
+            const blob = await normalizeInlineNoteAttachment(attachment, sourceBlob);
             await Media.putAttachment(key, blob);
             attachment.hasData = true;
             writtenKeys.add(key);
@@ -1680,6 +1838,20 @@ function stageNoteAttachmentKey(item, note, attachment) {
   return Media.mediaKeyNoteAttachment(noteId, attachmentId);
 }
 
+async function normalizeStagedNoteAttachment(attachment, blob) {
+  if (!blob || typeof blob.size !== 'number' || !NoteMedia?.normalizeBlob) {
+    throw new Error('note_media_unavailable');
+  }
+  const normalized = await NoteMedia.normalizeBlob(blob);
+  Object.assign(attachment, {
+    mime: normalized.mime,
+    size: normalized.size,
+    width: normalized.width,
+    height: normalized.height,
+  });
+  return normalized.blob;
+}
+
 async function persistStagedMediaToIdb(stageId, items) {
   if (!Media?.getImportStage || !Media?.putFromBlobs) {
     throw new Error('import_stage_unavailable');
@@ -1713,7 +1885,8 @@ async function persistStagedMediaToIdb(stageId, items) {
             const row = staged.get(stageNoteAttachmentKey(item, note, attachment));
             if (attachment.hasData && !row?.attachment) throw new Error('import_stage_missing_media');
             if (row?.attachment) {
-              await Media.putAttachment(key, row.attachment);
+              const normalizedBlob = await normalizeStagedNoteAttachment(attachment, row.attachment);
+              await Media.putAttachment(key, normalizedBlob);
               attachment.hasData = true;
               writtenKeys.add(key);
             } else {
@@ -1728,7 +1901,8 @@ async function persistStagedMediaToIdb(stageId, items) {
           const row = staged.get(stageNoteAttachmentKey(item, item, attachment));
           if (attachment.hasData && !row?.attachment) throw new Error('import_stage_missing_media');
           if (row?.attachment) {
-            await Media.putAttachment(key, row.attachment);
+            const normalizedBlob = await normalizeStagedNoteAttachment(attachment, row.attachment);
+            await Media.putAttachment(key, normalizedBlob);
             attachment.hasData = true;
             writtenKeys.add(key);
           } else {
@@ -1848,6 +2022,32 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
         : await persistInlineMediaToIdb(items);
     } catch (err) {
       return fail({ ok: false, error: 'media_write_failed', detail: String(err?.message || err) });
+    }
+
+    const normalizedBackup = {
+      ...backup,
+      media: 'idb',
+      parkedItems: items,
+      canvasLayout: append ? undefined : backup.canvasLayout,
+      parkedTabs: items
+        .filter((item) => item.kind === 'tab')
+        .map(({ kind, ...rest }) => rest),
+    };
+    const normalizedValidation = Build?.validateBackup?.(normalizedBackup, {
+      allowStoredOnlyUrls: Boolean(prepared.allowStoredOnlyUrls),
+    });
+    if (!normalizedValidation?.ok) {
+      await Media.removeMany([...writtenKeys]).catch(() => {});
+      return fail(normalizedValidation);
+    }
+    const quota = await checkAttachmentQuota(
+      append ? [...existing, ...items] : items,
+      '',
+      ''
+    );
+    if (!quota.ok) {
+      await Media.removeMany([...writtenKeys]).catch(() => {});
+      return fail(quota);
     }
 
     try {
@@ -3670,6 +3870,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case 'GET_MEDIA':
         return getMediaMessage(message.key, message.kind || 'thumb');
+      case 'GET_ATTACHMENT_USAGE':
+        return getAttachmentUsage(message.noteId || '', message.groupId || '');
       case 'GET_CANVAS_LAYOUT':
         return { ok: true, ...(await getCanvasLayoutRecord()) };
       case 'RESTORE_TAB':
@@ -3873,6 +4075,7 @@ if (globalThis.__TABWALL_TEST__) {
     createNote,
     updateNote,
     deleteNote,
+    getAttachmentUsage,
     normalizeNoteItem,
     remintItemIds,
     saveActiveGroup,

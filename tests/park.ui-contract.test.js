@@ -65,6 +65,7 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
     'stickerNoteFile',
     'stickerNoteDrop',
     'stickerNoteAttachments',
+    'stickerNoteMediaStatus',
     'stickerNotePreview',
     'stickerNoteSave',
     'stickerNoteCancel',
@@ -84,6 +85,14 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(PARK_SOURCE, /stickerNoteFile\.files/);
   assert.match(PARK_SOURCE, /event\.clipboardData\?\.items/);
   assert.match(PARK_SOURCE, /stickerNoteDrop\?\.addEventListener\('drop'/);
+  assert.match(HTML_SOURCE, /<script src="noteMedia\.js"><\/script>/);
+  assert.match(PARK_SOURCE, /const NoteMedia = self\.TabWallNoteMedia/);
+  assert.match(PARK_SOURCE, /await NoteMedia\.normalizeBlob\(file\)/);
+  assert.match(PARK_SOURCE, /type: 'GET_ATTACHMENT_USAGE'/);
+  assert.match(PARK_SOURCE, /const ATTACHMENT_URL_CACHE_MAX = 8/);
+  assert.match(PARK_SOURCE, /function observeStickerAttachment\(img\)/);
+  assert.match(PARK_SOURCE, /function pruneAttachmentUrlCache\(items = allTabs\)/);
+  assert.match(PARK_SOURCE, /stickerNoteMediaBusy/);
 });
 
 test('Top-level actions are consolidated in the header', () => {

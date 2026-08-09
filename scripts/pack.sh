@@ -24,6 +24,7 @@ zip -r "$OUT_ZIP" \
   content.js \
   mediaDb.js \
   backupBuild.js \
+  noteMedia.js \
   canvasStore.js \
   park.html \
   park.js \

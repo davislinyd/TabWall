@@ -62,6 +62,7 @@ const DEFAULT_SETTINGS = {
 
 const Build = self.TabWallBackupBuild;
 const CanvasStoreApi = self.TabWallCanvasStore;
+const NoteMedia = self.TabWallNoteMedia;
 
 function classifyStoredUrl(url) {
   if (Build?.classifyUrl) return Build.classifyUrl(url, { allowStoredOnly: true });
@@ -103,8 +104,29 @@ function formatImportWarnings(warnings) {
 
 function formatBackupError(error) {
   const code = typeof error === 'string' ? error : error?.error || 'invalid_backup';
+  if (code === 'backup_too_large:full_zip') return t('backupFullTooLarge');
+  if (code === 'attachment_quota_exceeded') return t('noteImageQuotaExceeded');
   const detail = error && typeof error === 'object' && error.detail ? ` (${error.detail})` : '';
   return t('backupInvalidDetail', { error: `${code}${detail}` });
+}
+
+function formatNoteBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KiB`;
+  return `${Math.round(bytes)} B`;
+}
+
+function formatNoteMediaError(error) {
+  const code = typeof error === 'string' ? error : error?.code || error?.message || '';
+  const key = {
+    note_image_source_too_large: 'noteImageSourceTooLarge',
+    note_image_decode_too_large: 'noteImageDecodeTooLarge',
+    note_image_output_too_large: 'noteImageOutputTooLarge',
+    note_image_too_many: 'noteImageTooMany',
+    attachment_quota_exceeded: 'noteImageQuotaExceeded',
+  }[code];
+  return key ? t(key) : t('noteImageInvalid');
 }
 
 function getParentOrigin() {
@@ -156,6 +178,7 @@ const snapCache = new Map();
 const SNAP_CACHE_MAX = 12;
 /** @type {Map<string, string>} note attachment blob URL cache */
 const attachmentUrlCache = new Map();
+const ATTACHMENT_URL_CACHE_MAX = 8;
 /** @type {Map<string, Promise<string>>} */
 const mediaFetches = new Map();
 /** @type {Set<string>} */
@@ -246,6 +269,19 @@ function cacheAttachmentUrl(key, url) {
     attachmentUrlCache.delete(key);
   }
   attachmentUrlCache.set(key, url);
+  while (attachmentUrlCache.size > ATTACHMENT_URL_CACHE_MAX) {
+    const firstEvictable = [...attachmentUrlCache.keys()].find((candidate) => {
+      const cached = attachmentUrlCache.get(candidate);
+      return !isMediaUrlInUse(cached) && !mediaFetches.has(mediaFetchKey(candidate, 'attachment'));
+    });
+    const first = firstEvictable
+      ?? [...attachmentUrlCache.keys()].find((candidate) => !mediaFetches.has(mediaFetchKey(candidate, 'attachment')))
+      ?? attachmentUrlCache.keys().next().value;
+    if (first == null) break;
+    const oldUrl = attachmentUrlCache.get(first);
+    attachmentUrlCache.delete(first);
+    revokeObjectUrl(oldUrl);
+  }
   return url;
 }
 
@@ -258,7 +294,10 @@ function fetchMediaUrl(key, kind) {
     return Promise.resolve(snapCache.get(key) || '');
   }
   if (kind === 'attachment' && attachmentUrlCache.has(key)) {
-    return Promise.resolve(attachmentUrlCache.get(key) || '');
+    const url = attachmentUrlCache.get(key) || '';
+    attachmentUrlCache.delete(key);
+    attachmentUrlCache.set(key, url);
+    return Promise.resolve(url);
   }
   const requestKey = mediaFetchKey(key, kind);
   const existing = mediaFetches.get(requestKey);
@@ -329,7 +368,8 @@ function getCanvasMediaObserver() {
         if (!entry.isIntersecting) continue;
         const img = entry.target;
         canvasMediaObserver.unobserve(img);
-        loadCanvasMediaInto(img);
+        if (img.dataset.noteAttachmentKey) loadStickerAttachmentInto(img);
+        else loadCanvasMediaInto(img);
       }
     },
     { root: canvasViewportEl, rootMargin: '320px', threshold: 0.01 }
@@ -374,6 +414,23 @@ function forgetCachedMediaUrl(key, kind, url) {
   if (cache.get(key) !== url) return;
   cache.delete(key);
   revokeObjectUrl(url);
+}
+
+function pruneAttachmentUrlCache(items = allTabs) {
+  const keep = new Set();
+  for (const item of items || []) {
+    const notes = item.kind === 'group' ? item.notes || [] : item.kind === 'note' ? [item] : [];
+    for (const note of notes) {
+      for (const attachment of note.attachments || []) {
+        keep.add(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+      }
+    }
+  }
+  for (const [key, url] of attachmentUrlCache) {
+    if (keep.has(key)) continue;
+    attachmentUrlCache.delete(key);
+    revokeObjectUrl(url);
+  }
 }
 
 function loadThumbInto(img) {
@@ -442,6 +499,63 @@ function loadCanvasMediaInto(img) {
   })().catch(() => {
     if (img.dataset.canvasLoadToken === token) delete img.dataset.canvasLoadingKind;
   });
+}
+
+function loadStickerAttachmentInto(img) {
+  if (!img) return;
+  const key = img.dataset.noteAttachmentKey;
+  if (!key || img.dataset.noteAttachmentLoaded === '1' || img.dataset.noteAttachmentLoading === '1') return;
+  img.dataset.noteAttachmentLoading = '1';
+  fetchMediaUrl(key, 'attachment').then((url) => {
+    if (!img.isConnected) return;
+    if (url) {
+      img.src = url;
+      img.dataset.noteAttachmentLoaded = '1';
+    } else if (img.dataset.attachmentId) {
+      img.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'note-attachment-missing',
+        textContent: t('noteAttachmentMissing'),
+      }));
+    }
+    delete img.dataset.noteAttachmentLoading;
+  }).catch(() => {
+    if (img.isConnected) delete img.dataset.noteAttachmentLoading;
+  });
+}
+
+function observeStickerAttachment(img) {
+  if (!img || !img.dataset.noteAttachmentKey) return;
+  if (attachmentUrlCache.has(img.dataset.noteAttachmentKey)) {
+    const key = img.dataset.noteAttachmentKey;
+    const url = attachmentUrlCache.get(key);
+    attachmentUrlCache.delete(key);
+    attachmentUrlCache.set(key, url);
+    img.src = url;
+    img.dataset.noteAttachmentLoaded = '1';
+    return;
+  }
+  const observer = getCanvasMediaObserver();
+  if (!observer) {
+    loadStickerAttachmentInto(img);
+    return;
+  }
+  const viewportRect = canvasViewportEl?.getBoundingClientRect?.();
+  const imageRect = img.getBoundingClientRect?.();
+  const margin = 320;
+  if (!img.isConnected) {
+    observer.observe(img);
+    return;
+  }
+  const isNearViewport = Boolean(
+    viewportRect && imageRect &&
+    imageRect.bottom >= viewportRect.top - margin &&
+    imageRect.top <= viewportRect.bottom + margin &&
+    imageRect.right >= viewportRect.left - margin &&
+    imageRect.left <= viewportRect.right + margin
+  );
+  observer.unobserve(img);
+  if (isNearViewport) loadStickerAttachmentInto(img);
+  else observer.observe(img);
 }
 
 function loadCanvasThumbFallback(img) {
@@ -637,6 +751,15 @@ const I18N = {
     noteCancel: '取消編輯',
     noteUntitled: 'Sticker Note',
     noteCount: '{n} 張圖片',
+    noteImageNormalizing: '正在處理圖片…',
+    noteImageUsage: '附件容量：{used}／{noteLimit}（全域 {globalUsed}／{globalLimit}）',
+    noteImageSourceTooLarge: '圖片原始檔超過 24 MiB',
+    noteImageDecodeTooLarge: '圖片解析度過高，無法安全處理',
+    noteImageOutputTooLarge: '圖片壓縮後仍超過 24 MiB',
+    noteImageInvalid: '圖片格式無法處理',
+    noteImageTooMany: '一次加入的圖片超過剩餘附件數量',
+    noteImageQuotaExceeded: '附件容量已達上限',
+    backupFullTooLarge: '完整備份超過 256 MiB，請改用精簡備份或分批匯出',
     canvasArrange: '排列',
     canvasArrangeGrid: '棋盤',
     canvasArrangeAlign: '對齊格式',
@@ -970,6 +1093,15 @@ const I18N = {
     noteCancel: 'Cancel editing',
     noteUntitled: 'Sticker Note',
     noteCount: '{n} image(s)',
+    noteImageNormalizing: 'Processing image…',
+    noteImageUsage: 'Attachments: {used}/{noteLimit} (global {globalUsed}/{globalLimit})',
+    noteImageSourceTooLarge: 'The source image exceeds 24 MiB',
+    noteImageDecodeTooLarge: 'The image resolution is too high to process safely',
+    noteImageOutputTooLarge: 'The compressed image still exceeds 24 MiB',
+    noteImageInvalid: 'The image format could not be processed',
+    noteImageTooMany: 'The batch exceeds the remaining attachment slots',
+    noteImageQuotaExceeded: 'The attachment quota has been reached',
+    backupFullTooLarge: 'Full backup exceeds 256 MiB; use lite backup or export in smaller batches',
     canvasArrange: 'Arrange',
     canvasArrangeGrid: 'Grid',
     canvasArrangeAlign: 'Aligned rows',
@@ -1263,6 +1395,7 @@ const stickerNoteMarkdown = document.getElementById('stickerNoteMarkdown');
 const stickerNotePreview = document.getElementById('stickerNotePreview');
 const stickerNoteFile = document.getElementById('stickerNoteFile');
 const stickerNoteAttachments = document.getElementById('stickerNoteAttachments');
+const stickerNoteMediaStatus = document.getElementById('stickerNoteMediaStatus');
 const stickerNoteDrop = document.getElementById('stickerNoteDrop');
 const stickerNoteSave = document.getElementById('stickerNoteSave');
 const stickerNoteCancel = document.getElementById('stickerNoteCancel');
@@ -1555,6 +1688,8 @@ let editingId = null;
 let stickerNoteContext = null;
 let stickerNoteTagList = [];
 let stickerNoteDraftAttachments = [];
+let stickerNoteMediaBusy = false;
+let stickerNoteUsageRequest = 0;
 let canvasNotePlacementArmed = false;
 /** @type {{ type: 'item' | 'member' | 'batch', groupId?: string, memberId?: string, ids?: string[] } | null} */
 let editContext = null;
@@ -4588,7 +4723,7 @@ async function hydrateItemMediaLocal(item) {
         } catch (err) {
           uiLog('warn', 'export', 'attachment get failed', `${note.id}/${attachment.id} ${err?.message || err}`);
         }
-        return { ...attachment, data, hasData: Boolean(data) };
+        return { ...attachment, data, hasData: Boolean(data) || attachment.hasData === true };
       }),
     }));
     return { ...item, tabs, notes };
@@ -4602,7 +4737,7 @@ async function hydrateItemMediaLocal(item) {
       } catch (err) {
         uiLog('warn', 'export', 'attachment get failed', `${item.id}/${attachment.id} ${err?.message || err}`);
       }
-      return { ...attachment, data, hasData: Boolean(data) };
+      return { ...attachment, data, hasData: Boolean(data) || attachment.hasData === true };
     });
     return { ...item, attachments };
   }
@@ -4619,6 +4754,61 @@ async function hydrateItemMediaLocal(item) {
     uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
   }
   return { ...item, thumbnail, snapshot };
+}
+
+async function estimateFullBackupMediaBytes(items) {
+  const sizeOf = (blob, fallback = 0) => {
+    const size = Number(blob?.size);
+    return Number.isFinite(size) && size >= 0 ? size : fallback;
+  };
+  const estimateItem = async (item) => {
+    if (item.kind === 'group') {
+      const tabBytes = await mapWithConcurrencyLocal(item.tabs || [], 4, async (member) => {
+        let row = null;
+        try {
+          row = await Media?.get?.(mediaKeyForMember(item.id, member.id));
+        } catch {
+          row = null;
+        }
+        return sizeOf(row?.thumb) + sizeOf(row?.snap);
+      });
+      const noteBytes = await mapWithConcurrencyLocal(item.notes || [], 4, async (note) => {
+        const values = await mapWithConcurrencyLocal(note.attachments || [], 4, async (attachment) => {
+          let blob = null;
+          try {
+            blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+          } catch {
+            blob = null;
+          }
+          return sizeOf(blob, attachment.hasData ? Number(attachment.size) || 0 : 0);
+        });
+        return values.reduce((total, size) => total + size, 0);
+      });
+      return tabBytes.reduce((total, size) => total + size, 0)
+        + noteBytes.reduce((total, size) => total + size, 0);
+    }
+    if (item.kind === 'note') {
+      const values = await mapWithConcurrencyLocal(item.attachments || [], 4, async (attachment) => {
+        let blob = null;
+        try {
+          blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(item.id, attachment.id));
+        } catch {
+          blob = null;
+        }
+        return sizeOf(blob, attachment.hasData ? Number(attachment.size) || 0 : 0);
+      });
+      return values.reduce((total, size) => total + size, 0);
+    }
+    let row = null;
+    try {
+      row = await Media?.get?.(mediaKeyForItem(item));
+    } catch {
+      row = null;
+    }
+    return sizeOf(row?.thumb) + sizeOf(row?.snap);
+  };
+  const values = await mapWithConcurrencyLocal(items, 4, estimateItem);
+  return values.reduce((total, size) => total + size, 0);
 }
 
 exportLiteBtn.addEventListener('click', async () => {
@@ -4645,6 +4835,7 @@ exportLiteBtn.addEventListener('click', async () => {
 exportFullBtn.addEventListener('click', async () => {
   backupStatus.textContent = t('backupExporting');
   uiLog('info', 'export', 'full start');
+  let hydrated = [];
   try {
     // Meta only over the wire — hydrate images in this page from IDB
     const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'full' });
@@ -4656,8 +4847,12 @@ exportFullBtn.addEventListener('click', async () => {
     }
     const rawItems = res.backup.parkedItems || [];
     uiLog('info', 'export', 'hydrating media', `items=${rawItems.length}`);
+    const estimatedMediaBytes = await estimateFullBackupMediaBytes(rawItems);
+    if (estimatedMediaBytes > (Build.LIMITS?.MAX_ZIP_BYTES || 256 * 1024 * 1024)) {
+      throw new Error('backup_too_large:full_zip');
+    }
     let hydratedCount = 0;
-    const hydrated = await mapWithConcurrencyLocal(rawItems, 4, async (item) => {
+    hydrated = await mapWithConcurrencyLocal(rawItems, 4, async (item) => {
       const result = await hydrateItemMediaLocal(item);
       hydratedCount++;
       if (hydratedCount % 20 === 0 || hydratedCount === rawItems.length) {
@@ -4672,12 +4867,16 @@ exportFullBtn.addEventListener('click', async () => {
     };
     const { blob, filename } = Build.buildFullZipBlob(backup, { auto: false });
     downloadBlob(blob, filename);
+    hydrated = [];
+    res.backup.parkedItems = [];
     uiLog('info', 'export', 'full ok', `file=${filename} bytes=${blob.size}`);
     backupStatus.textContent = t('backupExported');
   } catch (err) {
     console.warn(err);
     uiLog('error', 'export', 'full exception', err?.message || err);
-    backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
+    backupStatus.textContent = `${t('backupError')}: ${formatBackupError(err?.message || err)}`;
+  } finally {
+    hydrated = [];
   }
 });
 
@@ -4738,7 +4937,30 @@ async function stageImportMedia(stageId, items) {
     throw new Error('import_stage_unavailable');
   }
   const rows = [];
-  const stagedItems = (Array.isArray(items) ? items : []).map((raw) => {
+  const normalizeImportedAttachment = async (rawAttachment) => {
+    const attachment = { ...rawAttachment };
+    if (!attachment.data) {
+      if (attachment.hasData === true) throw new Error('import_missing_media');
+      attachment.hasData = false;
+      attachment.data = '';
+      return { attachment, blob: null };
+    }
+    const sourceBlob = Media.dataUrlToBlob(attachment.data);
+    if (!sourceBlob) throw new Error('invalid_image');
+    if (!NoteMedia?.normalizeBlob) throw new Error('note_media_unavailable');
+    const normalized = await NoteMedia.normalizeBlob(sourceBlob);
+    Object.assign(attachment, {
+      mime: normalized.mime,
+      size: normalized.size,
+      width: normalized.width,
+      height: normalized.height,
+      hasData: true,
+      data: '',
+    });
+    return { attachment, blob: normalized.blob };
+  };
+  const stagedItems = [];
+  for (const raw of (Array.isArray(items) ? items : [])) {
     const item = { ...raw };
     const stageOwner = (owner, mediaKey) => {
       const thumb = owner.thumbnail ? Media.dataUrlToBlob(owner.thumbnail) : null;
@@ -4765,40 +4987,36 @@ async function stageImportMedia(stageId, items) {
         stageOwner(member, Media.mediaKeyMember(item.id, member.id));
         return member;
       });
-      item.notes = (item.notes || []).map((rawNote) => {
+      const sourceNotes = Array.isArray(item.notes) ? item.notes : [];
+      item.notes = [];
+      for (const rawNote of sourceNotes) {
         const note = { ...rawNote };
-        note.attachments = (note.attachments || []).map((rawAttachment) => {
-          const attachment = { ...rawAttachment };
-          const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
-          if (attachment.data && !blob) throw new Error('invalid_image');
-          if (blob) rows.push({
-            mediaKey: Media.mediaKeyNoteAttachment(note.id, attachment.id),
-            attachment: blob,
+        note.attachments = [];
+        for (const rawAttachment of rawNote.attachments || []) {
+          const normalized = await normalizeImportedAttachment(rawAttachment);
+          note.attachments.push(normalized.attachment);
+          if (normalized.blob) rows.push({
+            mediaKey: Media.mediaKeyNoteAttachment(note.id, normalized.attachment.id),
+            attachment: normalized.blob,
           });
-          attachment.hasData = Boolean(blob);
-          attachment.data = '';
-          return attachment;
-        });
-        return note;
-      });
+        }
+        item.notes.push(note);
+      }
     } else if (item.kind === 'note') {
-      item.attachments = (item.attachments || []).map((rawAttachment) => {
-        const attachment = { ...rawAttachment };
-        const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
-        if (attachment.data && !blob) throw new Error('invalid_image');
-        if (blob) rows.push({
-          mediaKey: Media.mediaKeyNoteAttachment(item.id, attachment.id),
-          attachment: blob,
+      item.attachments = [];
+      for (const rawAttachment of raw.attachments || []) {
+        const normalized = await normalizeImportedAttachment(rawAttachment);
+        item.attachments.push(normalized.attachment);
+        if (normalized.blob) rows.push({
+          mediaKey: Media.mediaKeyNoteAttachment(item.id, normalized.attachment.id),
+          attachment: normalized.blob,
         });
-        attachment.hasData = Boolean(blob);
-        attachment.data = '';
-        return attachment;
-      });
+      }
     } else {
       stageOwner(item, Media.mediaKeyTab(item.id));
     }
-    return item;
-  });
+    stagedItems.push(item);
+  }
   await Media.putImportStage(stageId, rows);
   return { items: stagedItems, mediaOwners: rows.length };
 }
@@ -5546,7 +5764,14 @@ function stickerNoteUuid() {
 }
 
 function stickerNoteDraftMeta() {
-  return stickerNoteDraftAttachments.map(({ blob, previewUrl, ...attachment }) => ({ ...attachment }));
+  return stickerNoteDraftAttachments.map(({
+    blob,
+    previewUrl,
+    sourceBytes,
+    sourceWidth,
+    sourceHeight,
+    ...attachment
+  }) => ({ ...attachment }));
 }
 
 function stickerNoteDraftRecord() {
@@ -5579,6 +5804,46 @@ function renderStickerNoteTags() {
     });
     chip.appendChild(remove);
     stickerNoteChips.appendChild(chip);
+  }
+}
+
+function setStickerNoteMediaStatus(message = '', isError = false) {
+  if (!stickerNoteMediaStatus) return;
+  stickerNoteMediaStatus.textContent = message;
+  stickerNoteMediaStatus.classList.toggle('error', Boolean(isError));
+}
+
+function setStickerNoteMediaBusy(busy) {
+  stickerNoteMediaBusy = Boolean(busy);
+  if (stickerNoteSave) stickerNoteSave.disabled = stickerNoteMediaBusy;
+  if (stickerNoteDrop) stickerNoteDrop.toggleAttribute('aria-busy', stickerNoteMediaBusy);
+}
+
+async function refreshStickerNoteUsage() {
+  const requestId = ++stickerNoteUsageRequest;
+  if (!stickerNoteContext) return;
+  try {
+    const usage = await sendMessage({
+      type: 'GET_ATTACHMENT_USAGE',
+      noteId: stickerNoteContext.id,
+      groupId: stickerNoteContext.groupId || '',
+    });
+    if (requestId !== stickerNoteUsageRequest || !usage?.ok) return;
+    const draftBytes = stickerNoteDraftAttachments.reduce(
+      (total, attachment) => total + (attachment.hasData ? Number(attachment.size) || 0 : 0),
+      0
+    );
+    const previousNoteBytes = stickerNoteContext.mode === 'edit' ? Number(usage.noteBytes) || 0 : 0;
+    const noteBytes = draftBytes;
+    const globalBytes = Math.max(0, (Number(usage.usedBytes) || 0) - previousNoteBytes + noteBytes);
+    setStickerNoteMediaStatus(t('noteImageUsage', {
+      used: formatNoteBytes(noteBytes),
+      noteLimit: formatNoteBytes(usage.noteMaxBytes),
+      globalUsed: formatNoteBytes(globalBytes),
+      globalLimit: formatNoteBytes(usage.maxBytes),
+    }));
+  } catch {
+    // Usage is advisory; background validation remains authoritative.
   }
 }
 
@@ -5651,46 +5916,53 @@ function removeStickerNoteAttachment(id) {
     stickerNoteMarkdown.value = stickerNoteMarkdown.value.replace(pattern, '');
   }
   refreshStickerNoteEditor();
-}
-
-function readStickerNoteImageSize(blob) {
-  if (typeof Image === 'undefined' || !URL?.createObjectURL) return Promise.resolve({ width: 0, height: 0 });
-  const url = URL.createObjectURL(blob);
-  return new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: 0, height: 0 });
-    };
-    image.src = url;
-  });
+  refreshStickerNoteUsage();
 }
 
 async function addStickerNoteFiles(files) {
   const list = [...(files || [])].filter((file) => String(file?.type || '').toLowerCase().startsWith('image/'));
-  for (const file of list) {
-    if (stickerNoteDraftAttachments.length >= (Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12)) break;
-    if (Number(file.size) > (Build?.LIMITS?.MAX_IMAGE_BYTES || 24 * 1024 * 1024)) continue;
-    const id = stickerNoteUuid();
-    const previewUrl = URL.createObjectURL(file);
-    const dimensions = await readStickerNoteImageSize(file);
-    stickerNoteDraftAttachments.push({
-      id,
-      name: String(file.name || 'image').slice(0, 512),
-      alt: String(file.name || 'image').slice(0, 2048),
-      mime: file.type || 'image/jpeg',
-      size: Number(file.size) || 0,
-      width: dimensions.width,
-      height: dimensions.height,
-      hasData: true,
-      blob: file,
-      previewUrl,
+  if (!list.length || stickerNoteMediaBusy) return;
+  const maxAttachments = Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12;
+  if (stickerNoteDraftAttachments.length + list.length > maxAttachments) {
+    setStickerNoteMediaStatus(t('noteImageTooMany'), true);
+    return;
+  }
+  setStickerNoteMediaBusy(true);
+  setStickerNoteMediaStatus(t('noteImageNormalizing'));
+  const normalizedAttachments = [];
+  try {
+    if (!NoteMedia?.normalizeBlob) throw new Error('note_media_unavailable');
+    for (const file of list) {
+      const normalized = await NoteMedia.normalizeBlob(file);
+      const id = stickerNoteUuid();
+      const name = String(file.name || 'image').slice(0, 512);
+      normalizedAttachments.push({
+        id,
+        name,
+        alt: name.slice(0, 2048),
+        mime: normalized.mime,
+        size: normalized.size,
+        width: normalized.width,
+        height: normalized.height,
+        hasData: true,
+        sourceBytes: Number(file.size) || 0,
+        sourceWidth: normalized.sourceWidth,
+        sourceHeight: normalized.sourceHeight,
+        blob: normalized.blob,
+        previewUrl: URL.createObjectURL(normalized.blob),
+      });
+    }
+  } catch (err) {
+    normalizedAttachments.forEach((attachment) => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
-    const token = `![${String(file.name || 'image').replace(/[\]\n]/g, '')}](attachment://${id})`;
+    setStickerNoteMediaStatus(formatNoteMediaError(err), true);
+    setStickerNoteMediaBusy(false);
+    return;
+  }
+  normalizedAttachments.forEach((attachment) => {
+    stickerNoteDraftAttachments.push(attachment);
+    const token = `![${String(attachment.alt || attachment.name).replace(/[\]\n]/g, '')}](attachment://${attachment.id})`;
     const textarea = stickerNoteMarkdown;
     const start = textarea?.selectionStart ?? textarea?.value?.length ?? 0;
     const end = textarea?.selectionEnd ?? start;
@@ -5698,8 +5970,11 @@ async function addStickerNoteFiles(files) {
       textarea.value = `${textarea.value.slice(0, start)}${token}\n${textarea.value.slice(end)}`;
       textarea.setSelectionRange(start + token.length + 1, start + token.length + 1);
     }
-  }
+  });
+  setStickerNoteMediaBusy(false);
+  setStickerNoteMediaStatus('');
   refreshStickerNoteEditor();
+  refreshStickerNoteUsage();
 }
 
 function openStickerNoteEditor(note = null, { groupId = '', position = null } = {}) {
@@ -5732,12 +6007,15 @@ function openStickerNoteEditor(note = null, { groupId = '', position = null } = 
   stickerNoteTitle.value = source.title || t('noteUntitled');
   stickerNoteMarkdown.value = source.markdown || '';
   stickerNoteTagDraft.value = '';
+  setStickerNoteMediaBusy(false);
+  setStickerNoteMediaStatus('');
   refreshStickerNoteEditor();
   stickerNoteBox.classList.add('open');
   stickerNoteBox.setAttribute('aria-hidden', 'false');
   stickerNoteBox.style.left = `${Math.max(16, Math.round((window.innerWidth - (stickerNoteBox.offsetWidth || 860)) / 2))}px`;
   stickerNoteBox.style.top = `${Math.max(16, Math.round((window.innerHeight - (stickerNoteBox.offsetHeight || 600)) / 2))}px`;
   syncFloatBackdrop();
+  refreshStickerNoteUsage();
   setTimeout(() => stickerNoteTitle?.focus(), 0);
 }
 
@@ -5750,6 +6028,9 @@ function closeStickerNoteEditor() {
   stickerNoteDraftAttachments = [];
   stickerNoteTagList = [];
   stickerNoteContext = null;
+  stickerNoteUsageRequest++;
+  setStickerNoteMediaBusy(false);
+  setStickerNoteMediaStatus('');
   stickerNoteBox.classList.remove('open');
   stickerNoteBox.setAttribute('aria-hidden', 'true');
   if (wasPlacement) resetCanvasNotePlacement();
@@ -5757,7 +6038,7 @@ function closeStickerNoteEditor() {
 }
 
 async function saveStickerNote() {
-  if (!stickerNoteContext) return;
+  if (!stickerNoteContext || stickerNoteMediaBusy) return;
   commitStickerNoteTagDraft();
   const note = stickerNoteDraftRecord();
   const writtenKeys = [];
@@ -5782,7 +6063,11 @@ async function saveStickerNote() {
   } catch (err) {
     if (writtenKeys.length) await Media.removeMany(writtenKeys).catch(() => {});
     console.warn('[TabWall] sticker note save failed:', err);
-    showCopyToast(t('editFailed'));
+    const message = err?.message === 'attachment_quota_exceeded'
+      ? t('noteImageQuotaExceeded')
+      : t('editFailed');
+    setStickerNoteMediaStatus(message, true);
+    showCopyToast(message);
   }
 }
 
@@ -7306,13 +7591,7 @@ function wireStickerAttachmentImages(root, note) {
     const key = img.dataset.noteAttachmentKey || (attachment ? Media.mediaKeyNoteAttachment(note.id, attachment.id) : '');
     if (!key) return;
     img.dataset.noteAttachmentKey = key;
-    fetchMediaUrl(key, 'attachment').then((url) => {
-      if (url && img.isConnected) img.src = url;
-      else if (img.dataset.attachmentId) img.replaceWith(Object.assign(document.createElement('span'), {
-        className: 'note-attachment-missing',
-        textContent: t('noteAttachmentMissing'),
-      }));
-    });
+    observeStickerAttachment(img);
   });
 }
 
@@ -8275,7 +8554,6 @@ function createCanvasNodeElement(item) {
   node.dataset.canvasRenderKey = canvasNodeRenderKey(item);
   wireCanvasNodeActions(node);
   node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-  if (item.kind === 'note') wireStickerAttachmentImages(node, item);
   node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
   return node;
 }
@@ -8285,6 +8563,9 @@ function removeCanvasNode(id, node) {
   canvasNodeClickSuppressUntil.delete(id);
   node?.querySelectorAll('img[data-canvas-media="true"]').forEach((img) => {
     thumbObserver?.unobserve?.(img);
+    canvasMediaObserver?.unobserve?.(img);
+  });
+  node?.querySelectorAll('[data-note-attachment-key], [data-attachment-id]').forEach((img) => {
     canvasMediaObserver?.unobserve?.(img);
   });
   node?.remove();
@@ -8352,6 +8633,11 @@ function renderCanvas() {
     fragment.appendChild(node);
   });
   canvasNodesEl.appendChild(fragment);
+  filtered.forEach((item) => {
+    if (item.kind !== 'note') return;
+    const node = canvasNodeElements.get(item.id);
+    if (node) wireStickerAttachmentImages(node, item);
+  });
   updateCanvasTransform();
   updateCanvasNodePositions();
   updateCanvasNodeSelection();
@@ -9239,6 +9525,7 @@ async function loadList() {
         ? res.tabs
         : [];
   allTabs = normalizeParkedList(raw);
+  pruneAttachmentUrlCache(allTabs);
   if (!layoutRes?.ok && settings.viewMode === 'canvas') {
     ensureCanvasStore()?.setItems(allTabs);
     canvasNeedsInitialCenter = false;

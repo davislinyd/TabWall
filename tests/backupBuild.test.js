@@ -88,6 +88,21 @@ function sampleNote({ id = NOTE_ID, attachment = true } = {}) {
   };
 }
 
+function quotaNote(id, attachmentCount, size = Build.LIMITS.MAX_IMAGE_BYTES) {
+  const note = sampleNote({ id, attachment: false });
+  note.attachments = Array.from({ length: attachmentCount }, (_, index) => ({
+    id: `${String(id).slice(0, 8)}-${String(index + 1).padStart(4, '0')}-4aaa-8aaa-aaaaaaaaaaaa`,
+    name: `image-${index}.webp`,
+    alt: '',
+    mime: 'image/webp',
+    size,
+    width: 4096,
+    height: 4096,
+    hasData: true,
+  }));
+  return note;
+}
+
 test('data URL conversion preserves bytes', () => {
   const bytes = Build.dataUrlToBytes('data:image/png;base64,AQID');
   assert.deepEqual([...bytes], [1, 2, 3]);
@@ -180,6 +195,19 @@ test('full ZIP round-trip preserves backup version and media MIME', async () => 
   const hydrated = Build.rehydrateMedia(metadata.parkedItems, files, metadata.mediaMimes);
   assert.match(hydrated[0].thumbnail, /^data:image\/png;base64,/);
   assert.match(hydrated[0].snapshot, /^data:image\/webp;base64,/);
+});
+
+test('full ZIP rehydration preserves a missing attachment as missing binary data', () => {
+  const attachmentPath = `media/${NOTE_ID}_${ATTACHMENT_ID}.png`;
+  const source = sampleNote();
+  source.attachments[0].data = attachmentPath;
+  const hydrated = Build.rehydrateMedia(
+    [source],
+    {},
+    { [attachmentPath]: 'image/png' }
+  );
+  assert.equal(hydrated[0].attachments[0].data, '');
+  assert.equal(hydrated[0].attachments[0].hasData, true);
 });
 
 test('malformed ZIP boundaries and traversal paths are rejected', () => {
@@ -369,7 +397,25 @@ test('lite backup keeps note text and attachment metadata without binary data', 
   assert.equal(imported.backup.parkedItems[0].markdown, backup.parkedItems[0].markdown);
   assert.equal(imported.backup.parkedItems[0].attachments[0].name, 'diagram.png');
   assert.equal(imported.backup.parkedItems[0].attachments[0].data, '');
+  assert.equal(imported.backup.parkedItems[0].attachments[0].hasData, false);
   assert.equal(Build.validateBackup(imported.backup).ok, true);
+});
+
+test('note and global attachment quotas reject oversized metadata', () => {
+  const noteLimit = quotaNote(NOTE_ID, 4);
+  assert.equal(Build.validateBackup(sampleBackup([noteLimit])).ok, true);
+  assert.equal(Build.validateBackup(sampleBackup([quotaNote(NOTE_ID, 5)])).error, 'attachment_quota_exceeded');
+
+  const notes = Array.from({ length: 6 }, (_, index) => quotaNote(
+    `${String(index + 1).padStart(8, '0')}-bbbb-4bbb-8bbb-bbbbbbbbbbbb`,
+    4
+  ));
+  assert.equal(Build.validateBackup(sampleBackup(notes)).error, 'attachment_quota_exceeded');
+});
+
+test('full ZIP preflight includes metadata and ZIP overhead', () => {
+  const files = [{ name: 'media/large.webp', data: { length: Build.LIMITS.MAX_ZIP_BYTES } }];
+  assert.ok(Build.estimateZipBytes(new Uint8Array([1]), files) > Build.LIMITS.MAX_ZIP_BYTES);
 });
 
 test('local legacy full ZIP imports all metadata and media', { skip: !fs.existsSync(LEGACY_ZIP) }, () => {

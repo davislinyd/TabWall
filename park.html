@@ -5954,6 +5954,8 @@
       .sticker-note-drop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 11px; cursor: pointer; }
       .sticker-note-drop:hover { border-color: var(--accent, #60a5fa); }
       .sticker-note-section-title { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+      .sticker-note-media-status { min-height: 16px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+      .sticker-note-media-status.error { color: var(--danger, #f87171); }
       .sticker-note-attachments { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow: auto; }
       .sticker-note-attachment { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 8px; min-width: 0; }
       .sticker-note-attachment img { width: 38px; height: 30px; object-fit: cover; border-radius: 5px; background: rgba(127,127,127,.12); }
@@ -6712,6 +6714,7 @@
             <span data-i18n="noteAttachDrop">拖曳或貼上圖片到這裡</span>
             <input id="stickerNoteFile" type="file" accept="image/*" multiple hidden />
           </div>
+          <div id="stickerNoteMediaStatus" class="sticker-note-media-status" role="status" aria-live="polite"></div>
           <div>
             <div class="sticker-note-section-title" data-i18n="noteAttachments">圖片附件</div>
             <div id="stickerNoteAttachments" class="sticker-note-attachments"></div>
@@ -6730,6 +6733,7 @@
 
     <script src="mediaDb.js"></script>
     <script src="backupBuild.js"></script>
+    <script src="noteMedia.js"></script>
     <script src="canvasStore.js"></script>
     <script src="park.js"></script>
   </body>

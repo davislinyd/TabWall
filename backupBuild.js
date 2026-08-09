@@ -19,6 +19,12 @@
     MAX_TITLE_LENGTH: 2048,
     MAX_NOTE_LENGTH: 20000,
     MAX_NOTE_ATTACHMENTS: 12,
+    MAX_NOTE_IMAGE_LONG_EDGE: 4096,
+    MAX_NOTE_IMAGE_PIXELS: 16 * 1024 * 1024,
+    MAX_SOURCE_DECODE_PIXELS: 64 * 1024 * 1024,
+    NOTE_ATTACHMENT_QUOTA_BYTES: 96 * 1024 * 1024,
+    TOTAL_ATTACHMENT_QUOTA_BYTES: 512 * 1024 * 1024,
+    NOTE_IMAGE_OUTPUT_QUALITY: 0.88,
     MAX_ATTACHMENT_NAME_LENGTH: 512,
     MAX_ATTACHMENT_ALT_LENGTH: 2048,
     MAX_TAG_LENGTH: 128,
@@ -501,6 +507,7 @@
   function collectMediaFiles(items) {
     const files = [];
     const mediaMimes = {};
+    let totalBytes = 0;
     const clone = (items || []).map((item) => ({
       ...item,
       ...(item?.kind === 'group' || Array.isArray(item?.tabs)
@@ -522,6 +529,7 @@
         return;
       }
       files.push({ name: path, data: parsed.bytes });
+      totalBytes += parsed.bytes.length;
       mediaMimes[path] = parsed.mime;
       owner[field] = path;
     };
@@ -533,6 +541,9 @@
         }
         for (const note of item.notes || []) {
           for (const attachment of note.attachments || []) {
+            if (attachment.hasData === true && !attachment.data) {
+              throw new Error('invalid_attachment_data');
+            }
             const path = `media/${note.id}_${attachment.id}.${extFromDataUrl(attachment.data)}`;
             const parsed = parseDataUrl(attachment.data);
             if (!parsed || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
@@ -541,6 +552,7 @@
               continue;
             }
             files.push({ name: path, data: parsed.bytes });
+            totalBytes += parsed.bytes.length;
             mediaMimes[path] = parsed.mime;
             attachment.data = path;
             attachment.hasData = true;
@@ -548,6 +560,9 @@
         }
       } else if (item.kind === 'note') {
         for (const attachment of item.attachments || []) {
+          if (attachment.hasData === true && !attachment.data) {
+            throw new Error('invalid_attachment_data');
+          }
           const path = `media/${item.id}_${attachment.id}.${extFromDataUrl(attachment.data)}`;
           const parsed = parseDataUrl(attachment.data);
           if (!parsed || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
@@ -556,6 +571,7 @@
             continue;
           }
           files.push({ name: path, data: parsed.bytes });
+          totalBytes += parsed.bytes.length;
           mediaMimes[path] = parsed.mime;
           attachment.data = path;
           attachment.hasData = true;
@@ -565,7 +581,7 @@
         addMedia(item, 'snapshot', `media/${item.id}_snap.${extFromDataUrl(item.snapshot)}`);
       }
     }
-    return { items: clone, files, mediaMimes };
+    return { items: clone, files, mediaMimes, totalBytes };
   }
 
   function rehydrateMedia(items, zipFiles, mediaMimes = {}) {
@@ -587,22 +603,28 @@
           })),
           notes: (item.notes || []).map((note) => ({
             ...note,
-            attachments: (note.attachments || []).map((attachment) => ({
-              ...attachment,
-              data: get(attachment.data),
-              hasData: Boolean(get(attachment.data)),
-            })),
+            attachments: (note.attachments || []).map((attachment) => {
+              const data = get(attachment.data);
+              return {
+                ...attachment,
+                data,
+                hasData: Boolean(data) || attachment.hasData === true,
+              };
+            }),
           })),
         };
       }
       if (item.kind === 'note') {
         return {
           ...item,
-          attachments: (item.attachments || []).map((attachment) => ({
-            ...attachment,
-            data: get(attachment.data),
-            hasData: Boolean(get(attachment.data)),
-          })),
+          attachments: (item.attachments || []).map((attachment) => {
+            const data = get(attachment.data);
+            return {
+              ...attachment,
+              data,
+              hasData: Boolean(data) || attachment.hasData === true,
+            };
+          }),
         };
       }
       return {
@@ -684,6 +706,13 @@
     const normalizeNote = (raw) => {
       const note = raw && typeof raw === 'object' ? { ...raw } : {};
       note.kind = 'note';
+      if (backup.media === 'none' && Array.isArray(note.attachments)) {
+        note.attachments = note.attachments.map((attachment) => ({
+          ...attachment,
+          data: '',
+          hasData: false,
+        }));
+      }
       if (legacy) {
         note.title = legacyText(note.title, 'Untitled');
         note.markdown = legacyText(note.markdown, '');
@@ -794,6 +823,7 @@
         attachments: (note.attachments || []).map((attachment) => ({
           ...attachment,
           data: '',
+          hasData: false,
         })),
       });
       if (clone.kind === 'group') {
@@ -807,6 +837,7 @@
         clone.attachments = (clone.attachments || []).map((attachment) => ({
           ...attachment,
           data: '',
+          hasData: false,
         }));
       } else {
         clone.thumbnail = '';
@@ -829,7 +860,24 @@
     return { blob, filename };
   }
 
+  function estimateZipBytes(jsonBytes, files = []) {
+    const backupNameBytes = new TextEncoder().encode('backup.json').length;
+    const metadataBytes = Number(jsonBytes?.length) || 0;
+    const mediaBytes = (files || []).reduce((total, file) => {
+      const nameBytes = new TextEncoder().encode(file.name).length;
+      return total + (Number(file.data?.length) || 0) + 76 + nameBytes * 2;
+    }, 0);
+    return metadataBytes + mediaBytes + 30 + 46 + backupNameBytes * 2 + 22;
+  }
+
   function buildFullZipBlob(backup, { auto = false, partial = false } = {}) {
+    const validation = validateBackup({
+      ...(backup || {}),
+      format: FORMAT,
+      version: FORMAT_VERSION,
+      media: 'inline',
+    });
+    if (!validation.ok) throw new Error(validation.error);
     const { items, files, mediaMimes } = collectMediaFiles(backup.parkedItems || []);
     const meta = {
       ...backup,
@@ -841,6 +889,8 @@
       parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...r }) => r),
     };
     const jsonBytes = new TextEncoder().encode(JSON.stringify(meta));
+    const estimatedZipBytes = estimateZipBytes(jsonBytes, files);
+    if (estimatedZipBytes > LIMITS.MAX_ZIP_BYTES) throw new Error('backup_too_large:full_zip');
     const zip = zipStore([{ name: 'backup.json', data: jsonBytes }, ...files]);
     let prefix = auto ? 'tabwall-auto-full' : 'tabwall-backup-full';
     if (partial && !auto) prefix = 'tabwall-backup-full-partial';
@@ -895,6 +945,22 @@
     return typeof mime === 'string' && /^image\/[a-z0-9.+-]+$/i.test(mime);
   }
 
+  function attachmentStoredBytes(attachment, media = 'none') {
+    if (!attachment || (attachment.hasData !== true && !attachment.data)) return 0;
+    if (typeof attachment.data === 'string' && attachment.data.startsWith('data:')) {
+      return parseDataUrl(attachment.data)?.bytes.length || 0;
+    }
+    const size = Number(attachment.size);
+    return Number.isInteger(size) && size > 0 ? size : 0;
+  }
+
+  function noteAttachmentBytes(note, media = 'none') {
+    return (note?.attachments || []).reduce(
+      (total, attachment) => total + attachmentStoredBytes(attachment, media),
+      0
+    );
+  }
+
   function validateNoteShape(
     note,
     idSet,
@@ -944,10 +1010,16 @@
           return 'invalid_attachment_dimensions';
         }
       }
+      if (attachment.width * attachment.height > LIMITS.MAX_SOURCE_DECODE_PIXELS) {
+        return 'invalid_attachment_dimensions';
+      }
       if (attachment.hasData != null && typeof attachment.hasData !== 'boolean') {
         return 'invalid_attachment_data';
       }
       if (!validateAttachmentData(attachment.data, media, mediaMimes)) return 'invalid_attachment_data';
+    }
+    if (noteAttachmentBytes(note, media) > LIMITS.NOTE_ATTACHMENT_QUOTA_BYTES) {
+      return 'attachment_quota_exceeded';
     }
     const referenced = new Set();
     const tokenPattern = /!\[[^\]\n]*\]\(attachment:\/\/([A-Za-z0-9_-]{1,128})\)/g;
@@ -1143,6 +1215,19 @@
         }
       }
 
+      const totalAttachmentBytes = items.reduce((total, item) => {
+        if (item.kind === 'group') {
+          return total + (item.notes || []).reduce(
+            (groupTotal, note) => groupTotal + noteAttachmentBytes(note, media),
+            0
+          );
+        }
+        return total + (item.kind === 'note' ? noteAttachmentBytes(item, media) : 0);
+      }, 0);
+      if (totalAttachmentBytes > LIMITS.TOTAL_ATTACHMENT_QUOTA_BYTES) {
+        return validationError('attachment_quota_exceeded', String(totalAttachmentBytes));
+      }
+
       if (!validateCanvasLayout(backup.canvasLayout, ids)) {
         return validationError('invalid_canvas_layout');
       }
@@ -1179,6 +1264,8 @@
     classifyUrl,
     renderSafeMarkdown,
     isImageDataUrl,
+    attachmentStoredBytes,
+    noteAttachmentBytes,
     zipStore,
     unzipStore,
     collectMediaFiles,
@@ -1187,6 +1274,7 @@
     validateBackup,
     stamp,
     buildLiteBlob,
+    estimateZipBytes,
     buildFullZipBlob,
   };
 })(typeof self !== 'undefined' ? self : this);

@@ -13,6 +13,15 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.20.1 — 2026-08-09
+
+- Sticker Note 新上傳與完整 backup 匯入會先正規化圖片：長邊最多 4096px、總像素最多 16MP，原始檔與儲存檔各最多 24 MiB；統一輸出 WebP，必要時退回 PNG，GIF／SVG 轉為靜態圖片。
+- 附件容量上限為單一 note 96 MiB、全 extension 512 MiB；超限會拒絕操作並回傳目前使用量，既有附件不自動重編碼或遷移。
+- Canvas note 圖片改為 lazy load，附件 Object URL 使用最多 8 項 LRU 快取並在刪除、更新、匯入與重新載入時清理。
+- Full ZIP 匯入採整批正規化與驗證；full backup 預估超過 256 MiB 時提示改用 Lite 或分批匯出。Lite backup 仍保留文字與附件 metadata，不含圖片二進位。
+
+---
+
 ## 2.20.0 — 2026-08-09
 
 - 新增 Canvas Sticker Note：支援標題、tags、群組分組、安全 Markdown 原文／預覽，以及檔案、剪貼簿與拖曳插入的本機圖片附件。
