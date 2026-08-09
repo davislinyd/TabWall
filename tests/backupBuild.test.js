@@ -24,6 +24,8 @@ const Build = loadBuild();
 const ITEM_ID = '11111111-1111-4111-8111-111111111111';
 const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
 const SECOND_ID = '33333333-3333-4333-8333-333333333333';
+const NOTE_ID = '77777777-7777-4777-8777-777777777777';
+const ATTACHMENT_ID = '88888888-8888-4888-8888-888888888888';
 const LEGACY_ZIP = new URL(
   '../backup/tabwall-backup-full-2026-08-05T14-49-39+0800.zip',
   import.meta.url
@@ -58,6 +60,31 @@ function sampleBackup(items = [sampleItem()]) {
     parkedTabs: items.filter((item) => item.kind === 'tab').map(({ kind, ...item }) => item),
     settings: {},
     tagCatalog: ['one'],
+  };
+}
+
+function sampleNote({ id = NOTE_ID, attachment = true } = {}) {
+  return {
+    kind: 'note',
+    id,
+    title: '安全筆記',
+    markdown: attachment
+      ? `# Heading\n\n![diagram](attachment://${ATTACHMENT_ID})\n\n[Open](https://example.com)`
+      : 'Plain note',
+    tags: ['idea'],
+    pinned: true,
+    savedAt: Date.now() - 1000,
+    attachments: attachment ? [{
+      id: ATTACHMENT_ID,
+      name: 'diagram.png',
+      alt: 'diagram',
+      mime: 'image/png',
+      size: 3,
+      width: 1,
+      height: 1,
+      hasData: true,
+      data: 'data:image/png;base64,AQID',
+    }] : [],
   };
 }
 
@@ -281,6 +308,68 @@ test('backup schema accepts valid group members and rejects invalid color', () =
   };
   assert.equal(Build.validateBackup(sampleBackup([group])).ok, true);
   assert.equal(Build.validateBackup(sampleBackup([{ ...group, color: 'orange' }])).error, 'invalid_group_color');
+});
+
+test('note schema validates attachments and attachment references', () => {
+  const backup = sampleBackup([sampleNote()]);
+  assert.equal(Build.validateBackup(backup).ok, true);
+
+  const brokenReference = sampleBackup([{
+    ...sampleNote(),
+    markdown: '![missing](attachment://99999999-9999-4999-8999-999999999999)',
+  }]);
+  assert.equal(Build.validateBackup(brokenReference).error, 'invalid_attachment_reference');
+
+  const tooMany = sampleNote({ attachment: false });
+  tooMany.attachments = Array.from({ length: 13 }, (_, index) => ({
+    id: `${String(index + 1).padStart(8, '0')}-1111-4111-8111-111111111111`,
+    name: `image-${index}.png`,
+    alt: '',
+    mime: 'image/png',
+    size: 0,
+    width: 1,
+    height: 1,
+  }));
+  assert.equal(Build.validateBackup(sampleBackup([tooMany])).error, 'invalid_attachments');
+});
+
+test('safe Markdown renderer escapes XSS and rejects remote or dangerous images', () => {
+  const html = Build.renderSafeMarkdown(
+    '# Title\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n![remote](https://example.com/a.png)\n\n![local](attachment://' + ATTACHMENT_ID + ')',
+    [{ id: ATTACHMENT_ID, name: 'local.png' }]
+  );
+  assert.doesNotMatch(html, /<script>/i);
+  assert.doesNotMatch(html, /href="javascript:/i);
+  assert.doesNotMatch(html, new RegExp('src="https://example\\.com', 'i'));
+  assert.match(html, /data-attachment-id="88888888-8888-4888-8888-888888888888"/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('full ZIP round-trip preserves note attachment bytes', async () => {
+  const backup = sampleBackup([sampleNote()]);
+  const built = Build.buildFullZipBlob(backup);
+  const files = Build.unzipStore(new Uint8Array(await built.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  const path = `media/${NOTE_ID}_${ATTACHMENT_ID}.png`;
+
+  assert.equal(metadata.version, 5);
+  assert.equal(metadata.parkedItems[0].attachments[0].data, path);
+  assert.deepEqual([...files[path]], [1, 2, 3]);
+  const hydrated = Build.rehydrateMedia(metadata.parkedItems, files, metadata.mediaMimes);
+  assert.equal(hydrated[0].attachments[0].data, 'data:image/png;base64,AQID');
+});
+
+test('lite backup keeps note text and attachment metadata without binary data', async () => {
+  const backup = sampleBackup([sampleNote()]);
+  const lite = Build.buildLiteBlob(backup);
+  const metadata = JSON.parse(await lite.blob.text());
+  const imported = Build.prepareImportedBackup(metadata);
+
+  assert.equal(imported.ok, true);
+  assert.equal(imported.backup.parkedItems[0].markdown, backup.parkedItems[0].markdown);
+  assert.equal(imported.backup.parkedItems[0].attachments[0].name, 'diagram.png');
+  assert.equal(imported.backup.parkedItems[0].attachments[0].data, '');
+  assert.equal(Build.validateBackup(imported.backup).ok, true);
 });
 
 test('local legacy full ZIP imports all metadata and media', { skip: !fs.existsSync(LEGACY_ZIP) }, () => {

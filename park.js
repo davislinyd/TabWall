@@ -154,6 +154,8 @@ const pendingObjectUrlRevokes = new Set();
 /** @type {Map<string, string>} snap dataUrl/blob url cache */
 const snapCache = new Map();
 const SNAP_CACHE_MAX = 12;
+/** @type {Map<string, string>} note attachment blob URL cache */
+const attachmentUrlCache = new Map();
 /** @type {Map<string, Promise<string>>} */
 const mediaFetches = new Map();
 /** @type {Set<string>} */
@@ -236,6 +238,17 @@ function cacheThumbUrl(key, url) {
   return url;
 }
 
+function cacheAttachmentUrl(key, url) {
+  if (!key || !url) return url;
+  if (attachmentUrlCache.has(key)) {
+    const old = attachmentUrlCache.get(key);
+    if (old !== url) revokeObjectUrl(old);
+    attachmentUrlCache.delete(key);
+  }
+  attachmentUrlCache.set(key, url);
+  return url;
+}
+
 function fetchMediaUrl(key, kind) {
   if (!key) return Promise.resolve('');
   if (kind === 'thumb' && thumbUrlCache.has(key)) {
@@ -243,6 +256,9 @@ function fetchMediaUrl(key, kind) {
   }
   if (kind === 'snap' && snapCache.has(key)) {
     return Promise.resolve(snapCache.get(key) || '');
+  }
+  if (kind === 'attachment' && attachmentUrlCache.has(key)) {
+    return Promise.resolve(attachmentUrlCache.get(key) || '');
   }
   const requestKey = mediaFetchKey(key, kind);
   const existing = mediaFetches.get(requestKey);
@@ -253,20 +269,25 @@ function fetchMediaUrl(key, kind) {
       const url = res.ok ? res.dataUrl || '' : '';
       if (kind === 'thumb' && url) cacheThumbUrl(key, url);
       if (kind === 'snap' && url) cacheSnap(key, url);
+      if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
       return url;
     }
     try {
-      const blob = await Media.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
+      const blob = kind === 'attachment'
+        ? await Media.getAttachment?.(key)
+        : await Media.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
       if (!blob) return '';
       const url = trackObjectUrl(URL.createObjectURL(blob));
       if (kind === 'thumb') cacheThumbUrl(key, url);
       if (kind === 'snap') cacheSnap(key, url);
+      if (kind === 'attachment') cacheAttachmentUrl(key, url);
       return url;
     } catch {
       const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
       const url = res.ok ? res.dataUrl || '' : '';
       if (kind === 'thumb' && url) cacheThumbUrl(key, url);
       if (kind === 'snap' && url) cacheSnap(key, url);
+      if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
       return url;
     }
   })();
@@ -347,7 +368,9 @@ function probeCanvasMediaUrl(url) {
 }
 
 function forgetCachedMediaUrl(key, kind, url) {
-  const cache = kind === 'snap' ? snapCache : thumbUrlCache;
+  const cache = kind === 'snap'
+    ? snapCache
+    : kind === 'attachment' ? attachmentUrlCache : thumbUrlCache;
   if (cache.get(key) !== url) return;
   cache.delete(key);
   revokeObjectUrl(url);
@@ -598,6 +621,22 @@ const I18N = {
     canvasStackPlaceholder: 'Stack 名稱',
     canvasSnapshot: '快照',
     canvasNodeHint: '單擊預覽快照；雙擊還原；按住拖曳移動',
+    canvasAddNote: '新增 Sticker Note',
+    canvasNotePlaceHint: '點擊空白畫布放置 Sticker Note；按 Esc 取消',
+    noteKind: 'Sticker Note',
+    noteTitlePh: 'Note 標題',
+    noteMarkdownPh: '以 Markdown 撰寫…',
+    notePreview: '即時預覽',
+    noteAttachments: '圖片附件',
+    noteAttachAdd: '插入圖片',
+    noteAttachDrop: '拖曳或貼上圖片到這裡',
+    noteAttachmentDelete: '移除圖片',
+    noteAttachmentMissing: '圖片尚未匯入',
+    noteEditHeading: '編輯 Sticker Note',
+    noteSave: '儲存 Note',
+    noteCancel: '取消編輯',
+    noteUntitled: 'Sticker Note',
+    noteCount: '{n} 張圖片',
     canvasArrange: '排列',
     canvasArrangeGrid: '棋盤',
     canvasArrangeAlign: '對齊格式',
@@ -915,6 +954,22 @@ const I18N = {
     canvasStackPlaceholder: 'Stack name',
     canvasSnapshot: 'Snapshot',
     canvasNodeHint: 'Click to preview; double-click to restore; drag to move',
+    canvasAddNote: 'Add Sticker Note',
+    canvasNotePlaceHint: 'Click an empty canvas area to place a Sticker Note; Esc cancels',
+    noteKind: 'Sticker Note',
+    noteTitlePh: 'Note title',
+    noteMarkdownPh: 'Write in Markdown…',
+    notePreview: 'Live preview',
+    noteAttachments: 'Image attachments',
+    noteAttachAdd: 'Insert images',
+    noteAttachDrop: 'Drop or paste images here',
+    noteAttachmentDelete: 'Remove image',
+    noteAttachmentMissing: 'Image not imported',
+    noteEditHeading: 'Edit Sticker Note',
+    noteSave: 'Save Note',
+    noteCancel: 'Cancel editing',
+    noteUntitled: 'Sticker Note',
+    noteCount: '{n} image(s)',
     canvasArrange: 'Arrange',
     canvasArrangeGrid: 'Grid',
     canvasArrangeAlign: 'Aligned rows',
@@ -1200,6 +1255,20 @@ const canvasStackDialog = document.getElementById('canvasStackDialog');
 const canvasStackTitle = document.getElementById('canvasStackTitle');
 const canvasStackConfirm = document.getElementById('canvasStackConfirm');
 const canvasStackCancel = document.getElementById('canvasStackCancel');
+const canvasAddNoteBtn = document.getElementById('canvasAddNoteBtn');
+const stickerNoteBox = document.getElementById('stickerNoteBox');
+const stickerNoteDrag = document.getElementById('stickerNoteDrag');
+const stickerNoteTitle = document.getElementById('stickerNoteTitle');
+const stickerNoteMarkdown = document.getElementById('stickerNoteMarkdown');
+const stickerNotePreview = document.getElementById('stickerNotePreview');
+const stickerNoteFile = document.getElementById('stickerNoteFile');
+const stickerNoteAttachments = document.getElementById('stickerNoteAttachments');
+const stickerNoteDrop = document.getElementById('stickerNoteDrop');
+const stickerNoteSave = document.getElementById('stickerNoteSave');
+const stickerNoteCancel = document.getElementById('stickerNoteCancel');
+const stickerNoteCloseX = document.getElementById('stickerNoteCloseX');
+const stickerNoteChips = document.getElementById('stickerNoteChips');
+const stickerNoteTagDraft = document.getElementById('stickerNoteTagDraft');
 const countEl = document.getElementById('count');
 const loadStatusEl = document.getElementById('loadStatus');
 const searchEl = document.getElementById('search');
@@ -1427,7 +1496,7 @@ const membersRestoreAll = document.getElementById('membersRestoreAll');
 const membersDelete = document.getElementById('membersDelete');
 
 /** @type {Array<any>} */
-let allTabs = []; // ParkItem[] (kind tab | group)
+let allTabs = []; // ParkItem[] (kind tab | group | note)
 /** Store-owned read projection; canvas mutations must go through canvasStore. */
 let canvasLayout = {
   version: CANVAS_LAYOUT_VERSION,
@@ -1483,6 +1552,10 @@ let expandedMeta = null;
 let lightboxNav = null;
 /** @type {string|null} */
 let editingId = null;
+let stickerNoteContext = null;
+let stickerNoteTagList = [];
+let stickerNoteDraftAttachments = [];
+let canvasNotePlacementArmed = false;
 /** @type {{ type: 'item' | 'member' | 'batch', groupId?: string, memberId?: string, ids?: string[] } | null} */
 let editContext = null;
 /** @type {string|null} */
@@ -2801,6 +2874,7 @@ function anyFloatOpen() {
     helpBox.classList.contains('open') ||
     editBox.classList.contains('open') ||
     membersBox.classList.contains('open') ||
+    (stickerNoteBox && stickerNoteBox.classList.contains('open')) ||
     (dedupeBox && dedupeBox.classList.contains('open')) ||
     (importPickBox && importPickBox.classList.contains('open')) ||
     (canvasStackDialog && canvasStackDialog.classList.contains('open'))
@@ -2823,6 +2897,7 @@ function closeAllFloatsExcept(except) {
   if (except !== 'help') closeHelpBox(false);
   if (except !== 'edit') closeEditBox();
   if (except !== 'members') closeMembersBox();
+  if (except !== 'stickerNote') closeStickerNoteEditor();
   if (except !== 'dedupe') closeDedupeBox(false);
   if (except !== 'importPick') closeImportPickBox(false);
   if (except !== 'canvasStack') closeCanvasStackDialog();
@@ -2912,6 +2987,10 @@ floatBackdrop.addEventListener('click', () => {
   if (editBox.classList.contains('open')) {
     closeEditBox();
     syncFloatBackdrop();
+    return;
+  }
+  if (stickerNoteBox?.classList.contains('open')) {
+    closeStickerNoteEditor();
     return;
   }
   if (membersBox.classList.contains('open')) {
@@ -3259,6 +3338,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
+    if (canvasNotePlacementArmed) {
+      resetCanvasNotePlacement();
+      return;
+    }
     if (canvasZoomMenu && !canvasZoomMenu.hidden) {
       closeCanvasZoomMenu();
       return;
@@ -3281,6 +3364,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (editBox.classList.contains('open')) {
       closeEditBox();
+      return;
+    }
+    if (stickerNoteBox?.classList.contains('open')) {
+      closeStickerNoteEditor();
       return;
     }
     if (lightbox.classList.contains('open')) {
@@ -3356,15 +3443,16 @@ function sortTabs(list, sortBy) {
   switch (normalizeSortBy(sortBy)) {
     case 'group-first':
       return arr.sort((a, b) => {
-        const ga = a.kind === 'group' ? 0 : 1;
-        const gb = b.kind === 'group' ? 0 : 1;
+        const rank = (item) => item.kind === 'group' ? 0 : item.kind === 'note' ? 1 : 2;
+        const ga = rank(a);
+        const gb = rank(b);
         if (ga !== gb) return ga - gb;
         return (b.savedAt || 0) - (a.savedAt || 0);
       });
     case 'domain':
       return arr.sort((a, b) => {
-        const da = a.kind === 'group' ? '' : domainOf(a.url);
-        const db = b.kind === 'group' ? '' : domainOf(b.url);
+        const da = a.kind === 'group' || a.kind === 'note' ? '' : domainOf(a.url);
+        const db = b.kind === 'group' || b.kind === 'note' ? '' : domainOf(b.url);
         return da.localeCompare(db) || (b.savedAt || 0) - (a.savedAt || 0);
       });
     case 'newest':
@@ -3380,6 +3468,7 @@ function linkTextForItem(item) {
       .filter(Boolean)
       .join('\n');
   }
+  if (item.kind === 'note') return '';
   return item.url || '';
 }
 
@@ -3758,6 +3847,9 @@ function itemHaystack(item, scope = searchScope) {
     for (const m of item.tabs || []) {
       parts.push(m.title || '', m.url || '', domainOf(m.url));
     }
+    for (const note of item.notes || []) {
+      parts.push(note.title || '', note.markdown || '', ...(note.tags || []));
+    }
     return parts.join(' ');
   }
   if (scope === 'tag') {
@@ -3765,6 +3857,9 @@ function itemHaystack(item, scope = searchScope) {
       const parts = [...(Array.isArray(item.tags) ? item.tags : [])];
       for (const m of item.tabs || []) {
         if (Array.isArray(m.tags)) parts.push(...m.tags);
+      }
+      for (const note of item.notes || []) {
+        if (Array.isArray(note.tags)) parts.push(...note.tags);
       }
       return parts.join(' ');
     }
@@ -3774,8 +3869,10 @@ function itemHaystack(item, scope = searchScope) {
     if (item.kind === 'group') {
       const parts = [item.note || ''];
       for (const m of item.tabs || []) parts.push(m.note || '');
+      for (const note of item.notes || []) parts.push(note.title || '', note.markdown || '');
       return parts.join(' ');
     }
+    if (item.kind === 'note') return [item.title || '', item.markdown || ''].join(' ');
     return item.note || '';
   }
   if (item.kind === 'group') {
@@ -3793,7 +3890,21 @@ function itemHaystack(item, scope = searchScope) {
         ...(Array.isArray(m.tags) ? m.tags : [])
       );
     }
+    for (const note of item.notes || []) {
+      parts.push(note.title || '', note.markdown || '', ...(Array.isArray(note.tags) ? note.tags : []));
+      for (const attachment of note.attachments || []) parts.push(attachment.name || '', attachment.alt || '');
+    }
     return parts.join(' ');
+  }
+  if (item.kind === 'note') {
+    if (scope === 'tag') return (item.tags || []).join(' ');
+    if (scope === 'note') return [item.title || '', item.markdown || ''].join(' ');
+    return [
+      item.title || '',
+      item.markdown || '',
+      ...(Array.isArray(item.tags) ? item.tags : []),
+      ...(item.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']),
+    ].join(' ');
   }
   return [
     item.title || '',
@@ -3846,13 +3957,14 @@ function textMatchesQuery(text, q) {
 function memberHaystack(member, scope = searchScope) {
   if (!member) return '';
   if (scope === 'group') {
+    if (member.kind === 'note') return [member.title || '', member.markdown || ''].join(' ');
     return [member.title || '', member.url || '', domainOf(member.url)].join(' ');
   }
   if (scope === 'tag') {
     return (Array.isArray(member.tags) ? member.tags : []).join(' ');
   }
   if (scope === 'note') {
-    return member.note || '';
+    return member.kind === 'note' ? [member.title || '', member.markdown || ''].join(' ') : member.note || '';
   }
   return [
     member.title || '',
@@ -3860,6 +3972,7 @@ function memberHaystack(member, scope = searchScope) {
     domainOf(member.url),
     member.note || '',
     ...(Array.isArray(member.tags) ? member.tags : []),
+    ...(member.kind === 'note' ? (member.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']) : []),
   ].join(' ');
 }
 
@@ -3868,21 +3981,28 @@ function groupMetaHaystack(group, scope = searchScope) {
     return group.title || '';
   }
   if (scope === 'tag') {
-    return (Array.isArray(group.tags) ? group.tags : []).join(' ');
+    return [
+      ...(Array.isArray(group.tags) ? group.tags : []),
+      ...(group.notes || []).flatMap((note) => note.tags || []),
+    ].join(' ');
   }
   if (scope === 'note') {
-    return group.note || '';
+    return [group.note || '', ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || ''])].join(' ');
   }
   return [
     group.title || '',
     group.note || '',
     ...(Array.isArray(group.tags) ? group.tags : []),
+    ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || '', ...(note.tags || [])]),
   ].join(' ');
 }
 
 function getMatchingMembers(group, q = query) {
   if (!q || !group || group.kind !== 'group') return [];
-  return (group.tabs || []).filter((m) => textMatchesQuery(memberHaystack(m), q));
+  return [
+    ...(group.tabs || []),
+    ...(group.notes || []),
+  ].filter((m) => textMatchesQuery(memberHaystack(m), q));
 }
 
 function groupMetaMatches(group, q = query) {
@@ -3949,16 +4069,17 @@ function appendGroupSearchHits(parentEl, group) {
       const main = document.createElement('button');
       main.type = 'button';
       main.className = 'search-hit-main';
-      main.title = t('memberRestore');
+      main.title = m.kind === 'note' ? t('edit') : t('memberRestore');
       main.innerHTML = `
         <div class="search-hit-title">${escapeHtml(m.title || m.url || '—')}</div>
-        <div class="search-hit-url">${escapeHtml(m.url || '')}</div>
+        <div class="search-hit-url">${escapeHtml(m.kind === 'note' ? (m.markdown || '').slice(0, 160) : (m.url || ''))}</div>
       `;
       main.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (selectMode) return;
-        restoreMember(group.id, m.id);
+        if (m.kind === 'note') openStickerNoteEditor(m, { groupId: group.id });
+        else restoreMember(group.id, m.id);
       });
 
       const actions = document.createElement('div');
@@ -3967,23 +4088,25 @@ function appendGroupSearchHits(parentEl, group) {
       const prevBtn = document.createElement('button');
       prevBtn.type = 'button';
       prevBtn.className = 'icon-btn sm';
-      prevBtn.title = t('expand');
+      prevBtn.title = m.kind === 'note' ? t('edit') : t('expand');
       prevBtn.innerHTML = iconSvg('expand');
       prevBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openLightbox(m, { groupId: group.id });
+        if (m.kind === 'note') openStickerNoteEditor(m, { groupId: group.id });
+        else openLightbox(m, { groupId: group.id });
       });
 
       const restBtn = document.createElement('button');
       restBtn.type = 'button';
       restBtn.className = 'icon-btn sm';
-      restBtn.title = t('memberRestore');
-      restBtn.innerHTML = iconSvg('restore');
+      restBtn.title = m.kind === 'note' ? t('delete') : t('memberRestore');
+      restBtn.innerHTML = iconSvg(m.kind === 'note' ? 'delete' : 'restore');
       restBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        restoreMember(group.id, m.id);
+        if (m.kind === 'note') deleteGroupNote(group.id, m.id);
+        else restoreMember(group.id, m.id);
       });
 
       actions.append(prevBtn, restBtn);
@@ -4015,6 +4138,7 @@ function appendGroupSearchHits(parentEl, group) {
 
 function itemTitle(item) {
   if (item.kind === 'group') return item.title || t('unnamedGroup');
+  if (item.kind === 'note') return item.title || t('noteUntitled');
   return item.title || item.url || 'Untitled';
 }
 
@@ -4163,7 +4287,7 @@ function openCanvasGroupLightbox(group) {
   expandedMeta = { type: 'group' };
   lightboxNav = null;
   lbTitle.textContent = itemTitle(group);
-  lbUrl.textContent = t('groupTabs', { n: (group.tabs || []).length });
+  lbUrl.textContent = t('groupTabs', { n: (group.tabs || []).length + (group.notes || []).length });
   if (lbCounter) lbCounter.textContent = '—';
   if (lbPrev) lbPrev.hidden = true;
   if (lbNext) lbNext.hidden = true;
@@ -4454,7 +4578,33 @@ async function hydrateItemMediaLocal(item) {
       }
       return { ...m, thumbnail: thumb, snapshot: snap };
     });
-    return { ...item, tabs };
+    const notes = await mapWithConcurrencyLocal(item.notes || [], 4, async (note) => ({
+      ...note,
+      attachments: await mapWithConcurrencyLocal(note.attachments || [], 4, async (attachment) => {
+        let data = '';
+        try {
+          const blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+          if (blob) data = await Media.blobToDataUrl(blob);
+        } catch (err) {
+          uiLog('warn', 'export', 'attachment get failed', `${note.id}/${attachment.id} ${err?.message || err}`);
+        }
+        return { ...attachment, data, hasData: Boolean(data) };
+      }),
+    }));
+    return { ...item, tabs, notes };
+  }
+  if (item.kind === 'note') {
+    const attachments = await mapWithConcurrencyLocal(item.attachments || [], 4, async (attachment) => {
+      let data = '';
+      try {
+        const blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(item.id, attachment.id));
+        if (blob) data = await Media.blobToDataUrl(blob);
+      } catch (err) {
+        uiLog('warn', 'export', 'attachment get failed', `${item.id}/${attachment.id} ${err?.message || err}`);
+      }
+      return { ...attachment, data, hasData: Boolean(data) };
+    });
+    return { ...item, attachments };
   }
   const key = mediaKeyForItem(item);
   let thumbnail = '';
@@ -4568,6 +4718,8 @@ function pickImportImageDataUrl(item) {
     const v = item[key];
     if (typeof v === 'string' && v.startsWith('data:')) return v;
   }
+  const attachment = item?.kind === 'note' ? item.attachments?.find((value) => typeof value?.data === 'string' && value.data.startsWith('data:')) : null;
+  if (attachment?.data) return attachment.data;
   return '';
 }
 
@@ -4613,6 +4765,35 @@ async function stageImportMedia(stageId, items) {
         stageOwner(member, Media.mediaKeyMember(item.id, member.id));
         return member;
       });
+      item.notes = (item.notes || []).map((rawNote) => {
+        const note = { ...rawNote };
+        note.attachments = (note.attachments || []).map((rawAttachment) => {
+          const attachment = { ...rawAttachment };
+          const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+          if (attachment.data && !blob) throw new Error('invalid_image');
+          if (blob) rows.push({
+            mediaKey: Media.mediaKeyNoteAttachment(note.id, attachment.id),
+            attachment: blob,
+          });
+          attachment.hasData = Boolean(blob);
+          attachment.data = '';
+          return attachment;
+        });
+        return note;
+      });
+    } else if (item.kind === 'note') {
+      item.attachments = (item.attachments || []).map((rawAttachment) => {
+        const attachment = { ...rawAttachment };
+        const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+        if (attachment.data && !blob) throw new Error('invalid_image');
+        if (blob) rows.push({
+          mediaKey: Media.mediaKeyNoteAttachment(item.id, attachment.id),
+          attachment: blob,
+        });
+        attachment.hasData = Boolean(blob);
+        attachment.data = '';
+        return attachment;
+      });
     } else {
       stageOwner(item, Media.mediaKeyTab(item.id));
     }
@@ -4634,7 +4815,7 @@ function closeImportPreview() {
 function openImportTabPreview(item) {
   if (!importPreviewOverlay || !importPreviewBody) return;
   const title = item?.title || item?.url || '—';
-  const url = item?.url || '';
+  const url = item?.kind === 'note' ? t('noteKind') : item?.url || '';
   if (importPreviewTitle) importPreviewTitle.textContent = title;
   if (importPreviewUrl) {
     importPreviewUrl.textContent = isStoredOnlyUrl(url) ? `${url} · ${t('storedOnly')}` : url;
@@ -4660,12 +4841,13 @@ function openImportGroupPreview(item) {
   if (!importPreviewOverlay || !importPreviewBody) return;
   const title = item?.title || t('stackTitle');
   const members = Array.isArray(item?.tabs) ? item.tabs : [];
+  const notes = Array.isArray(item?.notes) ? item.notes : [];
   if (importPreviewTitle) importPreviewTitle.textContent = title;
   if (importPreviewUrl) {
-    importPreviewUrl.textContent = t('groupTabs', { n: members.length });
+    importPreviewUrl.textContent = t('groupTabs', { n: members.length + notes.length });
   }
   importPreviewBody.innerHTML = '';
-  if (!members.length) {
+  if (!members.length && !notes.length) {
     const empty = document.createElement('div');
     empty.className = 'import-preview-empty';
     empty.textContent = t('importPreviewGroupEmpty');
@@ -4673,7 +4855,19 @@ function openImportGroupPreview(item) {
   } else {
     const list = document.createElement('div');
     list.className = 'import-preview-members';
-    members.forEach((m) => {
+    [...members, ...notes].forEach((m) => {
+      if (m.kind === 'note') {
+        const row = document.createElement('div');
+        row.className = 'import-preview-member';
+        row.innerHTML = `<div class="m-main"><div class="m-title">${escapeHtml(m.title || t('noteUntitled'))}</div><div class="m-url">${escapeHtml((m.markdown || '').slice(0, 180))}</div></div><button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>`;
+        row.querySelector('button')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openImportTabPreview(m);
+        });
+        list.appendChild(row);
+        return;
+      }
       const row = document.createElement('div');
       const storedOnly = isStoredOnlyUrl(m?.url);
       row.className = `import-preview-member${storedOnly ? ' stored-only' : ''}`;
@@ -4733,16 +4927,19 @@ function openImportPickBox(mode, backup, warnings = {}) {
   items.forEach((item) => {
     const id = String(item.id);
     const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
+    const isNote = item.kind === 'note';
     const storedOnlyCount = countStoredOnlyUrls(item);
     const title = isGroup
       ? item.title || t('stackTitle')
       : item.title || item.url || '—';
     const sub = isGroup
-      ? `${t('groupTabs', { n: (item.tabs || []).length })}${storedOnlyCount ? ` · ${t('backupStoredOnly', { n: storedOnlyCount })}` : ''}`
+      ? `${t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })}${storedOnlyCount ? ` · ${t('backupStoredOnly', { n: storedOnlyCount })}` : ''}`
+      : isNote
+        ? `${t('noteKind')} · ${t('noteCount', { n: (item.attachments || []).length })}`
       : isStoredOnlyUrl(item.url)
         ? `${item.url || ''} · ${t('storedOnly')}`
         : item.url || '';
-    const kindLabel = isGroup ? 'group' : storedOnlyCount ? t('storedOnlyShort') : 'tab';
+    const kindLabel = isGroup ? 'group' : isNote ? 'note' : storedOnlyCount ? t('storedOnlyShort') : 'tab';
 
     const row = document.createElement('div');
     row.className = `import-pick-row${storedOnlyCount ? ' stored-only' : ''}`;
@@ -4799,7 +4996,7 @@ async function confirmImportPickUnlocked() {
     ...backup,
     parkedItems: filtered,
     parkedTabs: filtered
-      .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+      .filter((i) => i.kind === 'tab')
       .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
   };
 
@@ -4816,7 +5013,7 @@ async function confirmImportPickUnlocked() {
       media: 'idb',
       parkedItems: transportItems,
       parkedTabs: transportItems
-        .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+        .filter((i) => i.kind === 'tab')
         .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
     };
     const res = await sendMessage({
@@ -4991,9 +5188,16 @@ function updateBatchBar() {
       const snapshotButton = canvasContextBar.querySelector('[data-canvas-action="snapshot"]');
       const membersButton = canvasContextBar.querySelector('[data-canvas-action="members"]');
       const editButton = canvasContextBar.querySelector('[data-canvas-action="edit"]');
+      const restoreButton = canvasContextBar.querySelector('[data-canvas-action="restore"]');
       if (snapshotButton) snapshotButton.hidden = selectedItem?.kind !== 'tab';
       if (membersButton) membersButton.hidden = selectedItem?.kind !== 'group';
       if (editButton) editButton.hidden = n !== 1;
+      if (restoreButton) {
+        restoreButton.hidden = n === 1 && (
+          selectedItem?.kind === 'note'
+          || (selectedItem?.kind === 'group' && !(selectedItem.tabs || []).length)
+        );
+      }
     }
     if (canvasDropZone) canvasDropZone.hidden = n < 2;
     batchBar.classList.remove('open');
@@ -5006,6 +5210,11 @@ function updateBatchBar() {
   } else {
     batchBar.classList.remove('open');
     batchBar.setAttribute('aria-hidden', 'true');
+  }
+  if (batchRestore) {
+    const selectedItems = [...selection].map((id) => allTabs.find((item) => item.id === id)).filter(Boolean);
+    const restorable = selectedItems.some((item) => item.kind === 'tab' || (item.kind === 'group' && (item.tabs || []).length));
+    batchRestore.hidden = !restorable;
   }
 }
 
@@ -5059,6 +5268,11 @@ async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
           m.thumbnail = '';
           m.snapshot = '';
         }
+        for (const note of it.notes || []) {
+          for (const attachment of note.attachments || []) attachment.data = '';
+        }
+      } else if (it.kind === 'note') {
+        for (const attachment of it.attachments || []) attachment.data = '';
       } else {
         it.thumbnail = '';
         it.snapshot = '';
@@ -5066,7 +5280,7 @@ async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
     }
   }
   const parkedTabs = parkedItems
-    .filter((i) => i.kind !== 'group' && !Array.isArray(i.tabs))
+    .filter((i) => i.kind === 'tab')
     .map(({ kind, hasThumb, hasSnap, thumbnail, snapshot, ...rest }) => rest);
   const selectedIds = new Set(items.map((item) => item.id));
   const partialLayout = normalizeCanvasLayoutLocal(canvasLayout, items);
@@ -5145,7 +5359,10 @@ batchExportFull?.addEventListener('click', () => {
 batchRestore.addEventListener('click', async () => {
   await withUiActionLock('batch-restore', async () => {
     const ids = [...selectedIds];
-    for (const id of ids) await restoreItem(id);
+    for (const id of ids) {
+      const item = allTabs.find((candidate) => candidate.id === id);
+      if (item?.kind === 'tab' || (item?.kind === 'group' && (item.tabs || []).length)) await restoreItem(id);
+    }
     clearAllSelections();
     updateBatchBar();
     await loadList();
@@ -5317,6 +5534,341 @@ editSave.addEventListener('click', async () => {
   }
 });
 
+// ─── Canvas Sticker Note editor ───────────────────────────────────
+
+function stickerNoteUuid() {
+  try {
+    if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  } catch {
+    // fall through
+  }
+  return `note-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function stickerNoteDraftMeta() {
+  return stickerNoteDraftAttachments.map(({ blob, previewUrl, ...attachment }) => ({ ...attachment }));
+}
+
+function stickerNoteDraftRecord() {
+  return {
+    kind: 'note',
+    id: stickerNoteContext?.id || stickerNoteUuid(),
+    title: stickerNoteTitle?.value?.trim() || t('noteUntitled'),
+    markdown: stickerNoteMarkdown?.value || '',
+    tags: [...stickerNoteTagList],
+    pinned: Boolean(stickerNoteContext?.pinned),
+    savedAt: stickerNoteContext?.savedAt || Date.now(),
+    attachments: stickerNoteDraftMeta(),
+  };
+}
+
+function renderStickerNoteTags() {
+  if (!stickerNoteChips) return;
+  stickerNoteChips.innerHTML = '';
+  for (const tag of stickerNoteTagList) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = `#${tag}`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', t('delete'));
+    remove.innerHTML = iconSvg('close');
+    remove.addEventListener('click', () => {
+      stickerNoteTagList = stickerNoteTagList.filter((value) => value !== tag);
+      renderStickerNoteTags();
+    });
+    chip.appendChild(remove);
+    stickerNoteChips.appendChild(chip);
+  }
+}
+
+function commitStickerNoteTagDraft() {
+  const value = stickerNoteTagDraft?.value?.trim();
+  if (!value) return;
+  if (!stickerNoteTagList.includes(value)) stickerNoteTagList.push(value);
+  stickerNoteTagDraft.value = '';
+  renderStickerNoteTags();
+}
+
+function renderStickerNotePreview() {
+  if (!stickerNotePreview) return;
+  const note = stickerNoteDraftRecord();
+  stickerNotePreview.innerHTML = Build?.renderSafeMarkdown
+    ? Build.renderSafeMarkdown(note.markdown, note.attachments)
+    : escapeHtml(note.markdown);
+  const attachmentMap = new Map(stickerNoteDraftAttachments.map((attachment) => [attachment.id, attachment]));
+  stickerNotePreview.querySelectorAll('[data-attachment-id]').forEach((img) => {
+    const attachment = attachmentMap.get(img.dataset.attachmentId);
+    if (!attachment) return;
+    if (attachment.previewUrl) img.src = attachment.previewUrl;
+    else {
+      fetchMediaUrl(Media.mediaKeyNoteAttachment(note.id, attachment.id), 'attachment').then((url) => {
+        if (url && img.isConnected) img.src = url;
+      });
+    }
+  });
+}
+
+function renderStickerNoteAttachments() {
+  if (!stickerNoteAttachments) return;
+  stickerNoteAttachments.innerHTML = '';
+  stickerNoteDraftAttachments.forEach((attachment) => {
+    const row = document.createElement('div');
+    row.className = 'sticker-note-attachment';
+    const image = document.createElement('img');
+    image.alt = attachment.alt || attachment.name || '';
+    image.loading = 'lazy';
+    if (attachment.previewUrl) image.src = attachment.previewUrl;
+    else fetchMediaUrl(Media.mediaKeyNoteAttachment(stickerNoteContext.id, attachment.id), 'attachment').then((url) => {
+      if (url && image.isConnected) image.src = url;
+    });
+    const name = document.createElement('span');
+    name.textContent = attachment.name || 'image';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'icon-btn danger';
+    remove.title = t('noteAttachmentDelete');
+    remove.setAttribute('aria-label', t('noteAttachmentDelete'));
+    remove.innerHTML = iconSvg('delete');
+    remove.addEventListener('click', () => removeStickerNoteAttachment(attachment.id));
+    row.append(image, name, remove);
+    stickerNoteAttachments.appendChild(row);
+  });
+}
+
+function refreshStickerNoteEditor() {
+  renderStickerNoteTags();
+  renderStickerNoteAttachments();
+  renderStickerNotePreview();
+}
+
+function removeStickerNoteAttachment(id) {
+  const target = stickerNoteDraftAttachments.find((attachment) => attachment.id === id);
+  if (target?.previewUrl && target.blob) URL.revokeObjectURL(target.previewUrl);
+  stickerNoteDraftAttachments = stickerNoteDraftAttachments.filter((attachment) => attachment.id !== id);
+  if (stickerNoteMarkdown) {
+    const pattern = new RegExp(`!\\[[^\\]\\n]*\\]\\(attachment://${String(id).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\)\\n?`, 'g');
+    stickerNoteMarkdown.value = stickerNoteMarkdown.value.replace(pattern, '');
+  }
+  refreshStickerNoteEditor();
+}
+
+function readStickerNoteImageSize(blob) {
+  if (typeof Image === 'undefined' || !URL?.createObjectURL) return Promise.resolve({ width: 0, height: 0 });
+  const url = URL.createObjectURL(blob);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: 0, height: 0 });
+    };
+    image.src = url;
+  });
+}
+
+async function addStickerNoteFiles(files) {
+  const list = [...(files || [])].filter((file) => String(file?.type || '').toLowerCase().startsWith('image/'));
+  for (const file of list) {
+    if (stickerNoteDraftAttachments.length >= (Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12)) break;
+    if (Number(file.size) > (Build?.LIMITS?.MAX_IMAGE_BYTES || 24 * 1024 * 1024)) continue;
+    const id = stickerNoteUuid();
+    const previewUrl = URL.createObjectURL(file);
+    const dimensions = await readStickerNoteImageSize(file);
+    stickerNoteDraftAttachments.push({
+      id,
+      name: String(file.name || 'image').slice(0, 512),
+      alt: String(file.name || 'image').slice(0, 2048),
+      mime: file.type || 'image/jpeg',
+      size: Number(file.size) || 0,
+      width: dimensions.width,
+      height: dimensions.height,
+      hasData: true,
+      blob: file,
+      previewUrl,
+    });
+    const token = `![${String(file.name || 'image').replace(/[\]\n]/g, '')}](attachment://${id})`;
+    const textarea = stickerNoteMarkdown;
+    const start = textarea?.selectionStart ?? textarea?.value?.length ?? 0;
+    const end = textarea?.selectionEnd ?? start;
+    if (textarea) {
+      textarea.value = `${textarea.value.slice(0, start)}${token}\n${textarea.value.slice(end)}`;
+      textarea.setSelectionRange(start + token.length + 1, start + token.length + 1);
+    }
+  }
+  refreshStickerNoteEditor();
+}
+
+function openStickerNoteEditor(note = null, { groupId = '', position = null } = {}) {
+  if (!stickerNoteBox) return;
+  closeAllFloatsExcept('stickerNote');
+  const source = note ? normalizeNoteProjection(note) : {
+    kind: 'note',
+    id: stickerNoteUuid(),
+    title: t('noteUntitled'),
+    markdown: '',
+    tags: [],
+    pinned: false,
+    savedAt: Date.now(),
+    attachments: [],
+  };
+  stickerNoteContext = {
+    mode: note ? 'edit' : 'create',
+    id: source.id,
+    groupId,
+    position,
+    pinned: Boolean(source.pinned),
+    savedAt: source.savedAt,
+  };
+  stickerNoteTagList = [...(source.tags || [])];
+  stickerNoteDraftAttachments = (source.attachments || []).map((attachment) => ({
+    ...attachment,
+    blob: null,
+    previewUrl: '',
+  }));
+  stickerNoteTitle.value = source.title || t('noteUntitled');
+  stickerNoteMarkdown.value = source.markdown || '';
+  stickerNoteTagDraft.value = '';
+  refreshStickerNoteEditor();
+  stickerNoteBox.classList.add('open');
+  stickerNoteBox.setAttribute('aria-hidden', 'false');
+  stickerNoteBox.style.left = `${Math.max(16, Math.round((window.innerWidth - (stickerNoteBox.offsetWidth || 860)) / 2))}px`;
+  stickerNoteBox.style.top = `${Math.max(16, Math.round((window.innerHeight - (stickerNoteBox.offsetHeight || 600)) / 2))}px`;
+  syncFloatBackdrop();
+  setTimeout(() => stickerNoteTitle?.focus(), 0);
+}
+
+function closeStickerNoteEditor() {
+  if (!stickerNoteBox) return;
+  const wasPlacement = stickerNoteContext?.mode === 'create';
+  stickerNoteDraftAttachments.forEach((attachment) => {
+    if (attachment.blob && attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+  });
+  stickerNoteDraftAttachments = [];
+  stickerNoteTagList = [];
+  stickerNoteContext = null;
+  stickerNoteBox.classList.remove('open');
+  stickerNoteBox.setAttribute('aria-hidden', 'true');
+  if (wasPlacement) resetCanvasNotePlacement();
+  syncFloatBackdrop();
+}
+
+async function saveStickerNote() {
+  if (!stickerNoteContext) return;
+  commitStickerNoteTagDraft();
+  const note = stickerNoteDraftRecord();
+  const writtenKeys = [];
+  try {
+    for (const attachment of stickerNoteDraftAttachments) {
+      if (!attachment.blob) continue;
+      const key = Media.mediaKeyNoteAttachment(note.id, attachment.id);
+      await Media.putAttachment(key, attachment.blob);
+      writtenKeys.push(key);
+    }
+    const res = stickerNoteContext.mode === 'create'
+      ? await sendMessage({ type: 'CREATE_NOTE', note, position: stickerNoteContext.position })
+      : await sendMessage({
+          type: 'UPDATE_NOTE',
+          noteId: note.id,
+          groupId: stickerNoteContext.groupId,
+          patch: note,
+        });
+    if (!res?.ok) throw new Error(res?.error || 'note_save_failed');
+    closeStickerNoteEditor();
+    await loadList();
+  } catch (err) {
+    if (writtenKeys.length) await Media.removeMany(writtenKeys).catch(() => {});
+    console.warn('[TabWall] sticker note save failed:', err);
+    showCopyToast(t('editFailed'));
+  }
+}
+
+function deleteGroupNote(groupId, noteId) {
+  return withUiActionLock(`delete-note:${groupId}:${noteId}`, async () => {
+    const res = await sendMessage({ type: 'DELETE_NOTE', groupId, noteId });
+    if (res?.ok) await loadList();
+    return res;
+  });
+}
+
+stickerNoteTitle?.addEventListener('input', renderStickerNotePreview);
+stickerNoteMarkdown?.addEventListener('input', renderStickerNotePreview);
+stickerNoteTagDraft?.addEventListener('keydown', (event) => {
+  if ((event.key === 'Enter' || event.key === 'Tab') && stickerNoteTagDraft.value.trim()) {
+    event.preventDefault();
+    commitStickerNoteTagDraft();
+  }
+  if (event.key === 'Backspace' && !stickerNoteTagDraft.value && stickerNoteTagList.length) {
+    stickerNoteTagList.pop();
+    renderStickerNoteTags();
+  }
+});
+stickerNoteFile?.addEventListener('change', () => addStickerNoteFiles(stickerNoteFile.files));
+stickerNoteDrop?.addEventListener('click', () => stickerNoteFile?.click());
+stickerNoteDrop?.addEventListener('dragover', (event) => event.preventDefault());
+stickerNoteDrop?.addEventListener('drop', (event) => {
+  event.preventDefault();
+  addStickerNoteFiles(event.dataTransfer?.files || []);
+});
+stickerNoteMarkdown?.addEventListener('paste', (event) => {
+  const fromItems = [...(event.clipboardData?.items || [])]
+    .filter((item) => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+    .map((item) => item.getAsFile?.())
+    .filter(Boolean);
+  const files = [...(event.clipboardData?.files || []), ...fromItems]
+    .filter((file, index, values) => String(file.type || '').startsWith('image/') && values.indexOf(file) === index);
+  if (!files.length) return;
+  event.preventDefault();
+  addStickerNoteFiles(files);
+});
+stickerNoteMarkdown?.addEventListener('dragover', (event) => {
+  if ([...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')) event.preventDefault();
+});
+stickerNoteMarkdown?.addEventListener('drop', (event) => {
+  const files = [...(event.dataTransfer?.files || [])].filter((file) => String(file.type || '').startsWith('image/'));
+  if (!files.length) return;
+  event.preventDefault();
+  addStickerNoteFiles(files);
+});
+stickerNoteSave?.addEventListener('click', saveStickerNote);
+stickerNoteCancel?.addEventListener('click', closeStickerNoteEditor);
+stickerNoteCloseX?.addEventListener('click', closeStickerNoteEditor);
+
+(function setupStickerNoteDrag() {
+  if (!stickerNoteDrag || !stickerNoteBox) return;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let origLeft = 0;
+  let origTop = 0;
+  stickerNoteDrag.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button')) return;
+    const rect = stickerNoteBox.getBoundingClientRect();
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    origLeft = rect.left;
+    origTop = rect.top;
+    stickerNoteDrag.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  stickerNoteDrag.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    stickerNoteBox.style.left = `${Math.max(8, origLeft + event.clientX - startX)}px`;
+    stickerNoteBox.style.top = `${Math.max(8, origTop + event.clientY - startY)}px`;
+  });
+  const end = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    try { stickerNoteDrag.releasePointerCapture(event.pointerId); } catch {}
+  };
+  stickerNoteDrag.addEventListener('pointerup', end);
+  stickerNoteDrag.addEventListener('pointercancel', end);
+})();
+
 // ─── Members floating box ──────────────────────────────────────────
 
 function placeMembersBoxCentered() {
@@ -5327,7 +5879,10 @@ function placeMembersBoxCentered() {
 }
 
 function renderMembersList(group) {
-  const members = [...(group.tabs || [])].sort(
+  const members = [
+    ...(group.tabs || []).map((member) => ({ ...member, kind: 'tab' })),
+    ...(group.notes || []).map((note) => ({ ...note, kind: 'note' })),
+  ].sort(
     (a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0)
   );
   membersList.innerHTML = '';
@@ -5339,18 +5894,21 @@ function renderMembersList(group) {
     const row = document.createElement('div');
     row.className = 'member-row';
     row.dataset.memberId = m.id;
-    const storedOnly = isStoredOnlyUrl(m.url);
-    const note = m.note || '';
+    const isNote = m.kind === 'note';
+    const storedOnly = !isNote && isStoredOnlyUrl(m.url);
+    const note = isNote ? m.markdown || '' : m.note || '';
     const tags = Array.isArray(m.tags) ? m.tags : [];
-    const mKey = mediaKeyForMember(group.id, m.id);
+    const mKey = isNote && m.attachments?.[0]
+      ? Media.mediaKeyNoteAttachment(m.id, m.attachments[0].id)
+      : mediaKeyForMember(group.id, m.id);
     row.innerHTML = `
-      <img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />
+      ${isNote ? `<div class="member-thumb note-member-thumb">${iconSvg('note')}</div>` : `<img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />`}
       <div class="member-body">
         <div class="member-title" title="${escapeAttr(m.title || '')}">
           ${escapeHtml(m.title || m.url || '')}
           ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
         </div>
-        <div class="member-url" title="${escapeAttr(m.url || '')}">${escapeHtml(m.url || '')}</div>
+        <div class="member-url" title="${escapeAttr(isNote ? t('noteKind') : m.url || '')}">${escapeHtml(isNote ? t('noteKind') : m.url || '')}</div>
         ${storedOnly ? `<div class="note-preview">${escapeHtml(t('storedOnly'))}</div>` : ''}
         ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
         ${
@@ -5360,13 +5918,19 @@ function renderMembersList(group) {
         }
         <div class="member-actions">
           <button type="button" class="btn snap-btn">${escapeHtml(t('memberSnapshot'))}</button>
-          <button type="button" class="btn edit-m-btn">${escapeHtml(t('memberEdit'))}</button>
-          <button type="button" class="btn primary restore-m-btn" ${storedOnly ? `disabled title="${escapeAttr(t('storedOnly'))}"` : ''}>${escapeHtml(t('memberRestore'))}</button>
+          <button type="button" class="btn edit-m-btn">${escapeHtml(isNote ? t('edit') : t('memberEdit'))}</button>
+          ${isNote
+            ? `<button type="button" class="btn danger delete-note-m-btn">${escapeHtml(t('delete'))}</button>`
+            : `<button type="button" class="btn primary restore-m-btn" ${storedOnly ? `disabled title="${escapeAttr(t('storedOnly'))}"` : ''}>${escapeHtml(t('memberRestore'))}</button>`}
         </div>
       </div>
     `;
     observeThumb(row.querySelector('img.lazy-thumb'));
     const openMemberSnap = () => {
+      if (isNote) {
+        openStickerNoteEditor(m, { groupId: group.id });
+        return;
+      }
       openLightbox(
         {
           id: m.id,
@@ -5381,13 +5945,17 @@ function renderMembersList(group) {
     row.querySelector('.snap-btn').addEventListener('click', openMemberSnap);
     row.querySelector('.member-thumb').addEventListener('click', openMemberSnap);
     row.querySelector('.edit-m-btn').addEventListener('click', () => {
-      openMemberEditBox(group.id, m);
+      if (isNote) openStickerNoteEditor(m, { groupId: group.id });
+      else openMemberEditBox(group.id, m);
     });
-    row.querySelector('.restore-m-btn').addEventListener('click', async () => {
+    row.querySelector('.restore-m-btn')?.addEventListener('click', async () => {
       await restoreMember(group.id, m.id);
       const g = allTabs.find((x) => x.id === group.id);
       if (!g) closeMembersBox();
       else renderMembersList(g);
+    });
+    row.querySelector('.delete-note-m-btn')?.addEventListener('click', async () => {
+      await deleteGroupNote(group.id, m.id);
     });
     membersList.appendChild(row);
   });
@@ -5397,7 +5965,7 @@ function openMembersBox(group) {
   closeAllFloatsExcept('members');
   membersGroupId = group.id;
   const color = GROUP_COLORS[group.color] || GROUP_COLORS.grey;
-  membersTitle.innerHTML = `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>${escapeHtml(itemTitle(group))} · ${escapeHtml(t('groupTabs', { n: (group.tabs || []).length }))}`;
+  membersTitle.innerHTML = `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>${escapeHtml(itemTitle(group))} · ${escapeHtml(t('groupTabs', { n: (group.tabs || []).length + (group.notes || []).length }))}`;
   renderMembersList(group);
   membersBox.classList.add('open');
   membersBox.setAttribute('aria-hidden', 'false');
@@ -5509,6 +6077,10 @@ membersDelete.addEventListener('click', async () => {
 async function restoreItem(id) {
   return withUiActionLock(`restore:${id}`, async () => {
     const item = allTabs.find((t) => t.id === id);
+    if (item?.kind === 'note') {
+      openStickerNoteEditor(item);
+      return { ok: false, error: 'note_not_restorable' };
+    }
     if (item?.kind !== 'group' && isStoredOnlyUrl(item?.url)) {
       showCopyToast(t('restoreRestricted'));
       return { ok: false, error: 'restricted_url' };
@@ -5795,8 +6367,10 @@ function normalizeParkedList(raw) {
         note: typeof item.note === 'string' ? item.note : '',
         tags: Array.isArray(item.tags) ? item.tags : [],
         tabs: Array.isArray(item.tabs) ? item.tabs : [],
+        notes: Array.isArray(item.notes) ? item.notes.map(normalizeNoteProjection) : [],
       };
     }
+    if (item.kind === 'note') return normalizeNoteProjection(item);
     return {
       ...item,
       kind: 'tab',
@@ -5805,6 +6379,27 @@ function normalizeParkedList(raw) {
       tags: Array.isArray(item.tags) ? item.tags : [],
     };
   });
+}
+
+function normalizeNoteProjection(item) {
+  return {
+    ...item,
+    kind: 'note',
+    title: typeof item?.title === 'string' && item.title ? item.title : t('noteUntitled'),
+    markdown: typeof item?.markdown === 'string' ? item.markdown : '',
+    pinned: Boolean(item?.pinned),
+    savedAt: Number(item?.savedAt) || Date.now(),
+    tags: Array.isArray(item?.tags) ? item.tags : [],
+    attachments: Array.isArray(item?.attachments)
+      ? item.attachments.map((attachment) => ({
+          ...attachment,
+          id: String(attachment?.id || ''),
+          name: typeof attachment?.name === 'string' ? attachment.name : 'image',
+          alt: typeof attachment?.alt === 'string' ? attachment.alt : '',
+          hasData: attachment?.hasData === true,
+        }))
+      : [],
+  };
 }
 
 async function endCardDrag(e) {
@@ -6067,6 +6662,7 @@ function iconSvg(name) {
     copy: '<rect x="8" y="8" width="11" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"></path>',
     snapshot: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle><path d="M8 5 9.2 3h5.6L16 5"></path>',
     close: '<path d="m6 6 12 12M18 6 6 18"></path>',
+    note: '<path d="M5 4h14v16H5z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>',
   };
   return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${paths[name] || ''}</svg>`;
 }
@@ -6074,7 +6670,9 @@ function iconSvg(name) {
 async function togglePinned(item) {
   const next = !Boolean(item?.pinned);
   const res = await withUiActionLock(`pin:${item?.id || ''}`, () =>
-    sendMessage({ type: 'UPDATE_ITEM', id: item.id, pinned: next })
+    item?.kind === 'note'
+      ? sendMessage({ type: 'UPDATE_NOTE', noteId: item.id, patch: { pinned: next } })
+      : sendMessage({ type: 'UPDATE_ITEM', id: item.id, pinned: next })
   );
   if (!res?.ok) {
     showCopyToast(t('pinFailed'));
@@ -6098,7 +6696,12 @@ function groupCoverHtml(item, { canvas = false } = {}) {
   if (members.length === 0) {
     // still try first few for keys even without hasThumb flag (migration)
     const any = (item.tabs || []).slice(0, 4);
-    if (!any.length) return `<div class="group-cover empty-cover"></div>`;
+    if (!any.length) {
+      if (item.notes?.length) {
+        return `<div class="canvas-note-cover">${iconSvg('note')}<span>${escapeHtml(t('noteKind'))}</span></div>`;
+      }
+      return `<div class="group-cover empty-cover"></div>`;
+    }
     if (any.length === 1) {
       return imageHtml(any[0], 'thumb');
     }
@@ -6123,7 +6726,7 @@ function createGroupCard(item) {
   card.setAttribute('role', 'listitem');
 
   const title = itemTitle(item);
-  const n = (item.tabs || []).length;
+  const n = (item.tabs || []).length + (item.notes || []).length;
   const storedOnlyCount = countStoredOnlyUrls(item);
   const color = GROUP_COLORS[item.color] || GROUP_COLORS.grey;
   const note = item.note || '';
@@ -6208,12 +6811,13 @@ function createGroupCard(item) {
 
 function createCard(item) {
   if (item.kind === 'group') return createGroupCard(item);
+  if (item.kind === 'note') return createRow(item);
 
   const card = document.createElement('article');
   card.className = 'card';
   card.draggable = false;
   card.dataset.id = item.id;
-  card.dataset.kind = 'tab';
+  card.dataset.kind = item.kind;
   card.setAttribute('role', 'listitem');
 
   const title = item.title || item.url || 'Untitled';
@@ -6303,26 +6907,31 @@ function createCard(item) {
 
 function createRow(item) {
   const row = document.createElement('article');
-  row.className = 'row' + (item.kind === 'group' ? ' group-row' : '');
+  row.className = `row${item.kind === 'group' ? ' group-row' : ''}${item.kind === 'note' ? ' note-row' : ''}`;
   row.dataset.id = item.id;
   row.setAttribute('role', 'listitem');
 
   const isGroup = item.kind === 'group';
+  const isNote = item.kind === 'note';
   const title = itemTitle(item);
-  const url = isGroup ? t('groupTabs', { n: (item.tabs || []).length }) : item.url || '';
+  const url = isGroup
+    ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
+    : isNote ? t('noteKind') : item.url || '';
   const mediaKey = isGroup
     ? (() => {
         const m = (item.tabs || []).find((x) => x.hasThumb || x.id) || (item.tabs || [])[0];
         return m ? mediaKeyForMember(item.id, m.id) : '';
       })()
-    : mediaKeyForItem(item);
-  const note = item.note || '';
+    : isNote ? '' : mediaKeyForItem(item);
+  const note = isNote ? (item.markdown || '') : item.note || '';
   const tags = Array.isArray(item.tags) ? item.tags : [];
   const color = isGroup ? GROUP_COLORS[item.color] || GROUP_COLORS.grey : null;
   const storedOnlyCount = countStoredOnlyUrls(item);
 
   row.innerHTML = `
-    <img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />
+    ${isNote
+      ? `<button type="button" class="row-thumb note-row-thumb" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('note')}</button>`
+      : `<img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />`}
     <div class="row-main">
       <div class="title copy-hit" title="${escapeAttr(title)}">
         ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
@@ -6344,7 +6953,7 @@ function createRow(item) {
       <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
       <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
       ${
-        isGroup
+        isGroup || isNote
           ? ''
           : `<button type="button" class="icon-btn expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}</button>`
       }
@@ -6359,7 +6968,8 @@ function createRow(item) {
       handleCardSelectClick(item.id, e);
       return;
     }
-    restoreItem(item.id);
+    if (isNote) openStickerNoteEditor(item);
+    else restoreItem(item.id);
   });
   row.querySelectorAll('.copy-hit').forEach((el) => {
     el.addEventListener('click', (e) => {
@@ -6368,7 +6978,7 @@ function createRow(item) {
         handleCardSelectClick(item.id, e);
         return;
       }
-      copySavedLink(item);
+      if (!isNote) copySavedLink(item);
     });
   });
   if (selectedIds.has(item.id)) row.classList.add('selected');
@@ -6376,7 +6986,10 @@ function createRow(item) {
   if (expandBtn) {
     expandBtn.addEventListener('click', () => openLightbox(item));
   }
-  row.querySelector('.edit-btn').addEventListener('click', () => openEditBox(item));
+  row.querySelector('.edit-btn').addEventListener('click', () => {
+    if (isNote) openStickerNoteEditor(item);
+    else openEditBox(item);
+  });
   row.querySelector('.pin-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     if (selectMode) return;
@@ -6668,7 +7281,39 @@ function scheduleInitialCanvasCenter() {
 
 function canvasThumbHtml(item) {
   if (item.kind === 'group') return groupCoverHtml(item, { canvas: true });
+  if (item.kind === 'note') {
+    const attachment = item.attachments?.[0];
+    if (!attachment) return `<div class="canvas-note-cover">${iconSvg('note')}<span>${escapeHtml(t('noteKind'))}</span></div>`;
+    const key = Media.mediaKeyNoteAttachment(item.id, attachment.id);
+    return `<img class="canvas-note-cover-image" alt="${escapeAttr(attachment.alt || attachment.name || '')}" data-note-attachment-key="${escapeAttr(key)}" data-note-attachment-id="${escapeAttr(attachment.id)}" />`;
+  }
   return `<img class="canvas-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKeyForItem(item))}" data-canvas-media="true" data-canvas-has-thumb="${item.hasThumb || item.thumbnail ? 'true' : 'false'}" data-canvas-has-snap="${item.hasSnap || item.snapshot ? 'true' : 'false'}" />`;
+}
+
+function safeNotePreviewHtml(note, className = 'canvas-note-preview') {
+  const rendered = Build?.renderSafeMarkdown
+    ? Build.renderSafeMarkdown(note?.markdown || '', note?.attachments || [])
+    : escapeHtml(note?.markdown || '');
+  return `<div class="${className}">${rendered || `<span class="note-preview">—</span>`}</div>`;
+}
+
+function wireStickerAttachmentImages(root, note) {
+  if (!root || !note) return;
+  const attachments = new Map((note.attachments || []).map((attachment) => [attachment.id, attachment]));
+  root.querySelectorAll('[data-note-attachment-key], [data-attachment-id]').forEach((img) => {
+    const id = img.dataset.noteAttachmentId || img.dataset.attachmentId;
+    const attachment = attachments.get(id);
+    const key = img.dataset.noteAttachmentKey || (attachment ? Media.mediaKeyNoteAttachment(note.id, attachment.id) : '');
+    if (!key) return;
+    img.dataset.noteAttachmentKey = key;
+    fetchMediaUrl(key, 'attachment').then((url) => {
+      if (url && img.isConnected) img.src = url;
+      else if (img.dataset.attachmentId) img.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'note-attachment-missing',
+        textContent: t('noteAttachmentMissing'),
+      }));
+    });
+  });
 }
 
 function canvasNodeHtml(item) {
@@ -6676,9 +7321,12 @@ function canvasNodeHtml(item) {
   const selected = activeCanvasSelection().has(item.id);
   const position = canvasDisplayPosition(canvasPositionFor(item.id));
   const pin = item.pinned ? `<span class="canvas-pin" title="${escapeAttr(t('pinnedOnly'))}" aria-label="${escapeAttr(t('pinnedOnly'))}">${iconSvg('pin')}</span>` : '';
+  const isNote = item.kind === 'note';
   const meta = item.kind === 'group'
-    ? t('groupTabs', { n: (item.tabs || []).length })
-    : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
+    ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
+    : isNote
+      ? `${t('noteKind')} · ${formatSavedAt(item.savedAt)} · ${t('noteCount', { n: (item.attachments || []).length })}`
+      : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
   const actions = item.kind === 'group'
     ? [
         ['restore', t('restoreGroup'), 'restore'],
@@ -6687,7 +7335,13 @@ function canvasNodeHtml(item) {
         ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
         ['delete', t('delete'), 'delete'],
       ]
-    : [
+    : isNote
+      ? [
+          ['edit', t('edit'), 'edit'],
+          ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
+          ['delete', t('delete'), 'delete'],
+        ]
+      : [
         ['restore', t('restore'), 'restore'],
         ['snapshot', t('canvasSnapshot'), 'snapshot'],
         ['edit', t('edit'), 'edit'],
@@ -6705,7 +7359,7 @@ function canvasNodeHtml(item) {
     ['left', 'canvasLinkHandleLeft'],
   ].map(([side, labelKey]) => `<button type="button" class="canvas-link-handle canvas-link-handle-${side}" data-canvas-link-handle="${side}" tabindex="-1" title="${escapeAttr(t(labelKey))}" aria-label="${escapeAttr(t(labelKey))}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>`).join('');
   return `
-    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${selected ? ' selected' : ''}"
+    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${selected ? ' selected' : ''}"
       data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
       aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}">
       <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
@@ -6715,7 +7369,7 @@ function canvasNodeHtml(item) {
           <span>${escapeHtml(title)}</span>${pin}
         </div>
         <div class="canvas-node-meta">${escapeHtml(meta)}</div>
-        ${item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
+        ${isNote ? safeNotePreviewHtml(item) : item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
         ${item.tags?.length ? `<div class="canvas-node-tags">${item.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ')}</div>` : ''}
       </div>
       <div class="canvas-node-actions" aria-label="${escapeAttr(title)}">${actionHtml}</div>
@@ -6741,6 +7395,7 @@ function scheduleCanvasNodePreview(item) {
     const current = canvasItemById(item.id);
     if (!current) return;
     if (current.kind === 'group') openCanvasGroupLightbox(current);
+    else if (current.kind === 'note') openStickerNoteEditor(current);
     else openLightbox(current);
   }, CANVAS_NODE_CLICK_DELAY);
   canvasNodeClickTimers.set(item.id, timer);
@@ -6805,7 +7460,10 @@ function wireCanvasNodeActions(node) {
       else if (action === 'snapshot') openLightbox(item);
       else if (action === 'copy') await copySavedLink(item);
       else if (action === 'members') openMembersBox(item);
-      else if (action === 'edit') openEditBox(item);
+      else if (action === 'edit') {
+        if (item.kind === 'note') openStickerNoteEditor(item);
+        else openEditBox(item);
+      }
       else if (action === 'pin') await togglePinned(item);
       else if (action === 'delete') await deleteItem(item.id);
     });
@@ -7594,8 +8252,15 @@ function canvasNodeRenderKey(item) {
     pinned: item.pinned,
     savedAt: item.savedAt,
     favIconUrl: item.favIconUrl,
+    markdown: item.kind === 'note' ? item.markdown : undefined,
+    attachments: item.kind === 'note'
+      ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
+      : undefined,
     tabs: item.kind === 'group'
       ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
+      : undefined,
+    notes: item.kind === 'group'
+      ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
       : undefined,
     query,
     locale: settings.locale,
@@ -7610,6 +8275,7 @@ function createCanvasNodeElement(item) {
   node.dataset.canvasRenderKey = canvasNodeRenderKey(item);
   wireCanvasNodeActions(node);
   node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
+  if (item.kind === 'note') wireStickerAttachmentImages(node, item);
   node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
   return node;
 }
@@ -7673,6 +8339,7 @@ function renderCanvas() {
     node.dataset.id = item.id;
     node.dataset.kind = item.kind;
     node.classList.toggle('canvas-group', item.kind === 'group');
+    node.classList.toggle('canvas-note', item.kind === 'note');
     node.classList.toggle('search-direct', searchContext.queryActive && searchContext.directIds.has(item.id));
     node.classList.toggle('search-related', searchContext.queryActive && searchContext.relatedIds.has(item.id));
     node.style.left = `${position.x}px`;
@@ -7868,7 +8535,8 @@ async function canvasAction(action) {
   }
   if (action === 'edit' && ids.length === 1) {
     const item = allTabs.find((candidate) => candidate.id === ids[0]);
-    if (item) openEditBox(item);
+    if (item?.kind === 'note') openStickerNoteEditor(item);
+    else if (item) openEditBox(item);
     return;
   }
   if (action === 'members' && ids.length === 1) {
@@ -8242,6 +8910,34 @@ function endCanvasMinimapDrag({ event = null, commit = true } = {}) {
   if (commit) ensureCanvasStore()?.flush?.();
 }
 
+function resetCanvasNotePlacement() {
+  canvasNotePlacementArmed = false;
+  if (canvasActiveTool === 'note') canvasActiveTool = 'select';
+  canvasView?.classList.remove('is-note-placement');
+  document.querySelectorAll('[data-canvas-tool]').forEach((tool) => {
+    const active = tool.dataset.canvasTool === canvasActiveTool;
+    tool.classList.toggle('active', active);
+    tool.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function armCanvasNotePlacement() {
+  canvasActiveTool = 'note';
+  canvasNotePlacementArmed = true;
+  canvasView?.classList.add('is-note-placement');
+  document.querySelectorAll('[data-canvas-tool]').forEach((tool) => {
+    const active = tool.dataset.canvasTool === 'note';
+    tool.classList.toggle('active', active);
+    tool.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  canvasViewportEl?.focus?.({ preventScroll: true });
+}
+
+function placeStickerNoteAt(point) {
+  resetCanvasNotePlacement();
+  openStickerNoteEditor(null, { position: point });
+}
+
 function initCanvasInteractions() {
   if (!canvasViewportEl) return;
   canvasViewportEl.addEventListener('pointerdown', (event) => {
@@ -8252,6 +8948,12 @@ function initCanvasInteractions() {
     clearCanvasMiddleClickSequence();
     if (isCanvasControlTarget(event.target)) return;
     const node = event.target.closest?.('.canvas-node');
+    if (canvasNotePlacementArmed && event.button === 0) {
+      if (node) return;
+      event.preventDefault();
+      placeStickerNoteAt(canvasPointFromEvent(event));
+      return;
+    }
     if (canvasActiveTool === 'link') {
       if (event.button !== 0) return;
       handleCanvasConnectionNodeClick(node?.dataset.id || '');
@@ -8358,6 +9060,11 @@ function initCanvasInteractions() {
       }
     }
     if (event.key === 'Escape') {
+      if (canvasNotePlacementArmed) {
+        event.preventDefault();
+        resetCanvasNotePlacement();
+        return;
+      }
       if (canvasZoomMenu && !canvasZoomMenu.hidden) {
         event.preventDefault();
         event.stopPropagation();
@@ -8405,6 +9112,8 @@ function initCanvasInteractions() {
   document.querySelectorAll('[data-canvas-tool]').forEach((button) => {
     button.addEventListener('click', () => {
       canvasActiveTool = button.dataset.canvasTool || 'select';
+      canvasNotePlacementArmed = canvasActiveTool === 'note';
+      canvasView?.classList.toggle('is-note-placement', canvasNotePlacementArmed);
       document.querySelectorAll('[data-canvas-tool]').forEach((tool) => tool.classList.toggle('active', tool === button));
     document.querySelectorAll('[data-canvas-tool]').forEach((tool) => tool.setAttribute('aria-pressed', tool === button ? 'true' : 'false'));
       canvasViewportEl.classList.toggle('is-link-tool', canvasActiveTool === 'link');
@@ -8417,6 +9126,7 @@ function initCanvasInteractions() {
       }
     });
   });
+  canvasAddNoteBtn?.addEventListener('click', armCanvasNotePlacement);
   canvasViewportEl.classList.toggle('is-link-tool', canvasActiveTool === 'link');
   updateCanvasNodeSelection();
   document.getElementById('canvasZoomOut')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom - 0.1));
@@ -8528,25 +9238,7 @@ async function loadList() {
       : Array.isArray(res.tabs)
         ? res.tabs
         : [];
-  allTabs = raw.map((item) => {
-    if (item.kind === 'group' || Array.isArray(item.tabs)) {
-      return {
-        ...item,
-        kind: 'group',
-        pinned: Boolean(item.pinned),
-        note: typeof item.note === 'string' ? item.note : '',
-        tags: Array.isArray(item.tags) ? item.tags : [],
-        tabs: Array.isArray(item.tabs) ? item.tabs : [],
-      };
-    }
-    return {
-      ...item,
-      kind: 'tab',
-      pinned: Boolean(item.pinned),
-      note: typeof item.note === 'string' ? item.note : '',
-      tags: Array.isArray(item.tags) ? item.tags : [],
-    };
-  });
+  allTabs = normalizeParkedList(raw);
   if (!layoutRes?.ok && settings.viewMode === 'canvas') {
     ensureCanvasStore()?.setItems(allTabs);
     canvasNeedsInitialCenter = false;

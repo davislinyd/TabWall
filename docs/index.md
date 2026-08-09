@@ -60,7 +60,9 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 
 | Action | Result |
 |--------|--------|
+| Sticker Note tool / empty canvas click | Create a Canvas-only note and open the split editor |
 | Click a thumbnail | Restore a tab or group; groups ask for confirmation first |
+| Click a note title or Edit | Edit title, tags, safe Markdown, and local image attachments |
 | Click a title or metadata area | Copy the saved URL or the member URLs |
 | Click the pin control | Pin or unpin the top-level item; use the toolbar filter to show pinned items |
 | Select a node | Show contextual actions; hold `Shift` / `Control` for multi-select |
@@ -71,7 +73,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Drag the minimap viewport frame | Pan the current canvas view; release commits one pan operation |
 | Link tool | Hover a node to reveal four `+` handles, then drag from any side; connections snap to the nearest side handle, and clicking two nodes or groups remains available as a fallback |
 | Drag a connection line | The first and last thirds reconnect an endpoint; the middle third bends or lengthens the curve. The line uses a 16px near-hit area, and double-click resets its custom curve |
-| Restore a stack or group | Recreate a Chrome Tab Group |
+| Restore a stack or group | Recreate its tabs as a Chrome Tab Group; notes remain Canvas-only |
 
 List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering.
 
@@ -80,7 +82,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
 - Field scope: use `tag`, `note`, or `group` followed by Tab.
-- When a group matches, the card lists the member tabs that matched.
+- When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
 - Search input is debounced, and thumbnails load near the visible area.
 
@@ -89,19 +91,20 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected.
 - **Static themes:** Backgrounds use static themes; video backgrounds and user-imported videos are not supported.
 - Park and restore groups, with member notes and tags.
+- **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. Notes can join Stacks but are never restored as browser tabs.
 - Multi-selection and batch operations.
 - **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible.
 - **Canvas settings:** sort by date, FQDN, or Group; arrange with Grid or Aligned Rows using a 96px card gap while preserving stored node sizes.
-- **Stack:** select two or more items or drop one node onto another to create a Chrome Tab Group-backed Stack.
+- **Stack:** select two or more items or drop one node onto another to create a Stack; tab members restore as a Chrome Tab Group while note members remain on the Canvas.
 - New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
 - Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
 - Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
 - Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
-- **Backup export:** lite JSON without images or a full ZIP with binary media. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
+- **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
 - **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
-- **Group restore:** ask for confirmation before restoring a complete group.
+- **Group restore:** ask for confirmation before restoring a complete group; note members remain in the Canvas-only group.
 - **Metadata continuity:** notes and tags are retained when a restored tab or group is saved again in the same browser session.
 - **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups can run on a schedule or after data changes, and 1–99 copies can be retained.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
@@ -195,7 +198,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 | 操作 | 結果 |
 |------|------|
+| Sticker Note 工具／點擊空白畫布 | 建立僅存在於 Canvas 的 note，並開啟左右分割編輯器 |
 | 點擊縮圖 | 還原分頁或群組；群組會先要求確認 |
+| 點擊 note 標題或編輯 | 編輯標題、標籤、安全 Markdown 與本機圖片附件 |
 | 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
 | 點擊固定控制項 | 固定／取消固定頂層項目；可用工具列篩選已固定項目 |
 | 選取節點 | 顯示上下文操作；按住 `Shift`／`Control` 可多選 |
@@ -205,7 +210,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 拖曳 minimap 視角框 | 平移目前畫布；放開後提交單次視角操作 |
 | 連結工具 | 將滑鼠移到卡片即可顯示四側 `+` handle，從任一側拖曳；連線會貼齊相對方向的側邊 handle，也可點擊兩張卡片或群組建立無方向持久連線 |
 | 拖曳連線線段 | 前／後三分之一可重接端點，中間三分之一可彎曲或拉長線段；線段提供 16px 近距離命中範圍，雙擊可重設自訂曲線 |
-| 還原堆疊或群組 | 重新建立 Chrome Tab Group |
+| 還原堆疊或群組 | 分頁成員重新建立 Chrome Tab Group；note 保留在僅限 Canvas 的群組 |
 
 列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。
 
@@ -214,7 +219,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
 - 欄位範圍：輸入 `tag`、`note` 或 `group` 後按 Tab。
-- 群組命中時，卡片會列出符合條件的成員分頁。
+- 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
 - 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
 
@@ -223,19 +228,20 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。
 - **靜態主題：** 背景使用靜態主題，不支援影片背景或使用者匯入影片。
 - 暫存與還原群組，支援成員備註與標籤。
+- **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件；note 可加入 Stack，但不會還原成瀏覽器分頁。
 - 多選與批次操作。
 - **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。
 - **畫布設定：** 可依日期、FQDN 或 Group 排序；排列提供棋盤與對齊格式，使用 96px 卡片間距並保留儲存的卡片尺寸。
-- **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併。
+- **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併；分頁成員可還原為 Chrome Tab Group，note 成員留在 Canvas。
 - 新安裝預設深色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
 - 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
-- **備份匯出：** 可匯出不含圖片的精簡 JSON，或包含二進位媒體的完整 ZIP；檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
+- **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片；檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
 - **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
-- **群組還原：** 還原完整群組前會要求確認。
+- **群組還原：** 還原完整群組前會要求確認；note 成員會保留在僅限 Canvas 的群組。
 - **中繼資料延續：** 還原分頁或群組後，在同一瀏覽器工作階段再次儲存時，會保留原本的備註與標籤。
 - **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。

@@ -13,6 +13,9 @@ const TARGET_ID = '33333333-3333-4333-8333-333333333333';
 const GROUP_ID = '44444444-4444-4444-8444-444444444444';
 const GROUP_HTTP_MEMBER_ID = '55555555-5555-4555-8555-555555555555';
 const GROUP_FILE_MEMBER_ID = '66666666-6666-4666-8666-666666666666';
+const NOTE_ID = '77777777-7777-4777-8777-777777777777';
+const NOTE_ATTACHMENT_ID = '88888888-8888-4888-8888-888888888888';
+const NOTE_ATTACHMENT_TWO_ID = '99999999-9999-4999-8999-999999999999';
 const LEGACY_ZIP = new URL(
   '../backup/tabwall-backup-full-2026-08-05T14-49-39+0800.zip',
   import.meta.url
@@ -184,11 +187,19 @@ function createRuntime() {
   const mediaApi = {
     mediaKeyTab: (id) => `t:${id}`,
     mediaKeyMember: (groupId, memberId) => `g:${groupId}:${memberId}`,
+    mediaKeyNoteAttachment: (noteId, attachmentId) => `n:${noteId}:${attachmentId}`,
     async get(key) {
       return media.get(key) || { thumb: null, snap: null };
     },
+    async getAttachment(key) {
+      return media.get(key)?.attachment || null;
+    },
     async put(key, value) {
       media.set(key, value);
+    },
+    async putAttachment(key, blob) {
+      media.set(key, { attachment: blob });
+      return true;
     },
     async remove(key) {
       media.delete(key);
@@ -218,6 +229,7 @@ function createRuntime() {
         new Map((rows || []).map((row) => [row.mediaKey, {
           thumb: row.thumb || null,
           snap: row.snap || null,
+          attachment: row.attachment || null,
         }]))
       );
     },
@@ -227,11 +239,21 @@ function createRuntime() {
     async removeImportStage(stageId) {
       importStages.delete(stageId);
     },
+    dataUrlToBlob(value) { return value || null; },
     async blobToDataUrl(value) { return value ? String(value) : ''; },
     keysForItem(item) {
-      return item.kind === 'group'
-        ? (item.tabs || []).map((member) => `g:${item.id}:${member.id}`)
-        : [`t:${item.id}`];
+      if (item.kind === 'group') {
+        return [
+          ...(item.tabs || []).map((member) => `g:${item.id}:${member.id}`),
+          ...(item.notes || []).flatMap((note) => (
+            note.attachments || []
+          ).map((attachment) => `n:${note.id}:${attachment.id}`)),
+        ];
+      }
+      if (item.kind === 'note') {
+        return (item.attachments || []).map((attachment) => `n:${item.id}:${attachment.id}`);
+      }
+      return [`t:${item.id}`];
     },
     async removeOrphans(keepKeys) {
       const keep = new Set(keepKeys || []);
@@ -300,9 +322,32 @@ function tab(id, url = 'https://example.com/') {
   };
 }
 
+function note(id = NOTE_ID, { attachment = true, tags = ['idea'] } = {}) {
+  return {
+    kind: 'note',
+    id,
+    title: 'Canvas note',
+    markdown: attachment ? `# Heading\n\n![diagram](attachment://${NOTE_ATTACHMENT_ID})` : 'Plain note',
+    tags,
+    pinned: false,
+    savedAt: Date.now() - 1000,
+    attachments: attachment ? [{
+      id: NOTE_ATTACHMENT_ID,
+      name: 'diagram.png',
+      alt: 'diagram',
+      mime: 'image/png',
+      size: 3,
+      width: 1,
+      height: 1,
+      hasData: true,
+      data: 'data:image/png;base64,AQID',
+    }] : [],
+  };
+}
+
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.19.5');
+  assert.equal(MANIFEST.version, '2.20.0');
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
@@ -350,6 +395,111 @@ test('legacy items default top-level pinned to false and update keeps order', as
   items = await runtime.api.getParkedItems();
   assert.deepEqual(items.map((item) => item.id), [ITEM_ID, GROUP_ID]);
   assert.deepEqual(items.map((item) => item.pinned), [false, true]);
+});
+
+test('note CRUD persists fixed metadata and cleans attachment media', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+
+  const created = await runtime.api.createNote(note(), { x: 120, y: 240, w: 280, h: 220 });
+  assert.equal(created.ok, true);
+  assert.equal(created.item.kind, 'note');
+  assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), true);
+  assert.deepEqual(
+    Object.keys(runtime.store.parkedItems[0]).sort(),
+    ['attachments', 'id', 'kind', 'markdown', 'pinned', 'savedAt', 'tags', 'title'].sort()
+  );
+
+  const updated = await runtime.api.updateNote(NOTE_ID, {
+    title: 'Updated note',
+    markdown: 'Updated **text**',
+    tags: ['updated'],
+    attachments: [],
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(runtime.store.parkedItems[0].title, 'Updated note');
+  assert.deepEqual([...runtime.store.parkedItems[0].tags], ['updated']);
+  assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), false);
+
+  const tags = await dispatchMessage(runtime, { type: 'GET_TAGS' });
+  const updatedTag = tags.tags.find((entry) => entry.name === 'updated');
+  assert.equal(updatedTag?.name, 'updated');
+  assert.equal(updatedTag?.count, 1);
+  assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
+  assert.equal(runtime.store.parkedItems.length, 0);
+});
+
+test('Stack supports mixed tabs and notes as Canvas-only group members', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.createNote(note());
+  await runtime.api.setParkedItems([tab(ITEM_ID), ...(await runtime.api.getParkedItems())]);
+
+  const result = await runtime.api.stackItems(ITEM_ID, NOTE_ID);
+  assert.equal(result.ok, true);
+  const group = runtime.store.parkedItems[0];
+  assert.equal(group.kind, 'group');
+  assert.equal(group.tabs.length, 1);
+  assert.equal(group.notes.length, 1);
+  assert.equal(group.notes[0].id, NOTE_ID);
+  assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), true);
+});
+
+test('restoring a mixed Stack keeps notes after browser tabs are restored', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const groupNote = note();
+  delete groupNote.attachments[0].data;
+  const group = {
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Mixed group',
+    color: 'blue',
+    collapsed: false,
+    pinned: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [{ ...tab(GROUP_HTTP_MEMBER_ID), indexInGroup: 0 }],
+    notes: [groupNote],
+  };
+  await runtime.api.setParkedItems([group]);
+  runtime.media.set(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`, { attachment: 'attachment-bytes' });
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.notesRemaining, 1);
+  assert.equal(runtime.runtime.createdTabs.length, 1);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].kind, 'group');
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 0);
+  assert.equal(runtime.store.parkedItems[0].notes.length, 1);
+  assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), true);
+  assert.equal((await runtime.api.restoreGroup(GROUP_ID)).error, 'notes_only');
+});
+
+test('append import remints note and attachment IDs and rewrites Markdown tokens', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const backup = {
+    format: 'tabwall-backup',
+    version: runtime.Build.FORMAT_VERSION,
+    media: 'inline',
+    parkedItems: [note()],
+    parkedTabs: [],
+    settings: {},
+    tagCatalog: ['idea'],
+  };
+
+  assert.equal((await runtime.api.importBackup(backup, { mode: 'replace' })).ok, true);
+  assert.equal((await runtime.api.importBackup(backup, { mode: 'append' })).ok, true);
+  const notes = runtime.store.parkedItems.filter((item) => item.kind === 'note');
+  assert.equal(notes.length, 2);
+  assert.notEqual(notes[0].id, notes[1].id);
+  assert.notEqual(notes[0].attachments[0].id, notes[1].attachments[0].id);
+  assert.match(notes[1].markdown, new RegExp(`attachment://${notes[1].attachments[0].id}`));
+  assert.equal(runtime.media.has(`n:${notes[0].id}:${notes[0].attachments[0].id}`), true);
+  assert.equal(runtime.media.has(`n:${notes[1].id}:${notes[1].attachments[0].id}`), true);
 });
 
 test('canvas layout defaults missing positions and normalizes bounds', async () => {

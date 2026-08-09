@@ -47,6 +47,10 @@
     return `g:${groupId}:${memberId}`;
   }
 
+  function mediaKeyNoteAttachment(noteId, attachmentId) {
+    return `n:${noteId}:${attachmentId}`;
+  }
+
   function txDone(tx) {
     return new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve();
@@ -172,6 +176,33 @@
     return { hasThumb: Boolean(thumbBlob), hasSnap: Boolean(snapBlob) };
   }
 
+  async function putAttachment(key, blob) {
+    if (!key || !blob) {
+      if (key) await remove(key);
+      return false;
+    }
+    const db = await openDb();
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put({
+      key: String(key),
+      attachment: blob,
+      updatedAt: Date.now(),
+    });
+    await txDone(tx);
+    return true;
+  }
+
+  async function getAttachment(key) {
+    if (!key) return null;
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(String(key));
+      req.onsuccess = () => resolve(req.result?.attachment || null);
+      req.onerror = () => reject(req.error || new Error('IDB attachment read failed'));
+    });
+  }
+
   function stageKey(stageId, mediaKey) {
     return `${String(stageId)}|${String(mediaKey)}`;
   }
@@ -192,13 +223,14 @@
     for (const row of rows) {
       if (!row?.mediaKey) continue;
       const key = stageKey(stageId, row.mediaKey);
-      if (row.thumb || row.snap) {
+      if (row.thumb || row.snap || row.attachment) {
         store.put({
           key,
           stageId: String(stageId),
           mediaKey: String(row.mediaKey),
           thumb: row.thumb || null,
           snap: row.snap || null,
+          attachment: row.attachment || null,
           updatedAt: Date.now(),
         });
       } else {
@@ -224,6 +256,7 @@
           result.set(String(row.mediaKey), {
             thumb: row.thumb || null,
             snap: row.snap || null,
+            attachment: row.attachment || null,
           });
         }
         resolve(result);
@@ -269,11 +302,21 @@
     return stale.size;
   }
 
-  /** Collect all keys for a parked item (tab or group) */
+  /** Collect all keys for a parked item (tab, note or group). */
   function keysForItem(item) {
     if (!item) return [];
     if (item.kind === 'group') {
-      return (item.tabs || []).map((m) => mediaKeyMember(item.id, m.id));
+      return [
+        ...(item.tabs || []).map((m) => mediaKeyMember(item.id, m.id)),
+        ...(item.notes || []).flatMap((note) => (
+          note.attachments || []
+        ).map((attachment) => mediaKeyNoteAttachment(note.id, attachment.id))),
+      ];
+    }
+    if (item.kind === 'note') {
+      return (item.attachments || []).map((attachment) => (
+        mediaKeyNoteAttachment(item.id, attachment.id)
+      ));
     }
     return [mediaKeyTab(item.id)];
   }
@@ -282,6 +325,7 @@
     openDb,
     mediaKeyTab,
     mediaKeyMember,
+    mediaKeyNoteAttachment,
     put,
     get,
     getPart,
@@ -293,6 +337,8 @@
     blobToDataUrl,
     putFromDataUrls,
     putFromBlobs,
+    putAttachment,
+    getAttachment,
     putImportStage,
     getImportStage,
     removeImportStage,

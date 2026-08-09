@@ -13,6 +13,12 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.20.0 — 2026-08-09
+
+- 新增 Canvas Sticker Note：支援標題、tags、群組分組、安全 Markdown 原文／預覽，以及檔案、剪貼簿與拖曳插入的本機圖片附件。
+- Note 圖片以 IndexedDB 媒體鍵保存，限制最多 12 張、單檔 24 MiB；note 可加入混合 Stack，但不會還原成瀏覽器分頁。
+- 搜尋、列表、tag catalog、Canvas 成員、lite JSON 與 full ZIP 備份均納入 note；backup format version 升至 5，加入 note／附件驗證與 Markdown XSS 防護。
+
 ## 2.19.5 — 2026-08-09
 
 - Canvas 縮放比例欄位 hover 或 focus 時顯示原生 range slider；點擊百分比可使用 Fit to width、Fit to screen 與 Reset，並依目前可見卡片計算視角。

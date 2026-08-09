@@ -153,6 +153,7 @@ function normalizeGroupItem(raw) {
         };
       })
     : [];
+  const normalizeNote = (value) => normalizeNoteItem(value);
   return {
     kind: 'group',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
@@ -166,6 +167,49 @@ function normalizeGroupItem(raw) {
     tags: normalizeTags(raw.tags),
     savedAt: safeTimestamp(raw.savedAt),
     tabs,
+    notes: Array.isArray(raw.notes) ? raw.notes.map(normalizeNote).filter(Boolean) : [],
+  };
+}
+
+function normalizeNoteItem(raw) {
+  raw = raw && typeof raw === 'object' ? raw : {};
+  const attachments = Array.isArray(raw.attachments)
+    ? raw.attachments.slice(0, Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12).map((value) => {
+        value = value && typeof value === 'object' ? value : {};
+        const mime = typeof value.mime === 'string' && /^image\//i.test(value.mime)
+          ? value.mime.slice(0, 128)
+          : 'image/jpeg';
+        const data = typeof value.data === 'string' ? value.data : '';
+        return {
+          id: typeof value.id === 'string' && value.id ? value.id : crypto.randomUUID(),
+          name: safeText(value.name || 'image', DATA_LIMITS.MAX_TITLE_LENGTH) || 'image',
+          alt: safeText(value.alt, DATA_LIMITS.MAX_NOTE_LENGTH),
+          mime,
+          size: Math.max(0, Math.min(
+            Build?.LIMITS?.MAX_IMAGE_BYTES || 24 * 1024 * 1024,
+            Math.round(Number(value.size) || 0)
+          )),
+          width: Math.max(0, Math.min(100000, Math.round(Number(value.width) || 0))),
+          height: Math.max(0, Math.min(100000, Math.round(Number(value.height) || 0))),
+          hasData: value.hasData === true || Boolean(data),
+          ...(data ? { data } : {}),
+          ...(value.__stageNoteId ? { __stageNoteId: value.__stageNoteId } : {}),
+          ...(value.__stageAttachmentId ? { __stageAttachmentId: value.__stageAttachmentId } : {}),
+        };
+      })
+    : [];
+  return {
+    kind: 'note',
+    id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
+    title: safeText(raw.title || 'Sticker note', DATA_LIMITS.MAX_TITLE_LENGTH) || 'Sticker note',
+    markdown: safeText(raw.markdown, DATA_LIMITS.MAX_NOTE_LENGTH),
+    tags: normalizeTags(raw.tags),
+    pinned: Boolean(raw.pinned),
+    savedAt: safeTimestamp(raw.savedAt),
+    attachments,
+    ...(raw.__stageItemId ? { __stageItemId: raw.__stageItemId } : {}),
+    ...(raw.__stageGroupId ? { __stageGroupId: raw.__stageGroupId } : {}),
+    ...(raw.__stageNoteId ? { __stageNoteId: raw.__stageNoteId } : {}),
   };
 }
 
@@ -504,6 +548,7 @@ function mergeAppendedCanvasLayout(baseLayout, incomingLayout, incomingItems, al
 function normalizeItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.kind === 'group' || Array.isArray(raw.tabs)) return normalizeGroupItem(raw);
+  if (raw.kind === 'note') return normalizeNoteItem(raw);
   return normalizeTabItem(raw);
 }
 
@@ -531,6 +576,28 @@ function toStoredMeta(item) {
         tags: Array.isArray(m.tags) ? m.tags : [],
         hasThumb: Boolean(m.hasThumb),
         hasSnap: Boolean(m.hasSnap),
+      })),
+      notes: (item.notes || []).map((note) => toStoredMeta(note)),
+    };
+  }
+  if (item.kind === 'note') {
+    return {
+      kind: 'note',
+      id: item.id,
+      title: item.title || 'Sticker note',
+      markdown: item.markdown || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      pinned: Boolean(item.pinned),
+      savedAt: item.savedAt || Date.now(),
+      attachments: (item.attachments || []).map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name || 'image',
+        alt: attachment.alt || '',
+        mime: attachment.mime || 'image/jpeg',
+        size: Number.isFinite(Number(attachment.size)) ? Number(attachment.size) : 0,
+        width: Number.isFinite(Number(attachment.width)) ? Number(attachment.width) : 0,
+        height: Number.isFinite(Number(attachment.height)) ? Number(attachment.height) : 0,
+        hasData: Boolean(attachment.hasData),
       })),
     };
   }
@@ -602,6 +669,29 @@ async function ensureMediaMigration() {
           }
           m.thumbnail = '';
           m.snapshot = '';
+        }
+        for (const note of item.notes || []) {
+          for (const attachment of note.attachments || []) {
+            if (attachment.data && Media.putAttachment) {
+              const blob = Media.dataUrlToBlob(attachment.data);
+              if (blob) {
+                await Media.putAttachment(Media.mediaKeyNoteAttachment(note.id, attachment.id), blob);
+                attachment.hasData = true;
+              }
+            }
+            delete attachment.data;
+          }
+        }
+      } else if (item.kind === 'note') {
+        for (const attachment of item.attachments || []) {
+          if (attachment.data && Media.putAttachment) {
+            const blob = Media.dataUrlToBlob(attachment.data);
+            if (blob) {
+              await Media.putAttachment(Media.mediaKeyNoteAttachment(item.id, attachment.id), blob);
+              attachment.hasData = true;
+            }
+          }
+          delete attachment.data;
         }
       } else if (item.thumbnail || item.snapshot) {
         const flags = await Media.putFromDataUrls(
@@ -1053,6 +1143,9 @@ function eachTagOnItem(item, fn) {
     for (const m of item.tabs) {
       if (Array.isArray(m.tags)) for (const t of m.tags) fn(t);
     }
+    for (const note of item.notes || []) {
+      if (Array.isArray(note.tags)) for (const t of note.tags) fn(t);
+    }
   }
 }
 
@@ -1077,6 +1170,9 @@ function countTagUsage(items, name) {
       for (const m of item.tabs) {
         if (Array.isArray(m.tags) && m.tags.includes(name)) n++;
       }
+      for (const note of item.notes || []) {
+        if (Array.isArray(note.tags) && note.tags.includes(name)) n++;
+      }
     }
   }
   return n;
@@ -1097,6 +1193,10 @@ function mapTagsInItem(item, mapFn) {
     next.tabs = item.tabs.map((m) => ({
       ...m,
       tags: Array.isArray(m.tags) ? mapFn(m.tags) : [],
+    }));
+    next.notes = (item.notes || []).map((note) => ({
+      ...note,
+      tags: Array.isArray(note.tags) ? mapFn(note.tags) : [],
     }));
   }
   return next;
@@ -1197,6 +1297,158 @@ async function updateGroupMember(groupId, memberId, patch) {
   return { ok: true, item: group, member };
 }
 
+function noteIndexInList(list, noteId, groupId = '') {
+  if (groupId) {
+    const groupIndex = list.findIndex((item) => item.id === groupId && item.kind === 'group');
+    if (groupIndex < 0) return null;
+    const noteIndex = (list[groupIndex].notes || []).findIndex((note) => note.id === noteId);
+    return noteIndex < 0 ? null : { groupIndex, noteIndex };
+  }
+  const itemIndex = list.findIndex((item) => item.id === noteId && item.kind === 'note');
+  return itemIndex < 0 ? null : { itemIndex };
+}
+
+function rewriteNoteAttachmentTokens(markdown, idMap) {
+  return String(markdown || '').replace(
+    /(!\[[^\]\n]*\]\(attachment:\/\/)([A-Za-z0-9_-]{1,128})(\))/g,
+    (full, prefix, id, suffix) => `${prefix}${idMap.get(id) || id}${suffix}`
+  );
+}
+
+function remintNote(note, { groupId = '', sourceItemId = '' } = {}) {
+  const sourceNoteId = note.id;
+  const attachmentMap = new Map();
+  const attachments = (note.attachments || []).map((attachment) => {
+    const sourceAttachmentId = attachment.id;
+    const id = crypto.randomUUID();
+    attachmentMap.set(sourceAttachmentId, id);
+    return {
+      ...attachment,
+      id,
+      __stageNoteId: sourceNoteId,
+      __stageAttachmentId: sourceAttachmentId,
+    };
+  });
+  return {
+    ...note,
+    id: crypto.randomUUID(),
+    markdown: rewriteNoteAttachmentTokens(note.markdown, attachmentMap),
+    attachments,
+    ...(sourceItemId ? { __stageItemId: sourceItemId } : {}),
+    ...(groupId ? { __stageGroupId: groupId, __stageNoteId: sourceNoteId } : {}),
+  };
+}
+
+function validateNoteMutation(note) {
+  if (!Build?.validateBackup) return '';
+  const validation = Build.validateBackup({
+    format: 'tabwall-backup',
+    version: DATA_VERSION,
+    media: 'inline',
+    parkedItems: [note],
+    parkedTabs: [],
+    settings: {},
+    tagCatalog: [],
+  });
+  return validation?.ok ? '' : validation?.error || 'invalid_note';
+}
+
+async function createNote(raw, position = null) {
+  const note = normalizeNoteItem({ ...(raw || {}), kind: 'note' });
+  const list = await getParkedItems();
+  const idAlreadyUsed = list.some((item) => (
+    item.id === note.id
+    || (item.kind === 'group' && (
+      (item.tabs || []).some((member) => member.id === note.id)
+      || (item.notes || []).some((member) => member.id === note.id)
+    ))
+  ));
+  if (idAlreadyUsed) note.id = crypto.randomUUID();
+  const validationError = validateNoteMutation(note);
+  if (validationError) return { ok: false, error: validationError };
+  try {
+    await persistInlineMediaToIdb([note], { preserveMissingAttachments: true });
+  } catch (err) {
+    return { ok: false, error: 'media_write_failed', detail: String(err?.message || err) };
+  }
+  const layout = await getCanvasLayout();
+  if (position && typeof position === 'object') {
+    layout.positions = { ...(layout.positions || {}) };
+    layout.positions[note.id] = normalizeCanvasPosition(position, defaultCanvasPosition(list.length));
+  }
+  list.push(note);
+  await setParkedItems(list, { canvasLayout: layout });
+  await mergeTagsIntoCatalog(note.tags);
+  return { ok: true, item: toStoredMeta(note) };
+}
+
+async function updateNote(noteId, patch = {}, groupId = '') {
+  const list = await getParkedItems();
+  const location = noteIndexInList(list, noteId, groupId);
+  if (!location) return { ok: false, error: 'not_found' };
+  const current = location.groupIndex != null
+    ? list[location.groupIndex].notes[location.noteIndex]
+    : list[location.itemIndex];
+  const nextNote = normalizeNoteItem({
+    ...current,
+    ...patch,
+    kind: 'note',
+    id: current.id,
+    attachments: Array.isArray(patch.attachments) ? patch.attachments : current.attachments,
+  });
+  const validationError = validateNoteMutation(nextNote);
+  if (validationError) return { ok: false, error: validationError };
+  try {
+    if ((nextNote.attachments || []).some((attachment) => attachment.data)) {
+      await persistInlineMediaToIdb([nextNote], { preserveMissingAttachments: true });
+    }
+  } catch (err) {
+    return { ok: false, error: 'media_write_failed', detail: String(err?.message || err) };
+  }
+  const oldKeys = new Set(Media.keysForItem(current));
+  const newKeys = new Set(Media.keysForItem(nextNote));
+  if (location.groupIndex != null) {
+    const group = { ...list[location.groupIndex], notes: [...(list[location.groupIndex].notes || [])] };
+    group.notes[location.noteIndex] = nextNote;
+    list[location.groupIndex] = group;
+  } else {
+    list[location.itemIndex] = nextNote;
+  }
+  await setParkedItems(list);
+  await mergeTagsIntoCatalog(nextNote.tags);
+  try {
+    await Media.removeMany([...oldKeys].filter((key) => !newKeys.has(key)));
+  } catch (err) {
+    appLogPush('warn', 'note', 'attachment cleanup deferred', err?.message || err);
+  }
+  return {
+    ok: true,
+    item: toStoredMeta(nextNote),
+    group: location.groupIndex != null ? list[location.groupIndex] : null,
+  };
+}
+
+async function deleteNote(noteId, groupId = '') {
+  const list = await getParkedItems();
+  const location = noteIndexInList(list, noteId, groupId);
+  if (!location) return { ok: false, error: 'not_found' };
+  let removed;
+  if (location.groupIndex != null) {
+    const group = { ...list[location.groupIndex], notes: [...(list[location.groupIndex].notes || [])] };
+    [removed] = group.notes.splice(location.noteIndex, 1);
+    list[location.groupIndex] = group;
+  } else {
+    [removed] = list.splice(location.itemIndex, 1);
+  }
+  await setParkedItems(list);
+  try {
+    await Media.removeMany(Media.keysForItem(removed));
+  } catch (err) {
+    appLogPush('warn', 'note', 'attachment cleanup deferred', err?.message || err);
+  }
+  return { ok: true, remaining: list.length };
+}
+
 // ─── Media hydrate for export ──────────────────────────────────────
 
 async function mapWithConcurrency(values, limit, mapper) {
@@ -1226,7 +1478,31 @@ async function hydrateItemMedia(item) {
         snapshot: med.snap ? await Media.blobToDataUrl(med.snap) : '',
       };
     });
-    return { ...item, tabs };
+    const notes = await mapWithConcurrency(item.notes || [], 4, async (note) => ({
+      ...note,
+      attachments: await mapWithConcurrency(note.attachments || [], 4, async (attachment) => {
+        const blob = await Media.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+        return {
+          ...attachment,
+          data: blob ? await Media.blobToDataUrl(blob) : '',
+          hasData: Boolean(blob),
+        };
+      }),
+    }));
+    return { ...item, tabs, notes };
+  }
+  if (item.kind === 'note') {
+    return {
+      ...item,
+      attachments: await mapWithConcurrency(item.attachments || [], 4, async (attachment) => {
+        const blob = await Media.getAttachment?.(Media.mediaKeyNoteAttachment(item.id, attachment.id));
+        return {
+          ...attachment,
+          data: blob ? await Media.blobToDataUrl(blob) : '',
+          hasData: Boolean(blob),
+        };
+      }),
+    };
   }
   const med = await Media.get(Media.mediaKeyTab(item.id));
   return {
@@ -1297,13 +1573,15 @@ function remintItemIds(items) {
           __stageGroupId: sourceGroupId,
           __stageMemberId: m.id,
         })),
+        notes: (item.notes || []).map((note) => remintNote(note, { groupId: sourceGroupId })),
       };
     }
+    if (item.kind === 'note') return remintNote(item, { sourceItemId: item.id });
     return { ...item, id: crypto.randomUUID(), __stageItemId: item.id };
   });
 }
 
-async function persistInlineMediaToIdb(items) {
+async function persistInlineMediaToIdb(items, { preserveMissingAttachments = false } = {}) {
   const writtenKeys = new Set();
   try {
     for (const item of items) {
@@ -1321,6 +1599,35 @@ async function persistInlineMediaToIdb(items) {
           }
           m.thumbnail = '';
           m.snapshot = '';
+        }
+        for (const note of item.notes || []) {
+          for (const attachment of note.attachments || []) {
+            const key = Media.mediaKeyNoteAttachment(note.id, attachment.id);
+            const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+            if (attachment.data && !blob) throw new Error('invalid_attachment');
+            if (blob) {
+              await Media.putAttachment(key, blob);
+              attachment.hasData = true;
+              writtenKeys.add(key);
+            } else if (!preserveMissingAttachments) {
+              attachment.hasData = false;
+            }
+            delete attachment.data;
+          }
+        }
+      } else if (item.kind === 'note') {
+        for (const attachment of item.attachments || []) {
+          const key = Media.mediaKeyNoteAttachment(item.id, attachment.id);
+          const blob = attachment.data ? Media.dataUrlToBlob(attachment.data) : null;
+          if (attachment.data && !blob) throw new Error('invalid_attachment');
+          if (blob) {
+            await Media.putAttachment(key, blob);
+            attachment.hasData = true;
+            writtenKeys.add(key);
+          } else if (!preserveMissingAttachments) {
+            attachment.hasData = false;
+          }
+          delete attachment.data;
         }
       } else if (item.thumbnail || item.snapshot) {
         const key = Media.mediaKeyTab(item.id);
@@ -1351,12 +1658,26 @@ function isValidImportStageId(value) {
 }
 
 function stageSourceKey(item, member = null) {
+  if (member?.__stageAttachmentId) {
+    const noteId = member.__stageNoteId || member.noteId || member.id;
+    return Media.mediaKeyNoteAttachment(noteId, member.__stageAttachmentId);
+  }
+  if (member?.kind === 'note' || member?.attachments) {
+    const noteId = member.__stageNoteId || member.id;
+    return Media.mediaKeyNoteAttachment(noteId, member.attachmentId || member.id);
+  }
   if (member) {
     const groupId = member.__stageGroupId || item.__stageGroupId || item.id;
     const memberId = member.__stageMemberId || member.id;
     return Media.mediaKeyMember(groupId, memberId);
   }
   return Media.mediaKeyTab(item.__stageItemId || item.id);
+}
+
+function stageNoteAttachmentKey(item, note, attachment) {
+  const noteId = attachment.__stageNoteId || note.__stageNoteId || note.id;
+  const attachmentId = attachment.__stageAttachmentId || attachment.id;
+  return Media.mediaKeyNoteAttachment(noteId, attachmentId);
 }
 
 async function persistStagedMediaToIdb(stageId, items) {
@@ -1385,6 +1706,35 @@ async function persistStagedMediaToIdb(stageId, items) {
           }
           member.thumbnail = '';
           member.snapshot = '';
+        }
+        for (const note of item.notes || []) {
+          for (const attachment of note.attachments || []) {
+            const key = Media.mediaKeyNoteAttachment(note.id, attachment.id);
+            const row = staged.get(stageNoteAttachmentKey(item, note, attachment));
+            if (attachment.hasData && !row?.attachment) throw new Error('import_stage_missing_media');
+            if (row?.attachment) {
+              await Media.putAttachment(key, row.attachment);
+              attachment.hasData = true;
+              writtenKeys.add(key);
+            } else {
+              attachment.hasData = false;
+            }
+            delete attachment.data;
+          }
+        }
+      } else if (item.kind === 'note') {
+        for (const attachment of item.attachments || []) {
+          const key = Media.mediaKeyNoteAttachment(item.id, attachment.id);
+          const row = staged.get(stageNoteAttachmentKey(item, item, attachment));
+          if (attachment.hasData && !row?.attachment) throw new Error('import_stage_missing_media');
+          if (row?.attachment) {
+            await Media.putAttachment(key, row.attachment);
+            attachment.hasData = true;
+            writtenKeys.add(key);
+          } else {
+            attachment.hasData = false;
+          }
+          delete attachment.data;
         }
       } else {
         const key = Media.mediaKeyTab(item.id);
@@ -1432,6 +1782,15 @@ async function cleanupOrphanMedia(items = null) {
     if (item.kind === 'group') {
       for (const member of item.tabs || []) {
         if (member.hasThumb || member.hasSnap) keep.add(Media.mediaKeyMember(item.id, member.id));
+      }
+      for (const note of item.notes || []) {
+        for (const attachment of note.attachments || []) {
+          if (attachment.hasData) keep.add(Media.mediaKeyNoteAttachment(note.id, attachment.id));
+        }
+      }
+    } else if (item.kind === 'note') {
+      for (const attachment of item.attachments || []) {
+        if (attachment.hasData) keep.add(Media.mediaKeyNoteAttachment(item.id, attachment.id));
       }
     } else if (item.hasThumb || item.hasSnap) {
       keep.add(Media.mediaKeyTab(item.id));
@@ -1763,7 +2122,10 @@ async function batchUpdateItems(ids, patch) {
     if (!idSet.has(item.id)) return item;
     changed++;
     const updated = { ...item };
-    if (typeof patch.note === 'string' && patch.note.length > 0) updated.note = patch.note;
+    if (typeof patch.note === 'string' && patch.note.length > 0) {
+      if (item.kind === 'note') updated.markdown = patch.note;
+      else updated.note = patch.note;
+    }
     if (Array.isArray(patch.tags)) {
       const incoming = patch.tags
         .map((t) => String(t).trim())
@@ -2572,7 +2934,10 @@ async function stackItems(sourceId, targetId, options = {}) {
   const mediaState = { created: new Set() };
   const obsoleteMediaKeys = new Set();
   const markObsolete = (item) => {
-    for (const key of Media.keysForItem(item)) obsoleteMediaKeys.add(key);
+    for (const key of Media.keysForItem(item)) {
+      // Note attachments keep their note id when a note moves into a Stack.
+      if (!key.startsWith('n:')) obsoleteMediaKeys.add(key);
+    }
   };
   const finalize = async (next, groupId, anchors, removedIds) => {
     await commitItemsAndCanvas(
@@ -2589,13 +2954,17 @@ async function stackItems(sourceId, targetId, options = {}) {
   };
 
   try {
-    // tab → tab : create stack at target position
+    // tab/note → tab/note : create a mixed Canvas/Chrome Stack.
     if (!srcGroup && !tgtGroup) {
       const groupId = crypto.randomUUID();
       markObsolete(source);
       markObsolete(target);
-      const mTarget = await tabItemToMember(target, groupId, 0, mediaState);
-      const mSource = await tabItemToMember(source, groupId, 1, mediaState);
+      const tabs = [];
+      const notes = [];
+      if (target.kind === 'tab') tabs.push(await tabItemToMember(target, groupId, tabs.length, mediaState));
+      else if (target.kind === 'note') notes.push(target);
+      if (source.kind === 'tab') tabs.push(await tabItemToMember(source, groupId, tabs.length, mediaState));
+      else if (source.kind === 'note') notes.push(source);
       const group = {
         kind: 'group',
         id: groupId,
@@ -2606,7 +2975,8 @@ async function stackItems(sourceId, targetId, options = {}) {
         note: '',
         tags: [],
         savedAt: Date.now(),
-        tabs: [mTarget, mSource],
+        tabs,
+        notes,
       };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, group);
       await finalize(next, groupId, [targetId, sourceId], [sourceId, targetId]);
@@ -2616,12 +2986,20 @@ async function stackItems(sourceId, targetId, options = {}) {
     // tab → group : add tab into group
     if (!srcGroup && tgtGroup) {
       markObsolete(source);
-      const member = await tabItemToMember(source, target.id, (target.tabs || []).length, mediaState);
-      const updated = {
-        ...target,
-        tabs: [...(target.tabs || []), member],
-        savedAt: Date.now(),
-      };
+      const updated = source.kind === 'note'
+        ? {
+            ...target,
+            notes: [...(target.notes || []), source],
+            savedAt: Date.now(),
+          }
+        : {
+            ...target,
+            tabs: [
+              ...(target.tabs || []),
+              await tabItemToMember(source, target.id, (target.tabs || []).length, mediaState),
+            ],
+            savedAt: Date.now(),
+          };
       const next = list
         .map((i) => (i.id === target.id ? updated : i))
         .filter((i) => i.id !== source.id);
@@ -2632,12 +3010,20 @@ async function stackItems(sourceId, targetId, options = {}) {
     // group → tab : add tab into group, place group where tab was
     if (srcGroup && !tgtGroup) {
       markObsolete(target);
-      const member = await tabItemToMember(target, source.id, (source.tabs || []).length, mediaState);
-      const updated = {
-        ...source,
-        tabs: [...(source.tabs || []), member],
-        savedAt: Date.now(),
-      };
+      const updated = target.kind === 'note'
+        ? {
+            ...source,
+            notes: [...(source.notes || []), target],
+            savedAt: Date.now(),
+          }
+        : {
+            ...source,
+            tabs: [
+              ...(source.tabs || []),
+              await tabItemToMember(target, source.id, (source.tabs || []).length, mediaState),
+            ],
+            savedAt: Date.now(),
+          };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, updated);
       await finalize(next, source.id, [source.id, targetId], [targetId]);
       return { ok: true, items: next, groupId: source.id };
@@ -2650,6 +3036,7 @@ async function stackItems(sourceId, targetId, options = {}) {
       const updated = {
         ...target,
         tabs: [...(target.tabs || []), ...extra],
+        notes: [...(target.notes || []), ...(source.notes || [])],
         savedAt: Date.now(),
       };
       const next = list
@@ -2682,7 +3069,9 @@ async function createStack(ids, title = '') {
   const mediaState = { created: new Set() };
   const obsoleteMediaKeys = new Set();
   const markObsolete = (item) => {
-    for (const key of Media.keysForItem(item)) obsoleteMediaKeys.add(key);
+    for (const key of Media.keysForItem(item)) {
+      if (!key.startsWith('n:')) obsoleteMediaKeys.add(key);
+    }
   };
 
   try {
@@ -2704,12 +3093,17 @@ async function createStack(ids, title = '') {
         groupId = crypto.randomUUID();
         markObsolete(source);
         markObsolete(target);
-        const mTarget = await tabItemToMember(target, groupId, 0, mediaState);
-        const mSource = await tabItemToMember(source, groupId, 1, mediaState);
+        const tabs = [];
+        const notes = [];
+        if (target.kind === 'tab') tabs.push(await tabItemToMember(target, groupId, tabs.length, mediaState));
+        else if (target.kind === 'note') notes.push(target);
+        if (source.kind === 'tab') tabs.push(await tabItemToMember(source, groupId, tabs.length, mediaState));
+        else if (source.kind === 'note') notes.push(source);
         const group = {
           kind: 'group', id: groupId, title: target.title || source.title || '', color: 'grey',
           collapsed: false, pinned: false, note: '', tags: [], savedAt: Date.now(),
-          tabs: [mTarget, mSource],
+          tabs,
+          notes,
         };
         next = replaceListKeepingOrder(list, [source.id, target.id], target.id, group);
         anchors = [target.id, source.id];
@@ -2717,16 +3111,32 @@ async function createStack(ids, title = '') {
       } else if (!srcGroup && tgtGroup) {
         groupId = target.id;
         markObsolete(source);
-        const member = await tabItemToMember(source, groupId, (target.tabs || []).length, mediaState);
-        const updated = { ...target, tabs: [...(target.tabs || []), member], savedAt: Date.now() };
+        const updated = source.kind === 'note'
+          ? { ...target, notes: [...(target.notes || []), source], savedAt: Date.now() }
+          : {
+              ...target,
+              tabs: [
+                ...(target.tabs || []),
+                await tabItemToMember(source, groupId, (target.tabs || []).length, mediaState),
+              ],
+              savedAt: Date.now(),
+            };
         next = list.map((item) => (item.id === target.id ? updated : item)).filter((item) => item.id !== source.id);
         anchors = [target.id, source.id];
         removedIds = [source.id];
       } else if (srcGroup && !tgtGroup) {
         groupId = source.id;
         markObsolete(target);
-        const member = await tabItemToMember(target, groupId, (source.tabs || []).length, mediaState);
-        const updated = { ...source, tabs: [...(source.tabs || []), member], savedAt: Date.now() };
+        const updated = target.kind === 'note'
+          ? { ...source, notes: [...(source.notes || []), target], savedAt: Date.now() }
+          : {
+              ...source,
+              tabs: [
+                ...(source.tabs || []),
+                await tabItemToMember(target, groupId, (source.tabs || []).length, mediaState),
+              ],
+              savedAt: Date.now(),
+            };
         next = replaceListKeepingOrder(list, [source.id, target.id], target.id, updated);
         anchors = [source.id, target.id];
         removedIds = [target.id];
@@ -2734,7 +3144,12 @@ async function createStack(ids, title = '') {
         groupId = target.id;
         markObsolete(source);
         const extra = await rekeyGroupMembers(source, groupId, (target.tabs || []).length, mediaState);
-        const updated = { ...target, tabs: [...(target.tabs || []), ...extra], savedAt: Date.now() };
+        const updated = {
+          ...target,
+          tabs: [...(target.tabs || []), ...extra],
+          notes: [...(target.notes || []), ...(source.notes || [])],
+          savedAt: Date.now(),
+        };
         next = list.map((item) => (item.id === target.id ? updated : item)).filter((item) => item.id !== source.id);
         anchors = [target.id, source.id];
         removedIds = [source.id];
@@ -2956,6 +3371,15 @@ async function commitRestoredItem(
   restoredGroupId = null
 ) {
   const next = list.filter((entry) => entry.id !== item.id);
+  const remainingNotes = item.kind === 'group' ? (item.notes || []) : [];
+  if (remainingNotes.length) {
+    next.splice(Math.min(index, next.length), 0, {
+      ...item,
+      tabs: [],
+      notes: remainingNotes,
+      savedAt: Date.now(),
+    });
+  }
   try {
     await setParkedItems(next);
   } catch (err) {
@@ -2976,12 +3400,15 @@ async function commitRestoredItem(
     }
   }
   try {
-    await Media.removeMany(Media.keysForItem(item));
+    const tabMediaKeys = item.kind === 'group'
+      ? (item.tabs || []).map((member) => Media.mediaKeyMember(item.id, member.id))
+      : Media.keysForItem(item);
+    await Media.removeMany(tabMediaKeys);
   } catch (err) {
     // Metadata is already committed; retain correctness and let orphan GC retry.
     appLogPush('warn', 'restore', 'media cleanup deferred', err?.message || err);
   }
-  return { ok: true, remaining: next.length };
+  return { ok: true, remaining: next.length, notesRemaining: remainingNotes.length };
 }
 
 async function restoreTab(id) {
@@ -2990,6 +3417,7 @@ async function restoreTab(id) {
   if (i === -1) return { ok: false, error: 'not_found' };
   const item = list[i];
   if (item.kind === 'group') return restoreGroup(id);
+  if (item.kind === 'note') return { ok: false, error: 'note_not_restorable' };
   if (!isRestorableUrl(item.url)) return { ok: false, error: 'restricted_url' };
 
   let tab;
@@ -3007,6 +3435,7 @@ async function restoreGroup(id) {
   if (idx === -1) return { ok: false, error: 'not_found' };
 
   const item = list[idx];
+  if (!(item.tabs || []).length) return { ok: false, error: 'notes_only' };
   const settings = await getSettings();
   const members = [...(item.tabs || [])].sort(
     (a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0)
@@ -3179,6 +3608,15 @@ async function reorderItems(ids) {
 }
 
 async function getMediaMessage(key, kind) {
+  if (kind === 'attachment') {
+    const blob = await Media.getAttachment?.(key);
+    return {
+      ok: true,
+      dataUrl: blob ? await Media.blobToDataUrl(blob) : '',
+      key,
+      kind: 'attachment',
+    };
+  }
   const part = kind === 'snap' ? 'snap' : 'thumb';
   const blob = await Media.getPart(key, part);
   if (!blob) return { ok: true, dataUrl: '', key, kind: part };
@@ -3193,6 +3631,9 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'RESTORE_GROUP',
   'RESTORE_GROUP_MEMBER',
   'UPDATE_GROUP_MEMBER',
+  'CREATE_NOTE',
+  'UPDATE_NOTE',
+  'DELETE_NOTE',
   'DELETE_TAB',
   'DELETE_ITEM',
   'UPDATE_TAB',
@@ -3242,6 +3683,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           note: message.note,
           tags: message.tags,
         });
+      case 'CREATE_NOTE':
+        return createNote(message.note || message.item, message.position);
+      case 'UPDATE_NOTE':
+        return updateNote(message.noteId || message.id, message.patch || message.note || {}, message.groupId || '');
+      case 'DELETE_NOTE':
+        return deleteNote(message.noteId || message.id, message.groupId || '');
       case 'DELETE_TAB':
       case 'DELETE_ITEM':
         return deleteItem(message.id);
@@ -3423,6 +3870,11 @@ if (globalThis.__TABWALL_TEST__) {
     saveCurrentTab,
     saveActiveTab,
     updateItem,
+    createNote,
+    updateNote,
+    deleteNote,
+    normalizeNoteItem,
+    remintItemIds,
     saveActiveGroup,
     restoreTab,
     restoreGroup,

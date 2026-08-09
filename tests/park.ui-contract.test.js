@@ -55,6 +55,37 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
 
+test('Canvas Sticker Note exposes placement, split editing, attachments, and safe actions', () => {
+  assert.match(HTML_SOURCE, /id="canvasAddNoteBtn"[^>]*data-canvas-tool="note"/);
+  for (const id of [
+    'stickerNoteBox',
+    'stickerNoteTitle',
+    'stickerNoteTagDraft',
+    'stickerNoteMarkdown',
+    'stickerNoteFile',
+    'stickerNoteDrop',
+    'stickerNoteAttachments',
+    'stickerNotePreview',
+    'stickerNoteSave',
+    'stickerNoteCancel',
+  ]) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  assert.match(HTML_SOURCE, /class="sticker-note-body"/);
+  assert.match(HTML_SOURCE, /type="file" accept="image\/\*" multiple hidden/);
+  assert.match(HTML_SOURCE, /\.sticker-note-body\s*\{[\s\S]*?grid-template-columns:\s*minmax\(320px, 1fr\) minmax\(280px, 1fr\)/);
+  assert.match(PARK_SOURCE, /function armCanvasNotePlacement\(\)/);
+  assert.match(PARK_SOURCE, /function placeStickerNoteAt\(point\)/);
+  assert.match(PARK_SOURCE, /type: 'CREATE_NOTE'/);
+  assert.match(PARK_SOURCE, /type: 'UPDATE_NOTE'/);
+  assert.match(PARK_SOURCE, /type: 'DELETE_NOTE'/);
+  assert.match(PARK_SOURCE, /Build\.renderSafeMarkdown/);
+  assert.match(PARK_SOURCE, /attachment:\/\//);
+  assert.match(PARK_SOURCE, /stickerNoteFile\.files/);
+  assert.match(PARK_SOURCE, /event\.clipboardData\?\.items/);
+  assert.match(PARK_SOURCE, /stickerNoteDrop\?\.addEventListener\('drop'/);
+});
+
 test('Top-level actions are consolidated in the header', () => {
   for (const id of ['viewCards', 'viewList', 'canvasTagsBtn', 'canvasAddBtn', 'canvasSettingsBtn', 'canvasListBtn']) {
     assert.doesNotMatch(HTML_SOURCE, new RegExp(`id="${id}"`));

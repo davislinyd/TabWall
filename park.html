@@ -5890,6 +5890,77 @@
         outline-offset: 2px;
       }
 
+      .canvas-note-tool svg,
+      .canvas-note-cover svg,
+      .note-row-thumb svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .canvas-view.is-note-placement .canvas-viewport { cursor: crosshair; }
+      .canvas-node.canvas-note {
+        background: linear-gradient(145deg, rgba(254, 243, 199, .98), rgba(253, 230, 138, .96));
+        color: #3f2d0b;
+        border-color: rgba(180, 125, 18, .55);
+      }
+      html[data-theme='dark'] .canvas-node.canvas-note {
+        background: linear-gradient(145deg, #594718, #3f3215);
+        color: #fff6cf;
+        border-color: rgba(250, 204, 21, .42);
+      }
+      .canvas-note .canvas-node-meta,
+      .canvas-note .canvas-node-tags { color: currentColor; opacity: .72; }
+      .canvas-note-cover,
+      .canvas-note-cover-image {
+        width: 100%; height: 100%; min-height: 58px; object-fit: cover;
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        color: currentColor; opacity: .82;
+      }
+      .canvas-note-cover svg { width: 30px; height: 30px; }
+      .canvas-note-preview,
+      .sticker-note-preview { color: inherit; line-height: 1.5; overflow-wrap: anywhere; }
+      .canvas-note-preview { max-height: 74px; overflow: hidden; font-size: 12px; }
+      .canvas-note-preview h1, .canvas-note-preview h2, .canvas-note-preview h3,
+      .sticker-note-preview h1, .sticker-note-preview h2, .sticker-note-preview h3 { margin: 0 0 5px; line-height: 1.2; }
+      .canvas-note-preview p, .sticker-note-preview p { margin: 0 0 6px; }
+      .canvas-note-preview ul, .canvas-note-preview ol,
+      .sticker-note-preview ul, .sticker-note-preview ol { margin: 0 0 6px 18px; padding: 0; }
+      .canvas-note-preview blockquote, .sticker-note-preview blockquote { border-left: 3px solid currentColor; margin: 5px 0; padding-left: 8px; opacity: .8; }
+      .canvas-note-preview code, .sticker-note-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+      .canvas-note-preview img, .sticker-note-preview img { max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; display: block; margin: 4px 0; }
+      .note-attachment-missing { color: var(--muted); font-size: 11px; }
+      .note-row-thumb { border: 0; border-radius: 10px; background: rgba(250, 204, 21, .16); color: #d1a51b; cursor: pointer; }
+      .note-row-thumb svg { width: 30px; height: 30px; }
+      .note-row .row-note { white-space: pre-wrap; max-height: 62px; overflow: hidden; }
+      .note-member-thumb { display: flex; align-items: center; justify-content: center; color: #d1a51b; }
+      .note-member-thumb svg { width: 28px; height: 28px; }
+      .member-row .member-actions .danger { color: var(--danger, #f87171); }
+      .sticker-note-box {
+        position: fixed; z-index: 120; width: min(940px, calc(100vw - 32px));
+        max-height: min(760px, calc(100vh - 32px)); display: none; overflow: hidden;
+        flex-direction: column; border: 1px solid var(--border); border-radius: 14px;
+        background: var(--panel); box-shadow: 0 26px 70px rgba(0,0,0,.4);
+      }
+      .sticker-note-box.open { display: flex; }
+      .sticker-note-drag { min-height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); cursor: move; }
+      .sticker-note-drag h2 { margin: 0; font-size: 15px; }
+      .sticker-note-body { min-height: 0; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(280px, 1fr); gap: 14px; padding: 14px; overflow: auto; }
+      .sticker-note-fields, .sticker-note-preview-pane { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+      .sticker-note-fields > label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+      #stickerNoteTitle, #stickerNoteMarkdown { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg, rgba(255,255,255,.04)); color: var(--text); padding: 9px 10px; }
+      #stickerNoteMarkdown { min-height: 230px; resize: vertical; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .sticker-note-drop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 11px; cursor: pointer; }
+      .sticker-note-drop:hover { border-color: var(--accent, #60a5fa); }
+      .sticker-note-section-title { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+      .sticker-note-attachments { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow: auto; }
+      .sticker-note-attachment { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 8px; min-width: 0; }
+      .sticker-note-attachment img { width: 38px; height: 30px; object-fit: cover; border-radius: 5px; background: rgba(127,127,127,.12); }
+      .sticker-note-attachment span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+      .sticker-note-preview-pane { min-height: 280px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(127,127,127,.06); }
+      .sticker-note-preview { min-height: 0; overflow: auto; font-size: 13px; }
+      .sticker-note-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
     </style>
   </head>
   <body>
@@ -5990,6 +6061,7 @@
             <button type="button" class="canvas-tool" data-canvas-tool="pan" title="平移" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V6a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-5a1.5 1.5 0 0 1 3 0v7-3a1.5 1.5 0 0 1 3 0v6c0 4-2.4 6-6 6h-2.5c-2 0-3.3-.8-4.5-2.3L5 14a1.8 1.8 0 0 1 3-2.1Z"></path></svg><span data-i18n="canvasPan">平移</span></button>
             <button type="button" class="canvas-tool" data-canvas-tool="area" title="框選區域" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8V5h3M16 5h3v3M19 16v3h-3M8 19H5v-3"></path></svg><span data-i18n="canvasArea">框選</span></button>
             <button type="button" class="canvas-tool" id="canvasLinkBtn" data-canvas-tool="link" title="連結" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5 14 10M8.5 16.5l-1.2 1.2a3.2 3.2 0 0 1-4.5-4.5l3.5-3.5a3.2 3.2 0 0 1 4.5 0"></path><path d="m15.5 7.5 1.2-1.2a3.2 3.2 0 0 1 4.5 4.5l-3.5 3.5a3.2 3.2 0 0 1-4.5 0"></path></svg><span data-i18n="canvasLink">連結</span></button>
+            <button type="button" class="canvas-tool canvas-note-tool" id="canvasAddNoteBtn" data-canvas-tool="note" title="新增 Sticker Note" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg><span data-i18n="canvasAddNote">新增 Sticker Note</span></button>
           </div>
           <div class="canvas-rail-section">
             <div class="canvas-rail-label">索引</div>
@@ -6609,6 +6681,50 @@
           <button type="button" class="btn" id="editCancel" data-i18n="cancel">取消</button>
           <button type="button" class="btn primary" id="editSave" data-i18n="save">儲存</button>
         </div>
+      </div>
+    </div>
+
+    <div id="stickerNoteBox" class="sticker-note-box" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stickerNoteHeading">
+      <div class="sticker-note-drag" id="stickerNoteDrag">
+        <h2 id="stickerNoteHeading" data-i18n="noteEditHeading">編輯 Sticker Note</h2>
+        <button type="button" class="btn icon-close" id="stickerNoteCloseX" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div class="sticker-note-body">
+        <div class="sticker-note-fields">
+          <label>
+            <span data-i18n="noteTitlePh">Note 標題</span>
+            <input id="stickerNoteTitle" type="text" maxlength="2048" autocomplete="off" data-i18n-placeholder="noteTitlePh" placeholder="Note 標題" />
+          </label>
+          <div class="edit-field">
+            <span data-i18n="tags">Tags</span>
+            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+            <div class="tag-input" id="stickerNoteTagInput">
+              <div class="chips" id="stickerNoteChips"></div>
+              <input id="stickerNoteTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+            </div>
+          </div>
+          <label class="sticker-note-markdown-label">
+            <span>Markdown</span>
+            <textarea id="stickerNoteMarkdown" data-i18n-placeholder="noteMarkdownPh" placeholder="以 Markdown 撰寫…" spellcheck="true"></textarea>
+          </label>
+          <div id="stickerNoteDrop" class="sticker-note-drop" tabindex="0">
+            <button type="button" class="btn" data-i18n="noteAttachAdd">插入圖片</button>
+            <span data-i18n="noteAttachDrop">拖曳或貼上圖片到這裡</span>
+            <input id="stickerNoteFile" type="file" accept="image/*" multiple hidden />
+          </div>
+          <div>
+            <div class="sticker-note-section-title" data-i18n="noteAttachments">圖片附件</div>
+            <div id="stickerNoteAttachments" class="sticker-note-attachments"></div>
+          </div>
+        </div>
+        <div class="sticker-note-preview-pane">
+          <div class="sticker-note-section-title" data-i18n="notePreview">即時預覽</div>
+          <div id="stickerNotePreview" class="sticker-note-preview" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="sticker-note-actions">
+        <button type="button" class="btn" id="stickerNoteCancel" data-i18n="noteCancel">取消編輯</button>
+        <button type="button" class="btn primary" id="stickerNoteSave" data-i18n="noteSave">儲存 Note</button>
       </div>
     </div>
 

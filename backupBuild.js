@@ -3,7 +3,7 @@
  */
 (function (global) {
   const FORMAT = 'tabwall-backup';
-  const FORMAT_VERSION = 4;
+  const FORMAT_VERSION = 5;
   const SUPPORTED_MIN_VERSION = 1;
   const LIMITS = Object.freeze({
     MAX_JSON_BYTES: 100 * 1024 * 1024,
@@ -18,6 +18,9 @@
     MAX_URL_LENGTH: 8192,
     MAX_TITLE_LENGTH: 2048,
     MAX_NOTE_LENGTH: 20000,
+    MAX_NOTE_ATTACHMENTS: 12,
+    MAX_ATTACHMENT_NAME_LENGTH: 512,
+    MAX_ATTACHMENT_ALT_LENGTH: 2048,
     MAX_TAG_LENGTH: 128,
     MAX_FAVICON_LENGTH: 4096,
   });
@@ -117,6 +120,127 @@
     const parsed = parseDataUrl(value);
     if (!parsed || !/^image\/[a-z0-9.+-]+$/i.test(parsed.mime)) return false;
     return parsed.bytes.length <= LIMITS.MAX_IMAGE_BYTES;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function attachmentTokenId(value) {
+    const match = /^attachment:\/\/([A-Za-z0-9_-]{1,128})$/.exec(String(value || ''));
+    return match ? match[1] : '';
+  }
+
+  function renderSafeInlineMarkdown(source, attachments) {
+    const text = String(source || '');
+    const attachmentMap = attachments instanceof Map
+      ? attachments
+      : new Map((Array.isArray(attachments) ? attachments : []).map((item) => [String(item?.id || ''), item]));
+    const tokenPattern = /!\[([^\]\n]{0,2048})\]\(([^)\s]{1,512})\)|\[([^\]\n]{0,2048})\]\(([^)\s]{1,2048})\)|`([^`\n]{0,2048})`|\*\*([^*\n]{0,2048})\*\*|__([^_\n]{0,2048})__|~~([^~\n]{0,2048})~~|\*([^*\n]{0,2048})\*|_([^_\n]{0,2048})_/g;
+    let output = '';
+    let cursor = 0;
+    let match;
+    while ((match = tokenPattern.exec(text))) {
+      output += escapeHtml(text.slice(cursor, match.index));
+      if (match[1] != null) {
+        const id = attachmentTokenId(match[2]);
+        const attachment = id ? attachmentMap.get(id) : null;
+        if (attachment) {
+          output += `<img class="sticker-markdown-image" data-attachment-id="${escapeHtml(id)}" alt="${escapeHtml(match[1])}" />`;
+        } else {
+          output += escapeHtml(match[0]);
+        }
+      } else if (match[3] != null) {
+        const label = escapeHtml(match[3]);
+        const url = match[4];
+        if (isHttpUrl(url, LIMITS.MAX_URL_LENGTH)) {
+          output += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+        } else {
+          output += escapeHtml(match[0]);
+        }
+      } else if (match[5] != null) {
+        output += `<code>${escapeHtml(match[5])}</code>`;
+      } else if (match[6] != null || match[7] != null) {
+        output += `<strong>${escapeHtml(match[6] ?? match[7])}</strong>`;
+      } else if (match[8] != null) {
+        output += `<del>${escapeHtml(match[8])}</del>`;
+      } else if (match[9] != null || match[10] != null) {
+        output += `<em>${escapeHtml(match[9] ?? match[10])}</em>`;
+      }
+      cursor = tokenPattern.lastIndex;
+    }
+    output += escapeHtml(text.slice(cursor));
+    return output;
+  }
+
+  /** Render the intentionally small, safe Markdown subset used by notes. */
+  function renderSafeMarkdown(markdown, attachments = []) {
+    const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+    const html = [];
+    let inCode = false;
+    let codeLines = [];
+    let listType = '';
+    const closeList = () => {
+      if (listType) html.push(`</${listType}>`);
+      listType = '';
+    };
+    const flushCode = () => {
+      if (!inCode) return;
+      html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+      codeLines = [];
+      inCode = false;
+    };
+    for (const line of lines) {
+      if (/^\s*```/.test(line)) {
+        closeList();
+        if (inCode) flushCode();
+        else inCode = true;
+        continue;
+      }
+      if (inCode) {
+        codeLines.push(line);
+        continue;
+      }
+      if (!line.trim()) {
+        closeList();
+        continue;
+      }
+      const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+      if (heading) {
+        closeList();
+        const level = heading[1].length;
+        html.push(`<h${level}>${renderSafeInlineMarkdown(heading[2], attachments)}</h${level}>`);
+        continue;
+      }
+      const quote = /^\s*>\s?(.*)$/.exec(line);
+      if (quote) {
+        closeList();
+        html.push(`<blockquote>${renderSafeInlineMarkdown(quote[1], attachments)}</blockquote>`);
+        continue;
+      }
+      const unordered = /^\s*[-*+]\s+(.+)$/.exec(line);
+      const ordered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+      if (unordered || ordered) {
+        const nextType = unordered ? 'ul' : 'ol';
+        if (listType !== nextType) {
+          closeList();
+          listType = nextType;
+          html.push(`<${listType}>`);
+        }
+        html.push(`<li>${renderSafeInlineMarkdown((unordered || ordered)[1], attachments)}</li>`);
+        continue;
+      }
+      closeList();
+      html.push(`<p>${renderSafeInlineMarkdown(line, attachments)}</p>`);
+    }
+    flushCode();
+    closeList();
+    return html.join('');
   }
 
   function isSafeZipPath(name) {
@@ -380,8 +504,16 @@
     const clone = (items || []).map((item) => ({
       ...item,
       ...(item?.kind === 'group' || Array.isArray(item?.tabs)
-        ? { tabs: (item.tabs || []).map((member) => ({ ...member })) }
-        : {}),
+        ? {
+            tabs: (item.tabs || []).map((member) => ({ ...member })),
+            notes: (item.notes || []).map((note) => ({
+              ...note,
+              attachments: (note.attachments || []).map((attachment) => ({ ...attachment })),
+            })),
+          }
+        : item?.kind === 'note'
+          ? { attachments: (item.attachments || []).map((attachment) => ({ ...attachment })) }
+          : {}),
     }));
     const addMedia = (owner, field, path) => {
       const parsed = parseDataUrl(owner[field]);
@@ -398,6 +530,35 @@
         for (const m of item.tabs || []) {
           addMedia(m, 'thumbnail', `media/${item.id}_${m.id}_thumb.${extFromDataUrl(m.thumbnail)}`);
           addMedia(m, 'snapshot', `media/${item.id}_${m.id}_snap.${extFromDataUrl(m.snapshot)}`);
+        }
+        for (const note of item.notes || []) {
+          for (const attachment of note.attachments || []) {
+            const path = `media/${note.id}_${attachment.id}.${extFromDataUrl(attachment.data)}`;
+            const parsed = parseDataUrl(attachment.data);
+            if (!parsed || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
+              attachment.data = '';
+              attachment.hasData = false;
+              continue;
+            }
+            files.push({ name: path, data: parsed.bytes });
+            mediaMimes[path] = parsed.mime;
+            attachment.data = path;
+            attachment.hasData = true;
+          }
+        }
+      } else if (item.kind === 'note') {
+        for (const attachment of item.attachments || []) {
+          const path = `media/${item.id}_${attachment.id}.${extFromDataUrl(attachment.data)}`;
+          const parsed = parseDataUrl(attachment.data);
+          if (!parsed || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
+            attachment.data = '';
+            attachment.hasData = false;
+            continue;
+          }
+          files.push({ name: path, data: parsed.bytes });
+          mediaMimes[path] = parsed.mime;
+          attachment.data = path;
+          attachment.hasData = true;
         }
       } else {
         addMedia(item, 'thumbnail', `media/${item.id}_thumb.${extFromDataUrl(item.thumbnail)}`);
@@ -423,6 +584,24 @@
             ...m,
             thumbnail: get(m.thumbnail),
             snapshot: get(m.snapshot),
+          })),
+          notes: (item.notes || []).map((note) => ({
+            ...note,
+            attachments: (note.attachments || []).map((attachment) => ({
+              ...attachment,
+              data: get(attachment.data),
+              hasData: Boolean(get(attachment.data)),
+            })),
+          })),
+        };
+      }
+      if (item.kind === 'note') {
+        return {
+          ...item,
+          attachments: (item.attachments || []).map((attachment) => ({
+            ...attachment,
+            data: get(attachment.data),
+            hasData: Boolean(get(attachment.data)),
           })),
         };
       }
@@ -502,6 +681,22 @@
       return member;
     };
 
+    const normalizeNote = (raw) => {
+      const note = raw && typeof raw === 'object' ? { ...raw } : {};
+      note.kind = 'note';
+      if (legacy) {
+        note.title = legacyText(note.title, 'Untitled');
+        note.markdown = legacyText(note.markdown, '');
+        note.tags = Array.isArray(note.tags) ? note.tags : [];
+        note.attachments = Array.isArray(note.attachments) ? note.attachments : [];
+        if (note.savedAt == null) {
+          note.savedAt = Date.now();
+          warnings.defaultedFields++;
+        }
+      }
+      return note;
+    };
+
     const items = sourceItems.map((raw) => {
       const value = raw && typeof raw === 'object' ? { ...raw } : {};
       const isGroup = value.kind === 'group' || Array.isArray(value.tabs);
@@ -527,6 +722,11 @@
         value.tabs = Array.isArray(value.tabs)
           ? value.tabs.map((member, index) => normalizeMember(member, index))
           : [];
+        value.notes = Array.isArray(value.notes)
+          ? value.notes.map((note) => normalizeNote(note))
+          : [];
+      } else if (value.kind === 'note') {
+        return normalizeNote(value);
       } else {
         value.kind = 'tab';
         if (legacy) {
@@ -587,11 +787,44 @@
   }
 
   function buildLiteBlob(backup, { auto = false, partial = false } = {}) {
+    const items = (backup?.parkedItems || []).map((item) => {
+      const clone = { ...item };
+      const stripNote = (note) => ({
+        ...note,
+        attachments: (note.attachments || []).map((attachment) => ({
+          ...attachment,
+          data: '',
+        })),
+      });
+      if (clone.kind === 'group') {
+        clone.tabs = (clone.tabs || []).map((member) => ({
+          ...member,
+          thumbnail: '',
+          snapshot: '',
+        }));
+        clone.notes = (clone.notes || []).map(stripNote);
+      } else if (clone.kind === 'note') {
+        clone.attachments = (clone.attachments || []).map((attachment) => ({
+          ...attachment,
+          data: '',
+        }));
+      } else {
+        clone.thumbnail = '';
+        clone.snapshot = '';
+      }
+      return clone;
+    });
+    const liteBackup = {
+      ...backup,
+      parkedItems: items,
+      parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...rest }) => rest),
+      media: 'none',
+    };
     let prefix = auto ? 'tabwall-auto-lite' : 'tabwall-backup-lite';
     if (partial && !auto) prefix = 'tabwall-backup-lite-partial';
     const filename = `${prefix}-${stamp()}.json`;
     const blob = new Blob([
-      JSON.stringify({ ...backup, format: FORMAT, version: FORMAT_VERSION }, null, 2),
+      JSON.stringify({ ...liteBackup, format: FORMAT, version: FORMAT_VERSION }, null, 2),
     ], { type: 'application/json' });
     return { blob, filename };
   }
@@ -651,6 +884,79 @@
       validateImageField(owner.thumbnail, media, mediaMimes) &&
       validateImageField(owner.snapshot, media, mediaMimes)
     );
+  }
+
+  function validateAttachmentData(value, media, mediaMimes) {
+    if (value == null || value === '') return true;
+    if (typeof value !== 'string') return false;
+    if (value.startsWith('data:')) return isImageDataUrl(value);
+    if (media !== 'zip' || !isSafeZipPath(value) || !value.startsWith('media/')) return false;
+    const mime = mediaMimes && mediaMimes[value];
+    return typeof mime === 'string' && /^image\/[a-z0-9.+-]+$/i.test(mime);
+  }
+
+  function validateNoteShape(
+    note,
+    idSet,
+    memberSet,
+    attachmentIds,
+    media,
+    mediaMimes
+  ) {
+    if (!note || typeof note !== 'object' || note.kind !== 'note' || !isUuid(note.id)
+      || idSet.has(note.id) || memberSet.has(note.id)) {
+      return 'invalid_note_id';
+    }
+    idSet.add(note.id);
+    memberSet.add(note.id);
+    if (!validateString(note.title, LIMITS.MAX_TITLE_LENGTH)) return 'invalid_title';
+    if (!validateString(note.markdown, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_markdown';
+    if (!validateTags(note.tags)) return 'invalid_tags';
+    if (note.pinned != null && typeof note.pinned !== 'boolean') return 'invalid_pinned';
+    if (!Number.isFinite(note.savedAt) || note.savedAt < 0 || note.savedAt > Date.now() + 86400000) {
+      return 'invalid_timestamp';
+    }
+    if (!Array.isArray(note.attachments) || note.attachments.length > LIMITS.MAX_NOTE_ATTACHMENTS) {
+      return 'invalid_attachments';
+    }
+    const localAttachmentIds = new Set();
+    for (const attachment of note.attachments) {
+      if (!attachment || typeof attachment !== 'object' || !isUuid(attachment.id)
+        || attachmentIds.has(attachment.id) || localAttachmentIds.has(attachment.id)) {
+        return 'invalid_attachment_id';
+      }
+      attachmentIds.add(attachment.id);
+      localAttachmentIds.add(attachment.id);
+      if (!validateString(attachment.name, LIMITS.MAX_ATTACHMENT_NAME_LENGTH, { allowEmpty: false })) {
+        return 'invalid_attachment_name';
+      }
+      if (!validateString(attachment.alt, LIMITS.MAX_ATTACHMENT_ALT_LENGTH)) {
+        return 'invalid_attachment_alt';
+      }
+      if (typeof attachment.mime !== 'string' || !/^image\/[a-z0-9.+-]+$/i.test(attachment.mime)) {
+        return 'invalid_attachment_mime';
+      }
+      if (!Number.isInteger(attachment.size) || attachment.size < 0 || attachment.size > LIMITS.MAX_IMAGE_BYTES) {
+        return 'invalid_attachment_size';
+      }
+      for (const dimension of ['width', 'height']) {
+        if (!Number.isInteger(attachment[dimension]) || attachment[dimension] < 0 || attachment[dimension] > 100000) {
+          return 'invalid_attachment_dimensions';
+        }
+      }
+      if (attachment.hasData != null && typeof attachment.hasData !== 'boolean') {
+        return 'invalid_attachment_data';
+      }
+      if (!validateAttachmentData(attachment.data, media, mediaMimes)) return 'invalid_attachment_data';
+    }
+    const referenced = new Set();
+    const tokenPattern = /!\[[^\]\n]*\]\(attachment:\/\/([A-Za-z0-9_-]{1,128})\)/g;
+    let token;
+    while ((token = tokenPattern.exec(note.markdown || ''))) referenced.add(token[1]);
+    for (const id of referenced) {
+      if (!localAttachmentIds.has(id)) return 'invalid_attachment_reference';
+    }
+    return '';
   }
 
   function validateTabShape(tab, idSet, memberSet, media, mediaMimes, allowStoredOnlyUrls) {
@@ -752,6 +1058,7 @@
       if (JSON.stringify(backup).length > maxJsonBytes) return validationError('backup_too_large');
 
       const ids = new Set();
+      const attachmentIds = new Set();
       const mediaMimes = backup.mediaMimes && typeof backup.mediaMimes === 'object' ? backup.mediaMimes : {};
       let memberCount = 0;
       for (const item of items) {
@@ -765,13 +1072,28 @@
         if (!Number.isFinite(item.savedAt) || item.savedAt < 0 || item.savedAt > Date.now() + 86400000) {
           return validationError('invalid_timestamp');
         }
+        const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
+        if (!isGroup && item.kind === 'note') {
+          // The common item-id check above reserves the id for tab/group items;
+          // note validation owns the same global set so nested note ids cannot collide.
+          ids.delete(item.id);
+          const error = validateNoteShape(
+            item,
+            ids,
+            new Set(),
+            attachmentIds,
+            media,
+            mediaMimes
+          );
+          if (error) return validationError(error, item.id);
+          continue;
+        }
         if (!validateString(item.note, LIMITS.MAX_NOTE_LENGTH)) return validationError('invalid_note');
         if (!validateTags(item.tags)) return validationError('invalid_tags');
         if (!validateString(item.title, LIMITS.MAX_TITLE_LENGTH)) return validationError('invalid_title');
         if (!validateImageField(item.thumbnail, media, mediaMimes) || !validateImageField(item.snapshot, media, mediaMimes)) {
           return validationError('invalid_image');
         }
-        const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
         if (!isGroup) {
           if (
             item.kind !== 'tab' ||
@@ -804,6 +1126,20 @@
             allowStoredOnlyUrls
           );
           if (error) return validationError(error, member.id);
+        }
+        if (item.notes != null && !Array.isArray(item.notes)) return validationError('invalid_notes', item.id);
+        for (const note of item.notes || []) {
+          memberCount++;
+          if (memberCount > LIMITS.MAX_MEMBERS) return validationError('too_many_members');
+          const error = validateNoteShape(
+            note,
+            ids,
+            memberIds,
+            attachmentIds,
+            media,
+            mediaMimes
+          );
+          if (error) return validationError(error, note?.id || item.id);
         }
       }
 
@@ -841,6 +1177,8 @@
     isHttpUrl,
     isFileUrl,
     classifyUrl,
+    renderSafeMarkdown,
+    isImageDataUrl,
     zipStore,
     unzipStore,
     collectMediaFiles,
