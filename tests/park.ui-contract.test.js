@@ -134,6 +134,14 @@ test('Top-level actions are consolidated in the header', () => {
   assert.doesNotMatch(PARK_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle/);
 });
 
+test('Chrome shortcut settings expose the tab-or-group keep command', () => {
+  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park']) {
+    assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
+  }
+  assert.match(PARK_SOURCE, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
+  assert.match(PARK_SOURCE, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
+});
+
 test('Canvas rail is resizable, collapsible, and the header mark is a stacked-panel SVG', () => {
   assert.match(HTML_SOURCE, /id="canvasRail" class="canvas-rail"/);
   assert.match(HTML_SOURCE, /class="canvas-rail-content"/);

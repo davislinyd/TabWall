@@ -26,6 +26,8 @@ zip -r "$OUT_ZIP" \
   backupBuild.js \
   noteMedia.js \
   canvasStore.js \
+  popup.html \
+  popup.js \
   park.html \
   park.js \
   icons/icon16.png \

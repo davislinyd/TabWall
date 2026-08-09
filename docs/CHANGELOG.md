@@ -13,6 +13,27 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.24.1 — 2026-08-10
+
+- 修正 Chrome `commands` 超過最多 4 個導致 extension 無法 reload 的問題。
+- keep 快捷鍵合併為 `Alt+Shift+S`，依目前分頁是否屬於 Tab Group 自動儲存分頁或整組，且不關閉。
+
+---
+
+## 2.24.0 — 2026-08-10
+
+- 新增 Chrome 層級 keep 快捷鍵；Popup 仍保留分頁與 Tab Group 的分開操作按鈕。
+- TabWall 設定中的 Chrome 快捷鍵清單同步顯示 keep command。
+
+---
+
+## 2.23.0 — 2026-08-10
+
+- extension icon 改為操作選單，可分別選擇儲存目前分頁／Tab Group 並保留或關閉分頁。
+- 非 Tab Group 分頁會停用 Group 操作；新增「打開 TabWall 面板」並保留既有 Chrome 快捷鍵行為。
+
+---
+
 ## 2.21.4 — 2026-08-09
 
 - 將 Canvas 同步狀態移至縮放面板左側外部，避免「未同步」等文字改變縮放控制列的尺寸與位置。

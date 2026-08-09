@@ -28,8 +28,9 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 
 | Shortcut | Action |
 |----------|--------|
-| `Option/Alt+S` | Park the current tab |
-| `Option/Alt+Shift+G` | Park the current Tab Group |
+| `Option/Alt+S` | Park the current tab (uses the configured after-save behavior) |
+| `Option/Alt+Shift+S` | Park the current tab or Tab Group and keep it open |
+| `Option/Alt+Shift+G` | Park the current Tab Group (uses the configured after-save behavior) |
 | `Option/Alt+O` | Toggle the TabWall canvas |
 | `/` | Focus search |
 | `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
@@ -44,7 +45,9 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `Esc` | Close panels or the TabWall wall |
 | `←` / `→` | Show the previous or next snapshot |
 
-The first three actions are Chrome commands. Their `suggested_key` values provide install-time defaults. Existing Chrome assignments, shortcut conflicts, and platform rules can leave a command unbound. Manage the commands in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
+The first four actions are Chrome commands. Their `suggested_key` values provide install-time defaults. Existing Chrome assignments, shortcut conflicts, and platform rules can leave a command unbound. Manage the commands in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
+
+Clicking the extension icon opens an action menu for saving the current tab or Tab Group with or without closing it, or opening the TabWall panel. Group actions are disabled when the current tab is not in a Tab Group.
 
 The other shortcuts are built-in wall-navigation behavior and cannot be customized in TabWall.
 
@@ -166,8 +169,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 | 快捷鍵 | 動作 |
 |--------|------|
-| `Option/Alt+S` | 暫存目前分頁 |
-| `Option/Alt+Shift+G` | 暫存目前 Tab Group |
+| `Option/Alt+S` | 暫存目前分頁（依「儲存後行為」設定） |
+| `Option/Alt+Shift+S` | 暫存目前分頁或目前 Tab Group 但不關閉 |
+| `Option/Alt+Shift+G` | 暫存目前 Tab Group（依「儲存後行為」設定） |
 | `Option/Alt+O` | 開關 TabWall 空間畫布 |
 | `/` | 聚焦搜尋框 |
 | Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉畫布設定 |
@@ -182,7 +186,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `Esc` | 關閉面板或空間畫布 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前三項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+前四項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+
+點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
 其餘快捷鍵是畫布內建的操作，不可在 TabWall 中自訂。
 
@@ -269,7 +275,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 ```text
 manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
-content.js      park.html       park.js
+content.js      popup.html      popup.js       park.html       park.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md
 docs/privacy.md docs/CHANGELOG.md

@@ -2569,6 +2569,20 @@ async function toggleParkOnActiveTab() {
   }
 }
 
+async function openParkOnActiveTab() {
+  const tab = await getActiveTab();
+  if (tab?.url && isOwnParkPageUrl(tab.url)) {
+    return { ok: true, mode: 'already-open', tabId: tab.id ?? null };
+  }
+  if (!tab?.id || isRestrictedUrl(tab.url)) {
+    return openStandaloneParkTab();
+  }
+  if (await openParkOnTab(tab.id)) {
+    return { ok: true, mode: 'overlay', tabId: tab.id };
+  }
+  return openStandaloneParkTab();
+}
+
 async function openParkOnTab(tabId, extraMessage = null) {
   try {
     await sendToTab(tabId, { type: 'OPEN_PARK' });
@@ -2835,10 +2849,15 @@ async function deleteTabItemsByIds(ids) {
 
 // ─── Save tab ──────────────────────────────────────────────────────
 
+function normalizeAfterSaveMode(value, fallback = 'close') {
+  if (value === 'keep' || value === 'close') return value;
+  return fallback === 'keep' ? 'keep' : 'close';
+}
+
 /**
  * Commit a parked tab from a live chrome.tabs Tab (or pending snapshot fields).
  * @param {object} tabLike - { id?, windowId?, url, title, favIconUrl }
- * @param {{ replaceMatchIds?: string[] }} opts
+ * @param {{ replaceMatchIds?: string[], afterSave?: 'keep'|'close' }} opts
  */
 async function commitSaveTab(tabLike, opts = {}) {
   const replaceMatchIds = opts.replaceMatchIds || [];
@@ -2907,7 +2926,8 @@ async function commitSaveTab(tabLike, opts = {}) {
     console.warn('[TabWall] restore hint cleanup failed:', err);
   }
 
-  const { afterSave } = await getSettings();
+  const settings = await getSettings();
+  const afterSave = normalizeAfterSaveMode(opts.afterSave, settings.afterSave);
   if (afterSave === 'close' && tabLike.id != null) {
     try {
       await chrome.tabs.remove(tabLike.id);
@@ -2919,7 +2939,7 @@ async function commitSaveTab(tabLike, opts = {}) {
   return { ok: true, id, remaining: list.length };
 }
 
-async function saveCurrentTab(tab) {
+async function saveCurrentTab(tab, opts = {}) {
   if (!beginAction('save-tab')) return { ok: false, error: 'debounced' };
   try {
     if (!tab || tab.id == null) {
@@ -2931,6 +2951,8 @@ async function saveCurrentTab(tab) {
       return { ok: false, error: 'restricted_url' };
     }
 
+    const settings = await getSettings();
+    const afterSave = normalizeAfterSaveMode(opts.afterSave, settings.afterSave);
     const items = await getParkedItems();
     const matches = findTabDuplicates(tab.url, items);
     if (matches.length > 0) {
@@ -2941,6 +2963,7 @@ async function saveCurrentTab(tab) {
         title: tab.title || tab.url || 'Untitled',
         favIconUrl: tab.favIconUrl || '',
         matches,
+        afterSave,
       });
       await flashBadge('?', '#f59e0b', 2500);
       const hostTabId = tab.id;
@@ -2956,7 +2979,7 @@ async function saveCurrentTab(tab) {
       return { ok: true, conflict: true, matchCount: matches.length };
     }
 
-    return await commitSaveTab(tab);
+    return await commitSaveTab(tab, { afterSave });
   } catch (err) {
     console.warn('[TabWall] saveCurrentTab failed:', err);
     await flashBadge('!');
@@ -2964,13 +2987,13 @@ async function saveCurrentTab(tab) {
   }
 }
 
-async function saveActiveTab() {
+async function saveActiveTab(opts = {}) {
   const tab = await getActiveTab();
   if (isOwnParkPageUrl(tab?.url)) {
     await flashBadge('!');
     return { ok: false, error: 'self_tab' };
   }
-  return saveCurrentTab(tab);
+  return saveCurrentTab(tab, opts);
 }
 
 async function resolveSaveConflict(decision) {
@@ -3010,7 +3033,10 @@ async function resolveSaveConflict(decision) {
 
   // Avoid debounce blocking the follow-up commit
   actionLocks.delete('save-tab');
-  const result = await commitSaveTab(tabLike, { replaceMatchIds });
+  const result = await commitSaveTab(tabLike, {
+    replaceMatchIds,
+    afterSave: pending.afterSave,
+  });
   await clearPendingConflict();
   return result;
 }
@@ -3384,7 +3410,7 @@ async function createStack(ids, title = '') {
 
 // ─── Save group ────────────────────────────────────────────────────
 
-async function saveActiveGroup() {
+async function saveActiveGroup(opts = {}) {
   if (!beginAction('save-group')) return { ok: false, error: 'debounced' };
   try {
     const tab = await getActiveTab();
@@ -3420,6 +3446,7 @@ async function saveActiveGroup() {
     }
 
     const settings = await getSettings();
+    const afterSaveGroup = normalizeAfterSaveMode(opts.afterSaveGroup, settings.afterSaveGroup);
     const captureMode = settings.saveGroupCapture || 'all';
     const originalActiveId = tab.id;
     const groupId = crypto.randomUUID();
@@ -3494,7 +3521,7 @@ async function saveActiveGroup() {
       console.warn('[TabWall] group restore hint cleanup failed:', err);
     }
 
-    if ((settings.afterSaveGroup || 'close') === 'close') {
+    if (afterSaveGroup === 'close') {
       const ids = members.map((m) => m.id).filter((id) => id != null);
       try {
         await chrome.tabs.remove(ids);
@@ -3518,6 +3545,14 @@ async function handleCommandAction(action) {
   }
   if (action === 'save-group') {
     return saveActiveGroup();
+  }
+  if (action === 'save-keep') {
+    const tab = await getActiveTab();
+    const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+    if (tab?.groupId != null && tab.groupId !== none) {
+      return saveActiveGroup({ afterSaveGroup: 'keep' });
+    }
+    return saveActiveTab({ afterSave: 'keep' });
   }
   if (action === 'toggle-park') {
     if (!beginAction('toggle-park')) return { ok: false, error: 'debounced' };
@@ -3846,6 +3881,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'SAVE_ACTIVE_TAB',
   'SAVE_TAB_FROM_CONTENT',
   'SAVE_ACTIVE_GROUP',
+  'OPEN_PARK_ACTIVE',
   'ADD_TAG',
   'RENAME_TAG',
   'DELETE_TAG',
@@ -3911,11 +3947,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'CREATE_STACK':
         return createStack(message.ids, message.title);
       case 'SAVE_ACTIVE_TAB':
-        return saveActiveTab();
+        return saveActiveTab({ afterSave: message.afterSave });
       case 'SAVE_TAB_FROM_CONTENT':
         return saveCurrentTab(sender?.tab || null);
       case 'SAVE_ACTIVE_GROUP':
-        return saveActiveGroup();
+        return saveActiveGroup({ afterSaveGroup: message.afterSaveGroup });
+      case 'OPEN_PARK_ACTIVE':
+        return openParkOnActiveTab();
       case 'GET_TAGS':
         return { ok: true, tags: await getTagsWithCounts() };
       case 'ADD_TAG':
@@ -4046,10 +4084,6 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-chrome.action.onClicked.addListener(async () => {
-  await enqueueMutation(() => toggleParkOnActiveTab());
-});
-
 if (globalThis.__TABWALL_TEST__) {
   globalThis.TabWallBackgroundTest = {
     DATA_VERSION,
@@ -4083,6 +4117,7 @@ if (globalThis.__TABWALL_TEST__) {
     restoreGroup,
     restoreGroupMember,
     toggleParkOnActiveTab,
+    openParkOnActiveTab,
     openStandaloneParkTab,
     handleCommandAction,
   };

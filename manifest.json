@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.21.4",
+  "version": "2.24.1",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -20,6 +20,7 @@
   },
   "action": {
     "default_title": "TabWall",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -55,6 +56,13 @@
         "mac": "Alt+S"
       },
       "description": "Park current tab"
+    },
+    "save-keep": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Park current tab or Tab Group without closing it"
     },
     "save-group": {
       "suggested_key": {

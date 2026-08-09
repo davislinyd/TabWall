@@ -390,7 +390,193 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.21.4');
+  assert.equal(MANIFEST.version, '2.24.1');
+  assert.equal(MANIFEST.action?.default_popup, 'popup.html');
+  assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
+  assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
+});
+
+test('Chrome keep shortcut saves the current tab or group without closing it', async () => {
+  const tabRuntime = createRuntime();
+  await tabRuntime.ready;
+  tabRuntime.runtime.activeTabs = [{
+    id: 901,
+    windowId: 1,
+    url: 'https://command-keep-tab.example/',
+    title: 'Keep tab',
+    favIconUrl: '',
+  }];
+
+  const tabResult = await tabRuntime.api.handleCommandAction('save-keep');
+  assert.equal(tabResult.ok, true);
+  assert.deepEqual(tabRuntime.removedTabs, []);
+
+  const groupRuntime = createRuntime();
+  await groupRuntime.ready;
+  groupRuntime.store.settings = { saveGroupCapture: 'none' };
+  groupRuntime.runtime.groupTabs = [
+    { id: 902, windowId: 1, groupId: 77, index: 0, url: 'https://command-keep-group.example/', title: 'Keep group' },
+  ];
+  groupRuntime.runtime.activeTabs = [groupRuntime.runtime.groupTabs[0]];
+
+  const groupResult = await groupRuntime.api.handleCommandAction('save-keep');
+  assert.equal(groupResult.ok, true);
+  assert.deepEqual(groupRuntime.removedTabs, []);
+});
+
+test('popup tab keep override saves without closing and does not change settings', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{
+    id: 501,
+    windowId: 1,
+    url: 'https://popup-keep.example/',
+    title: 'Popup keep',
+    favIconUrl: '',
+  }];
+
+  const saved = await dispatchMessage(runtime, {
+    type: 'SAVE_ACTIVE_TAB',
+    afterSave: 'keep',
+  });
+
+  assert.equal(saved.ok, true);
+  assert.deepEqual(runtime.removedTabs, []);
+  assert.equal((await runtime.api.getParkedItems())[0].url, 'https://popup-keep.example/');
+  assert.equal((await runtime.api.commitSaveTab({
+    id: 502,
+    windowId: 1,
+    url: 'https://popup-close-default.example/',
+    title: 'Default close',
+    favIconUrl: '',
+  })).ok, true);
+  assert.deepEqual(runtime.removedTabs, [502]);
+});
+
+test('popup tab close override removes the saved tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{
+    id: 503,
+    windowId: 1,
+    url: 'https://popup-close.example/',
+    title: 'Popup close',
+    favIconUrl: '',
+  }];
+
+  const saved = await dispatchMessage(runtime, {
+    type: 'SAVE_ACTIVE_TAB',
+    afterSave: 'close',
+  });
+
+  assert.equal(saved.ok, true);
+  assert.deepEqual(runtime.removedTabs, [503]);
+});
+
+test('popup group keep and close overrides control member removal', async () => {
+  const keepRuntime = createRuntime();
+  await keepRuntime.ready;
+  keepRuntime.store.settings = { saveGroupCapture: 'none' };
+  keepRuntime.runtime.groupTabs = [
+    { id: 601, windowId: 1, groupId: 77, index: 0, url: 'https://group-keep-a.example/', title: 'A' },
+    { id: 602, windowId: 1, groupId: 77, index: 1, url: 'https://group-keep-b.example/', title: 'B' },
+  ];
+  keepRuntime.runtime.activeTabs = [keepRuntime.runtime.groupTabs[0]];
+
+  const kept = await dispatchMessage(keepRuntime, {
+    type: 'SAVE_ACTIVE_GROUP',
+    afterSaveGroup: 'keep',
+  });
+  assert.equal(kept.ok, true);
+  assert.deepEqual(keepRuntime.removedTabs, []);
+
+  const closeRuntime = createRuntime();
+  await closeRuntime.ready;
+  closeRuntime.store.settings = { saveGroupCapture: 'none' };
+  closeRuntime.runtime.groupTabs = [
+    { id: 603, windowId: 1, groupId: 77, index: 0, url: 'https://group-close-a.example/', title: 'A' },
+    { id: 604, windowId: 1, groupId: 77, index: 1, url: 'https://group-close-b.example/', title: 'B' },
+  ];
+  closeRuntime.runtime.activeTabs = [closeRuntime.runtime.groupTabs[0]];
+
+  const closed = await dispatchMessage(closeRuntime, {
+    type: 'SAVE_ACTIVE_GROUP',
+    afterSaveGroup: 'close',
+  });
+  assert.equal(closed.ok, true);
+  assert.deepEqual(closeRuntime.removedTabs, [603, 604]);
+});
+
+test('popup save mode survives duplicate conflict resolution', async () => {
+  const keepRuntime = createRuntime();
+  await keepRuntime.ready;
+  await keepRuntime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-popup.example/')]);
+  keepRuntime.runtime.activeTabs = [{
+    id: 701,
+    windowId: 1,
+    url: 'https://conflict-popup.example/',
+    title: 'Incoming',
+    favIconUrl: '',
+  }];
+
+  const pendingKeep = await dispatchMessage(keepRuntime, {
+    type: 'SAVE_ACTIVE_TAB',
+    afterSave: 'keep',
+  });
+  assert.equal(pendingKeep.conflict, true);
+  assert.equal((await dispatchMessage(keepRuntime, {
+    type: 'RESOLVE_SAVE_CONFLICT',
+    decision: 'keep',
+  })).ok, true);
+  assert.deepEqual(keepRuntime.removedTabs, []);
+
+  const closeRuntime = createRuntime();
+  await closeRuntime.ready;
+  await closeRuntime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-popup-close.example/')]);
+  closeRuntime.runtime.activeTabs = [{
+    id: 702,
+    windowId: 1,
+    url: 'https://conflict-popup-close.example/',
+    title: 'Incoming',
+    favIconUrl: '',
+  }];
+
+  const pendingClose = await dispatchMessage(closeRuntime, {
+    type: 'SAVE_ACTIVE_TAB',
+    afterSave: 'close',
+  });
+  assert.equal(pendingClose.conflict, true);
+  assert.equal((await dispatchMessage(closeRuntime, {
+    type: 'RESOLVE_SAVE_CONFLICT',
+    decision: 'keep',
+  })).ok, true);
+  assert.deepEqual(closeRuntime.removedTabs, [702]);
+});
+
+test('open panel action opens overlay, standalone fallback, or reuses TabWall', async () => {
+  const overlayRuntime = createRuntime();
+  await overlayRuntime.ready;
+  overlayRuntime.runtime.activeTabs = [{ id: 801, windowId: 1, url: 'https://open-panel.example/' }];
+  const overlay = await dispatchMessage(overlayRuntime, { type: 'OPEN_PARK_ACTIVE' });
+  assert.equal(overlay.ok, true);
+  assert.equal(overlay.mode, 'overlay');
+  assert.equal(overlay.tabId, 801);
+
+  const standaloneRuntime = createRuntime();
+  await standaloneRuntime.ready;
+  standaloneRuntime.runtime.activeTabs = [{ id: 802, windowId: 1, url: 'chrome://extensions/' }];
+  const standalone = await dispatchMessage(standaloneRuntime, { type: 'OPEN_PARK_ACTIVE' });
+  assert.equal(standalone.ok, true);
+  assert.equal(standalone.mode, 'standalone');
+  assert.equal(standaloneRuntime.runtime.createdTabs[0].url, 'chrome-extension://test/park.html?surface=standalone');
+
+  const existingRuntime = createRuntime();
+  await existingRuntime.ready;
+  existingRuntime.runtime.activeTabs = [{ id: 803, windowId: 1, url: 'chrome-extension://test/park.html?surface=standalone' }];
+  const existing = await dispatchMessage(existingRuntime, { type: 'OPEN_PARK_ACTIVE' });
+  assert.equal(existing.ok, true);
+  assert.equal(existing.mode, 'already-open');
+  assert.equal(existing.tabId, 803);
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
