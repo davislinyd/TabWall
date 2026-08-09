@@ -4083,7 +4083,14 @@
         width: 10000px;
         height: 10000px;
         transform-origin: 0 0;
-        will-change: transform;
+      }
+
+      .canvas-world-scale {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 10000px;
+        height: 10000px;
       }
 
       .canvas-nodes {
@@ -4486,6 +4493,12 @@
         box-shadow: var(--shadow);
       }
 
+      .canvas-zoom-value-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
       .canvas-zoom-controls button {
         min-width: 34px;
         min-height: 32px;
@@ -4499,8 +4512,88 @@
         cursor: pointer;
       }
 
+      .canvas-zoom-value {
+        min-width: 52px !important;
+        color: var(--muted) !important;
+        font-size: 10px !important;
+        text-align: center;
+      }
+
       .canvas-zoom-controls button:hover {
         background: var(--btn-hover);
+      }
+
+      .canvas-zoom-slider-popover,
+      .canvas-zoom-menu {
+        position: absolute;
+        top: calc(100% + 7px);
+        left: 50%;
+        z-index: 40;
+        transform: translateX(-50%);
+        border: 1px solid var(--border-strong);
+        border-radius: 4px;
+        background: var(--panel-raised, var(--panel));
+        box-shadow: var(--shadow);
+      }
+
+      .canvas-zoom-slider-popover {
+        width: 180px;
+        padding: 8px 10px;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 120ms ease, visibility 120ms ease;
+      }
+
+      .canvas-zoom-value-wrap:hover .canvas-zoom-slider-popover,
+      .canvas-zoom-value-wrap:focus-within .canvas-zoom-slider-popover {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
+
+      .canvas-zoom-value-wrap[data-menu-open="true"] .canvas-zoom-slider-popover {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .canvas-zoom-slider {
+        display: block;
+        width: 100%;
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .canvas-zoom-menu {
+        display: grid;
+        min-width: 154px;
+        padding: 4px;
+      }
+
+      .canvas-zoom-menu[hidden] {
+        display: none !important;
+      }
+
+      .canvas-zoom-menu button {
+        width: 100%;
+        min-height: 32px;
+        padding: 6px 9px;
+        border: 0;
+        border-radius: 3px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 11px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .canvas-zoom-menu button:hover,
+      .canvas-zoom-menu button:focus-visible {
+        background: var(--btn-hover);
+        color: var(--accent);
       }
 
       .canvas-zoom-controls span {
@@ -4620,6 +4713,7 @@
       .canvas-index:focus-visible,
       .canvas-context-bar button:focus-visible,
       .canvas-zoom-controls button:focus-visible,
+      .canvas-zoom-controls input:focus-visible,
       .settings-nav-btn:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
@@ -5790,7 +5884,8 @@
       .canvas-tool:focus-visible,
       .canvas-index:focus-visible,
       .canvas-context-bar button:focus-visible,
-      .canvas-zoom-controls button:focus-visible {
+      .canvas-zoom-controls button:focus-visible,
+      .canvas-zoom-controls input:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
@@ -5934,10 +6029,12 @@
         </aside>
         <div id="canvasViewport" class="canvas-viewport" tabindex="0" role="application" aria-label="TabWall 無限畫布">
           <div id="canvasWorld" class="canvas-world">
-            <svg id="canvasConnections" class="canvas-connections" role="group" data-i18n-aria="canvasConnectionsLabel" aria-label="畫布連線" focusable="false"></svg>
-            <div id="canvasNodes" class="canvas-nodes"></div>
-            <div id="canvasSelection" class="canvas-selection" hidden></div>
-            <button type="button" id="canvasDropZone" class="canvas-drop-zone" hidden data-i18n="canvasDropStack">拖曳到這裡建立 Stack</button>
+            <div id="canvasWorldScale" class="canvas-world-scale">
+              <svg id="canvasConnections" class="canvas-connections" role="group" data-i18n-aria="canvasConnectionsLabel" aria-label="畫布連線" focusable="false"></svg>
+              <div id="canvasNodes" class="canvas-nodes"></div>
+              <div id="canvasSelection" class="canvas-selection" hidden></div>
+              <button type="button" id="canvasDropZone" class="canvas-drop-zone" hidden data-i18n="canvasDropStack">拖曳到這裡建立 Stack</button>
+            </div>
           </div>
           <div id="canvasContextBar" class="canvas-context-bar" aria-hidden="true">
             <span class="canvas-selection-count"><span data-canvas-selection-count>0</span> 個項目</span>
@@ -5955,10 +6052,20 @@
             </div>
             <button type="button" id="canvasResetView" data-i18n="canvasResetView">重設視角</button>
           </div>
-          <div class="canvas-zoom-controls" aria-label="縮放控制">
-            <button type="button" id="canvasZoomOut" aria-label="縮小">−</button>
-            <span id="canvasZoomValue">100%</span>
-            <button type="button" id="canvasZoomIn" aria-label="放大">＋</button>
+          <div id="canvasZoomControls" class="canvas-zoom-controls" aria-label="縮放控制" data-i18n-aria="canvasZoomControlsLabel">
+            <button type="button" id="canvasZoomOut" aria-label="縮小" data-i18n-aria="canvasZoomOut">−</button>
+            <div id="canvasZoomValueWrap" class="canvas-zoom-value-wrap" data-menu-open="false">
+              <button type="button" id="canvasZoomValue" class="canvas-zoom-value" aria-label="縮放比例" data-i18n-aria="canvasZoomValueLabel" aria-expanded="false" aria-controls="canvasZoomMenu">100%</button>
+              <div class="canvas-zoom-slider-popover">
+                <input id="canvasZoomSlider" class="canvas-zoom-slider" type="range" min="0.25" max="2" step="0.05" value="1" aria-label="調整縮放比例" data-i18n-aria="canvasZoomSliderLabel" />
+              </div>
+              <div id="canvasZoomMenu" class="canvas-zoom-menu" role="menu" aria-label="縮放選項" data-i18n-aria="canvasZoomMenuLabel" hidden>
+                <button type="button" role="menuitem" data-canvas-zoom-action="width" data-i18n="canvasZoomFitWidth">符合寬度</button>
+                <button type="button" role="menuitem" data-canvas-zoom-action="screen" data-i18n="canvasZoomFitScreen">符合畫面</button>
+                <button type="button" role="menuitem" data-canvas-zoom-action="reset" data-i18n="canvasZoomReset">重設</button>
+              </div>
+            </div>
+            <button type="button" id="canvasZoomIn" aria-label="放大" data-i18n-aria="canvasZoomIn">＋</button>
             <span id="canvasSyncStatus" class="canvas-sync-status" aria-live="polite"></span>
           </div>
         </div>

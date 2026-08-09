@@ -20,6 +20,10 @@ const CANVAS_NODE_DISPLAY_SCALE = 1.1;
 const CANVAS_NODE_DEFAULT_WIDTH = 220;
 const CANVAS_NODE_DEFAULT_HEIGHT = 170;
 const CANVAS_DEFAULT_CARD_GAP = 96;
+const CANVAS_ZOOM_MIN = 0.25;
+const CANVAS_ZOOM_MAX = 2;
+const CANVAS_ZOOM_STEP = 0.05;
+const CANVAS_FIT_PADDING = 24;
 const CANVAS_CONNECTION_HIT_WIDTH = 16;
 const CANVAS_CONNECTION_MAX_CURVE_OFFSET = 2000;
 
@@ -621,6 +625,15 @@ const I18N = {
     canvasSortTitle: '排序',
     canvasSortLabel: '排序方式',
     canvasArrangeTitle: '排列',
+    canvasZoomControlsLabel: '縮放控制',
+    canvasZoomOut: '縮小',
+    canvasZoomIn: '放大',
+    canvasZoomValueLabel: '縮放比例',
+    canvasZoomSliderLabel: '調整縮放比例',
+    canvasZoomMenuLabel: '縮放選項',
+    canvasZoomFitWidth: '符合寬度',
+    canvasZoomFitScreen: '符合畫面',
+    canvasZoomReset: '重設',
     canvasOpen: '開啟',
     canvasMoveToStack: '移至 Stack',
     canvasCreateStack: '建立 Stack',
@@ -929,6 +942,15 @@ const I18N = {
     canvasSortTitle: 'Sort',
     canvasSortLabel: 'Sort by',
     canvasArrangeTitle: 'Arrange',
+    canvasZoomControlsLabel: 'Zoom controls',
+    canvasZoomOut: 'Zoom out',
+    canvasZoomIn: 'Zoom in',
+    canvasZoomValueLabel: 'Zoom level',
+    canvasZoomSliderLabel: 'Adjust zoom level',
+    canvasZoomMenuLabel: 'Zoom options',
+    canvasZoomFitWidth: 'Fit to width',
+    canvasZoomFitScreen: 'Fit to screen',
+    canvasZoomReset: 'Reset',
     canvasOpen: 'Open',
     canvasMoveToStack: 'Move to Stack',
     canvasCreateStack: 'Create Stack',
@@ -1162,12 +1184,17 @@ const canvasRailResize = document.getElementById('canvasRailResize');
 const canvasRailToggle = document.getElementById('canvasRailToggle');
 const canvasViewportEl = document.getElementById('canvasViewport');
 const canvasWorldEl = document.getElementById('canvasWorld');
+const canvasWorldScaleEl = document.getElementById('canvasWorldScale');
 const canvasConnectionsEl = document.getElementById('canvasConnections');
 const canvasNodesEl = document.getElementById('canvasNodes');
 const canvasSelectionEl = document.getElementById('canvasSelection');
 const canvasContextBar = document.getElementById('canvasContextBar');
 const canvasMinimap = document.getElementById('canvasMinimap');
 const canvasMinimapViewport = document.getElementById('canvasMinimapViewport');
+const canvasZoomValueWrap = document.getElementById('canvasZoomValueWrap');
+const canvasZoomValue = document.getElementById('canvasZoomValue');
+const canvasZoomSlider = document.getElementById('canvasZoomSlider');
+const canvasZoomMenu = document.getElementById('canvasZoomMenu');
 const canvasDropZone = document.getElementById('canvasDropZone');
 const canvasStackDialog = document.getElementById('canvasStackDialog');
 const canvasStackTitle = document.getElementById('canvasStackTitle');
@@ -2045,6 +2072,7 @@ function applyViewMode(mode) {
   if (canvasView) canvasView.hidden = !isCanvas;
   if (canvasView) canvasView.setAttribute('aria-hidden', isCanvas ? 'false' : 'true');
   document.body.classList.toggle('canvas-mode', isCanvas);
+  if (!isCanvas) closeCanvasZoomMenu();
   if (isCanvas) scheduleInitialCanvasCenter();
 }
 
@@ -3231,6 +3259,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
+    if (canvasZoomMenu && !canvasZoomMenu.hidden) {
+      closeCanvasZoomMenu();
+      return;
+    }
     if (canvasConnectionSourceId || selectedCanvasConnectionId) {
       clearCanvasConnectionSelection();
       return;
@@ -6500,18 +6532,20 @@ function canvasPointFromEvent(event) {
 }
 
 function updateCanvasTransform() {
-  if (!canvasWorldEl) return;
   const { x, y, zoom } = canvasLayout.viewport;
-  canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px) scale(${zoom})`;
-  const zoomValue = document.getElementById('canvasZoomValue');
-  if (zoomValue) zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+  if (canvasWorldEl && canvasWorldScaleEl) {
+    canvasWorldScaleEl.style.zoom = String(zoom);
+    canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px)`;
+  }
+  if (canvasZoomValue) canvasZoomValue.textContent = `${Math.round(zoom * 100)}%`;
+  if (canvasZoomSlider) canvasZoomSlider.value = String(zoom);
   if (canvasMinimap) canvasMinimap.dataset.zoom = String(zoom);
 }
 
 function setCanvasZoom(next, clientX = null, clientY = null) {
   const state = canvasStoreSnapshot();
   const oldZoom = state.layout.viewport.zoom;
-  const zoom = Math.min(2, Math.max(0.25, Number(next) || oldZoom));
+  const zoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, Number(next) || oldZoom));
   if (zoom === oldZoom) return;
   const rect = canvasViewportEl?.getBoundingClientRect();
   let anchor = null;
@@ -6528,6 +6562,69 @@ function setCanvasZoom(next, clientX = null, clientY = null) {
     };
   }
   canvasStore?.commitZoom(zoom, anchor);
+}
+
+function canvasViewportSize() {
+  const rect = canvasViewportEl?.getBoundingClientRect?.();
+  return {
+    width: Math.max(0, canvasViewportEl?.clientWidth || rect?.width || 0),
+    height: Math.max(0, canvasViewportEl?.clientHeight || rect?.height || 0),
+  };
+}
+
+function canvasFitViewport(mode) {
+  if (mode !== 'width' && mode !== 'screen') return false;
+  const { width, height } = canvasViewportSize();
+  const items = getCanvasVisibleTabs();
+  if (!width || !height || !items.length) return false;
+  const state = canvasStoreSnapshot();
+  const layout = state.layout || canvasLayout;
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  items.forEach((item, index) => {
+    const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
+    bounds.minX = Math.min(bounds.minX, position.x);
+    bounds.minY = Math.min(bounds.minY, position.y);
+    bounds.maxX = Math.max(bounds.maxX, position.x + position.w);
+    bounds.maxY = Math.max(bounds.maxY, position.y + position.h);
+  });
+  const contentWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const contentHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const availableWidth = Math.max(1, width - CANVAS_FIT_PADDING * 2);
+  const availableHeight = Math.max(1, height - CANVAS_FIT_PADDING * 2);
+  const widthZoom = availableWidth / contentWidth;
+  const heightZoom = availableHeight / contentHeight;
+  const requestedZoom = mode === 'width' ? widthZoom : Math.min(widthZoom, heightZoom);
+  const zoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, requestedZoom));
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  ensureCanvasStore()?.commitViewport({
+    x: centerX - width / (2 * zoom),
+    y: centerY - height / (2 * zoom),
+    zoom,
+  });
+  return true;
+}
+
+function closeCanvasZoomMenu({ restoreFocus = false } = {}) {
+  if (!canvasZoomMenu || !canvasZoomValueWrap || !canvasZoomValue) return;
+  canvasZoomMenu.hidden = true;
+  canvasZoomValueWrap.dataset.menuOpen = 'false';
+  canvasZoomValue.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) canvasZoomValue.focus({ preventScroll: true });
+}
+
+function toggleCanvasZoomMenu() {
+  if (!canvasZoomMenu || !canvasZoomValueWrap || !canvasZoomValue) return;
+  const open = canvasZoomMenu.hidden;
+  canvasZoomMenu.hidden = !open;
+  canvasZoomValueWrap.dataset.menuOpen = open ? 'true' : 'false';
+  canvasZoomValue.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function applyCanvasZoomAction(action) {
+  if (action === 'reset') resetCanvasView();
+  else canvasFitViewport(action);
+  closeCanvasZoomMenu({ restoreFocus: true });
 }
 
 function centerCanvasInitialView() {
@@ -8261,6 +8358,12 @@ function initCanvasInteractions() {
       }
     }
     if (event.key === 'Escape') {
+      if (canvasZoomMenu && !canvasZoomMenu.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeCanvasZoomMenu();
+        return;
+      }
       cancelCanvasConnectionDrag();
       clearCanvasConnectionSelection();
       ensureCanvasStore()?.setSelection([]);
@@ -8319,6 +8422,22 @@ function initCanvasInteractions() {
   document.getElementById('canvasZoomOut')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom - 0.1));
   document.getElementById('canvasZoomIn')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom + 0.1));
   document.getElementById('canvasResetView')?.addEventListener('click', resetCanvasView);
+  if (canvasZoomSlider) {
+    canvasZoomSlider.min = String(CANVAS_ZOOM_MIN);
+    canvasZoomSlider.max = String(CANVAS_ZOOM_MAX);
+    canvasZoomSlider.step = String(CANVAS_ZOOM_STEP);
+    canvasZoomSlider.addEventListener('input', (event) => setCanvasZoom(event.currentTarget.value));
+  }
+  canvasZoomValue?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleCanvasZoomMenu();
+  });
+  canvasZoomMenu?.querySelectorAll('[data-canvas-zoom-action]').forEach((button) => {
+    button.addEventListener('click', () => applyCanvasZoomAction(button.dataset.canvasZoomAction || ''));
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (!event.target.closest?.('#canvasZoomValueWrap')) closeCanvasZoomMenu();
+  });
   document.getElementById('canvasAllBtn')?.addEventListener('click', () => setCanvasIndexFilter('all'));
   document.getElementById('canvasUnsortedBtn')?.addEventListener('click', () => setCanvasIndexFilter('unsorted'));
   document.getElementById('canvasPinnedBtn')?.addEventListener('click', () => setCanvasIndexFilter('pinned'));

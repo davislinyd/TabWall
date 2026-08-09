@@ -9,7 +9,7 @@ const WORKBENCH_CSS = HTML_SOURCE.split('/* ─── TabWall 2.17.0 Editorial W
 
 test('Spatial Canvas exposes isolated controls and complete node actions', () => {
   assert.match(HTML_SOURCE, /id="canvasViewport"[^>]*class="canvas-viewport"/);
-  for (const id of ['canvasContextBar', 'canvasMinimap', 'canvasZoomOut', 'canvasZoomIn', 'canvasConnections', 'canvasMinimapViewport']) {
+  for (const id of ['canvasContextBar', 'canvasMinimap', 'canvasZoomControls', 'canvasZoomValue', 'canvasZoomSlider', 'canvasZoomMenu', 'canvasZoomOut', 'canvasZoomIn', 'canvasConnections', 'canvasMinimapViewport']) {
     assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
   }
   assert.doesNotMatch(HTML_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle/);
@@ -174,7 +174,7 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.match(PARK_SOURCE, /canvasMinimapProjection/);
   assert.doesNotMatch(PARK_SOURCE.match(/function renderCanvasMinimap\(items\)[\s\S]*?\n\}\n\nfunction canvasNodeRenderKey/)?.[0] || '', /innerHTML/);
   assert.match(PARK_SOURCE, /data-canvas-media="true"/);
-  assert.match(HTML_SOURCE, /id="canvasZoomValue">100%<\/span>/);
+  assert.match(HTML_SOURCE, /id="canvasZoomValue"[^>]*aria-expanded="false"[^>]*aria-controls="canvasZoomMenu">100%<\/button>/);
   assert.match(HTML_SOURCE, /#settingsBox\.open[\s\S]*?display: grid/);
   assert.match(HTML_SOURCE, /#settingsBox\.open\s*\{\s*display:\s*grid;\s*transform:\s*translate\(-50%, -50%\) !important;/);
   assert.match(HTML_SOURCE, /grid-template-rows: auto minmax\(0, 1fr\) auto/);
@@ -282,4 +282,46 @@ test('Canvas display geometry and connection endpoints use the four side handles
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle svg\s*\{[\s\S]*?width:\s*14px[\s\S]*?height:\s*14px/);
   assert.match(WORKBENCH_CSS, /\.canvas-node:hover \.canvas-link-handle/);
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle:hover,[\s\S]*?transform:\s*translate\(-50%, -50%\) scale\(1\.08\)/);
+});
+
+test('Canvas zoom uses a layout-scaled inner world and translation-only outer transform', () => {
+  assert.match(HTML_SOURCE, /id="canvasWorld" class="canvas-world">[\s\S]*?id="canvasWorldScale" class="canvas-world-scale">[\s\S]*?id="canvasConnections"/);
+  const worldCss = HTML_SOURCE.match(/\.canvas-world\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
+  assert.doesNotMatch(worldCss, /will-change:\s*transform/);
+  assert.match(HTML_SOURCE, /\.canvas-world-scale\s*\{[\s\S]*?width:\s*10000px[\s\S]*?height:\s*10000px/);
+  const transformSource = PARK_SOURCE.match(/function updateCanvasTransform\(\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(transformSource, /canvasWorldScaleEl\.style\.zoom = String\(zoom\)/);
+  assert.match(transformSource, /canvasWorldEl\.style\.transform = `translate\(\$\{-x \* zoom\}px, \$\{-y \* zoom\}px\)`/);
+  assert.doesNotMatch(transformSource, /scale\(/);
+});
+
+test('Canvas zoom controls expose a hover slider and accessible fit menu', () => {
+  assert.match(HTML_SOURCE, /class="canvas-zoom-value-wrap"[^>]*data-menu-open="false"/);
+  assert.match(HTML_SOURCE, /id="canvasZoomSlider"[^>]*type="range"[^>]*min="0\.25"[^>]*max="2"[^>]*step="0\.05"/);
+  assert.match(HTML_SOURCE, /id="canvasZoomMenu"[^>]*role="menu"[^>]*hidden/);
+  for (const action of ['width', 'screen', 'reset']) {
+    assert.match(HTML_SOURCE, new RegExp(`data-canvas-zoom-action="${action}"`));
+  }
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap:hover \.canvas-zoom-slider-popover/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap:focus-within \.canvas-zoom-slider-popover/);
+  assert.match(HTML_SOURCE, /\.canvas-zoom-value-wrap\[data-menu-open="true"\] \.canvas-zoom-slider-popover/);
+  assert.match(PARK_SOURCE, /canvasZoomSlider\.addEventListener\('input'/);
+  assert.match(PARK_SOURCE, /canvasZoomValue\?\.addEventListener\('click'/);
+  assert.match(PARK_SOURCE, /function toggleCanvasZoomMenu\(\)/);
+  assert.match(PARK_SOURCE, /function closeCanvasZoomMenu\(/);
+  assert.match(PARK_SOURCE, /function applyCanvasZoomAction\(action\)/);
+  assert.match(PARK_SOURCE, /document\.addEventListener\('pointerdown', \(event\) => \{[\s\S]*?closeCanvasZoomMenu\(\);/);
+});
+
+test('Canvas fit actions use visible card bounds and preserve the viewport schema', () => {
+  assert.match(PARK_SOURCE, /const CANVAS_FIT_PADDING = 24/);
+  assert.match(PARK_SOURCE, /function canvasFitViewport\(mode\)/);
+  const fitSource = PARK_SOURCE.match(/function canvasFitViewport\(mode\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(fitSource, /const items = getCanvasVisibleTabs\(\)/);
+  assert.match(fitSource, /canvasDisplayPosition\(layout\.positions\?\.\[item\.id\] \|\| canvasDefaultPosition\(index\)\)/);
+  assert.match(fitSource, /const widthZoom = availableWidth \/ contentWidth/);
+  assert.match(fitSource, /const requestedZoom = mode === 'width' \? widthZoom : Math\.min\(widthZoom, heightZoom\)/);
+  assert.match(fitSource, /ensureCanvasStore\(\)\?\.commitViewport\(\{/);
+  assert.match(PARK_SOURCE, /if \(action === 'reset'\) resetCanvasView\(\)/);
+  assert.match(PARK_SOURCE, /if \(canvasZoomMenu && !canvasZoomMenu\.hidden\)/);
 });

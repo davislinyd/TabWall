@@ -302,7 +302,7 @@ function tab(id, url = 'https://example.com/') {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.19.3');
+  assert.equal(MANIFEST.version, '2.19.5');
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {

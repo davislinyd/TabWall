@@ -13,6 +13,14 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.19.5 — 2026-08-09
+
+- Canvas 縮放比例欄位 hover 或 focus 時顯示原生 range slider；點擊百分比可使用 Fit to width、Fit to screen 與 Reset，並依目前可見卡片計算視角。
+
+## 2.19.4 — 2026-08-09
+
+- Canvas zoom 改用內層 CSS layout zoom，外層只負責平移；卡片、文字、favicon、SVG 圖示與操作按鈕不再因放大合成層而模糊，快照仍受原始解析度限制。
+
 ## 2.19.3 — 2026-08-08
 
 - Canvas 連線端點改為貼齊卡片四側 `+` handle 中心，依兩張卡片相對方向動態選擇上、右、下或左側，並優先使用實際卡片矩形避免端點偏移。
