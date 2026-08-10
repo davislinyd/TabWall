@@ -43,6 +43,7 @@ function createRuntime() {
   const importStages = new Map();
   const removedDownloads = [];
   const removedTabs = [];
+  const badgeCalls = [];
   const testSetTimeout = setTimeout;
   const testClearTimeout = clearTimeout;
   const chrome = {
@@ -93,10 +94,16 @@ function createRuntime() {
     commands: { onCommand: event(), async getAll() { return []; } },
   action: {
       onClicked: event(),
-      async setBadgeBackgroundColor() {},
-      async setBadgeText() {},
+      async setBadgeBackgroundColor(details) {
+        badgeCalls.push({ type: 'background', ...details });
+      },
+      async setBadgeText(details) {
+        badgeCalls.push({ type: 'text', ...details });
+      },
   },
     tabs: {
+      onActivated: event(),
+      onUpdated: event(),
       async query(queryInfo = {}) {
         if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
         if (queryInfo.url) {
@@ -121,7 +128,19 @@ function createRuntime() {
       async getCurrent() {
         return runtime.currentTab;
       },
-      async get() { return { id: 1, windowId: 1, status: 'complete' }; },
+      async get(id) {
+        const candidates = [
+          ...runtime.activeTabs,
+          ...runtime.groupTabs,
+          ...runtime.createdTabs,
+        ];
+        const found = candidates.find((tab) => tab?.id === id);
+        return found ? { ...found, status: found.status || 'complete' } : {
+          id,
+          windowId: 1,
+          status: 'complete',
+        };
+      },
       async sendMessage() {
         if (runtime.failSendMessage) throw new Error('send_message_failed');
       },
@@ -175,6 +194,7 @@ function createRuntime() {
     createdTabs: [],
     updatedTabs: [],
     updatedWindows: [],
+    badgeCalls,
     parkTabs: [],
     currentTab: null,
     downloadItems: [],
@@ -331,6 +351,7 @@ function createRuntime() {
     runtime,
     removedDownloads,
     removedTabs,
+    badgeCalls,
     ready,
   };
 }
@@ -390,10 +411,132 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.25.0');
+  assert.equal(MANIFEST.version, '2.25.1');
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
+});
+
+test('action badge matches standalone tabs and group members by exact URL', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const standaloneUrl = 'https://badge-standalone.example/path?view=1#saved';
+  const groupUrl = 'https://badge-group.example/member';
+  await runtime.api.setParkedItems([
+    tab(ITEM_ID, standaloneUrl),
+    {
+      kind: 'group',
+      id: GROUP_ID,
+      title: 'Badge group',
+      color: 'blue',
+      tabs: [{
+        id: GROUP_HTTP_MEMBER_ID,
+        url: groupUrl,
+        title: 'Group member',
+      }],
+      notes: [note(NOTE_ID, { attachment: false })],
+    },
+  ]);
+
+  await runtime.api.refreshTabBadge({ id: 1101, url: standaloneUrl });
+  const standaloneText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1101);
+  const standaloneBackground = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'background' && call.tabId === 1101);
+  assert.equal(standaloneText.text, '✓');
+  assert.equal(standaloneBackground.color, '#16a34a');
+
+  await runtime.api.refreshTabBadge({
+    id: 1101,
+    url: 'https://badge-standalone.example/path?view=2#saved',
+  });
+  const queryMismatch = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1101);
+  assert.equal(queryMismatch.text, '');
+
+  await runtime.api.refreshTabBadge({ id: 1102, url: groupUrl });
+  const groupText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1102);
+  assert.equal(groupText.text, '✓');
+
+  await runtime.api.refreshTabBadge({ id: 1103, url: 'https://badge-note.example/' });
+  const noteText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1103);
+  assert.equal(noteText.text, '');
+});
+
+test('action badge refreshes on lifecycle, tab, navigation, and storage events', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const savedUrl = 'https://badge-events.example/saved';
+  await runtime.api.setParkedItems([tab(ITEM_ID, savedUrl)]);
+
+  runtime.runtime.activeTabs = [{ id: 1201, windowId: 1, url: savedUrl }];
+  await runtime.chrome.runtime.onStartup.listeners[0]();
+  let currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1201);
+  assert.equal(currentText.text, '✓');
+
+  runtime.runtime.activeTabs = [{ id: 1202, windowId: 1, url: 'https://badge-events.example/other' }];
+  await runtime.chrome.tabs.onActivated.listeners[0]({ tabId: 1202, windowId: 1 });
+  currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1202);
+  assert.equal(currentText.text, '');
+
+  runtime.runtime.activeTabs = [{ id: 1202, windowId: 1, url: savedUrl }];
+  await runtime.chrome.tabs.onUpdated.listeners[0](
+    1202,
+    { url: savedUrl, status: 'complete' },
+    runtime.runtime.activeTabs[0]
+  );
+  currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1202);
+  assert.equal(currentText.text, '✓');
+
+  const changedUrl = 'https://badge-events.example/added';
+  runtime.runtime.activeTabs = [{ id: 1202, windowId: 1, url: changedUrl }];
+  await runtime.api.setParkedItems([tab(ITEM_ID, changedUrl)]);
+  await runtime.chrome.storage.onChanged.listeners[0](
+    { parkedItems: { newValue: runtime.store.parkedItems } },
+    'local'
+  );
+  currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1202);
+  assert.equal(currentText.text, '✓');
+
+  await runtime.api.setParkedItems([]);
+  await runtime.chrome.storage.onChanged.listeners[0]({
+    parkedItems: { newValue: [] },
+  }, 'local');
+  currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1202);
+  assert.equal(currentText.text, '');
+});
+
+test('temporary action badge restores the saved-state checkmark', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const savedUrl = 'https://badge-flash.example/saved';
+  await runtime.api.setParkedItems([tab(ITEM_ID, savedUrl)]);
+  runtime.runtime.activeTabs = [{ id: 1301, windowId: 1, url: savedUrl }];
+
+  await runtime.api.flashBadge('!', '#ef4444', 0);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const currentText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1301);
+  assert.equal(currentText.text, '✓');
 });
 
 test('automatic save metadata rules support matchers, negation, and accumulation', async () => {

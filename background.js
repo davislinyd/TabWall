@@ -1163,23 +1163,41 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+chrome.tabs.onActivated?.addListener?.(({ tabId }) => {
+  return refreshTabBadge(tabId).catch(() => {});
+});
+
+chrome.tabs.onUpdated?.addListener?.((tabId, changeInfo, tab) => {
+  if (!changeInfo?.url && changeInfo?.status !== 'complete') return;
+  return refreshTabBadge(tab || tabId).catch(() => {});
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes.settings) return;
-  const next = changes.settings.newValue;
-  const ab = normalizeAutoBackup(next?.autoBackup);
-  syncAutoBackupAlarms(ab).catch(() => {});
+  if (area !== 'local') return;
+  const tasks = [];
+  if (changes.settings) {
+    const next = changes.settings.newValue;
+    const ab = normalizeAutoBackup(next?.autoBackup);
+    tasks.push(syncAutoBackupAlarms(ab));
+  }
+  if (changes[STORAGE_ITEMS] || changes[STORAGE_TABS]) {
+    tasks.push(refreshActiveTabBadge());
+  }
+  return Promise.all(tasks).catch(() => {});
 });
 
 // Restore schedule after SW wake / install
 chrome.runtime.onInstalled.addListener(() => {
-  getSettings()
-    .then((s) => syncAutoBackupAlarms(s.autoBackup))
-    .catch(() => {});
+  return Promise.all([
+    getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    refreshActiveTabBadge(),
+  ]).catch(() => {});
 });
 chrome.runtime.onStartup?.addListener?.(() => {
-  getSettings()
-    .then((s) => syncAutoBackupAlarms(s.autoBackup))
-    .catch(() => {});
+  return Promise.all([
+    getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    refreshActiveTabBadge(),
+  ]).catch(() => {});
 });
 
 async function getTagCatalog() {
@@ -2508,12 +2526,50 @@ function isRestorableUrl(url) {
   return !isRestrictedUrl(url) && status === 'restorable';
 }
 
+const PARKED_BADGE_TEXT = '✓';
+const PARKED_BADGE_COLOR = '#16a34a';
+
+async function refreshTabBadge(tabOrId) {
+  let tab = tabOrId;
+  if (typeof tabOrId === 'number') {
+    try {
+      tab = await chrome.tabs.get(tabOrId);
+    } catch {
+      return;
+    }
+  }
+  const tabId = tab?.id;
+  if (tabId == null) return;
+
+  const items = await getParkedItemsRaw();
+  const parked = hasParkedTabUrl(tab.url, items);
+  if (parked) {
+    await chrome.action.setBadgeBackgroundColor({
+      tabId,
+      color: PARKED_BADGE_COLOR,
+    });
+  }
+  await chrome.action.setBadgeText({
+    tabId,
+    text: parked ? PARKED_BADGE_TEXT : '',
+  });
+}
+
+async function refreshActiveTabBadge() {
+  return refreshTabBadge(await getActiveTab());
+}
+
 async function flashBadge(text, color = '#ef4444', ms = 2000) {
   try {
-    await chrome.action.setBadgeBackgroundColor({ color });
-    await chrome.action.setBadgeText({ text });
+    const tab = await getActiveTab();
+    const target = tab?.id != null ? { tabId: tab.id } : {};
+    await chrome.action.setBadgeBackgroundColor({ ...target, color });
+    await chrome.action.setBadgeText({ ...target, text });
     setTimeout(() => {
-      chrome.action.setBadgeText({ text: '' }).catch(() => {});
+      const restore = tab?.id != null
+        ? refreshTabBadge(tab.id)
+        : refreshActiveTabBadge();
+      restore.catch(() => {});
     }, ms);
   } catch {
     // ignore
@@ -2682,6 +2738,17 @@ const RESTORE_HINTS_KEY = 'restoreSaveHints';
 /** Exact URL key (full string including query/hash). */
 function normalizeUrlKey(url) {
   return typeof url === 'string' ? url : '';
+}
+
+function hasParkedTabUrl(url, items) {
+  const key = normalizeUrlKey(url);
+  if (!key) return false;
+  return (items || []).some((item) => {
+    if (!item) return false;
+    if (item.kind === 'tab') return normalizeUrlKey(item.url) === key;
+    if (item.kind !== 'group') return false;
+    return (item.tabs || []).some((member) => normalizeUrlKey(member?.url) === key);
+  });
 }
 
 function tabMatchSummary(item) {
@@ -4264,6 +4331,10 @@ if (globalThis.__TABWALL_TEST__) {
     matchesAutoSaveCondition,
     matchesAutoSaveRule,
     applyAutoSaveMetadata,
+    hasParkedTabUrl,
+    refreshTabBadge,
+    refreshActiveTabBadge,
+    flashBadge,
     commitSaveTab,
     saveCurrentTab,
     saveActiveTab,
@@ -4284,6 +4355,8 @@ if (globalThis.__TABWALL_TEST__) {
     handleCommandAction,
   };
 }
+
+refreshActiveTabBadge().catch(() => {});
 
 // Kick migration early
 ensureMediaMigration()

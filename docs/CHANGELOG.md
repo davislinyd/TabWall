@@ -13,6 +13,10 @@ permalink: /CHANGELOG.html
 
 ---
 
+## 2.25.1 — 2026-08-10
+
+- 目前分頁若已保存於 TabWall 的獨立項目或 Group 成員，extension icon 右下角顯示綠色勾勾 badge。
+
 ## 2.25.0 — 2026-08-10
 
 - 新增可在設定中管理的自動 Note／Tag 儲存規則；支援 domain／FQDN、page title、match／contains／starts with／ends with／regex、not，以及每條規則的 AND／OR。
