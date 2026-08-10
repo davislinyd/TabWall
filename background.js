@@ -122,6 +122,32 @@ const SNAPSHOT = { maxWidth: null, quality: 0.85 };
 
 let migrationPromise = null;
 
+// In-memory cache of every parked URL (tab items + group member URLs), kept
+// in sync by commitItemsAndCanvas (the sole writer of STORAGE_ITEMS) and by
+// storage.onChanged (defensive, in case something else ever writes it).
+// Avoids a full storage read + normalize + nested scan on every tab event.
+let parkedUrlIndex = null;
+
+function buildParkedUrlIndex(items) {
+  const set = new Set();
+  for (const item of items || []) {
+    if (!item) continue;
+    if (item.kind === 'tab' && item.url) set.add(normalizeUrlKey(item.url));
+    else if (item.kind === 'group') {
+      for (const member of item.tabs || []) {
+        if (member?.url) set.add(normalizeUrlKey(member.url));
+      }
+    }
+  }
+  return set;
+}
+
+async function getParkedUrlIndex() {
+  if (parkedUrlIndex) return parkedUrlIndex;
+  parkedUrlIndex = buildParkedUrlIndex(await getParkedItemsRaw());
+  return parkedUrlIndex;
+}
+
 // ─── Normalize meta (no inline media) ──────────────────────────────
 
 function normalizeTabItem(raw) {
@@ -589,6 +615,7 @@ async function commitItemsAndCanvas(items, layout, options = {}) {
   if (Array.isArray(options.tagCatalog)) payload[TAG_CATALOG_KEY] = options.tagCatalog;
   if (options.settings && typeof options.settings === 'object') payload[SETTINGS_KEY] = options.settings;
   await chrome.storage.local.set(payload);
+  parkedUrlIndex = buildParkedUrlIndex(stored); // `stored` is already normalized — no extra I/O
   await markAutoBackupDirty();
   return { items: stored, layout: normalized, revision };
 }
@@ -1097,7 +1124,13 @@ async function patchSettings(partial) {
   return { ok: true, settings: next };
 }
 
-let autoBackupDirtyWriting = false;
+// Mirrors settings.autoBackup.{enabled,onChange} so markAutoBackupDirty
+// doesn't need a settings read just to check whether it should no-op.
+let autoBackupFlagsCache = null;
+// True once dirtyAt + the alarm are set for the current edit burst, so
+// further edits before the alarm fires are no-ops instead of repeat
+// settings reads/writes. Reset when the alarm actually fires.
+let autoBackupAlarmPending = false;
 
 async function patchAutoBackup(partial) {
   const settings = await getSettings();
@@ -1108,12 +1141,16 @@ async function patchAutoBackup(partial) {
 }
 
 async function markAutoBackupDirty() {
-  if (autoBackupDirtyWriting) return;
-  autoBackupDirtyWriting = true;
+  if (!autoBackupFlagsCache) {
+    const settings = await getSettings();
+    autoBackupFlagsCache = { enabled: settings.autoBackup.enabled, onChange: settings.autoBackup.onChange };
+  }
+  if (!autoBackupFlagsCache.enabled || !autoBackupFlagsCache.onChange) return;
+  if (autoBackupAlarmPending) return;
+  autoBackupAlarmPending = true;
   try {
     const settings = await getSettings();
     const ab = settings.autoBackup;
-    if (!ab.enabled || !ab.onChange) return;
     await chrome.storage.local.set({
       [SETTINGS_KEY]: {
         ...settings,
@@ -1123,9 +1160,8 @@ async function markAutoBackupDirty() {
     // 0.5 min when allowed; Chrome may clamp to ≥1 min for store installs
     await chrome.alarms.create(AUTO_BACKUP_ONCHANGE_ALARM, { delayInMinutes: 0.5 });
   } catch (err) {
+    autoBackupAlarmPending = false; // allow retry on the next edit
     console.warn('[TabWall] markAutoBackupDirty failed:', err);
-  } finally {
-    autoBackupDirtyWriting = false;
   }
 }
 
@@ -1238,6 +1274,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_BACKUP_ALARM) {
     enqueueMutation(() => runAutoBackup({ reason: 'schedule' })).catch(() => {});
   } else if (alarm.name === AUTO_BACKUP_ONCHANGE_ALARM) {
+    autoBackupAlarmPending = false;
     enqueueMutation(() => runAutoBackup({ reason: 'onchange' })).catch(() => {});
   }
 });
@@ -1257,7 +1294,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     const next = changes.settings.newValue;
     const ab = normalizeAutoBackup(next?.autoBackup);
+    autoBackupFlagsCache = { enabled: ab.enabled, onChange: ab.onChange };
     tasks.push(syncAutoBackupAlarms(ab));
+  }
+  if (changes[STORAGE_ITEMS]) {
+    // Defensive resync in case something bypasses commitItemsAndCanvas —
+    // newValue is already delivered with the event, so this costs no I/O.
+    const nextItems = Array.isArray(changes[STORAGE_ITEMS].newValue)
+      ? changes[STORAGE_ITEMS].newValue.map(normalizeItem).filter(Boolean)
+      : [];
+    parkedUrlIndex = buildParkedUrlIndex(nextItems);
+  } else if (changes[STORAGE_TABS]) {
+    parkedUrlIndex = null; // legacy-only path; rebuilt lazily on next access
   }
   if (changes[STORAGE_ITEMS] || changes[STORAGE_TABS]) {
     tasks.push(refreshActiveTabBadge());
@@ -1778,16 +1826,33 @@ async function mapWithConcurrency(values, limit, mapper) {
   return result;
 }
 
+// Cache of media already re-encoded to data URLs for the auto full-backup
+// path, keyed by updatedAt so any Media.put*/removeMany call naturally
+// invalidates it (a mismatched or missing updatedAt forces a fresh encode).
+// Covers Media.get() lookups (tab/group-member thumb+snapshot) only — note
+// attachments go through Media.getAttachment(), which doesn't expose
+// updatedAt, so they're left out of this cache to avoid widening that API's
+// contract for a comparatively small win (see exportBackup/hydrateItemMedia).
+const autoBackupMediaCache = new Map(); // mediaKey -> { updatedAt, thumbnail, snapshot }
+
+async function hydrateMediaFields(key) {
+  const med = await Media.get(key);
+  const cached = autoBackupMediaCache.get(key);
+  if (cached && cached.updatedAt === med.updatedAt) {
+    return { thumbnail: cached.thumbnail, snapshot: cached.snapshot };
+  }
+  const thumbnail = med.thumb ? await Media.blobToDataUrl(med.thumb) : '';
+  const snapshot = med.snap ? await Media.blobToDataUrl(med.snap) : '';
+  autoBackupMediaCache.set(key, { updatedAt: med.updatedAt, thumbnail, snapshot });
+  return { thumbnail, snapshot };
+}
+
 async function hydrateItemMedia(item) {
   if (item.kind === 'group') {
-    const tabs = await mapWithConcurrency(item.tabs || [], 4, async (m) => {
-      const med = await Media.get(Media.mediaKeyMember(item.id, m.id));
-      return {
-        ...m,
-        thumbnail: med.thumb ? await Media.blobToDataUrl(med.thumb) : '',
-        snapshot: med.snap ? await Media.blobToDataUrl(med.snap) : '',
-      };
-    });
+    const tabs = await mapWithConcurrency(item.tabs || [], 4, async (m) => ({
+      ...m,
+      ...(await hydrateMediaFields(Media.mediaKeyMember(item.id, m.id))),
+    }));
     const notes = await mapWithConcurrency(item.notes || [], 4, async (note) => ({
       ...note,
       attachments: await mapWithConcurrency(note.attachments || [], 4, async (attachment) => {
@@ -1814,12 +1879,7 @@ async function hydrateItemMedia(item) {
       }),
     };
   }
-  const med = await Media.get(Media.mediaKeyTab(item.id));
-  return {
-    ...item,
-    thumbnail: med.thumb ? await Media.blobToDataUrl(med.thumb) : '',
-    snapshot: med.snap ? await Media.blobToDataUrl(med.snap) : '',
-  };
+  return { ...item, ...(await hydrateMediaFields(Media.mediaKeyTab(item.id))) };
 }
 
 /**
@@ -2511,7 +2571,9 @@ async function batchDeleteItems(ids) {
   const next = list.filter((i) => !idSet.has(i.id));
   await setParkedItems(next);
   try {
-    await Media.removeMany(removed.flatMap((item) => Media.keysForItem(item)));
+    const removedKeys = removed.flatMap((item) => Media.keysForItem(item));
+    await Media.removeMany(removedKeys);
+    removedKeys.forEach((key) => autoBackupMediaCache.delete(key));
   } catch (err) {
     console.warn('[TabWall] batch media remove deferred:', err);
   }
@@ -2620,8 +2682,8 @@ async function refreshTabBadge(tabOrId) {
   const tabId = tab?.id;
   if (tabId == null) return;
 
-  const items = await getParkedItemsRaw();
-  const parked = hasParkedTabUrl(tab.url, items);
+  const urlIndex = await getParkedUrlIndex();
+  const parked = urlIndex.has(normalizeUrlKey(tab.url));
   if (parked) {
     await chrome.action.setBadgeBackgroundColor({
       tabId,
@@ -2817,17 +2879,6 @@ const RESTORE_HINTS_KEY = 'restoreSaveHints';
 /** Exact URL key (full string including query/hash). */
 function normalizeUrlKey(url) {
   return typeof url === 'string' ? url : '';
-}
-
-function hasParkedTabUrl(url, items) {
-  const key = normalizeUrlKey(url);
-  if (!key) return false;
-  return (items || []).some((item) => {
-    if (!item) return false;
-    if (item.kind === 'tab') return normalizeUrlKey(item.url) === key;
-    if (item.kind !== 'group') return false;
-    return (item.tabs || []).some((member) => normalizeUrlKey(member?.url) === key);
-  });
 }
 
 function tabMatchSummary(item) {
@@ -4103,7 +4154,9 @@ async function deleteItem(id) {
   const next = list.filter((t) => t.id !== id);
   await setParkedItems(next);
   try {
-    await Media.removeMany(Media.keysForItem(item));
+    const removedKeys = Media.keysForItem(item);
+    await Media.removeMany(removedKeys);
+    removedKeys.forEach((key) => autoBackupMediaCache.delete(key));
   } catch (err) {
     appLogPush('warn', 'delete', 'media cleanup deferred', err?.message || err);
   }
@@ -4410,7 +4463,6 @@ if (globalThis.__TABWALL_TEST__) {
     matchesAutoSaveCondition,
     matchesAutoSaveRule,
     applyAutoSaveMetadata,
-    hasParkedTabUrl,
     refreshTabBadge,
     refreshActiveTabBadge,
     flashBadge,

@@ -120,6 +120,25 @@
     return normalizeLayout(layout, items);
   }
 
+  // Cheap structural copy for layouts that are already known to be normalized
+  // (i.e. produced by normalizeLayout/applyOperation). Skips the dedupe/sort/
+  // validate work normalizeLayout does, since re-running it on trusted,
+  // already-normalized input is pure waste on hot paths like pointer preview.
+  function cloneNormalizedLayout(layout) {
+    const positions = {};
+    for (const id in layout.positions) positions[id] = { ...layout.positions[id] };
+    return {
+      version: layout.version,
+      viewport: { ...layout.viewport },
+      positions,
+      connections: layout.connections.map((connection) => (
+        connection.curveOffset
+          ? { ...connection, curveOffset: { ...connection.curveOffset } }
+          : { ...connection }
+      )),
+    };
+  }
+
   function cloneOperation(operation) {
     if (!operation || typeof operation !== 'object') return null;
     const copy = { ...operation };
@@ -145,7 +164,10 @@
   }
 
   function applyOperation(rawLayout, operation, items = []) {
-    const next = cloneLayout(rawLayout, items);
+    // rawLayout is always already-normalized here (baseLayout/interaction
+    // startLayout), so a cheap structural copy is enough — see
+    // cloneNormalizedLayout for the invariant this relies on.
+    const next = cloneNormalizedLayout(rawLayout);
     const op = operation && typeof operation === 'object' ? operation : {};
     if (op.type === 'pan') {
       next.viewport.x += Number(op.dx) || 0;
@@ -245,8 +267,8 @@
     function getState() {
       return {
         items: [...state.items],
-        baseLayout: cloneLayout(state.baseLayout, state.items),
-        layout: cloneLayout(state.layout, state.items),
+        baseLayout: cloneNormalizedLayout(state.baseLayout),
+        layout: cloneNormalizedLayout(state.layout),
         viewport: { ...state.viewport },
         revision: state.revision,
         selectedIds: new Set(state.selectedIds),

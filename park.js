@@ -1737,6 +1737,8 @@ let canvasLayout = {
 };
 let canvasStore = null;
 const canvasNodeElements = new Map();
+const canvasConnectionElements = new Map(); // connectionId -> { path, highlights: [h0,h1,h2], hits: [x0,x1,x2] }
+let canvasConnectionDraftEl = null;
 const canvasMinimapElements = new Map();
 let canvasLoadGeneration = 0;
 let canvasPointerRaf = 0;
@@ -1857,10 +1859,11 @@ function handleCanvasStoreChange(snapshot, action = {}) {
   if (fullRender && settings.viewMode === 'canvas' && !canvasSessionFallback) renderCanvas();
   else if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
     updateCanvasTransform();
-    updateCanvasNodePositions(snapshot);
+    const searchContext = getCanvasSearchContext();
+    updateCanvasNodePositions(snapshot, searchContext);
     updateCanvasNodeSelection();
-    renderCanvasConnections();
-    renderCanvasMinimap(getCanvasVisibleTabs());
+    renderCanvasConnections(searchContext);
+    renderCanvasMinimap(searchContext.items);
     updateBatchBar();
     if (action.type === 'OPERATION_COMMIT' || action.type === 'SYNC_ERROR' || action.type === 'SYNC_FAILED') {
       if (action.operation?.type === 'zoom') scheduleCanvasMediaQualityRefresh();
@@ -1888,6 +1891,14 @@ ensureCanvasStore();
 
 /** @type {null | object} */
 let dragState = null;
+
+// Grid/list view incremental render state — mirrors canvasNodeElements'
+// reuse-by-render-key pattern so a single-field edit only patches the one
+// changed card instead of tearing down the whole visible list.
+const gridNodeElements = new Map(); // id -> DOM node (card or row)
+let gridNodeIsList = null; // last render's list/grid mode; a change forces a full rebuild
+let cardPointerRaf = 0;
+let cardQueuedPointerEvent = null;
 
 const uiBusyActions = new Set();
 
@@ -7065,6 +7076,29 @@ function updateStackHoverState(state, clientX, clientY) {
   return false;
 }
 
+function queueCardPointerMove(e) {
+  cardQueuedPointerEvent = e;
+  if (cardPointerRaf) return;
+  const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 16);
+  cardPointerRaf = schedule(() => {
+    cardPointerRaf = 0;
+    const next = cardQueuedPointerEvent;
+    cardQueuedPointerEvent = null;
+    if (next) onCardPointerMove(next);
+  });
+}
+
+function flushCardPointerFrame(e) {
+  if (cardPointerRaf) {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(cardPointerRaf);
+    else clearTimeout(cardPointerRaf);
+    cardPointerRaf = 0;
+  }
+  const next = e || cardQueuedPointerEvent;
+  cardQueuedPointerEvent = null;
+  if (next) onCardPointerMove(next);
+}
+
 function onCardPointerMove(e) {
   if (!dragState) return;
   // Ignore multi-touch / wrong pointer
@@ -7186,6 +7220,9 @@ function normalizeNoteProjection(item) {
 async function endCardDrag(e) {
   if (!dragState) return;
   const state = dragState;
+  // Flush while dragState is still set — onCardPointerMove early-returns
+  // once dragState is null, so this must run before clearing it.
+  flushCardPointerFrame(e);
   dragState = null;
   detachCardDragListeners(state);
 
@@ -7278,6 +7315,12 @@ function detachCardDragListeners(state) {
   window.removeEventListener('pointercancel', state.onUp, true);
   state.onMove = null;
   state.onUp = null;
+  if (cardPointerRaf) {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(cardPointerRaf);
+    else clearTimeout(cardPointerRaf);
+    cardPointerRaf = 0;
+  }
+  cardQueuedPointerEvent = null;
 }
 
 /**
@@ -7390,11 +7433,12 @@ function attachCardDrag(card, item) {
 
       state.onMove = (ev) => {
         if (ev.pointerId !== pointerId) return;
-        onCardPointerMove(ev);
+        queueCardPointerMove(ev);
       };
       state.onUp = (ev) => {
         if (ev.pointerId !== pointerId) return;
-        detachCardDragListeners(state);
+        // endCardDrag flushes the pending queued move (see queueCardPointerMove)
+        // and detaches listeners itself, synchronously, before its first await.
         endCardDrag(ev).catch(() => {});
       };
 
@@ -8191,6 +8235,7 @@ function suppressCanvasNodeClick(id) {
 
 function wireCanvasLinkHandles(node) {
   node?.querySelectorAll('[data-canvas-link-handle]').forEach((handle) => {
+    handle.tabIndex = 0;
     handle.addEventListener('pointerdown', (event) => {
       if (event.button !== 0 || event.isPrimary === false) return;
       event.preventDefault();
@@ -8255,16 +8300,13 @@ function wireCanvasNodeActions(node) {
 
 function updateCanvasNodeSelection() {
   const selection = activeCanvasSelection();
-  canvasNodesEl?.querySelectorAll('.canvas-node').forEach((node) => {
-    const active = selection.has(node.dataset.id);
+  for (const [id, node] of canvasNodeElements) {
+    const active = selection.has(id);
     node.classList.toggle('selected', active);
-    node.classList.toggle('connection-source', canvasConnectionSourceId === node.dataset.id);
-    node.classList.toggle('connection-target', Boolean(canvasConnectionDragState?.targetId === node.dataset.id && canvasConnectionDragState?.sourceId !== node.dataset.id));
-    node.querySelectorAll('[data-canvas-link-handle]').forEach((handle) => {
-      handle.tabIndex = 0;
-    });
+    node.classList.toggle('connection-source', canvasConnectionSourceId === id);
+    node.classList.toggle('connection-target', Boolean(canvasConnectionDragState?.targetId === id && canvasConnectionDragState?.sourceId !== id));
     node.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
+  }
 }
 
 function canvasConnectionId(sourceId, targetId) {
@@ -8589,7 +8631,13 @@ function updateCanvasConnectionDrag(event) {
 
 function renderCanvasConnectionDraft() {
   const state = canvasConnectionDragState;
-  if (!canvasConnectionsEl || !state || state.kind === 'curve') return;
+  if (!canvasConnectionsEl || !state || state.kind === 'curve') {
+    if (canvasConnectionDraftEl) {
+      canvasConnectionDraftEl.remove();
+      canvasConnectionDraftEl = null;
+    }
+    return;
+  }
   let sourcePoint;
   let targetPoint;
   if (state.targetId) {
@@ -8611,7 +8659,13 @@ function renderCanvasConnectionDraft() {
     targetPoint = state.currentPoint;
   } else {
     const fixed = canvasConnectionPosition(state.fixedId);
-    if (!fixed) return;
+    if (!fixed) {
+      if (canvasConnectionDraftEl) {
+        canvasConnectionDraftEl.remove();
+        canvasConnectionDraftEl = null;
+      }
+      return;
+    }
     sourcePoint = state.movingEndpoint === 'sourceId'
       ? state.currentPoint
       : canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId);
@@ -8620,11 +8674,22 @@ function renderCanvasConnectionDraft() {
       : state.currentPoint;
   }
   const d = canvasConnectionPathD(sourcePoint, targetPoint);
-  if (!d) return;
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('class', 'canvas-connection-draft');
-  path.setAttribute('d', d);
-  canvasConnectionsEl.appendChild(path);
+  if (!d) {
+    if (canvasConnectionDraftEl) {
+      canvasConnectionDraftEl.remove();
+      canvasConnectionDraftEl = null;
+    }
+    return;
+  }
+  if (canvasConnectionDraftEl) {
+    canvasConnectionDraftEl.setAttribute('d', d);
+  } else {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('class', 'canvas-connection-draft');
+    path.setAttribute('d', d);
+    canvasConnectionsEl.appendChild(path);
+    canvasConnectionDraftEl = path;
+  }
 }
 
 function commitCanvasConnectionDrag() {
@@ -8832,12 +8897,18 @@ function wireCanvasConnectionPath(path, connection, connectionId, zone = '') {
       if (detectCanvasConnectionDoublePointerDown(connectionId, event)) return;
       event.preventDefault();
       event.stopPropagation();
+      // Path elements are now created once and reused across renders (see
+      // renderCanvasConnections), so the closed-over `connection` can be
+      // stale if curveOffset changed since creation — look up the live one.
+      const live = (canvasStoreSnapshot().layout?.connections || []).find(
+        (c) => canvasConnectionId(c.sourceId, c.targetId) === connectionId
+      ) || connection;
       beginCanvasConnectionDrag({
         event,
         kind: zone === 'curve' ? 'curve' : 'edge',
         zone,
         movingEndpoint: zone === 'source' ? 'sourceId' : zone === 'target' ? 'targetId' : '',
-        connection,
+        connection: live,
         connectionId,
       });
     });
@@ -8854,16 +8925,15 @@ function wireCanvasConnectionPath(path, connection, connectionId, zone = '') {
   });
 }
 
-function renderCanvasConnections() {
+function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
   if (!canvasConnectionsEl) return;
-  while (canvasConnectionsEl.firstChild) canvasConnectionsEl.firstChild.remove();
-  const searchContext = getCanvasSearchContext();
+  const zones = ['source', 'curve', 'target'];
   const visibleIds = new Set(searchContext.items.map((item) => item.id));
   const layout = canvasStoreSnapshot().layout || canvasLayout;
   const connections = layout.connections || [];
   const connectionIds = new Set(connections.map((connection) => canvasConnectionId(connection.sourceId, connection.targetId)));
   if (selectedCanvasConnectionId && !connectionIds.has(selectedCanvasConnectionId)) selectedCanvasConnectionId = '';
-  const fragment = document.createDocumentFragment();
+  const seenIds = new Set();
   for (const connection of connections) {
     if (!visibleIds.has(connection.sourceId) || !visibleIds.has(connection.targetId)) continue;
     const source = canvasConnectionPosition(connection.sourceId);
@@ -8882,43 +8952,67 @@ function renderCanvasConnections() {
     const related = searchContext.queryActive
       && (searchContext.relatedIds.has(connection.sourceId) || searchContext.relatedIds.has(connection.targetId));
     const classes = `canvas-connection${selectedCanvasConnectionId === id ? ' selected' : ''}${related ? ' search-related' : ''}${canvasConnectionSourceId && (canvasConnectionSourceId === connection.sourceId || canvasConnectionSourceId === connection.targetId) ? ' source' : ''}${geometry.offset.x || geometry.offset.y ? ' curved' : ''}${canvasConnectionDragState?.kind === 'curve' && canvasConnectionDragState.connectionId === id ? ' dragging' : ''}`;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', geometry.pathD);
-    path.setAttribute('class', classes);
-    path.dataset.connectionId = id;
-    path.setAttribute('role', 'button');
-    path.setAttribute('tabindex', '0');
-    path.setAttribute('aria-label', `${canvasItemById(connection.sourceId)?.title || connection.sourceId} ↔ ${canvasItemById(connection.targetId)?.title || connection.targetId}`);
-    wireCanvasConnectionPath(path, connection, id);
-    fragment.appendChild(path);
+    const ariaLabel = `${canvasItemById(connection.sourceId)?.title || connection.sourceId} ↔ ${canvasItemById(connection.targetId)?.title || connection.targetId}`;
+    seenIds.add(id);
 
-    const zones = ['source', 'curve', 'target'];
-    for (const [index, zone] of zones.entries()) {
-      const highlight = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      highlight.setAttribute('d', segments[index].pathD);
-      highlight.setAttribute('class', `canvas-connection-zone-highlight ${zone}`);
-      highlight.setAttribute('aria-hidden', 'true');
-      highlight.dataset.connectionId = id;
-      highlight.dataset.connectionZone = zone;
-      fragment.appendChild(highlight);
+    let group = canvasConnectionElements.get(id);
+    if (!group) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.dataset.connectionId = id;
+      path.setAttribute('role', 'button');
+      path.setAttribute('tabindex', '0');
+      wireCanvasConnectionPath(path, connection, id);
+      canvasConnectionsEl.appendChild(path);
 
-      const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      hit.setAttribute('d', segments[index].pathD);
-      hit.setAttribute('class', `canvas-connection-hit ${zone}`);
-      hit.setAttribute('stroke-width', String(CANVAS_CONNECTION_HIT_WIDTH));
-      hit.setAttribute('aria-hidden', 'true');
-      hit.dataset.connectionId = id;
-      hit.dataset.connectionZone = zone;
-      wireCanvasConnectionPath(hit, connection, id, zone);
-      fragment.appendChild(hit);
+      const highlights = [];
+      const hits = [];
+      for (const zone of zones) {
+        const highlight = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        highlight.setAttribute('class', `canvas-connection-zone-highlight ${zone}`);
+        highlight.setAttribute('aria-hidden', 'true');
+        highlight.dataset.connectionId = id;
+        highlight.dataset.connectionZone = zone;
+        canvasConnectionsEl.appendChild(highlight);
+        highlights.push(highlight);
+
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hit.setAttribute('class', `canvas-connection-hit ${zone}`);
+        hit.setAttribute('stroke-width', String(CANVAS_CONNECTION_HIT_WIDTH));
+        hit.setAttribute('aria-hidden', 'true');
+        hit.dataset.connectionId = id;
+        hit.dataset.connectionZone = zone;
+        wireCanvasConnectionPath(hit, connection, id, zone);
+        canvasConnectionsEl.appendChild(hit);
+        hits.push(hit);
+      }
+      group = { path, highlights, hits };
+      canvasConnectionElements.set(id, group);
     }
+
+    // Existing elements are only patched here — listeners stay attached from
+    // creation (see wireCanvasConnectionPath's live-connection lookup for why
+    // that's still correct when curveOffset changes without id changing).
+    group.path.setAttribute('d', geometry.pathD);
+    group.path.setAttribute('class', classes);
+    group.path.setAttribute('aria-label', ariaLabel);
+    zones.forEach((zone, index) => {
+      group.highlights[index].setAttribute('d', segments[index].pathD);
+      group.hits[index].setAttribute('d', segments[index].pathD);
+    });
   }
-  canvasConnectionsEl.appendChild(fragment);
+
+  for (const [id, group] of canvasConnectionElements) {
+    if (seenIds.has(id)) continue;
+    group.path.remove();
+    group.highlights.forEach((el) => el.remove());
+    group.hits.forEach((el) => el.remove());
+    canvasConnectionElements.delete(id);
+  }
+
   renderCanvasConnectionDraft();
 }
 
-function updateCanvasNodePositions(snapshot = canvasStoreSnapshot()) {
-  const searchContext = getCanvasSearchContext();
+function updateCanvasNodePositions(snapshot = canvasStoreSnapshot(), searchContext = getCanvasSearchContext()) {
   const layout = isCanvasSearchPreviewActive(searchContext)
     ? canvasSearchLayoutFor(searchContext)
     : (snapshot.layout || canvasLayout);
@@ -9066,12 +9160,12 @@ function canvasNodeRenderKey(item) {
   });
 }
 
-function createCanvasNodeElement(item) {
+function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item)) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = canvasNodeHtml(item);
   const node = wrapper.firstElementChild;
   if (item.kind === 'group') appendGroupSearchHits(node, item);
-  node.dataset.canvasRenderKey = canvasNodeRenderKey(item);
+  node.dataset.canvasRenderKey = renderKey;
   wireCanvasNodeActions(node);
   node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
   node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
@@ -9120,7 +9214,7 @@ function renderCanvas() {
       empty.querySelector('span').textContent = t(allTabs.length ? 'noResultsBody' : 'emptyBody');
     }
     updateCanvasTransform();
-    renderCanvasConnections();
+    renderCanvasConnections(searchContext);
     renderCanvasMinimap(filtered);
     updateBatchBar();
     return;
@@ -9132,7 +9226,7 @@ function renderCanvas() {
     let node = canvasNodeElements.get(item.id);
     const renderKey = canvasNodeRenderKey(item);
     if (!node || node.dataset.canvasRenderKey !== renderKey) {
-      const replacement = createCanvasNodeElement(item);
+      const replacement = createCanvasNodeElement(item, renderKey);
       if (node) node.replaceWith(replacement);
       node = replacement;
       canvasNodeElements.set(item.id, node);
@@ -9160,9 +9254,9 @@ function renderCanvas() {
     if (node) wireStickerAttachmentImages(node, item);
   });
   updateCanvasTransform();
-  updateCanvasNodePositions();
+  updateCanvasNodePositions(canvasStoreSnapshot(), searchContext);
   updateCanvasNodeSelection();
-  renderCanvasConnections();
+  renderCanvasConnections(searchContext);
   canvasNodesEl.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
   renderCanvasMinimap(filtered, renderLayout);
   updateBatchBar();
@@ -9481,9 +9575,20 @@ function canvasNodeWorldRect(node) {
   };
 }
 
+// Position-based lookup for hit-testing: uses the layout state directly
+// instead of getBoundingClientRect(), so it never forces a reflow. Matches
+// canvasNodeWorldRect's coordinate space via canvasDisplayPosition (which
+// applies the same CANVAS_NODE_DISPLAY_SCALE the DOM box is actually sized to).
+function canvasNodeWorldRectFromState(id) {
+  const raw = canvasStoreSnapshot().layout?.positions?.[id];
+  if (!raw) return null;
+  const position = canvasDisplayPosition(raw);
+  return { x: position.x, y: position.y, w: position.w, h: position.h, z: position.z || 0 };
+}
+
 function canvasTargetAt(point, excludeId = '') {
-  const nodes = [...(canvasNodesEl?.querySelectorAll('.canvas-node') || [])]
-    .map((node) => ({ id: node.dataset.id || '', rect: canvasNodeWorldRect(node) }))
+  const nodes = [...canvasNodeElements.keys()]
+    .map((id) => ({ id, rect: canvasNodeWorldRectFromState(id) }))
     .filter(({ id, rect }) => id && id !== excludeId && rect)
     .sort((a, b) => b.rect.z - a.rect.z);
   for (const { id, rect } of nodes) {
@@ -9692,8 +9797,8 @@ function applyCanvasPointer(event) {
       canvasSelectionEl.style.width = `${w}px`;
       canvasSelectionEl.style.height = `${h}px`;
     }
-    const ids = [...(canvasNodesEl?.querySelectorAll('.canvas-node') || [])]
-      .map((node) => ({ id: node.dataset.id || '', rect: canvasNodeWorldRect(node) }))
+    const ids = [...canvasNodeElements.keys()]
+      .map((id) => ({ id, rect: canvasNodeWorldRectFromState(id) }))
       .filter(({ rect }) => rect && rect.x < x + w && rect.x + rect.w > x && rect.y < y + h && rect.y + rect.h > y)
       .map(({ id }) => id)
       .filter(Boolean);
@@ -10120,6 +10225,7 @@ function initCanvasInteractions() {
 }
 
 function renderEmpty(message) {
+  gridNodeElements.clear();
   gridEl.innerHTML = `
     <div class="empty" style="grid-column: 1 / -1">
       <strong>${escapeHtml(message.title)}</strong>
@@ -10128,44 +10234,107 @@ function renderEmpty(message) {
   `;
 }
 
+function gridNodeRenderKey(item, isList) {
+  return JSON.stringify({
+    isList,
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    url: item.url,
+    note: item.note,
+    tags: item.tags,
+    pinned: item.pinned,
+    savedAt: item.savedAt,
+    favIconUrl: item.favIconUrl,
+    markdown: item.kind === 'note' ? item.markdown : undefined,
+    attachments: item.kind === 'note'
+      ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
+      : undefined,
+    tabs: item.kind === 'group'
+      ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
+      : undefined,
+    notes: item.kind === 'group'
+      ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
+      : undefined,
+    query,
+    locale: settings.locale,
+  });
+}
+
+function removeGridNode(id, node) {
+  node?.querySelectorAll('img.lazy-thumb').forEach((img) => {
+    thumbObserver?.unobserve?.(img);
+  });
+  node?.remove();
+  gridNodeElements.delete(id);
+}
+
+function updateGridSelectionUi() {
+  gridEl.querySelectorAll('[data-id]').forEach((node) => {
+    const active = selectedIds.has(node.dataset.id);
+    node.classList.toggle('selected', active);
+    const check = node.querySelector('.card-check');
+    if (check) check.checked = active;
+  });
+}
+
 function renderGrid() {
   if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
     renderCanvas();
     return;
   }
   disconnectCanvasMediaObserver();
-  // Always release observations before replacing or emptying the grid.
-  if (thumbObserver) {
-    try {
-      thumbObserver.disconnect();
-    } catch {
-      // ignore
-    }
-  }
   // Fresh match cache for this paint (shared by filter + group hit rows)
   searchMatchCache = new Map();
   const filtered = getVisibleTabs();
   updateSavedBadge();
 
   if (allTabs.length === 0) {
+    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
     searchMatchCache = null;
     renderEmpty({ title: t('emptyTitle'), body: t('emptyBody') });
     return;
   }
   if (filtered.length === 0) {
+    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
     searchMatchCache = null;
     renderEmpty({ title: t('noResultsTitle'), body: t('noResultsBody') });
     return;
   }
 
-  gridEl.innerHTML = '';
-  applyCardCols(settings.cardCols);
-  const frag = document.createDocumentFragment();
   const isList = settings.viewMode === 'list' || canvasSessionFallback;
+  if (gridNodeIsList !== isList) {
+    // Rare full mode switch — cheap fallback, matches the old always-full-rebuild behavior.
+    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+    gridEl.innerHTML = '';
+    gridNodeElements.clear();
+    gridNodeIsList = isList;
+  }
+  applyCardCols(settings.cardCols);
+
+  const visibleIds = new Set(filtered.map((item) => item.id));
+  for (const [id, node] of gridNodeElements) {
+    if (!visibleIds.has(id)) removeGridNode(id, node);
+  }
+  gridEl.querySelector('.empty')?.remove();
+
+  const frag = document.createDocumentFragment();
   filtered.forEach((item) => {
-    frag.appendChild(isList ? createRow(item) : createCard(item));
+    const renderKey = gridNodeRenderKey(item, isList);
+    let node = gridNodeElements.get(item.id);
+    if (!node || node.dataset.gridRenderKey !== renderKey) {
+      const fresh = isList ? createRow(item) : createCard(item);
+      fresh.dataset.gridRenderKey = renderKey;
+      if (node) node.replaceWith(fresh);
+      node = fresh;
+      gridNodeElements.set(item.id, node);
+    }
+    // Moving an existing node through the fragment preserves DOM order
+    // without recreating it (same pattern as renderCanvas).
+    frag.appendChild(node);
   });
   gridEl.appendChild(frag);
+  updateGridSelectionUi();
   searchMatchCache = null;
 }
 

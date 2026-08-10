@@ -79,7 +79,9 @@
       const req = tx.objectStore(STORE).get(key);
       req.onsuccess = () => {
         const row = req.result;
-        resolve(row ? { thumb: row.thumb || null, snap: row.snap || null } : { thumb: null, snap: null });
+        resolve(row
+          ? { thumb: row.thumb || null, snap: row.snap || null, updatedAt: row.updatedAt || 0 }
+          : { thumb: null, snap: null, updatedAt: 0 });
       };
       req.onerror = () => reject(req.error);
     });
