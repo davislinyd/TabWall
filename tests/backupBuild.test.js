@@ -197,6 +197,27 @@ test('full ZIP round-trip preserves backup version and media MIME', async () => 
   assert.match(hydrated[0].snapshot, /^data:image\/webp;base64,/);
 });
 
+test('full ZIP export preserves stored-only file URLs and remains importable', async () => {
+  const url = 'file:///Users/test/current.html';
+  const backup = sampleBackup([sampleItem({ image: false })]);
+  backup.parkedItems[0].url = url;
+  backup.parkedTabs[0].url = url;
+
+  const built = Build.buildFullZipBlob(backup);
+  const files = Build.unzipStore(new Uint8Array(await built.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  const prepared = Build.prepareImportedBackup(metadata);
+
+  assert.equal(metadata.parkedItems[0].url, url);
+  assert.equal(prepared.allowStoredOnlyUrls, true);
+  assert.equal(
+    Build.validateBackup(prepared.backup, {
+      allowStoredOnlyUrls: prepared.allowStoredOnlyUrls,
+    }).ok,
+    true
+  );
+});
+
 test('full ZIP rehydration preserves a missing attachment as missing binary data', () => {
   const attachmentPath = `media/${NOTE_ID}_${ATTACHMENT_ID}.png`;
   const source = sampleNote();

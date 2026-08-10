@@ -699,6 +699,8 @@ const I18N = {
     quickAddGroup: '儲存目前 Group',
     quickAddUrl: '貼上 URL',
     quickAddMenuTitle: '新增選項',
+    canvasOrganize: '畫布整理',
+    manualAddTop: '新增卡片',
     quickAddSaved: '已送出存檔',
     quickAddGroupSaved: '已送出 Group 存檔',
     quickAddNoTarget: '目前沒有可存檔的分頁',
@@ -1076,6 +1078,8 @@ const I18N = {
     quickAddGroup: 'Save current Group',
     quickAddUrl: 'Paste URL',
     quickAddMenuTitle: 'Add options',
+    canvasOrganize: 'Organize canvas',
+    manualAddTop: 'Add cards',
     quickAddSaved: 'Save request sent',
     quickAddGroupSaved: 'Group save request sent',
     quickAddNoTarget: 'There is no tab available to save',
@@ -1499,6 +1503,12 @@ const quickAddMenu = document.getElementById('quickAddMenu');
 const quickAddTabMenu = document.getElementById('quickAddTabMenu');
 const quickAddGroupMenu = document.getElementById('quickAddGroupMenu');
 const quickAddUrlMenu = document.getElementById('quickAddUrlMenu');
+const canvasOrganizeWrap = document.getElementById('canvasOrganizeWrap');
+const canvasOrganizeBtn = document.getElementById('canvasOrganizeBtn');
+const canvasOrganizePanel = document.getElementById('canvasOrganizePanel');
+const manualAddWrap = document.getElementById('manualAddWrap');
+const manualAddTopBtn = document.getElementById('manualAddTopBtn');
+const manualAddPanel = document.getElementById('manualAddPanel');
 const moreToolsBtn = document.getElementById('moreToolsBtn');
 const moreToolsMenu = document.getElementById('moreToolsMenu');
 const pinnedOnlyBtn = document.getElementById('pinnedOnlyBtn');
@@ -2053,11 +2063,63 @@ async function handleQuickCaptureResult(result) {
   await loadList();
 }
 
+function setHeaderPopoverState(button, panel, open) {
+  if (!button || !panel) return;
+  panel.hidden = !open;
+  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+  button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  button.classList.toggle('active', open);
+}
+
+function closeHeaderPopovers({ restoreFocus = false } = {}) {
+  setHeaderPopoverState(canvasOrganizeBtn, canvasOrganizePanel, false);
+  setHeaderPopoverState(manualAddTopBtn, manualAddPanel, false);
+  if (restoreFocus) {
+    if (canvasOrganizeBtn?.dataset.focusRestore === 'true') canvasOrganizeBtn.focus({ preventScroll: true });
+    if (manualAddTopBtn?.dataset.focusRestore === 'true') manualAddTopBtn.focus({ preventScroll: true });
+  }
+  if (canvasOrganizeBtn) delete canvasOrganizeBtn.dataset.focusRestore;
+  if (manualAddTopBtn) delete manualAddTopBtn.dataset.focusRestore;
+}
+
 function closeQuickMenus() {
   if (quickAddMenu) quickAddMenu.hidden = true;
   if (quickAddMenuBtn) quickAddMenuBtn.setAttribute('aria-expanded', 'false');
   if (moreToolsMenu) moreToolsMenu.hidden = true;
   if (moreToolsBtn) moreToolsBtn.setAttribute('aria-expanded', 'false');
+  closeHeaderPopovers();
+}
+
+function openCanvasOrganizePanel() {
+  if (!canvasOrganizePanel || !canvasOrganizeBtn || settings.viewMode !== 'canvas' || canvasSessionFallback) return;
+  closeAllFloatsExcept('header');
+  closeQuickMenus();
+  setHeaderPopoverState(canvasOrganizeBtn, canvasOrganizePanel, true);
+}
+
+function openManualAddPanel() {
+  if (!manualAddPanel || !manualAddTopBtn) return;
+  closeAllFloatsExcept('header');
+  closeQuickMenus();
+  setHeaderPopoverState(manualAddTopBtn, manualAddPanel, true);
+  setTimeout(() => manualAddText?.focus(), 0);
+}
+
+function toggleHeaderPopover(button, panel, open) {
+  if (!panel || panel.hidden === !open) return;
+  if (open) {
+    if (button === canvasOrganizeBtn) openCanvasOrganizePanel();
+    else if (button === manualAddTopBtn) openManualAddPanel();
+    return;
+  }
+  if (button) button.dataset.focusRestore = 'true';
+  closeHeaderPopovers({ restoreFocus: true });
+}
+
+function syncCanvasOrganizeUi(mode = settings.viewMode) {
+  const visible = mode === 'canvas' && !canvasSessionFallback;
+  if (canvasOrganizeWrap) canvasOrganizeWrap.hidden = !visible;
+  if (!visible) setHeaderPopoverState(canvasOrganizeBtn, canvasOrganizePanel, false);
 }
 
 function syncQuickCaptureAvailability() {
@@ -2080,9 +2142,7 @@ function syncQuickCaptureAvailability() {
 async function requestQuickCapture(kind) {
   closeQuickMenus();
   if (kind === 'url') {
-    openSettingsBox();
-    applySettingsSection('tools');
-    setTimeout(() => manualAddText?.focus(), 0);
+    openManualAddPanel();
     return;
   }
   if (kind === 'tab' && !PARENT_ORIGIN) {
@@ -2105,6 +2165,16 @@ function initQuickCaptureUi() {
   quickAddTabMenu?.addEventListener('click', () => requestQuickCapture('tab'));
   quickAddGroupMenu?.addEventListener('click', () => requestQuickCapture('group'));
   quickAddUrlMenu?.addEventListener('click', () => requestQuickCapture('url'));
+  canvasOrganizeBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = Boolean(canvasOrganizePanel && canvasOrganizePanel.hidden);
+    toggleHeaderPopover(canvasOrganizeBtn, canvasOrganizePanel, open);
+  });
+  manualAddTopBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = Boolean(manualAddPanel && manualAddPanel.hidden);
+    toggleHeaderPopover(manualAddTopBtn, manualAddPanel, open);
+  });
   quickAddMenuBtn?.addEventListener('click', (event) => {
     event.stopPropagation();
     const open = Boolean(quickAddMenu && quickAddMenu.hidden);
@@ -2124,7 +2194,7 @@ function initQuickCaptureUi() {
     }
   });
   document.addEventListener('pointerdown', (event) => {
-    if (!event.target.closest?.('#quickAddWrap, #moreToolsMenu, #moreToolsBtn')) {
+    if (!event.target.closest?.('#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap')) {
       closeQuickMenus();
     }
   });
@@ -2399,7 +2469,6 @@ function applyCanvasRailUi({ width = settings.canvasRailWidth, collapsed = setti
   const isCollapsed = collapsed === true;
   const visibleWidth = isCollapsed ? CANVAS_RAIL_COLLAPSED_WIDTH : normalizedWidth;
   canvasView.style.setProperty('--canvas-rail-width', `${visibleWidth}px`);
-  document.body?.style.setProperty('--canvas-version-left', `${visibleWidth + 16}px`);
   canvasView.dataset.canvasRailCollapsed = isCollapsed ? 'true' : 'false';
   if (canvasRailResize) {
     canvasRailResize.title = t('canvasRailResize');
@@ -2444,6 +2513,7 @@ function applyViewMode(mode) {
   if (canvasView) canvasView.hidden = !isCanvas;
   if (canvasView) canvasView.setAttribute('aria-hidden', isCanvas ? 'false' : 'true');
   document.body.classList.toggle('canvas-mode', isCanvas);
+  syncCanvasOrganizeUi(mode);
   if (!isCanvas) closeCanvasZoomMenu();
   if (isCanvas) scheduleInitialCanvasCenter();
 }
@@ -2992,8 +3062,8 @@ async function initSettingsUi() {
     await saveSettings({ sortBy });
     renderGrid();
   });
-  settingsEl.querySelectorAll('[data-settings-arrange]').forEach((button) => {
-    button.addEventListener('click', () => arrangeCanvas(button.dataset.settingsArrange));
+  canvasOrganizePanel?.querySelectorAll('[data-canvas-arrange]').forEach((button) => {
+    button.addEventListener('click', () => arrangeCanvas(button.dataset.canvasArrange));
   });
 
   initChromeShortcutsUi();
@@ -3336,7 +3406,7 @@ function setupFloatDrag(handle, box) {
 }
 
 function applySettingsSection(section = 'general') {
-  const allowed = new Set(['general', 'automation', 'canvas', 'display', 'tools', 'backup', 'shortcuts', 'diagnostic']);
+  const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'shortcuts', 'diagnostic']);
   settingsSection = allowed.has(section) ? section : 'general';
   settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
     block.hidden = block.dataset.settingsSection !== settingsSection;
@@ -3885,6 +3955,14 @@ document.addEventListener('keydown', (e) => {
     }
     if (settingsBox.classList.contains('open')) {
       closeSettingsBox();
+      return;
+    }
+    if ((canvasOrganizePanel && !canvasOrganizePanel.hidden) || (manualAddPanel && !manualAddPanel.hidden)) {
+      const focusTarget = canvasOrganizePanel && !canvasOrganizePanel.hidden
+        ? canvasOrganizeBtn
+        : manualAddTopBtn;
+      closeHeaderPopovers();
+      focusTarget?.focus({ preventScroll: true });
       return;
     }
     if (selectMode) {
@@ -7865,16 +7943,16 @@ function setCanvasZoom(next, clientX = null, clientY = null) {
   if (zoom === oldZoom) return;
   const rect = canvasViewportEl?.getBoundingClientRect();
   let anchor = null;
-  if (rect && clientX != null && clientY != null) {
+  if (rect) {
+    const offset = clientX != null && clientY != null
+      ? { x: clientX - rect.left, y: clientY - rect.top }
+      : { x: rect.width / 2, y: rect.height / 2 };
     anchor = {
       world: {
-        x: (clientX - rect.left) / oldZoom + state.layout.viewport.x,
-        y: (clientY - rect.top) / oldZoom + state.layout.viewport.y,
+        x: offset.x / oldZoom + state.layout.viewport.x,
+        y: offset.y / oldZoom + state.layout.viewport.y,
       },
-      offset: {
-        x: clientX - rect.left,
-        y: clientY - rect.top,
-      },
+      offset,
     };
   }
   canvasStore?.commitZoom(zoom, anchor);

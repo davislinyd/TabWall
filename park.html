@@ -2356,6 +2356,114 @@
         display: none !important;
       }
 
+      .header-popover-wrap {
+        position: relative;
+        display: inline-flex;
+      }
+
+      .header-popover-wrap[hidden] {
+        display: none !important;
+      }
+
+      .header-popover {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 170;
+        display: grid;
+        gap: 14px;
+        width: min(320px, calc(100vw - 24px));
+        max-height: min(72vh, 620px);
+        overflow: auto;
+        padding: 16px;
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        background: var(--panel-raised);
+        box-shadow: var(--edit-shadow);
+      }
+
+      .header-popover[hidden] {
+        display: none !important;
+      }
+
+      .header-popover h2,
+      .header-popover h3 {
+        margin: 0;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .header-popover p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .header-popover-section {
+        display: grid;
+        gap: 8px;
+      }
+
+      .header-popover-section + .header-popover-section {
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
+
+      .header-popover label.inline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .header-popover select#sortBy {
+        min-width: 128px;
+        max-width: 100%;
+      }
+
+      .header-popover-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .header-popover-actions .btn {
+        flex: 1 1 120px;
+      }
+
+      #manualAddPanel {
+        width: min(390px, calc(100vw - 24px));
+      }
+
+      #manualAddText {
+        width: 100%;
+        min-height: 154px;
+        box-sizing: border-box;
+        resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--input-bg);
+        color: var(--text);
+        padding: 10px;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      #manualAddText:focus,
+      .header-popover select#sortBy:focus {
+        border-color: var(--accent);
+        outline: 0;
+        box-shadow: 0 0 0 2px var(--accent-soft);
+      }
+
+      #manualAddStatus {
+        min-height: 16px;
+      }
+
       .menu-item {
         width: 100%;
         min-height: 38px;
@@ -3923,11 +4031,6 @@
         background: var(--bg);
       }
 
-      body.canvas-mode #versionBadge {
-        left: var(--canvas-version-left, 16px);
-        bottom: 16px;
-      }
-
       .canvas-rail {
         z-index: 8;
         display: flex;
@@ -5464,6 +5567,17 @@
         overflow: hidden;
       }
 
+      #versionBadge {
+        position: static;
+        left: auto;
+        bottom: auto;
+        z-index: auto;
+        flex: 0 0 auto;
+        align-self: stretch;
+        padding: 0 12px 2px;
+        pointer-events: none;
+      }
+
       .canvas-rail-edge {
         position: absolute;
         top: 0;
@@ -6069,6 +6183,54 @@
               <button type="button" class="menu-item" id="quickAddUrlMenu" data-i18n="quickAddUrl">貼上 URL</button>
             </div>
           </div>
+          <div class="header-popover-wrap canvas-topbar-control" id="canvasOrganizeWrap" hidden>
+            <button type="button" class="btn header-text-btn" id="canvasOrganizeBtn" data-i18n-title="canvasOrganize" data-i18n-aria="canvasOrganize" title="畫布整理" aria-label="畫布整理" aria-expanded="false" aria-controls="canvasOrganizePanel">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"></path><path d="M8 5v4M16 10v4M11 15v4"></path></svg>
+              <span data-i18n="canvasOrganize">畫布整理</span>
+            </button>
+            <div class="header-popover" id="canvasOrganizePanel" role="dialog" aria-labelledby="canvasOrganizeTitle" aria-hidden="true" hidden>
+              <h2 id="canvasOrganizeTitle" data-i18n="canvasOrganize">畫布整理</h2>
+              <div class="header-popover-section">
+                <label class="inline" for="sortBy">
+                  <span data-i18n="canvasSortLabel">排序方式</span>
+                  <select id="sortBy" data-i18n-aria="sort" aria-label="排序">
+                    <option value="newest" data-i18n="sortDate">日期</option>
+                    <option value="domain" data-i18n="sortFqdn">FQDN</option>
+                    <option value="group-first" data-i18n="sortGroup">Group</option>
+                  </select>
+                </label>
+              </div>
+              <div class="header-popover-section">
+                <h3 data-i18n="canvasArrangeTitle">排列</h3>
+                <div class="header-popover-actions">
+                  <button type="button" class="btn" data-canvas-arrange="grid" data-i18n="canvasArrangeGrid">棋盤</button>
+                  <button type="button" class="btn" data-canvas-arrange="align" data-i18n="canvasArrangeAlign">對齊格式</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="header-popover-wrap" id="manualAddWrap">
+            <button type="button" class="btn header-text-btn" id="manualAddTopBtn" data-i18n-title="manualAddTop" data-i18n-aria="manualAddTop" title="新增卡片" aria-label="新增卡片" aria-expanded="false" aria-controls="manualAddPanel">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              <span data-i18n="manualAddTop">新增卡片</span>
+            </button>
+            <div class="header-popover" id="manualAddPanel" role="dialog" aria-labelledby="manualAddPanelTitle" aria-hidden="true" hidden>
+              <h2 id="manualAddPanelTitle" data-i18n="manualAddTitle">手動新增卡片</h2>
+              <p data-i18n="manualAddHint">每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。</p>
+              <textarea
+                id="manualAddText"
+                class="settings-textarea code-textarea"
+                rows="8"
+                spellcheck="false"
+                data-i18n-placeholder="manualAddPh"
+                placeholder="https://example.com/a&#10;https://example.com/b&#10;&#10;#GROUP:工作&#10;https://jira.example.com&#10;https://wiki.example.com&#10;#GROUP:工作"
+              ></textarea>
+              <div class="header-popover-actions">
+                <button type="button" class="btn primary" id="manualAddBtn" data-i18n="manualAddSubmit">新增卡片</button>
+              </div>
+              <p id="manualAddStatus" aria-live="polite"></p>
+            </div>
+          </div>
           <button type="button" class="btn header-text-btn" id="viewModeBtn" title="列表" aria-label="列表" data-view-target="list">
             <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
               <g id="viewModeListIcon"><path d="M5 6h14M5 12h14M5 18h14"></path></g>
@@ -6119,6 +6281,7 @@
             <button type="button" class="canvas-index" id="canvasPinnedBtn">已固定</button>
             <div id="canvasStackIndex" class="canvas-stack-index"></div>
           </div>
+          <div id="versionBadge">v—</div>
           </div>
           <div id="canvasRailEdge" class="canvas-rail-edge">
             <div
@@ -6260,7 +6423,6 @@
           <button type="button" class="settings-nav-btn" data-settings-section="automation" data-i18n="settingsAutomation">儲存規則</button>
           <button type="button" class="settings-nav-btn" data-settings-section="canvas" data-i18n="settingsCanvas">畫布</button>
           <button type="button" class="settings-nav-btn" data-settings-section="display" data-i18n="settingsDisplay">顯示</button>
-          <button type="button" class="settings-nav-btn" data-settings-section="tools" data-i18n="settingsTools">整理</button>
           <button type="button" class="settings-nav-btn" data-settings-section="backup" data-i18n="settingsBackup">備份</button>
           <button type="button" class="settings-nav-btn" data-settings-section="shortcuts" data-i18n="settingsShortcuts">快捷鍵</button>
           <button type="button" class="settings-nav-btn" data-settings-section="diagnostic" data-i18n="settingsDiagnostic">診斷</button>
@@ -6329,26 +6491,6 @@
           </div>
           <div class="settings-row" style="margin-top:10px">
             <button type="button" class="btn" id="settingsCanvasResetView" data-i18n="canvasResetView">重設視角</button>
-          </div>
-        </div>
-        <div class="settings-block" data-settings-section="canvas">
-          <h2 data-i18n="canvasSortTitle">排序</h2>
-          <div class="settings-row">
-            <label class="inline" for="sortBy">
-              <span data-i18n="canvasSortLabel">排序方式</span>
-              <select id="sortBy" data-i18n-aria="sort" aria-label="排序">
-                <option value="newest" data-i18n="sortDate">日期</option>
-                <option value="domain" data-i18n="sortFqdn">FQDN</option>
-                <option value="group-first" data-i18n="sortGroup">Group</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div class="settings-block" data-settings-section="canvas">
-          <h2 data-i18n="canvasArrangeTitle">排列</h2>
-          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px">
-            <button type="button" class="btn" data-settings-arrange="grid" data-i18n="canvasArrangeGrid">棋盤</button>
-            <button type="button" class="btn" data-settings-arrange="align" data-i18n="canvasArrangeAlign">對齊格式</button>
           </div>
         </div>
         <div class="settings-block" data-settings-section="display">
@@ -6441,24 +6583,6 @@
             <button type="button" class="btn" id="diagLogClearBtn" data-i18n="diagLogClear">清除</button>
           </div>
           <p id="diagLogStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
-        </div>
-        <div class="settings-block" id="manualAddBlock" data-settings-section="tools">
-          <h2 data-i18n="manualAddTitle">手動新增卡片</h2>
-          <p class="hint" style="margin:0 0 8px;font-size:11px;color:var(--muted)" data-i18n="manualAddHint">
-            每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。
-          </p>
-          <textarea
-            id="manualAddText"
-            class="settings-textarea code-textarea"
-            rows="8"
-            spellcheck="false"
-            data-i18n-placeholder="manualAddPh"
-            placeholder="https://example.com/a&#10;https://example.com/b&#10;&#10;#GROUP:工作&#10;https://jira.example.com&#10;https://wiki.example.com&#10;#GROUP:工作"
-          ></textarea>
-          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
-            <button type="button" class="btn primary" id="manualAddBtn" data-i18n="manualAddSubmit">新增卡片</button>
-          </div>
-          <p id="manualAddStatus" class="hint" style="margin:8px 0 0;font-size:12px;color:var(--muted)"></p>
         </div>
         <div class="settings-block" id="autoBackupBlock" data-settings-section="backup">
           <h2 data-i18n="autoBackupTitle">自動備份</h2>
@@ -6564,8 +6688,6 @@
         <button type="button" class="btn primary" id="settingsDoneBtn" data-i18n="done">完成</button>
       </div>
     </div>
-
-    <div id="versionBadge">v—</div>
 
     <div id="lightbox" aria-hidden="true">
       <div class="lb-toolbar">

@@ -288,6 +288,7 @@ const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
 const DEFAULT_CANVAS_CARD_GAP = 96;
 const DEFAULT_CANVAS_CARD_STEP_X = 338;
 const DEFAULT_CANVAS_CARD_STEP_Y = 283;
+const DEFAULT_CANVAS_DISPLAY_SCALE = 1.1;
 
 function clampNumber(value, min, max, fallback) {
   const n = Number(value);
@@ -295,11 +296,13 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
-function defaultCanvasPosition(index) {
+function defaultCanvasPosition(index, origin = null) {
   const i = Math.max(0, Number(index) || 0);
+  const originX = Number.isFinite(Number(origin?.x)) ? Number(origin.x) : DEFAULT_CANVAS_CARD_GAP;
+  const originY = Number.isFinite(Number(origin?.y)) ? Number(origin.y) : DEFAULT_CANVAS_CARD_GAP;
   return {
-    x: DEFAULT_CANVAS_CARD_GAP + (i % 4) * DEFAULT_CANVAS_CARD_STEP_X,
-    y: DEFAULT_CANVAS_CARD_GAP + Math.floor(i / 4) * DEFAULT_CANVAS_CARD_STEP_Y,
+    x: originX + (i % 4) * DEFAULT_CANVAS_CARD_STEP_X,
+    y: originY + Math.floor(i / 4) * DEFAULT_CANVAS_CARD_STEP_Y,
     w: 220,
     h: 170,
     z: i,
@@ -316,6 +319,73 @@ function normalizeCanvasPosition(raw, fallback) {
     h: clampNumber(value.h, 120, 560, base.h),
     z: clampNumber(value.z, 0, 1000000, base.z),
   };
+}
+
+function hasExplicitCanvasCoordinates(raw) {
+  return Boolean(
+    raw
+      && typeof raw === 'object'
+      && !Array.isArray(raw)
+      && Number.isFinite(Number(raw.x))
+      && Number.isFinite(Number(raw.y))
+  );
+}
+
+function canvasPositionRect(position) {
+  if (!position || typeof position !== 'object') return null;
+  return {
+    x: Number(position.x) || 0,
+    y: Number(position.y) || 0,
+    w: Math.max(1, Number(position.w) || 220) * DEFAULT_CANVAS_DISPLAY_SCALE,
+    h: Math.max(1, Number(position.h) || 170) * DEFAULT_CANVAS_DISPLAY_SCALE,
+  };
+}
+
+function canvasPositionsOverlap(left, right) {
+  return left.x < right.x + right.w
+    && left.x + left.w > right.x
+    && left.y < right.y + right.h
+    && left.y + left.h > right.y;
+}
+
+function canvasPositionBounds(positions) {
+  const bounds = {
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+  };
+  let count = 0;
+  for (const position of Object.values(positions || {})) {
+    const rect = canvasPositionRect(position);
+    if (!rect) continue;
+    bounds.minX = Math.min(bounds.minX, rect.x);
+    bounds.minY = Math.min(bounds.minY, rect.y);
+    bounds.maxX = Math.max(bounds.maxX, rect.x + rect.w);
+    bounds.maxY = Math.max(bounds.maxY, rect.y + rect.h);
+    count += 1;
+  }
+  return count ? bounds : null;
+}
+
+function nextAvailableCanvasPosition(positions) {
+  const occupied = Object.values(positions || {})
+    .map(canvasPositionRect)
+    .filter(Boolean);
+  const bounds = canvasPositionBounds(positions);
+  const origin = bounds ? { x: bounds.minX, y: bounds.minY } : null;
+  const maxZ = Object.values(positions || {}).reduce((max, position) => {
+    if (!position || typeof position !== 'object') return max;
+    return Math.max(max, Number(position.z) || 0);
+  }, -1);
+  let index = 0;
+  while (true) {
+    const candidate = defaultCanvasPosition(index++, origin);
+    const rect = canvasPositionRect(candidate);
+    if (!occupied.some((existing) => canvasPositionsOverlap(rect, existing))) {
+      return { ...candidate, z: maxZ + 1 };
+    }
+  }
 }
 
 function normalizeCanvasConnections(rawConnections, validIds = []) {
@@ -371,9 +441,18 @@ function normalizeCanvasLayout(raw, itemIds = []) {
   const source = value.positions && typeof value.positions === 'object' ? value.positions : {};
   let index = 0;
   if (ids.size) {
+    const missing = [];
     for (const id of ids) {
       const fallback = defaultCanvasPosition(index++);
-      positions[id] = normalizeCanvasPosition(source[id], fallback);
+      if (hasExplicitCanvasCoordinates(source[id])) {
+        positions[id] = normalizeCanvasPosition(source[id], fallback);
+      } else {
+        positions[id] = null;
+        missing.push({ id, index: index - 1 });
+      }
+    }
+    for (const { id } of missing) {
+      positions[id] = nextAvailableCanvasPosition(positions);
     }
   } else {
     for (const [id, position] of Object.entries(source)) {

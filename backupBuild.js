@@ -784,10 +784,11 @@
     const parkedTabs = items
       .filter((item) => item.kind === 'tab')
       .map(({ kind, ...item }) => item);
+    const allowStoredOnlyUrls = legacy || warnings.storedOnlyUrls > 0;
     return {
       ok: true,
       version,
-      allowStoredOnlyUrls: legacy,
+      allowStoredOnlyUrls,
       warnings,
       backup: {
         ...backup,
@@ -876,7 +877,7 @@
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'inline',
-    });
+    }, { allowStoredOnlyUrls: true });
     if (!validation.ok) throw new Error(validation.error);
     const { items, files, mediaMimes } = collectMediaFiles(backup.parkedItems || []);
     const meta = {

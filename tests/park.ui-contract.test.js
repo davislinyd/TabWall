@@ -13,8 +13,9 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
     assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
   }
   assert.doesNotMatch(HTML_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle/);
-  assert.match(HTML_SOURCE, /data-settings-arrange="grid"[^>]*data-i18n="canvasArrangeGrid"/);
-  assert.match(HTML_SOURCE, /data-settings-arrange="align"[^>]*data-i18n="canvasArrangeAlign"/);
+  assert.match(HTML_SOURCE, /id="canvasOrganizePanel"[^>]*role="dialog"[^>]*hidden/);
+  assert.match(HTML_SOURCE, /data-canvas-arrange="grid"[^>]*data-i18n="canvasArrangeGrid"/);
+  assert.match(HTML_SOURCE, /data-canvas-arrange="align"[^>]*data-i18n="canvasArrangeAlign"/);
   assert.match(HTML_SOURCE, /id="sortBy"/);
   assert.match(HTML_SOURCE, /value="newest"/);
   assert.match(HTML_SOURCE, /value="domain"/);
@@ -57,6 +58,30 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(PARK_SOURCE, /if \(event\.button === 0 && !node && \(selectedCanvasConnectionId \|\| canvasConnectionSourceId\)\) \{[\s\S]*?clearCanvasConnectionSelection\(\)/);
   assert.match(PARK_SOURCE, /canvasActiveTool === 'link'/);
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
+});
+
+test('Top bar exposes Canvas organization and manual add popovers', () => {
+  for (const id of ['canvasOrganizeWrap', 'canvasOrganizeBtn', 'canvasOrganizePanel', 'manualAddWrap', 'manualAddTopBtn', 'manualAddPanel']) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  assert.match(HTML_SOURCE, /id="canvasOrganizeWrap"[^>]*hidden/);
+  assert.match(HTML_SOURCE, /id="canvasOrganizeBtn"[^>]*aria-expanded="false"[^>]*aria-controls="canvasOrganizePanel"/);
+  assert.match(HTML_SOURCE, /id="manualAddTopBtn"[^>]*aria-expanded="false"[^>]*aria-controls="manualAddPanel"/);
+  for (const id of ['manualAddText', 'manualAddBtn', 'manualAddStatus']) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  const settingsStart = HTML_SOURCE.indexOf('<div id="settingsBox"');
+  const lightboxStart = HTML_SOURCE.indexOf('<div id="lightbox"', settingsStart);
+  const settingsSource = HTML_SOURCE.slice(settingsStart, lightboxStart);
+  assert.doesNotMatch(settingsSource, /id="sortBy"|data-canvas-arrange|manualAddBlock|id="manualAddText"/);
+  assert.doesNotMatch(HTML_SOURCE, /data-settings-arrange/);
+  assert.match(PARK_SOURCE, /function openCanvasOrganizePanel\(\)/);
+  assert.match(PARK_SOURCE, /function openManualAddPanel\(\)/);
+  assert.match(PARK_SOURCE, /function closeHeaderPopovers\(/);
+  assert.match(PARK_SOURCE, /function syncCanvasOrganizeUi\(/);
+  assert.match(PARK_SOURCE, /if \(kind === 'url'\) \{[\s\S]*?openManualAddPanel\(\)/);
+  assert.match(PARK_SOURCE, /canvasOrganizePanel\?\.querySelectorAll\('\[data-canvas-arrange\]'\)/);
+  assert.match(PARK_SOURCE, /#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap/);
 });
 
 test('Canvas Sticker Note exposes placement, split editing, attachments, and safe actions', () => {
@@ -131,7 +156,7 @@ test('Top-level actions are consolidated in the header', () => {
   assert.match(PARK_SOURCE, /function focusCanvasItem\(id\)/);
   assert.match(PARK_SOURCE, /setCanvasIndexFilter\(`stack:\$\{id\}`, id\)/);
   assert.match(PARK_SOURCE, /focusCanvasItem\(focusId\)/);
-  assert.doesNotMatch(PARK_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle/);
+  assert.doesNotMatch(PARK_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle|data-settings-arrange/);
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
@@ -156,8 +181,11 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_MAX_WIDTH = 360/);
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSE_THRESHOLD = 120/);
   assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSED_WIDTH = 34/);
-  assert.match(PARK_SOURCE, /document\.body\?\.style\.setProperty\('--canvas-version-left', `\$\{visibleWidth \+ 16\}px`\)/);
-  assert.match(HTML_SOURCE, /body\.canvas-mode #versionBadge\s*\{[\s\S]*?left:\s*var\(--canvas-version-left, 16px\)/);
+  const canvasRailSource = HTML_SOURCE.match(/<aside id="canvasRail"[\s\S]*?<\/aside>/)?.[0] || '';
+  assert.match(canvasRailSource, /class="canvas-rail-content"[\s\S]*?id="versionBadge"/);
+  assert.doesNotMatch(PARK_SOURCE, /--canvas-version-left/);
+  assert.doesNotMatch(HTML_SOURCE, /body\.canvas-mode #versionBadge/);
+  assert.match(WORKBENCH_CSS, /#versionBadge\s*\{[\s\S]*?position:\s*static;[\s\S]*?align-self:\s*stretch;/);
   assert.match(PARK_SOURCE, /function normalizeCanvasRailSettings\(target\)/);
   assert.match(PARK_SOURCE, /function applyCanvasRailUi\(/);
   assert.match(PARK_SOURCE, /function initCanvasRailResize\(\)/);
@@ -224,7 +252,7 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.match(PARK_SOURCE, /function arrangeCanvasAlign\(items, layout\)/);
   assert.match(PARK_SOURCE, /function normalizeSortBy\(value\)/);
   assert.match(PARK_SOURCE, /sortByEl\?\.addEventListener/);
-  assert.match(PARK_SOURCE, /data-settings-arrange/);
+  assert.match(PARK_SOURCE, /data-canvas-arrange/);
   assert.match(PARK_SOURCE, /function beginCanvasMinimapDrag\(event\)/);
   assert.match(PARK_SOURCE, /function updateCanvasMinimapDrag\(event\)/);
   assert.match(PARK_SOURCE, /previewPointer\(\{ dx, dy, moved:/);
@@ -420,6 +448,12 @@ test('Canvas zoom uses a layout-scaled inner world and translation-only outer tr
   assert.match(transformSource, /canvasWorldScaleEl\.style\.zoom = String\(zoom\)/);
   assert.match(transformSource, /canvasWorldEl\.style\.transform = `translate\(\$\{-x \* zoom\}px, \$\{-y \* zoom\}px\)`/);
   assert.doesNotMatch(transformSource, /scale\(/);
+  const zoomSource = PARK_SOURCE.match(/function setCanvasZoom\([\s\S]*?\n\}/)?.[0] || '';
+  assert.match(zoomSource, /clientX != null && clientY != null/);
+  assert.match(zoomSource, /x: rect\.width \/ 2/);
+  assert.match(zoomSource, /y: rect\.height \/ 2/);
+  assert.match(zoomSource, /x: offset\.x \/ oldZoom \+ state\.layout\.viewport\.x/);
+  assert.match(zoomSource, /y: offset\.y \/ oldZoom \+ state\.layout\.viewport\.y/);
 });
 
 test('Canvas zoom controls expose a hover slider and accessible fit menu', () => {

@@ -411,7 +411,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.25.1');
+  assert.equal(MANIFEST.version, '2.26.0');
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
@@ -1168,6 +1168,7 @@ test('canvas layout defaults missing positions and normalizes bounds', async () 
     viewport: { x: 999999, y: 'bad', zoom: 0 },
     positions: {
       [ITEM_ID]: { x: 12, y: 24, w: 999, h: 1, z: -4 },
+      [SOURCE_ID]: null,
       'unknown-id': { x: 80, y: 80, w: 220, h: 170, z: 2 },
     },
   });
@@ -1177,8 +1178,101 @@ test('canvas layout defaults missing positions and normalizes bounds', async () 
   assert.equal(normalized.positions[ITEM_ID].w, 640);
   assert.equal(normalized.positions[ITEM_ID].h, 120);
   assert.equal(normalized.positions[ITEM_ID].z, 0);
-  assert.equal(normalized.positions[SOURCE_ID].x, 434);
+  assert.equal(normalized.positions[SOURCE_ID].x, 1026);
   assert.equal(normalized.positions['unknown-id'], undefined);
+});
+
+test('newly saved tabs stay near the existing canvas cluster without overlap', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([
+    tab(ITEM_ID, 'https://existing-one.example/'),
+    tab(SOURCE_ID, 'https://existing-two.example/'),
+  ]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    positions: {
+      [ITEM_ID]: { x: 2400, y: 1800, w: 220, h: 170, z: 7 },
+      [SOURCE_ID]: { x: 2738, y: 1800, w: 220, h: 170, z: 8 },
+    },
+  });
+
+  const first = await runtime.api.commitSaveTab({
+    windowId: null,
+    url: 'https://saved-one.example/',
+    title: 'Saved one',
+    favIconUrl: '',
+  }, { afterSave: 'keep' });
+  const second = await runtime.api.commitSaveTab({
+    windowId: null,
+    url: 'https://saved-two.example/',
+    title: 'Saved two',
+    favIconUrl: '',
+  }, { afterSave: 'keep' });
+  const third = await runtime.api.commitSaveTab({
+    windowId: null,
+    url: 'https://saved-three.example/',
+    title: 'Saved three',
+    favIconUrl: '',
+  }, { afterSave: 'keep' });
+  const layout = await runtime.api.getCanvasLayout();
+  const rect = (position) => ({
+    x: position.x,
+    y: position.y,
+    w: position.w * 1.1,
+    h: position.h * 1.1,
+  });
+  const overlaps = (left, right) => (
+    left.x < right.x + right.w
+    && left.x + left.w > right.x
+    && left.y < right.y + right.h
+    && left.y + left.h > right.y
+  );
+  const ids = [ITEM_ID, SOURCE_ID, first.id, second.id, third.id];
+  const rects = ids.map((id) => rect(layout.positions[id]));
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(third.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions[ITEM_ID])), {
+    x: 2400,
+    y: 1800,
+    w: 220,
+    h: 170,
+    z: 7,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions[SOURCE_ID])), {
+    x: 2738,
+    y: 1800,
+    w: 220,
+    h: 170,
+    z: 8,
+  });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify([first.id, second.id, third.id].map((id) => layout.positions[id]))),
+    [
+      { x: 3076, y: 1800, w: 220, h: 170, z: 9 },
+      { x: 3414, y: 1800, w: 220, h: 170, z: 10 },
+      { x: 2400, y: 2083, w: 220, h: 170, z: 11 },
+    ]
+  );
+  assert.equal(new Set(rects.map(({ x, y }) => `${x},${y}`)).size, rects.length);
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      assert.equal(overlaps(rects[i], rects[j]), false);
+    }
+  }
+  assert.ok(layout.positions[first.id].x > layout.positions[SOURCE_ID].x);
+  assert.ok(layout.positions[second.id].x > layout.positions[first.id].x);
+  assert.ok(layout.positions[third.id].y > layout.positions[ITEM_ID].y);
+  assert.ok(layout.positions[first.id].z > layout.positions[SOURCE_ID].z);
+  assert.ok(layout.positions[second.id].z > layout.positions[first.id].z);
+  assert.ok(layout.positions[third.id].z > layout.positions[second.id].z);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(await runtime.api.getCanvasLayout())),
+    JSON.parse(JSON.stringify(layout))
+  );
 });
 
 test('canvas initial center is reported once and does not follow Reset View', async () => {
