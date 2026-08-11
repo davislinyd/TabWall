@@ -66,6 +66,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Drag a node | Move it on the canvas; positions are saved automatically |
 | Drag one node onto another | Stack the items into a group |
 | Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
+| Middle-mouse drag anywhere on the canvas | Pan the canvas without starting a selection; double-click resets the view |
 | Frame-select tool | Select nodes in a rectangular area |
 | Drag the minimap viewport frame | Pan the current canvas view; release commits one pan operation |
 | Link tool | Hover a node to reveal four `+` handles, then drag from any side; connections snap to the nearest side handle, and clicking two nodes or groups remains available as a fallback |
@@ -79,6 +80,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
 - Field scope: use `tag`, `note`, or `group` followed by Tab.
+- Tag mode (`tag` + Tab) shows a type-ahead suggestion dropdown: pick multiple tags, and combine them with `&&` (AND) or `||` (OR) — click a suggestion's `||` button or press Alt+Enter to insert OR. Unlike plain search, whitespace inside a tag-mode query is *not* an AND separator (so a tag name that itself contains a space keeps working) — only `&&` and `||` are operators.
 - When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
 - Search input is debounced, and thumbnails load near the visible area.
@@ -96,6 +98,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
 - Quick Add saves the current tab or Group from the overlay, or opens URL paste on New Tab/standalone surfaces.
 - **Automatic save metadata rules:** Settings can match a tab's hostname or page title with match, contains, starts with, ends with, regex, and not conditions. Rules support AND/OR, append note lines without duplicates, and merge tags without duplicates. Group saves evaluate each member independently.
+- **Edit before saving:** Saving a single tab (Alt+S, Alt+Shift+S, the popup's tab-save buttons, or the overlay's quick-save button) shows a panel to edit the note/tags — pre-filled from automatic save metadata rules — before it actually saves; cancelling leaves the tab untouched. Group saves are unaffected. Toggle this in Settings ("Edit before saving").
 - Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
 - Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
 - **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Full export is refused when its estimated ZIP exceeds 256 MiB. Note attachments are capped at 96 MiB per note and 512 MiB across the extension. Existing attachments are not migrated automatically; the limits apply to new uploads and imports. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
@@ -208,6 +211,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 拖曳節點 | 在畫布上移動；位置會自動儲存 |
 | 將節點拖到另一節點 | 將項目堆疊成群組 |
 | 使用平移／框選工具 | 平移畫布或框選多個節點 |
+| 在畫布任意處按住滑鼠中鍵拖曳 | 平移畫布且不會觸發選取；雙擊中鍵可重置視角 |
 | 拖曳 minimap 視角框 | 平移目前畫布；放開後提交單次視角操作 |
 | 連結工具 | 將滑鼠移到卡片即可顯示四側 `+` handle，從任一側拖曳；連線會貼齊相對方向的側邊 handle，也可點擊兩張卡片或群組建立無方向持久連線 |
 | 拖曳連線線段 | 前／後三分之一可重接端點，中間三分之一可彎曲或拉長線段；線段提供 16px 近距離命中範圍，雙擊可重設自訂曲線 |
@@ -220,6 +224,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
 - 欄位範圍：輸入 `tag`、`note` 或 `group` 後按 Tab。
+- Tag 模式（輸入 `tag` 後按 Tab）會顯示即時下拉建議，可多選 tag 並以 `&&`（且）／`||`（或）組合；點擊建議旁的 `||` 按鈕或按 Alt+Enter 可直接以「或」加入。與一般搜尋不同，tag 模式下空白鍵**不會**被當作且的分隔符（保留給包含空白的 tag 名稱本身），只有 `&&`／`||` 才是運算子。
 - 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
 - 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
@@ -237,6 +242,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 新安裝預設深色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。
 - 快速新增可在 Overlay 儲存目前分頁或 Group；New Tab／獨立頁面仍可開啟貼上 URL。
 - **自動儲存規則：** 設定可依分頁 hostname／FQDN 或 page title，使用 match、contains、starts with、ends with、regex 與 not 判斷；每條規則支援 AND／OR。命中後 note 逐行附加去重、tag 合併去重；儲存 Group 時會逐一判斷成員。
+- **儲存前編輯：** 儲存單一分頁時（Alt+S、Alt+Shift+S、popup 的分頁儲存按鈕，或 Overlay 內的快速儲存按鈕）會先跳出面板編輯 note／tag——預設值取自自動儲存規則，確認後才真正寫入；取消則分頁維持原狀不受影響。Group 儲存不受影響。可在設定「儲存前編輯」開關中關閉。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
 - **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片，預估超過 256 MiB 時會拒絕並提示改用精簡備份或分批匯出。附件容量上限為單一 note 96 MiB、全 extension 512 MiB；既有附件不會自動遷移，新上傳與匯入才套用圖片限制。檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。

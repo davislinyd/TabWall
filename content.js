@@ -17,12 +17,21 @@
   let iframeEl = null;
   /** @type {object|null} */
   let pendingConflict = null;
+  /** @type {object|null} */
+  let pendingPreSave = null;
   let iframeReady = false;
 
   function destroy() {
     if (pendingConflict) {
       try {
         chrome.runtime.sendMessage({ type: 'RESOLVE_SAVE_CONFLICT', decision: 'cancel' }, () => {});
+      } catch {
+        // ignore
+      }
+    }
+    if (pendingPreSave) {
+      try {
+        chrome.runtime.sendMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'cancel' }, () => {});
       } catch {
         // ignore
       }
@@ -44,6 +53,7 @@
     isOpen = false;
     iframeReady = false;
     pendingConflict = null;
+    pendingPreSave = null;
   }
 
   function focusParkSearch() {
@@ -71,6 +81,11 @@
     postToPark({ type: 'TABWALL_SAVE_CONFLICT', conflict: pendingConflict });
   }
 
+  function flushPendingPreSave() {
+    if (!pendingPreSave || !iframeReady) return;
+    postToPark({ type: 'TABWALL_PRESAVE_EDIT', preSave: pendingPreSave });
+  }
+
   function waitForPaint() {
     return new Promise((resolve) => {
       const schedule = typeof window.requestAnimationFrame === 'function'
@@ -80,10 +95,10 @@
     });
   }
 
-  function sendSaveMessage() {
+  function sendRuntimeMessage(payload) {
     return new Promise((resolve) => {
       try {
-        chrome.runtime.sendMessage({ type: 'SAVE_TAB_FROM_CONTENT' }, (response) => {
+        chrome.runtime.sendMessage(payload, (response) => {
           const result = chrome.runtime.lastError
             ? { ok: false, error: chrome.runtime.lastError.message }
             : response || { ok: false, error: 'empty_response' };
@@ -93,6 +108,10 @@
         resolve({ ok: false, error: String(err) });
       }
     });
+  }
+
+  function sendSaveMessage() {
+    return sendRuntimeMessage({ type: 'SAVE_TAB_FROM_CONTENT' });
   }
 
   async function saveActiveWithoutOverlay() {
@@ -109,6 +128,37 @@
       if (overlay && rootEl === overlay) overlay.style.visibility = previousVisibility;
     }
     postToPark({ type: 'TABWALL_SAVE_RESULT', result });
+  }
+
+  /** Hides the overlay so captureVisibleTab shoots the real page, then commits the pre-save edit. */
+  async function commitPreSaveWithoutOverlay(note, tags) {
+    const overlay = rootEl;
+    const previousVisibility = overlay?.style?.visibility || '';
+    pendingPreSave = null; // a destroy() triggered mid-flight must not also send a cancel
+    if (overlay) overlay.style.visibility = 'hidden';
+    let result;
+    try {
+      await waitForPaint();
+      result = await sendRuntimeMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'save', note, tags });
+    } catch (err) {
+      result = { ok: false, error: String(err) };
+    }
+    if (result?.ok) {
+      destroy();
+      return;
+    }
+    if (overlay && rootEl === overlay) overlay.style.visibility = previousVisibility;
+    postToPark({ type: 'TABWALL_PRESAVE_RESULT', result });
+  }
+
+  async function cancelPreSave() {
+    pendingPreSave = null;
+    try {
+      await sendRuntimeMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'cancel' });
+    } catch {
+      // ignore
+    }
+    destroy();
   }
 
   function open() {
@@ -187,6 +237,7 @@
         // ignore
       }
       flushPendingConflict();
+      flushPendingPreSave();
     });
 
     keyHandler = (e) => {
@@ -227,9 +278,16 @@
       if (event.data?.type === 'TABWALL_SAVE_ACTIVE') {
         saveActiveWithoutOverlay();
       }
+      if (event.data?.type === 'TABWALL_PRESAVE_COMMIT') {
+        commitPreSaveWithoutOverlay(event.data.note, event.data.tags);
+      }
+      if (event.data?.type === 'TABWALL_PRESAVE_CANCEL') {
+        cancelPreSave();
+      }
       if (event.data?.type === 'TABWALL_PARK_READY') {
         iframeReady = true;
         flushPendingConflict();
+        flushPendingPreSave();
       }
     };
     window.addEventListener('message', messageHandler);
@@ -243,6 +301,12 @@
     pendingConflict = conflict || null;
     ensureOpen();
     if (iframeReady) flushPendingConflict();
+  }
+
+  function showPreSaveEdit(preSave) {
+    pendingPreSave = preSave || null;
+    ensureOpen();
+    if (iframeReady) flushPendingPreSave();
   }
 
   function toggle() {
@@ -276,6 +340,15 @@
     if (message?.type === 'SHOW_SAVE_CONFLICT') {
       try {
         showSaveConflict(message.conflict);
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+      return false;
+    }
+    if (message?.type === 'SHOW_PRESAVE_EDIT') {
+      try {
+        showPreSaveEdit(message.preSave);
         sendResponse({ ok: true });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });

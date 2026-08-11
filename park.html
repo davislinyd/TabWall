@@ -599,7 +599,8 @@
       }
 
       /* Save conflict modal — above floats */
-      #conflictModal {
+      #conflictModal,
+      #preSaveModal {
         display: none;
         position: fixed;
         inset: 0;
@@ -610,11 +611,13 @@
         background: rgba(2, 6, 23, 0.55);
       }
 
-      #conflictModal.open {
+      #conflictModal.open,
+      #preSaveModal.open {
         display: flex;
       }
 
-      #conflictModal .conflict-panel {
+      #conflictModal .conflict-panel,
+      #preSaveModal .conflict-panel {
         width: min(480px, calc(100vw - 32px));
         max-height: min(80vh, 640px);
         overflow: auto;
@@ -625,12 +628,14 @@
         padding: 16px 18px 14px;
       }
 
-      #conflictModal h2 {
+      #conflictModal h2,
+      #preSaveModal h2 {
         margin: 0 0 8px;
         font-size: 16px;
       }
 
-      #conflictModal .conflict-incoming {
+      #conflictModal .conflict-incoming,
+      #preSaveModal .conflict-incoming {
         font-size: 13px;
         margin-bottom: 12px;
         padding: 10px;
@@ -639,12 +644,14 @@
         border: 1px solid var(--border);
       }
 
-      #conflictModal .conflict-incoming .title {
+      #conflictModal .conflict-incoming .title,
+      #preSaveModal .conflict-incoming .title {
         font-weight: 600;
         margin-bottom: 4px;
       }
 
-      #conflictModal .conflict-incoming .url {
+      #conflictModal .conflict-incoming .url,
+      #preSaveModal .conflict-incoming .url {
         font-size: 11px;
         color: var(--muted);
         word-break: break-all;
@@ -669,7 +676,8 @@
         background: var(--bg);
       }
 
-      #conflictModal .conflict-actions {
+      #conflictModal .conflict-actions,
+      #preSaveModal .conflict-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
@@ -1483,7 +1491,8 @@
         opacity: 1;
       }
 
-      #editTagDraft {
+      #editTagDraft,
+      #preSaveTagDraft {
         flex: 1 1 100px;
         min-width: 100px;
         border: 0 !important;
@@ -3819,7 +3828,8 @@
       }
 
       #importPreviewOverlay,
-      #conflictModal {
+      #conflictModal,
+      #preSaveModal {
         background: rgba(46, 43, 39, 0.28);
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
@@ -3827,6 +3837,7 @@
 
       #importPreviewOverlay .import-preview-panel,
       #conflictModal .conflict-panel,
+      #preSaveModal .conflict-panel,
       #membersBox {
         border: 0;
         border-left: 1px solid var(--border);
@@ -3844,6 +3855,7 @@
       #importPickList .import-pick-row,
       #conflictModal .conflict-incoming,
       #conflictModal .conflict-list li,
+      #preSaveModal .conflict-incoming,
       .dedupe-cluster,
       .member-row {
         border-radius: 0;
@@ -4861,7 +4873,6 @@
       }
 
       #settingsBox,
-      #tagsBox,
       #helpBox,
       #dedupeBox,
       #importPickBox {
@@ -4873,6 +4884,22 @@
         border-radius: 4px;
         box-shadow: var(--edit-shadow);
         transform: translate(-50%, -50%);
+        --input-bg: var(--panel);
+        --btn-bg: transparent;
+        --btn-hover: var(--row-hover);
+        --overlay-actions: transparent;
+        --action-btn-bg: var(--panel);
+        --shadow: 0 2px 8px rgba(41, 48, 51, 0.08);
+        --edit-shadow: 0 12px 36px rgba(41, 48, 51, 0.16);
+      }
+
+      /* Anchored to #tagsBtn via positionTagsBoxUnderButton() (park.js), not centered. */
+      #tagsBox {
+        width: min(420px, calc(100vw - 32px));
+        max-height: min(70vh, 560px);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        box-shadow: var(--edit-shadow);
         --input-bg: var(--panel);
         --btn-bg: transparent;
         --btn-hover: var(--row-hover);
@@ -5101,6 +5128,7 @@
       }
 
       #conflictModal,
+      #preSaveModal,
       #importPreviewOverlay {
         align-items: center;
         justify-content: center;
@@ -5111,6 +5139,7 @@
       }
 
       #conflictModal .conflict-panel,
+      #preSaveModal .conflict-panel,
       #importPreviewOverlay .import-preview-panel {
         width: min(680px, calc(100vw - 32px));
         max-height: min(84vh, 760px);
@@ -5120,7 +5149,8 @@
         box-shadow: var(--edit-shadow);
       }
 
-      #conflictModal .conflict-panel {
+      #conflictModal .conflict-panel,
+      #preSaveModal .conflict-panel {
         padding: 24px;
       }
 
@@ -6004,6 +6034,7 @@
       #editBox,
       #membersBox,
       #conflictModal .conflict-panel,
+      #preSaveModal .conflict-panel,
       #importPreviewOverlay .import-preview-panel {
         border-color: var(--border-strong);
         border-radius: 4px;
@@ -6125,6 +6156,66 @@
       .auto-save-tag-chip button { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; background: transparent; color: currentColor; cursor: pointer; }
       .auto-save-tag-chip button svg { width: 12px; height: 12px; }
       .auto-save-tag-input { flex: 1 1 160px; min-width: 160px; border: 0 !important; background: transparent !important; }
+
+      /* Tag-mode search autocomplete dropdown (#searchTagSuggest). */
+      .search-suggest {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        z-index: 175;
+        display: grid;
+        gap: 2px;
+        max-height: min(46vh, 320px);
+        overflow: auto;
+        padding: 6px;
+        border: 1px solid var(--border-strong, var(--border));
+        border-radius: 12px;
+        background: var(--panel-raised, var(--panel));
+        box-shadow: var(--edit-shadow, 0 12px 36px rgba(41, 48, 51, 0.16));
+      }
+      .search-suggest[hidden] { display: none !important; }
+      .search-suggest-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--text);
+      }
+      .search-suggest-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .search-suggest-row .count { color: var(--muted); font-size: 11px; }
+      .search-suggest-row:hover,
+      .search-suggest-row.active {
+        background: var(--accent-soft, var(--row-hover));
+        color: var(--accent);
+      }
+      .search-suggest-row.is-selected { border-left: 2px solid var(--accent); padding-left: 6px; }
+      .search-suggest-or {
+        opacity: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 5px;
+        cursor: pointer;
+      }
+      .search-suggest-row:hover .search-suggest-or,
+      .search-suggest-row.active .search-suggest-or,
+      .search-suggest-or:focus-visible {
+        opacity: 1;
+      }
+      .search-suggest-empty,
+      .search-suggest-hint {
+        padding: 6px 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
     </style>
   </head>
   <body>
@@ -6156,6 +6247,9 @@
             placeholder="搜尋…  空格/&& 且、|| 或（不分大小寫）"
             autocomplete="off"
             spellcheck="false"
+            aria-autocomplete="list"
+            aria-controls="searchTagSuggest"
+            aria-expanded="false"
           />
           <button
             type="button"
@@ -6167,6 +6261,7 @@
           >
             .*
           </button>
+          <div id="searchTagSuggest" class="search-suggest" hidden role="listbox" data-i18n-aria="searchTagSuggestTitle" aria-label="Tag 建議"></div>
         </div>
         <div class="header-actions">
           <div class="quick-add-wrap" id="quickAddWrap">
@@ -6239,7 +6334,7 @@
             <span id="viewModeLabel">列表</span>
           </button>
           <button type="button" class="btn header-text-btn" id="tagsBtn" data-i18n-title="tagsManage" data-i18n-aria="tagsManage" title="Tags" aria-label="Tags"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path><path d="M8 9h8M8 12h5"></path></svg><span data-i18n="tagsManage">Tags</span></button>
-          <button type="button" class="btn header-text-btn" id="settingsBtn" data-i18n-title="settings" data-i18n-aria="settings" title="設定" aria-label="設定"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path><circle cx="12" cy="12" r="4"></circle></svg><span data-i18n="settings">設定</span></button>
+          <button type="button" class="btn header-text-btn" id="settingsBtn" data-i18n-title="settings" data-i18n-aria="settings" title="設定" aria-label="設定"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="settings">設定</span></button>
           <button type="button" class="btn header-text-btn" id="themeBtn" data-i18n-title="themeToggle" data-i18n-aria="themeToggle" title="切換主題" aria-label="切換主題">Light</button>
           <button type="button" class="btn header-text-btn" id="helpBtn" data-i18n-title="help" data-i18n-aria="help" title="說明" aria-label="說明"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.7 9a2.4 2.4 0 1 1 3.9 1.8c-1.1.8-1.6 1.2-1.6 2.7M12 17h.01"></path></svg><span data-i18n="help">說明</span></button>
           <button type="button" class="btn icon-close" id="closeBtn" data-i18n-title="close" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
@@ -6433,6 +6528,18 @@
           <div class="radios">
             <label><input type="radio" name="afterSave" value="close" /> <span data-i18n="afterSaveClose">關閉該分頁</span></label>
             <label><input type="radio" name="afterSave" value="keep" /> <span data-i18n="afterSaveKeep">不額外執行動作（僅儲存）</span></label>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="general">
+          <h2 data-i18n="presaveSettingTitle">儲存前編輯</h2>
+          <p class="hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)" data-i18n="presaveSettingHint">
+            儲存單一分頁時，先跳出面板讓你快速編輯 note／tag，確認後才真正儲存（不含 Group 儲存）。
+          </p>
+          <div class="settings-row">
+            <label class="inline">
+              <input type="checkbox" id="settingsPreSaveEdit" />
+              <span data-i18n="presaveSettingLabel">儲存前先編輯 Note／Tag</span>
+            </label>
           </div>
         </div>
         <div class="settings-block" data-settings-section="general">
@@ -6783,6 +6890,38 @@
           <button type="button" class="btn" id="conflictCancel" data-i18n="dedupeCancel">取消</button>
           <button type="button" class="btn" id="conflictReplace" data-i18n="dedupeReplace">取代舊項</button>
           <button type="button" class="btn primary" id="conflictKeepBoth" data-i18n="dedupeKeepBoth">保留兩者</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="preSaveModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="preSaveHeading">
+      <div class="conflict-panel">
+        <h2 id="preSaveHeading" data-i18n="presaveHeading">儲存前編輯</h2>
+        <p class="hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)" data-i18n="presaveHint">
+          快速編輯 note / tag，確認後才會真正儲存。
+        </p>
+        <div class="conflict-incoming">
+          <div class="title" id="preSaveTitle">—</div>
+          <div class="url" id="preSaveUrl">—</div>
+        </div>
+        <div class="edit-body" style="padding:0">
+          <label>
+            <span data-i18n="note">Note</span>
+            <textarea id="preSaveNote" data-i18n-placeholder="notePh" placeholder="加入備註…"></textarea>
+          </label>
+          <div class="edit-field">
+            <span data-i18n="tags">Tags</span>
+            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+            <div class="tag-input" id="preSaveTagInput">
+              <div class="chips" id="preSaveChips"></div>
+              <input id="preSaveTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" />
+            </div>
+          </div>
+        </div>
+        <p class="sub" id="preSaveError" role="alert" style="min-height:14px;margin:8px 0 0"></p>
+        <div class="conflict-actions">
+          <button type="button" class="btn" id="preSaveCancel" data-i18n="cancel">取消</button>
+          <button type="button" class="btn primary" id="preSaveConfirm" data-i18n="save">儲存</button>
         </div>
       </div>
     </div>

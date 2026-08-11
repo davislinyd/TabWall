@@ -82,6 +82,7 @@ const DEFAULT_SETTINGS = {
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
+  preSaveEdit: true,
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
   autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
 };
@@ -1096,6 +1097,7 @@ function normalizeSettings(raw) {
     ...(merged.autoBackup || {}),
   });
   merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
+  merged.preSaveEdit = merged.preSaveEdit !== false;
   return merged;
 }
 
@@ -2968,6 +2970,54 @@ async function clearPendingConflict() {
   await chrome.storage.local.remove(PENDING_CONFLICT_KEY);
 }
 
+const PENDING_PRESAVE_KEY = 'pendingPreSaveEdit';
+
+async function setPendingPreSave(pending) {
+  const payload = { ...pending, createdAt: Date.now() };
+  try {
+    if (chrome.storage.session) {
+      await chrome.storage.session.set({ [PENDING_PRESAVE_KEY]: payload });
+    } else {
+      await chrome.storage.local.set({ [PENDING_PRESAVE_KEY]: payload });
+    }
+  } catch {
+    await chrome.storage.local.set({ [PENDING_PRESAVE_KEY]: payload });
+  }
+  return payload;
+}
+
+async function getPendingPreSave() {
+  let data = {};
+  try {
+    if (chrome.storage.session) {
+      data = await chrome.storage.session.get(PENDING_PRESAVE_KEY);
+    }
+  } catch {
+    data = {};
+  }
+  if (!data[PENDING_PRESAVE_KEY]) {
+    data = await chrome.storage.local.get(PENDING_PRESAVE_KEY);
+  }
+  const pending = data[PENDING_PRESAVE_KEY];
+  if (!pending || typeof pending !== 'object') return null;
+  if (Date.now() - (pending.createdAt || 0) > PENDING_TTL_MS) {
+    await clearPendingPreSave();
+    return null;
+  }
+  return pending;
+}
+
+async function clearPendingPreSave() {
+  try {
+    if (chrome.storage.session) {
+      await chrome.storage.session.remove(PENDING_PRESAVE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+  await chrome.storage.local.remove(PENDING_PRESAVE_KEY);
+}
+
 function normalizeRestoreHint(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const kind = raw.kind === 'group' ? 'group' : 'tab';
@@ -3191,12 +3241,12 @@ function normalizeAfterSaveMode(value, fallback = 'close') {
 }
 
 /**
- * Commit a parked tab from a live chrome.tabs Tab (or pending snapshot fields).
- * @param {object} tabLike - { id?, windowId?, url, title, favIconUrl }
- * @param {{ replaceMatchIds?: string[], afterSave?: 'keep'|'close' }} opts
+ * Computes the default note/tags a tab would be saved with: auto-save-metadata
+ * rules layered on top of any matching restore hint. Shared by the pre-save
+ * edit panel (to pre-fill it) and commitSaveTab (to fall back to it when the
+ * user never overrides it), so the two can never drift apart.
  */
-async function commitSaveTab(tabLike, opts = {}) {
-  const replaceMatchIds = opts.replaceMatchIds || [];
+async function computeSaveMetadata(tabLike) {
   const restoreHint = await findRestoreHint(tabLike.url);
   const settings = await getSettings();
   const metadata = applyAutoSaveMetadata(
@@ -3207,6 +3257,25 @@ async function commitSaveTab(tabLike, opts = {}) {
     },
     settings.autoSaveMetadata
   );
+  return { metadata, restoreHint, settings };
+}
+
+/**
+ * Commit a parked tab from a live chrome.tabs Tab (or pending snapshot fields).
+ * @param {object} tabLike - { id?, windowId?, url, title, favIconUrl }
+ * @param {{ replaceMatchIds?: string[], afterSave?: 'keep'|'close', metaOverride?: { note?: string, tags?: string[] } }} opts
+ */
+async function commitSaveTab(tabLike, opts = {}) {
+  const replaceMatchIds = opts.replaceMatchIds || [];
+  const { metadata: computedMetadata, restoreHint, settings } = await computeSaveMetadata(tabLike);
+  // A user-confirmed pre-save edit wins outright — do not re-apply auto-save
+  // rules on top of it, or a tag the user deliberately removed would reappear.
+  const metadata = opts.metaOverride
+    ? {
+        note: safeText(opts.metaOverride.note, DATA_LIMITS.MAX_NOTE_LENGTH),
+        tags: normalizeTags(opts.metaOverride.tags),
+      }
+    : computedMetadata;
   if (replaceMatchIds.length) {
     await deleteTabItemsByIds(replaceMatchIds);
   }
@@ -3324,7 +3393,7 @@ async function saveCurrentTab(tab, opts = {}) {
       return { ok: true, conflict: true, matchCount: matches.length };
     }
 
-    return await commitSaveTab(tab, { afterSave });
+    return await openPreSaveEdit(tab, { afterSave });
   } catch (err) {
     console.warn('[TabWall] saveCurrentTab failed:', err);
     await flashBadge('!');
@@ -3339,6 +3408,100 @@ async function saveActiveTab(opts = {}) {
     return { ok: false, error: 'self_tab' };
   }
   return saveCurrentTab(tab, opts);
+}
+
+/**
+ * Shows the "edit note/tags before saving" panel on the tab's own page via
+ * the content-script overlay (mirrors openParkOnTab/SHOW_SAVE_CONFLICT).
+ * Degrades straight to commitSaveTab — never drops a save — when the
+ * feature is off, there is no host tab to draw on, the URL is restricted,
+ * or the overlay fails to inject.
+ */
+async function openPreSaveEdit(tabLike, opts = {}) {
+  if (tabLike.id == null || isRestrictedUrl(tabLike.url)) {
+    return commitSaveTab(tabLike, opts);
+  }
+  const { metadata, settings } = await computeSaveMetadata(tabLike);
+  if (settings.preSaveEdit === false) {
+    return commitSaveTab(tabLike, opts);
+  }
+  await setPendingPreSave({
+    tabId: tabLike.id,
+    windowId: tabLike.windowId,
+    url: tabLike.url,
+    title: tabLike.title || tabLike.url || 'Untitled',
+    favIconUrl: tabLike.favIconUrl || '',
+    afterSave: opts.afterSave,
+    replaceMatchIds: opts.replaceMatchIds || [],
+    note: metadata.note,
+    tags: metadata.tags,
+  });
+  const opened = await openParkOnTab(tabLike.id, {
+    type: 'SHOW_PRESAVE_EDIT',
+    preSave: {
+      title: tabLike.title || tabLike.url || 'Untitled',
+      url: tabLike.url || '',
+      favIconUrl: tabLike.favIconUrl || '',
+      note: metadata.note,
+      tags: metadata.tags,
+      afterSave: normalizeAfterSaveMode(opts.afterSave, settings.afterSave),
+      matchCount: (opts.replaceMatchIds || []).length,
+    },
+  });
+  if (!opened) {
+    await clearPendingPreSave();
+    return commitSaveTab(tabLike, opts);
+  }
+  await flashBadge('✎', '#3b82f6', 2000);
+  return { ok: true, presave: true };
+}
+
+/** Resolves the pre-save edit panel: 'cancel' discards, 'save' commits with the user's note/tags. */
+async function resolvePreSaveEdit(decision, note, tags, senderTabId) {
+  const pending = await getPendingPreSave();
+  if (!pending) return { ok: false, error: 'no_pending' };
+  if (senderTabId != null && pending.tabId != null && senderTabId !== pending.tabId) {
+    return { ok: false, error: 'stale_presave' };
+  }
+  if (decision === 'cancel') {
+    await clearPendingPreSave();
+    if (pending.tabId != null) {
+      try {
+        await refreshTabBadge(pending.tabId);
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: true, cancelled: true };
+  }
+
+  const tabLike = {
+    id: pending.tabId,
+    windowId: pending.windowId,
+    url: pending.url,
+    title: pending.title,
+    favIconUrl: pending.favIconUrl,
+  };
+  if (pending.tabId != null) {
+    try {
+      const live = await chrome.tabs.get(pending.tabId);
+      tabLike.windowId = live.windowId;
+      tabLike.url = live.url || tabLike.url;
+      tabLike.title = live.title || tabLike.title;
+      tabLike.favIconUrl = live.favIconUrl || tabLike.favIconUrl;
+    } catch {
+      tabLike.id = null;
+      tabLike.windowId = null;
+    }
+  }
+
+  // Clear before commit — a mid-commit SW restart must not replay this.
+  await clearPendingPreSave();
+  return commitSaveTab(tabLike, {
+    replaceMatchIds: pending.replaceMatchIds || [],
+    afterSave: pending.afterSave,
+    metaOverride: { note, tags },
+  });
 }
 
 async function resolveSaveConflict(decision) {
@@ -3378,12 +3541,11 @@ async function resolveSaveConflict(decision) {
 
   // Avoid debounce blocking the follow-up commit
   actionLocks.delete('save-tab');
-  const result = await commitSaveTab(tabLike, {
+  await clearPendingConflict();
+  return openPreSaveEdit(tabLike, {
     replaceMatchIds,
     afterSave: pending.afterSave,
   });
-  await clearPendingConflict();
-  return result;
 }
 
 async function applyDedupe(ops) {
@@ -4249,6 +4411,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'BATCH_UPDATE_ITEMS',
   'BATCH_DELETE_ITEMS',
   'RESOLVE_SAVE_CONFLICT',
+  'RESOLVE_PRESAVE_EDIT',
   'APPLY_DEDUPE',
 ]);
 
@@ -4409,6 +4572,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case 'RESOLVE_SAVE_CONFLICT':
         return resolveSaveConflict(message.decision || 'cancel');
+      case 'GET_PENDING_PRESAVE': {
+        const pending = await getPendingPreSave();
+        if (!pending) return { ok: true, preSave: null };
+        return {
+          ok: true,
+          preSave: {
+            title: pending.title,
+            url: pending.url,
+            favIconUrl: pending.favIconUrl,
+            note: pending.note || '',
+            tags: pending.tags || [],
+            afterSave: pending.afterSave,
+            matchCount: (pending.replaceMatchIds || []).length,
+          },
+        };
+      }
+      case 'RESOLVE_PRESAVE_EDIT':
+        return resolvePreSaveEdit(message.decision || 'cancel', message.note, message.tags, sender?.tab?.id ?? null);
       case 'SCAN_DUPLICATES': {
         const items = await getParkedItems();
         return { ok: true, clusters: scanDuplicateClusters(items) };
@@ -4467,8 +4648,15 @@ if (globalThis.__TABWALL_TEST__) {
     refreshActiveTabBadge,
     flashBadge,
     commitSaveTab,
+    computeSaveMetadata,
+    openPreSaveEdit,
+    resolvePreSaveEdit,
+    getPendingPreSave,
+    setPendingPreSave,
+    clearPendingPreSave,
     saveCurrentTab,
     saveActiveTab,
+    resolveSaveConflict,
     updateItem,
     createNote,
     updateNote,
