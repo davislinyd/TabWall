@@ -411,7 +411,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.26.0');
+  assert.equal(MANIFEST.version, '2.27.0');
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
@@ -613,6 +613,7 @@ test('automatic save metadata merges restored hints and updates the tag catalog'
   assert.equal(restored.ok, true);
 
   runtime.store.settings = {
+    preSaveEdit: false,
     autoSaveMetadata: {
       enabled: true,
       rules: [{
@@ -734,6 +735,7 @@ test('Chrome keep shortcut saves the current tab or group without closing it', a
 test('popup tab keep override saves without closing and does not change settings', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   runtime.runtime.activeTabs = [{
     id: 501,
     windowId: 1,
@@ -763,6 +765,7 @@ test('popup tab keep override saves without closing and does not change settings
 test('popup tab close override removes the saved tab', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   runtime.runtime.activeTabs = [{
     id: 503,
     windowId: 1,
@@ -817,6 +820,7 @@ test('popup group keep and close overrides control member removal', async () => 
 test('popup save mode survives duplicate conflict resolution', async () => {
   const keepRuntime = createRuntime();
   await keepRuntime.ready;
+  keepRuntime.store.settings = { preSaveEdit: false };
   await keepRuntime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-popup.example/')]);
   keepRuntime.runtime.activeTabs = [{
     id: 701,
@@ -839,6 +843,7 @@ test('popup save mode survives duplicate conflict resolution', async () => {
 
   const closeRuntime = createRuntime();
   await closeRuntime.ready;
+  closeRuntime.store.settings = { preSaveEdit: false };
   await closeRuntime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-popup-close.example/')]);
   closeRuntime.runtime.activeTabs = [{
     id: 702,
@@ -865,6 +870,7 @@ test('automatic save metadata is applied after duplicate conflict resolution', a
   await runtime.ready;
   await runtime.api.setParkedItems([tab(ITEM_ID, 'https://conflict-rules.example/')]);
   runtime.store.settings = {
+    preSaveEdit: false,
     autoSaveMetadata: {
       enabled: true,
       rules: [{
@@ -898,6 +904,142 @@ test('automatic save metadata is applied after duplicate conflict resolution', a
   assert.equal(incoming.note, 'conflict note');
   assert.deepEqual([...incoming.tags], ['conflict']);
   assert.deepEqual(runtime.removedTabs, []);
+});
+
+test('pre-save edit panel defers the write until confirmed, then commits the user note/tags', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{
+    id: 910,
+    windowId: 1,
+    url: 'https://presave-confirm.example/',
+    title: 'Pre-save confirm',
+    favIconUrl: '',
+  }];
+
+  const opened = await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB', afterSave: 'close' });
+  assert.equal(opened.ok, true);
+  assert.equal(opened.presave, true);
+  assert.equal((await runtime.api.getParkedItems()).length, 0);
+  assert.deepEqual(runtime.removedTabs, []);
+
+  const pending = await dispatchMessage(runtime, { type: 'GET_PENDING_PRESAVE' });
+  assert.equal(pending.ok, true);
+  assert.equal(pending.preSave.url, 'https://presave-confirm.example/');
+
+  const resolved = await dispatchMessage(runtime, {
+    type: 'RESOLVE_PRESAVE_EDIT',
+    decision: 'save',
+    note: 'edited note',
+    tags: ['edited'],
+  });
+  assert.equal(resolved.ok, true);
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].note, 'edited note');
+  assert.deepEqual([...items[0].tags], ['edited']);
+  assert.deepEqual(runtime.removedTabs, [910]);
+});
+
+test('pre-save cancel leaves the tab untouched even in close mode', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{
+    id: 911,
+    windowId: 1,
+    url: 'https://presave-cancel.example/',
+    title: 'Pre-save cancel',
+    favIconUrl: '',
+  }];
+
+  const opened = await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB', afterSave: 'close' });
+  assert.equal(opened.ok, true);
+  assert.equal(opened.presave, true);
+
+  const resolved = await dispatchMessage(runtime, { type: 'RESOLVE_PRESAVE_EDIT', decision: 'cancel' });
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.cancelled, true);
+  assert.equal((await runtime.api.getParkedItems()).length, 0);
+  assert.deepEqual(runtime.removedTabs, []);
+
+  const pendingAfter = await dispatchMessage(runtime, { type: 'GET_PENDING_PRESAVE' });
+  assert.equal(pendingAfter.preSave, null);
+});
+
+test('pre-save panel pre-fills automatic tags but the user override wins on commit', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    autoSaveMetadata: {
+      enabled: true,
+      rules: [{
+        id: 'presave-rule',
+        conditions: [{ field: 'domain', operator: 'match', value: 'presave-rule.example' }],
+        note: 'auto note',
+        tags: ['auto'],
+      }],
+    },
+  };
+  runtime.runtime.activeTabs = [{
+    id: 912,
+    windowId: 1,
+    url: 'https://presave-rule.example/',
+    title: 'Pre-save rule',
+    favIconUrl: '',
+  }];
+
+  await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB', afterSave: 'keep' });
+  const pending = await dispatchMessage(runtime, { type: 'GET_PENDING_PRESAVE' });
+  assert.equal(pending.preSave.note, 'auto note');
+  assert.deepEqual([...pending.preSave.tags], ['auto']);
+
+  const resolved = await dispatchMessage(runtime, {
+    type: 'RESOLVE_PRESAVE_EDIT',
+    decision: 'save',
+    note: 'user note',
+    tags: ['user-tag'],
+  });
+  assert.equal(resolved.ok, true);
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items[0].note, 'user note');
+  assert.deepEqual([...items[0].tags], ['user-tag']);
+});
+
+test('duplicate conflict flows into the pre-save panel; replace only deletes the old item on confirm', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID, 'https://presave-conflict.example/')]);
+  runtime.runtime.activeTabs = [{
+    id: 913,
+    windowId: 1,
+    url: 'https://presave-conflict.example/',
+    title: 'Incoming',
+    favIconUrl: '',
+  }];
+
+  const pendingConflict = await dispatchMessage(runtime, { type: 'SAVE_ACTIVE_TAB', afterSave: 'keep' });
+  assert.equal(pendingConflict.conflict, true);
+
+  const resolvedConflict = await dispatchMessage(runtime, {
+    type: 'RESOLVE_SAVE_CONFLICT',
+    decision: 'replace',
+  });
+  assert.equal(resolvedConflict.ok, true);
+  assert.equal(resolvedConflict.presave, true);
+  // Not deleted yet — the pre-save panel hasn't been confirmed.
+  assert.equal((await runtime.api.getParkedItems()).length, 1);
+
+  const resolvedPreSave = await dispatchMessage(runtime, {
+    type: 'RESOLVE_PRESAVE_EDIT',
+    decision: 'save',
+    note: 'replacement note',
+    tags: ['replacement'],
+  });
+  assert.equal(resolvedPreSave.ok, true);
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items.length, 1);
+  assert.notEqual(items[0].id, ITEM_ID);
+  assert.equal(items[0].note, 'replacement note');
 });
 
 test('open panel action opens overlay, standalone fallback, or reuses TabWall', async () => {
@@ -1534,6 +1676,7 @@ test('Stack merge remaps connection endpoints and removes self or duplicate link
 test('overlay quick save uses the content sender tab', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   runtime.runtime.activeTabs = [{ id: 90, windowId: 1, url: 'https://wrong.example/' }];
 
   const result = await dispatchMessage(
@@ -1888,6 +2031,7 @@ test('restore create failure retains parked metadata', async () => {
 test('restored tab preserves note and tags when saved again', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   await runtime.api.setParkedItems([{
     ...tab(ITEM_ID),
     note: 'keep this note',
@@ -1925,6 +2069,7 @@ test('restored tab preserves note and tags when saved again', async () => {
 test('restore save hints require an exact URL match', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   await runtime.api.setParkedItems([{
     ...tab(ITEM_ID),
     note: 'do not copy',
@@ -1949,6 +2094,7 @@ test('restore save hints require an exact URL match', async () => {
 test('restored group member preserves note and tags when saved again', async () => {
   const runtime = createRuntime();
   await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
   await runtime.api.setParkedItems([{
     kind: 'group',
     id: GROUP_ID,

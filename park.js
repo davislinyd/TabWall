@@ -58,6 +58,7 @@ const DEFAULT_AUTO_SAVE_METADATA = {
 const DEFAULT_SETTINGS = {
   afterSave: 'close',
   afterSaveGroup: 'close',
+  preSaveEdit: true,
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
   viewMode: 'canvas',
@@ -730,13 +731,18 @@ const I18N = {
     searchPh: '搜尋…  空格/&& 且、|| 或（不分大小寫）',
     searchRegexPh: '正規表示式（預設 i；或 /pattern/flags）',
     searchRegexTitle: '正規表示式搜尋',
-    searchPhTag: '搜尋 tag…',
+    searchPhTag: '搜尋 tag…  && 且、|| 或',
     searchPhNote: '搜尋 note…',
     searchPhGroup: '搜尋群組名稱或成員…',
     searchPhTagRegex: 'Regex 搜尋 tag…',
     searchPhNoteRegex: 'Regex 搜尋 note…',
     searchPhGroupRegex: '群組／成員正規表示式…',
     searchScopeClear: '清除欄位模式（或 all + Tab）',
+    searchTagSuggestTitle: 'Tag 建議',
+    searchTagSuggestEmpty: '找不到符合的 tag',
+    searchTagSuggestHint: '↑↓ 選擇 · Enter/Tab 以 && 加入 · Alt+Enter 以 || 加入 · Esc 關閉',
+    searchTagSuggestOr: '以 || 加入',
+    searchTagSuggestRemove: '已加入，點擊移除',
     helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
     helpShortcutSearchMode:
       '搜尋框輸入 t/tag、n/note、g/group、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
@@ -837,6 +843,14 @@ const I18N = {
     afterSaveTitle: '儲存分頁後的行為',
     afterSaveClose: '關閉該分頁',
     afterSaveKeep: '不額外執行動作（僅儲存）',
+    presaveHeading: '儲存前編輯',
+    presaveHint: '快速編輯 note / tag，確認後才會真正儲存。',
+    presaveSaveAndClose: '儲存並關閉分頁',
+    presaveSaveKeep: '儲存',
+    presaveFailed: '儲存失敗，請重試。',
+    presaveSettingTitle: '儲存前編輯',
+    presaveSettingLabel: '儲存前先編輯 Note／Tag',
+    presaveSettingHint: '儲存單一分頁時，先跳出面板讓你快速編輯 note／tag，確認後才真正儲存（不含 Group 儲存）。',
     autoSaveMetadataTitle: '自動 Note／Tag',
     autoSaveMetadataHint: '儲存目前分頁或 Group 成員時，依 domain／page title 自動附加 note 與 tag。條件不分大小寫；note 逐行去重，tag 合併去重。',
     autoSaveMetadataEnable: '啟用自動 Note／Tag 規則',
@@ -1109,13 +1123,18 @@ const I18N = {
     searchPh: 'Search…  space/&& AND, || OR (case-insensitive)',
     searchRegexPh: 'Regex (default i; or /pattern/flags)',
     searchRegexTitle: 'Regex search',
-    searchPhTag: 'Search tags…',
+    searchPhTag: 'Search tags…  && AND, || OR',
     searchPhNote: 'Search notes…',
     searchPhGroup: 'Search group name or member tabs…',
     searchPhTagRegex: 'Regex search tags…',
     searchPhNoteRegex: 'Regex search notes…',
     searchPhGroupRegex: 'Group/member regex…',
     searchScopeClear: 'Clear field mode (or all + Tab)',
+    searchTagSuggestTitle: 'Tag suggestions',
+    searchTagSuggestEmpty: 'No matching tags',
+    searchTagSuggestHint: '↑↓ move · Enter/Tab add with && · Alt+Enter add with || · Esc close',
+    searchTagSuggestOr: 'Add with ||',
+    searchTagSuggestRemove: 'Added — click to remove',
     helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
     helpShortcutSearchMode:
       'In search, type t/tag, n/note, g/group, or re/regex then Tab; all + Tab resets scope',
@@ -1216,6 +1235,14 @@ const I18N = {
     afterSaveTitle: 'After saving a tab',
     afterSaveClose: 'Close the tab',
     afterSaveKeep: 'Keep the tab open (save only)',
+    presaveHeading: 'Edit before saving',
+    presaveHint: 'Quickly edit the note / tags — it only saves once you confirm.',
+    presaveSaveAndClose: 'Save and close tab',
+    presaveSaveKeep: 'Save',
+    presaveFailed: 'Save failed, please try again.',
+    presaveSettingTitle: 'Edit before saving',
+    presaveSettingLabel: 'Edit note/tags before saving',
+    presaveSettingHint: 'When saving a single tab, show a panel to quickly edit note/tags before it actually saves (group saves are unaffected).',
     autoSaveMetadataTitle: 'Automatic note / tag',
     autoSaveMetadataHint: 'When saving a tab or Group member, append notes and tags based on its domain or page title. Matching is case-insensitive; notes and tags are deduplicated.',
     autoSaveMetadataEnable: 'Enable automatic note / tag rules',
@@ -1497,6 +1524,7 @@ const searchEl = document.getElementById('search');
 const searchRegexBtn = document.getElementById('searchRegexBtn');
 const searchWrap = document.getElementById('searchWrap');
 const searchScopeChip = document.getElementById('searchScopeChip');
+const searchTagSuggest = document.getElementById('searchTagSuggest');
 const quickAddBtn = document.getElementById('quickAddBtn');
 const quickAddMenuBtn = document.getElementById('quickAddMenuBtn');
 const quickAddMenu = document.getElementById('quickAddMenu');
@@ -1536,6 +1564,16 @@ const conflictMatchList = document.getElementById('conflictMatchList');
 const conflictCancel = document.getElementById('conflictCancel');
 const conflictReplace = document.getElementById('conflictReplace');
 const conflictKeepBoth = document.getElementById('conflictKeepBoth');
+const preSaveModal = document.getElementById('preSaveModal');
+const preSaveTitle = document.getElementById('preSaveTitle');
+const preSaveUrl = document.getElementById('preSaveUrl');
+const preSaveNote = document.getElementById('preSaveNote');
+const preSaveChips = document.getElementById('preSaveChips');
+const preSaveTagDraft = document.getElementById('preSaveTagDraft');
+const preSaveError = document.getElementById('preSaveError');
+const preSaveCancel = document.getElementById('preSaveCancel');
+const preSaveConfirm = document.getElementById('preSaveConfirm');
+const settingsPreSaveEdit = document.getElementById('settingsPreSaveEdit');
 const dedupeBox = document.getElementById('dedupeBox');
 const dedupeDrag = document.getElementById('dedupeDrag');
 const dedupeCloseX = document.getElementById('dedupeCloseX');
@@ -1797,9 +1835,21 @@ let editContext = null;
 let membersGroupId = null;
 /** @type {string[]} */
 let editTagList = [];
+/** @type {string[]} */
+let preSaveTagList = [];
+/** @type {object|null} */
+let preSaveContext = null;
 /** @type {Array<{ name: string, count: number }>} */
 let tagStats = [];
 let tagFilter = '';
+let tagSuggestOpen = false;
+/** @type {Array<{ name: string, count: number }>} */
+let tagSuggestRows = [];
+let tagSuggestActive = -1;
+/** @type {Map<string, { name: string, count: number }>|null} */
+let tagSuggestIndex = null;
+let tagSuggestIndexDirty = true;
+const TAG_SUGGEST_LIMIT = 12;
 let pinnedOnly = false;
 let canvasIndexFilter = 'all';
 /** @type {{ key: string, revision: number, positions: Record<string, any>, mode: 'grid'|'align' } | null} */
@@ -1936,6 +1986,16 @@ window.addEventListener('message', (event) => {
   }
   if (event.data?.type === 'TABWALL_SAVE_CONFLICT' && event.data.conflict) {
     openConflictModal(event.data.conflict);
+    return;
+  }
+  if (event.data?.type === 'TABWALL_PRESAVE_EDIT' && event.data.preSave) {
+    openPreSaveModal(event.data.preSave);
+    return;
+  }
+  if (event.data?.type === 'TABWALL_PRESAVE_RESULT') {
+    if (preSaveConfirm) preSaveConfirm.disabled = false;
+    if (preSaveCancel) preSaveCancel.disabled = false;
+    if (preSaveError) preSaveError.textContent = t('presaveFailed');
   }
 });
 
@@ -2064,6 +2124,10 @@ async function handleQuickCaptureResult(result) {
   if (!result) return;
   if (!result.ok) {
     showCopyToast(quickCaptureErrorText(result.error));
+    return;
+  }
+  if (result.presave) {
+    // Pre-save edit panel is about to open in this same overlay — nothing saved yet.
     return;
   }
   if (result.conflict) {
@@ -2568,6 +2632,7 @@ function syncSettingsUi() {
   settings.sortBy = normalizeSortBy(settings.sortBy);
   sortByEl.value = settings.sortBy;
   openWithSearchFocusEl.checked = Boolean(settings.openWithSearchFocus);
+  if (settingsPreSaveEdit) settingsPreSaveEdit.checked = settings.preSaveEdit !== false;
 
   const after =
     settingsEl.querySelector(`input[name="afterSave"][value="${settings.afterSave}"]`) ||
@@ -2947,6 +3012,10 @@ async function initSettingsUi() {
     });
   });
 
+  settingsPreSaveEdit?.addEventListener('change', async () => {
+    await saveSettings({ preSaveEdit: settingsPreSaveEdit.checked });
+  });
+
   settingsEl.querySelectorAll('input[name="afterSaveGroup"]').forEach((input) => {
     input.addEventListener('change', async () => {
       if (input.checked) await saveSettings({ afterSaveGroup: input.value });
@@ -3090,6 +3159,10 @@ async function initSettingsUi() {
   sendMessage({ type: 'GET_PENDING_CONFLICT' }).then((res) => {
     if (res?.ok && res.conflict) openConflictModal(res.conflict);
   });
+  // Resume pre-save edit panel if SW queued one before park loaded (or the SW restarted mid-edit)
+  sendMessage({ type: 'GET_PENDING_PRESAVE' }).then((res) => {
+    if (res?.ok && res.preSave) openPreSaveModal(res.preSave);
+  });
 }
 
 // ─── Save conflict (human decision) ────────────────────────────────
@@ -3191,6 +3264,124 @@ function initConflictUi() {
   conflictKeepBoth?.addEventListener('click', () => resolveConflict('keep-both'));
   conflictModal.addEventListener('click', (e) => {
     if (e.target === conflictModal) resolveConflict('cancel');
+  });
+}
+
+// ─── Pre-save edit panel (note/tag before a single-tab save commits) ──
+
+function renderPreSaveChips() {
+  if (!preSaveChips) return;
+  preSaveChips.innerHTML = '';
+  preSaveTagList.forEach((tag) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">${iconSvg('close')}</button>`;
+    chip.querySelector('button').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentIndex = preSaveTagList.indexOf(tag);
+      if (currentIndex === -1) return;
+      preSaveTagList.splice(currentIndex, 1);
+      renderPreSaveChips();
+    });
+    preSaveChips.appendChild(chip);
+  });
+}
+
+function commitPreSaveTagDraft() {
+  if (!preSaveTagDraft) return false;
+  const raw = preSaveTagDraft.value.trim();
+  if (!raw) return false;
+  if (!preSaveTagList.includes(raw)) preSaveTagList.push(raw);
+  preSaveTagDraft.value = '';
+  renderPreSaveChips();
+  sendMessage({ type: 'ADD_TAG', name: raw }).then(() => {
+    if (tagsBox.classList.contains('open')) refreshTagManager();
+  });
+  return true;
+}
+
+function openPreSaveModal(preSave) {
+  if (!preSaveModal || !preSave) return;
+  preSaveContext = preSave;
+  preSaveTitle.textContent = preSave.title || preSave.url || '—';
+  preSaveUrl.textContent = preSave.url || '—';
+  preSaveNote.value = preSave.note || '';
+  preSaveTagList = Array.isArray(preSave.tags) ? [...preSave.tags] : [];
+  if (preSaveTagDraft) preSaveTagDraft.value = '';
+  renderPreSaveChips();
+  if (preSaveError) preSaveError.textContent = '';
+  if (preSaveConfirm) {
+    preSaveConfirm.disabled = false;
+    preSaveConfirm.textContent = t(preSave.afterSave === 'close' ? 'presaveSaveAndClose' : 'presaveSaveKeep');
+  }
+  if (preSaveCancel) preSaveCancel.disabled = false;
+  preSaveModal.classList.add('open');
+  preSaveModal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => preSaveNote.focus(), 0);
+}
+
+function closePreSaveModal() {
+  if (!preSaveModal) return;
+  preSaveModal.classList.remove('open');
+  preSaveModal.setAttribute('aria-hidden', 'true');
+  preSaveContext = null;
+  preSaveTagList = [];
+}
+
+function cancelPreSave() {
+  closePreSaveModal();
+  if (!postToParent({ type: 'TABWALL_PRESAVE_CANCEL' })) {
+    sendMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'cancel' });
+  }
+}
+
+async function confirmPreSave() {
+  if (!preSaveContext) return;
+  commitPreSaveTagDraft();
+  const note = preSaveNote.value;
+  const tags = [...preSaveTagList];
+  if (preSaveConfirm) preSaveConfirm.disabled = true;
+  if (preSaveCancel) preSaveCancel.disabled = true;
+  if (preSaveError) preSaveError.textContent = '';
+  // Inside the content-script overlay, the host hides the overlay before
+  // capturing the screenshot then destroys it on success — closePreSaveModal()
+  // isn't called here so the modal stays visible (with a usable error state)
+  // if the save fails.
+  if (postToParent({ type: 'TABWALL_PRESAVE_COMMIT', note, tags })) return;
+  // Standalone fallback (no host overlay to hide) — resolve directly.
+  const res = await sendMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'save', note, tags });
+  if (res?.ok) {
+    closePreSaveModal();
+    await loadList();
+    return;
+  }
+  if (preSaveConfirm) preSaveConfirm.disabled = false;
+  if (preSaveCancel) preSaveCancel.disabled = false;
+  if (preSaveError) preSaveError.textContent = t('presaveFailed');
+}
+
+function initPreSaveUi() {
+  if (!preSaveModal) return;
+  preSaveCancel?.addEventListener('click', () => cancelPreSave());
+  preSaveConfirm?.addEventListener('click', () => confirmPreSave());
+  preSaveModal.addEventListener('click', (e) => {
+    if (e.target === preSaveModal) cancelPreSave();
+  });
+  preSaveTagDraft?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      if (preSaveTagDraft.value.trim()) {
+        e.preventDefault();
+        commitPreSaveTagDraft();
+      }
+      if (e.key === 'Enter') e.preventDefault();
+      return;
+    }
+    if (e.key === 'Backspace' && !preSaveTagDraft.value && preSaveTagList.length) {
+      e.preventDefault();
+      preSaveTagList.pop();
+      renderPreSaveChips();
+    }
   });
 }
 
@@ -3363,6 +3554,7 @@ async function applyDedupeChoices() {
 
 function initDedupeUi() {
   initConflictUi();
+  initPreSaveUi();
   openDedupeBtn?.addEventListener('click', async () => {
     await openDedupeBox();
   });
@@ -3377,6 +3569,20 @@ function placeFloatBox(el) {
   const h = el.offsetHeight || 360;
   el.style.left = `${Math.max(16, Math.round((window.innerWidth - w) / 2))}px`;
   el.style.top = `${Math.max(16, Math.round((window.innerHeight - h) / 2))}px`;
+}
+
+function positionTagsBoxUnderButton() {
+  if (!tagsBtn || !tagsBox) return;
+  const rect = tagsBtn.getBoundingClientRect();
+  const w = tagsBox.offsetWidth || 360;
+  const h = tagsBox.offsetHeight || 420;
+  const left = Math.min(window.innerWidth - w - 8, Math.max(8, Math.round(rect.right - w)));
+  const top = Math.min(window.innerHeight - h - 8, Math.max(8, Math.round(rect.bottom + 8)));
+  tagsBox.style.left = `${left}px`;
+  tagsBox.style.top = `${top}px`;
+  tagsBox.style.right = 'auto';
+  tagsBox.style.bottom = 'auto';
+  tagsBox.style.transform = 'none';
 }
 
 function setupFloatDrag(handle, box) {
@@ -3498,6 +3704,7 @@ async function openTagsBox() {
   tagsBox.classList.add('open');
   tagsBox.setAttribute('aria-hidden', 'false');
   tagsBtn.classList.add('active');
+  positionTagsBoxUnderButton();
   syncFloatBackdrop();
   await refreshTagManager();
   tagSearch.focus();
@@ -3657,6 +3864,231 @@ function syncSearchScopeUi() {
       searchEl.style.paddingLeft = '';
     }
   }
+  syncTagSuggest();
+}
+
+// ─── Tag-mode search suggestion dropdown ──────────────────────────
+
+/** Flat list of every token already in the query (any operator), lowercased. */
+function allTagQueryTokens(raw) {
+  return String(raw || '')
+    .split(/\s*(?:\|\||&&)\s*/)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Splits the raw query into alternating {type:'token'|'op', value} entries, preserving exact text. */
+function tokenizeTagQuery(raw) {
+  const value = String(raw || '');
+  const result = [];
+  let lastIndex = 0;
+  const opRe = /\s*(\|\||&&)\s*/g;
+  let match;
+  while ((match = opRe.exec(value))) {
+    result.push({ type: 'token', value: value.slice(lastIndex, match.index) });
+    result.push({ type: 'op', value: match[1] });
+    lastIndex = opRe.lastIndex;
+  }
+  result.push({ type: 'token', value: value.slice(lastIndex) });
+  return result;
+}
+
+/** Token containing the caret in #search, as exact character offsets for splicing. */
+function currentTagToken() {
+  const value = searchEl.value;
+  const caret = searchEl.selectionStart ?? value.length;
+  const bounds = [0];
+  const opRe = /\|\||&&/g;
+  let match;
+  while ((match = opRe.exec(value))) {
+    bounds.push(match.index, match.index + match[0].length);
+  }
+  bounds.push(value.length);
+  for (let i = 0; i < bounds.length; i += 2) {
+    const start = bounds[i];
+    const end = bounds[i + 1];
+    if (caret >= start && caret <= end) return { start, end, text: value.slice(start, end) };
+  }
+  return { start: value.length, end: value.length, text: '' };
+}
+
+function buildTagSuggestIndex() {
+  const index = new Map();
+  for (const item of allTabs) {
+    for (const name of itemTagNames(item)) {
+      const key = String(name || '').trim();
+      if (!key) continue;
+      const lower = key.toLowerCase();
+      const entry = index.get(lower);
+      if (entry) entry.count += 1;
+      else index.set(lower, { name: key, count: 1 });
+    }
+  }
+  tagSuggestIndex = index;
+  tagSuggestIndexDirty = false;
+  return index;
+}
+
+function ensureTagSuggestIndex() {
+  if (tagSuggestIndexDirty || !tagSuggestIndex) return buildTagSuggestIndex();
+  return tagSuggestIndex;
+}
+
+/** Filters+ranks tags for the dropdown: exact > prefix > higher count > locale order. */
+function computeTagSuggestions(prefix) {
+  const index = ensureTagSuggestIndex();
+  const needle = String(prefix || '').trim().toLowerCase();
+  const all = [...index.values()];
+  const filtered = needle ? all.filter((tag) => tag.name.toLowerCase().includes(needle)) : all;
+  filtered.sort((a, b) => {
+    const aName = a.name.toLowerCase();
+    const bName = b.name.toLowerCase();
+    if (needle) {
+      const aExact = aName === needle;
+      const bExact = bName === needle;
+      if (aExact !== bExact) return aExact ? -1 : 1;
+      const aPrefix = aName.startsWith(needle);
+      const bPrefix = bName.startsWith(needle);
+      if (aPrefix !== bPrefix) return aPrefix ? -1 : 1;
+    }
+    if (a.count !== b.count) return b.count - a.count;
+    return a.name.localeCompare(b.name, 'zh-Hant');
+  });
+  return filtered.slice(0, TAG_SUGGEST_LIMIT);
+}
+
+function renderTagSuggest() {
+  if (!searchTagSuggest) return;
+  searchTagSuggest.innerHTML = '';
+  const selected = new Set(allTagQueryTokens(searchEl.value));
+  if (!tagSuggestRows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'search-suggest-empty';
+    empty.textContent = t('searchTagSuggestEmpty');
+    searchTagSuggest.appendChild(empty);
+  } else {
+    tagSuggestRows.forEach((row, i) => {
+      const isSelected = selected.has(row.name.toLowerCase());
+      const el = document.createElement('div');
+      el.className = `search-suggest-row${i === tagSuggestActive ? ' active' : ''}${isSelected ? ' is-selected' : ''}`;
+      el.id = `searchTagSuggestRow-${i}`;
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      el.title = isSelected ? t('searchTagSuggestRemove') : row.name;
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = row.name;
+      el.appendChild(name);
+
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = String(row.count);
+      el.appendChild(count);
+
+      const orBtn = document.createElement('button');
+      orBtn.type = 'button';
+      orBtn.className = 'search-suggest-or';
+      orBtn.textContent = '||';
+      orBtn.title = t('searchTagSuggestOr');
+      orBtn.addEventListener('pointerdown', (e) => e.preventDefault());
+      orBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        acceptTagSuggestion(row.name, '||');
+      });
+      el.appendChild(orBtn);
+
+      el.addEventListener('pointerdown', (e) => e.preventDefault()); // keep focus in #search
+      el.addEventListener('click', () => {
+        if (isSelected) removeTagToken(row.name);
+        else acceptTagSuggestion(row.name, '&&');
+      });
+      searchTagSuggest.appendChild(el);
+    });
+  }
+  const hint = document.createElement('div');
+  hint.className = 'search-suggest-hint';
+  hint.textContent = t('searchTagSuggestHint');
+  searchTagSuggest.appendChild(hint);
+
+  if (tagSuggestActive >= 0) searchEl.setAttribute('aria-activedescendant', `searchTagSuggestRow-${tagSuggestActive}`);
+  else searchEl.removeAttribute('aria-activedescendant');
+}
+
+function openTagSuggest() {
+  if (!searchTagSuggest || tagSuggestOpen) return;
+  tagSuggestOpen = true;
+  searchTagSuggest.hidden = false;
+  searchEl.setAttribute('aria-expanded', 'true');
+}
+
+function closeTagSuggest() {
+  if (!searchTagSuggest || !tagSuggestOpen) return;
+  tagSuggestOpen = false;
+  tagSuggestActive = -1;
+  searchTagSuggest.hidden = true;
+  searchEl.setAttribute('aria-expanded', 'false');
+  searchEl.removeAttribute('aria-activedescendant');
+}
+
+/** Single entry point: recomputes suggestions from the caret token and opens/closes as needed. */
+function syncTagSuggest() {
+  if (!searchTagSuggest || !searchEl) return;
+  if (!isTagExpressionMode() || document.activeElement !== searchEl) {
+    closeTagSuggest();
+    return;
+  }
+  const { text } = currentTagToken();
+  tagSuggestRows = computeTagSuggestions(text);
+  tagSuggestActive = -1;
+  renderTagSuggest();
+  openTagSuggest();
+}
+
+function moveTagSuggestActive(delta) {
+  if (!tagSuggestRows.length) return;
+  const n = tagSuggestRows.length;
+  tagSuggestActive = ((tagSuggestActive + delta) % n + n) % n;
+  renderTagSuggest();
+  searchTagSuggest.querySelector(`#searchTagSuggestRow-${tagSuggestActive}`)?.scrollIntoView({ block: 'nearest' });
+}
+
+/** Replaces the caret token with `name` and (when it's the trailing token) appends the operator. */
+function acceptTagSuggestion(name, operator = '&&') {
+  const { start, end } = currentTagToken();
+  const value = searchEl.value;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  let nextValue;
+  let caret;
+  if (!after.trim()) {
+    nextValue = `${before}${name} ${operator} `;
+    caret = nextValue.length;
+  } else {
+    nextValue = `${before}${name}${after}`;
+    caret = before.length + name.length;
+  }
+  searchEl.value = nextValue;
+  searchEl.setSelectionRange(caret, caret);
+  setSearchQueryFromInput({ immediate: true });
+  syncTagSuggest();
+  searchEl.focus();
+}
+
+/** Removes an already-selected tag token (and one adjacent operator) from the query. */
+function removeTagToken(name) {
+  const lower = String(name || '').trim().toLowerCase();
+  const tokens = tokenizeTagQuery(searchEl.value);
+  const idx = tokens.findIndex((entry) => entry.type === 'token' && entry.value.trim().toLowerCase() === lower);
+  if (idx === -1) return;
+  tokens.splice(idx, 1);
+  if (idx > 0 && tokens[idx - 1]?.type === 'op') tokens.splice(idx - 1, 1);
+  else if (tokens[idx]?.type === 'op') tokens.splice(idx, 1);
+  searchEl.value = tokens.map((entry) => entry.value).join('').trim();
+  searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
+  setSearchQueryFromInput({ immediate: true });
+  syncTagSuggest();
+  searchEl.focus();
 }
 
 function syncSearchRegexUi() {
@@ -3692,6 +4124,7 @@ function clearSearchInputKeepFocus() {
     clearTimeout(searchRenderTimer);
     searchRenderTimer = null;
   }
+  syncTagSuggest();
 }
 
 /** Empty query matches everything — no need to rebuild the canvas. */
@@ -3827,6 +4260,12 @@ function setSearchQueryFromInput({ immediate = false } = {}) {
 
 searchEl.addEventListener('input', () => {
   setSearchQueryFromInput({ immediate: false });
+  syncTagSuggest();
+});
+searchEl.addEventListener('focus', () => syncTagSuggest());
+searchEl.addEventListener('click', () => syncTagSuggest());
+document.addEventListener('pointerdown', (e) => {
+  if (tagSuggestOpen && !e.target.closest?.('#searchWrap')) closeTagSuggest();
 });
 
 const SEARCH_TAB_TOKENS = {
@@ -3843,6 +4282,31 @@ const SEARCH_TAB_TOKENS = {
 };
 
 searchEl.addEventListener('keydown', (e) => {
+  if (tagSuggestOpen) {
+    if (e.isComposing || e.keyCode === 229) return; // IME candidate window open — don't intercept
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveTagSuggestActive(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTagSuggest();
+      return;
+    }
+    if (
+      tagSuggestActive >= 0 &&
+      tagSuggestRows[tagSuggestActive] &&
+      (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey && !e.metaKey && !e.ctrlKey))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      acceptTagSuggestion(tagSuggestRows[tagSuggestActive].name, e.altKey ? '||' : '&&');
+      return;
+    }
+  }
+
   // Empty field + Backspace/Delete → leave tag/note/regex back to default
   if (
     (e.key === 'Backspace' || e.key === 'Delete') &&
@@ -3922,6 +4386,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (canvasStackDialog?.classList.contains('open')) {
       closeCanvasStackDialog();
+      return;
+    }
+    if (preSaveModal?.classList.contains('open')) {
+      cancelPreSave();
       return;
     }
     if (conflictModal?.classList.contains('open')) {
@@ -4543,6 +5011,78 @@ function itemHaystack(item, scope = searchScope) {
   ].join(' ');
 }
 
+/** Tag-mode search is active only when scoped to 'tag' and regex mode is off
+ * (regex's `|` would otherwise collide with the `||` operator). */
+function isTagExpressionMode() {
+  return searchScope === 'tag' && !settings.searchRegex;
+}
+
+/** @type {{ raw: string, or: string[][] }} */
+let compiledTagQuery = { raw: '', or: [] };
+
+/**
+ * Tag-mode query grammar — deliberately different from matchesPlainQuery:
+ * only `&&`/`||` are operators, whitespace stays part of a tag name (tag
+ * names may contain spaces, e.g. "個人 專案").
+ * `query := orGroup ("||" orGroup)*`, `orGroup := token ("&&" token)*`.
+ */
+function parseTagQuery(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { raw: trimmed, or: [] };
+  const or = trimmed
+    .split(/\s*\|\|\s*/)
+    .map((group) =>
+      group
+        .split(/\s*&&\s*/)
+        .map((token) => token.trim().toLowerCase())
+        .filter(Boolean)
+    )
+    .filter((group) => group.length);
+  return { raw: trimmed, or };
+}
+
+function compileTagQuery(raw) {
+  if (compiledTagQuery.raw !== raw) compiledTagQuery = parseTagQuery(raw);
+  return compiledTagQuery;
+}
+
+/** Case-insensitive substring match of each token against the item's tag names. */
+function tagsMatchQuery(tagNames, q) {
+  const { or } = compileTagQuery(q);
+  if (!or.length) return true;
+  const lowered = (tagNames || []).map((name) => String(name || '').toLowerCase());
+  return or.some((group) => group.every((token) => lowered.some((name) => name.includes(token))));
+}
+
+/** Array-returning mirror of itemHaystack's scope==='tag' branch. */
+function itemTagNames(item) {
+  if (!item) return [];
+  if (item.kind === 'group') {
+    const names = [...(Array.isArray(item.tags) ? item.tags : [])];
+    for (const m of item.tabs || []) {
+      if (Array.isArray(m.tags)) names.push(...m.tags);
+    }
+    for (const note of item.notes || []) {
+      if (Array.isArray(note.tags)) names.push(...note.tags);
+    }
+    return names;
+  }
+  return Array.isArray(item.tags) ? item.tags : [];
+}
+
+/** Array-returning mirror of memberHaystack's scope==='tag' branch. */
+function memberTagNames(member) {
+  return Array.isArray(member?.tags) ? member.tags : [];
+}
+
+/** Array-returning mirror of groupMetaHaystack's scope==='tag' branch. */
+function groupMetaTagNames(group) {
+  return [
+    ...(Array.isArray(group?.tags) ? group.tags : []),
+    ...(group?.notes || []).flatMap((note) => note.tags || []),
+  ];
+}
+
 /**
  * Plain search: case-insensitive.
  * - `||`  OR between groups
@@ -4627,14 +5167,14 @@ function groupMetaHaystack(group, scope = searchScope) {
 
 function getMatchingMembers(group, q = query) {
   if (!q || !group || group.kind !== 'group') return [];
-  return [
-    ...(group.tabs || []),
-    ...(group.notes || []),
-  ].filter((m) => textMatchesQuery(memberHaystack(m), q));
+  const members = [...(group.tabs || []), ...(group.notes || [])];
+  if (isTagExpressionMode()) return members.filter((m) => tagsMatchQuery(memberTagNames(m), q));
+  return members.filter((m) => textMatchesQuery(memberHaystack(m), q));
 }
 
 function groupMetaMatches(group, q = query) {
   if (!q || !group || group.kind !== 'group') return false;
+  if (isTagExpressionMode()) return tagsMatchQuery(groupMetaTagNames(group), q);
   return textMatchesQuery(groupMetaHaystack(group), q);
 }
 
@@ -4665,6 +5205,7 @@ function matchesQuery(item, q) {
     const { hits, metaHit } = getGroupSearchMatch(item, q);
     return metaHit || hits.length > 0;
   }
+  if (isTagExpressionMode()) return tagsMatchQuery(itemTagNames(item), q);
   const hay = itemHaystack(item);
   return textMatchesQuery(hay, q);
 }
@@ -5029,6 +5570,7 @@ function commitTagDraft() {
 async function refreshTagManager() {
   const res = await sendMessage({ type: 'GET_TAGS' });
   tagStats = res.ok && Array.isArray(res.tags) ? res.tags : [];
+  tagSuggestIndexDirty = true;
   renderTagManager();
 }
 
@@ -9717,7 +10259,7 @@ function scheduleCanvasWheelZoom(event, deltaY) {
 }
 
 function beginCanvasPointer(event, kind, id = '') {
-  if (event.button != null && event.button !== 0) return;
+  if (event.button != null && event.button !== 0 && !(kind === 'pan' && event.button === 1)) return;
   const point = canvasPointFromEvent(event);
   if (kind === 'node') {
     cancelCanvasNodeClick(id);
@@ -10002,6 +10544,7 @@ function initCanvasInteractions() {
   canvasViewportEl.addEventListener('pointerdown', (event) => {
     if (event.button === 1) {
       handleCanvasMiddleClick(event);
+      if (!isCanvasControlTarget(event.target)) beginCanvasPointer(event, 'pan');
       return;
     }
     clearCanvasMiddleClickSequence();
@@ -10365,6 +10908,7 @@ async function loadList() {
         ? res.tabs
         : [];
   allTabs = normalizeParkedList(raw);
+  tagSuggestIndexDirty = true;
   pruneAttachmentUrlCache(allTabs);
   if (!layoutRes?.ok && settings.viewMode === 'canvas') {
     ensureCanvasStore()?.setItems(allTabs);
