@@ -13,19 +13,12 @@ const CANVAS_RAIL_MAX_WIDTH = 360;
 const CANVAS_RAIL_COLLAPSE_THRESHOLD = 120;
 const CANVAS_RAIL_COLLAPSED_WIDTH = 34;
 const CANVAS_RAIL_KEYBOARD_STEP = 16;
-const CANVAS_WHEEL_ZOOM_SENSITIVITY = 0.0015;
-const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0.006;
-const CANVAS_WHEEL_ZOOM_FRAME_LIMIT = 120;
-const CANVAS_NODE_DISPLAY_SCALE = 1.1;
-const CANVAS_NODE_DEFAULT_WIDTH = 220;
-const CANVAS_NODE_DEFAULT_HEIGHT = 170;
-const CANVAS_DEFAULT_CARD_GAP = 96;
+// Node display / gap / connection curve / wheel zoom math constants live in parkCanvasGeometry.js
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.05;
 const CANVAS_FIT_PADDING = 24;
 const CANVAS_CONNECTION_HIT_WIDTH = 16;
-const CANVAS_CONNECTION_MAX_CURVE_OFFSET = 2000;
 
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
@@ -79,97 +72,40 @@ const DEFAULT_SETTINGS = {
 const Build = self.TabWallBackupBuild;
 const CanvasStoreApi = self.TabWallCanvasStore;
 const NoteMedia = self.TabWallNoteMedia;
+const SearchQuery = self.TabWallSearchQuery;
+const SearchUi = self.TabWallSearchUi;
+const Media = self.TabWallMediaDB;
+const MediaUi = self.TabWallMediaUi;
+const CanvasGeom = self.TabWallCanvasGeometry;
+const CanvasRender = self.TabWallCanvasRender;
+const SettingsUi = self.TabWallSettingsUi;
+const ImportExport = self.TabWallImportExport;
+const StickerUi = self.TabWallStickerUi;
+const CanvasIx = self.TabWallCanvasInteraction;
+const CanvasChrome = self.TabWallCanvasChrome;
+const ListUi = self.TabWallListUi;
+const WorkspaceUi = self.TabWallWorkspaceUi;
+const AppHelpers = self.TabWallAppHelpers;
 
-function classifyStoredUrl(url) {
-  if (Build?.classifyUrl) return Build.classifyUrl(url, { allowStoredOnly: true });
-  if (/^https?:\/\//i.test(String(url || ''))) return 'restorable';
-  if (/^file:/i.test(String(url || ''))) return 'stored_only';
-  return 'invalid';
-}
+function classifyStoredUrl(...args) { return AppHelpers.classifyStoredUrl(...args); }
 
-function isStoredOnlyUrl(url) {
-  return classifyStoredUrl(url) === 'stored_only';
-}
+function isStoredOnlyUrl(...args) { return AppHelpers.isStoredOnlyUrl(...args); }
 
-function countStoredOnlyUrls(items) {
-  const list = Array.isArray(items) ? items : items ? [items] : [];
-  return list.reduce((count, item) => {
-    if (Array.isArray(item?.tabs)) {
-      return count + item.tabs.filter((member) => isStoredOnlyUrl(member?.url)).length;
-    }
-    return count + (isStoredOnlyUrl(item?.url) ? 1 : 0);
-  }, 0);
-}
+function countStoredOnlyUrls(...args) { return AppHelpers.countStoredOnlyUrls(...args); }
 
-function formatImportWarnings(warnings) {
-  const parts = [];
-  if (warnings?.legacyVersion) {
-    parts.push(t('backupLegacyNotice', { version: warnings.legacyVersion }));
-  }
-  if (warnings?.normalizedGroupColors) {
-    parts.push(t('backupColorNotice', { n: warnings.normalizedGroupColors }));
-  }
-  if (warnings?.droppedFavicons) {
-    parts.push(t('backupFaviconNotice', { n: warnings.droppedFavicons }));
-  }
-  if (warnings?.storedOnlyUrls) {
-    parts.push(t('backupStoredOnly', { n: warnings.storedOnlyUrls }));
-  }
-  return parts.join(' ');
-}
+function formatImportWarnings(...args) { return ImportExport.formatImportWarnings(...args); }
 
-function formatBackupError(error) {
-  const code = typeof error === 'string' ? error : error?.error || 'invalid_backup';
-  if (code === 'backup_too_large:full_zip') return t('backupFullTooLarge');
-  if (code === 'attachment_quota_exceeded') return t('noteImageQuotaExceeded');
-  const detail = error && typeof error === 'object' && error.detail ? ` (${error.detail})` : '';
-  return t('backupInvalidDetail', { error: `${code}${detail}` });
-}
+function formatBackupError(...args) { return ImportExport.formatBackupError(...args); }
 
-function formatNoteBytes(value) {
-  const bytes = Math.max(0, Number(value) || 0);
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KiB`;
-  return `${Math.round(bytes)} B`;
-}
+function formatNoteBytes(...args) { return AppHelpers.formatNoteBytes(...args); }
 
-function formatNoteMediaError(error) {
-  const code = typeof error === 'string' ? error : error?.code || error?.message || '';
-  const key = {
-    note_image_source_too_large: 'noteImageSourceTooLarge',
-    note_image_decode_too_large: 'noteImageDecodeTooLarge',
-    note_image_output_too_large: 'noteImageOutputTooLarge',
-    note_image_too_many: 'noteImageTooMany',
-    attachment_quota_exceeded: 'noteImageQuotaExceeded',
-  }[code];
-  return key ? t(key) : t('noteImageInvalid');
-}
+function formatNoteMediaError(...args) { return AppHelpers.formatNoteMediaError(...args); }
 
-function getParentOrigin() {
-  try {
-    const ancestor = window.location.ancestorOrigins?.[0];
-    if (ancestor) return new URL(ancestor).origin;
-  } catch {
-    // fall through to referrer
-  }
-  try {
-    return document.referrer ? new URL(document.referrer).origin : '';
-  } catch {
-    return '';
-  }
-}
+function getParentOrigin(...args) { return AppHelpers.getParentOrigin(...args); }
 
 const PARENT_ORIGIN = getParentOrigin();
 
-function postToParent(payload) {
-  if (!PARENT_ORIGIN || !window.parent || window.parent === window) return false;
-  try {
-    window.parent.postMessage(payload, PARENT_ORIGIN);
-    return true;
-  } catch {
-    return false;
-  }
-}
+function postToParent(...args) { return AppHelpers.postToParent(...args); }
 
 const GROUP_COLORS = {
   grey: '#9ca3af',
@@ -183,1318 +119,37 @@ const GROUP_COLORS = {
 };
 
 const DRAG_THRESHOLD = 6;
-const MAX_SEARCH_REGEX_LENGTH = 512;
-const Media = self.TabWallMediaDB;
 
-/** @type {Set<string>} */
-const liveObjectUrls = new Set();
-const pendingObjectUrlRevokes = new Set();
-/** @type {Map<string, string>} snap dataUrl/blob url cache */
-const snapCache = new Map();
-const SNAP_CACHE_MAX = 12;
-/** @type {Map<string, string>} note attachment blob URL cache */
-const attachmentUrlCache = new Map();
-const ATTACHMENT_URL_CACHE_MAX = 8;
-/** @type {Map<string, Promise<string>>} */
-const mediaFetches = new Map();
-/** @type {Set<string>} */
-const canvasPendingMediaUrls = new Set();
+// Canvas pure geometry (zoom factor / bounds / connection bezier) lives in parkCanvasGeometry.js.
+const CANVAS_NODE_DISPLAY_SCALE = CanvasGeom.CANVAS_NODE_DISPLAY_SCALE;
+const CANVAS_NODE_DEFAULT_WIDTH = CanvasGeom.CANVAS_NODE_DEFAULT_WIDTH;
+const CANVAS_NODE_DEFAULT_HEIGHT = CanvasGeom.CANVAS_NODE_DEFAULT_HEIGHT;
+const CANVAS_DEFAULT_CARD_GAP = CanvasGeom.CANVAS_DEFAULT_CARD_GAP;
+const CANVAS_CONNECTION_MAX_CURVE_OFFSET = CanvasGeom.CANVAS_CONNECTION_MAX_CURVE_OFFSET;
+const CANVAS_WHEEL_ZOOM_SENSITIVITY = CanvasGeom.CANVAS_WHEEL_ZOOM_SENSITIVITY;
+const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = CanvasGeom.CANVAS_TRACKPAD_ZOOM_SENSITIVITY;
+const CANVAS_WHEEL_ZOOM_FRAME_LIMIT = CanvasGeom.CANVAS_WHEEL_ZOOM_FRAME_LIMIT;
+const canvasDefaultPosition = CanvasGeom.canvasDefaultPosition;
+const canvasDisplayPosition = CanvasGeom.canvasDisplayPosition;
+const canvasBoundsForItems = CanvasGeom.canvasBoundsForItems;
+const canvasConnectionId = CanvasGeom.canvasConnectionId;
+const canvasConnectionSideForVector = CanvasGeom.canvasConnectionSideForVector;
+const canvasConnectionSideForPoint = CanvasGeom.canvasConnectionSideForPoint;
+const canvasConnectionCurveGeometry = CanvasGeom.canvasConnectionCurveGeometry;
+const canvasCubicBezierPoint = CanvasGeom.canvasCubicBezierPoint;
+const canvasCubicBezierLength = CanvasGeom.canvasCubicBezierLength;
+const canvasCubicBezierTAtLength = CanvasGeom.canvasCubicBezierTAtLength;
+const canvasCubicBezierSplit = CanvasGeom.canvasCubicBezierSplit;
+const canvasConnectionCurveSegments = CanvasGeom.canvasConnectionCurveSegments;
+const canvasConnectionPathD = CanvasGeom.canvasConnectionPathD;
+const canvasConnectionHandlePoint = CanvasGeom.canvasConnectionHandlePoint;
+const canvasMinimapProjectionFor = CanvasGeom.canvasMinimapProjectionFor;
+const canvasWheelZoomFactor = CanvasGeom.canvasWheelZoomFactor;
+const canvasWheelZoomSensitivity = CanvasGeom.canvasWheelZoomSensitivity;
 
-function mediaFetchKey(key, kind) {
-  return `${kind}:${key}`;
-}
-
-function isMediaUrlInUse(url) {
-  if (!url) return false;
-  if (canvasPendingMediaUrls.has(url)) return true;
-  return [...document.images].some((img) => img.isConnected && img.src === url);
-}
-
-function trackObjectUrl(url) {
-  if (url && String(url).startsWith('blob:')) liveObjectUrls.add(url);
-  return url;
-}
-
-function revokeObjectUrl(url) {
-  if (url && String(url).startsWith('blob:') && liveObjectUrls.has(url)) {
-    if (isMediaUrlInUse(url)) {
-      pendingObjectUrlRevokes.add(url);
-      setTimeout(() => {
-        if (!pendingObjectUrlRevokes.has(url)) return;
-        pendingObjectUrlRevokes.delete(url);
-        revokeObjectUrl(url);
-      }, 1000);
-      return;
-    }
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      // ignore
-    }
-    liveObjectUrls.delete(url);
-  }
-}
-
-function cacheSnap(key, url) {
-  if (snapCache.has(key)) {
-    const old = snapCache.get(key);
-    if (old !== url) revokeObjectUrl(old);
-  }
-  snapCache.set(key, url);
-  while (snapCache.size > SNAP_CACHE_MAX) {
-    const first = [...snapCache.keys()].find((candidate) => {
-      const cached = snapCache.get(candidate);
-      return !isMediaUrlInUse(cached) && !mediaFetches.has(mediaFetchKey(candidate, 'snap'));
-    });
-    if (first == null) break;
-    revokeObjectUrl(snapCache.get(first));
-    snapCache.delete(first);
-  }
-}
-
-/** Reuse thumb blob URLs across re-renders (search typing). */
-const THUMB_URL_CACHE_MAX = 100;
-/** @type {Map<string, string>} */
-const thumbUrlCache = new Map();
-
-function cacheThumbUrl(key, url) {
-  if (!key || !url) return url;
-  if (thumbUrlCache.has(key)) {
-    const old = thumbUrlCache.get(key);
-    if (old !== url) revokeObjectUrl(old);
-    thumbUrlCache.delete(key);
-  }
-  thumbUrlCache.set(key, url);
-  while (thumbUrlCache.size > THUMB_URL_CACHE_MAX) {
-    const first = [...thumbUrlCache.keys()].find((candidate) => {
-      const cached = thumbUrlCache.get(candidate);
-      return !isMediaUrlInUse(cached) && !mediaFetches.has(mediaFetchKey(candidate, 'thumb'));
-    });
-    if (first == null) break;
-    revokeObjectUrl(thumbUrlCache.get(first));
-    thumbUrlCache.delete(first);
-  }
-  return url;
-}
-
-function cacheAttachmentUrl(key, url) {
-  if (!key || !url) return url;
-  if (attachmentUrlCache.has(key)) {
-    const old = attachmentUrlCache.get(key);
-    if (old !== url) revokeObjectUrl(old);
-    attachmentUrlCache.delete(key);
-  }
-  attachmentUrlCache.set(key, url);
-  while (attachmentUrlCache.size > ATTACHMENT_URL_CACHE_MAX) {
-    const firstEvictable = [...attachmentUrlCache.keys()].find((candidate) => {
-      const cached = attachmentUrlCache.get(candidate);
-      return !isMediaUrlInUse(cached) && !mediaFetches.has(mediaFetchKey(candidate, 'attachment'));
-    });
-    const first = firstEvictable
-      ?? [...attachmentUrlCache.keys()].find((candidate) => !mediaFetches.has(mediaFetchKey(candidate, 'attachment')))
-      ?? attachmentUrlCache.keys().next().value;
-    if (first == null) break;
-    const oldUrl = attachmentUrlCache.get(first);
-    attachmentUrlCache.delete(first);
-    revokeObjectUrl(oldUrl);
-  }
-  return url;
-}
-
-function fetchMediaUrl(key, kind) {
-  if (!key) return Promise.resolve('');
-  if (kind === 'thumb' && thumbUrlCache.has(key)) {
-    return Promise.resolve(thumbUrlCache.get(key) || '');
-  }
-  if (kind === 'snap' && snapCache.has(key)) {
-    return Promise.resolve(snapCache.get(key) || '');
-  }
-  if (kind === 'attachment' && attachmentUrlCache.has(key)) {
-    const url = attachmentUrlCache.get(key) || '';
-    attachmentUrlCache.delete(key);
-    attachmentUrlCache.set(key, url);
-    return Promise.resolve(url);
-  }
-  const requestKey = mediaFetchKey(key, kind);
-  const existing = mediaFetches.get(requestKey);
-  if (existing) return existing;
-  const request = (async () => {
-    if (!Media) {
-      const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
-      const url = res.ok ? res.dataUrl || '' : '';
-      if (kind === 'thumb' && url) cacheThumbUrl(key, url);
-      if (kind === 'snap' && url) cacheSnap(key, url);
-      if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
-      return url;
-    }
-    try {
-      const blob = kind === 'attachment'
-        ? await Media.getAttachment?.(key)
-        : await Media.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
-      if (!blob) return '';
-      const url = trackObjectUrl(URL.createObjectURL(blob));
-      if (kind === 'thumb') cacheThumbUrl(key, url);
-      if (kind === 'snap') cacheSnap(key, url);
-      if (kind === 'attachment') cacheAttachmentUrl(key, url);
-      return url;
-    } catch {
-      const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
-      const url = res.ok ? res.dataUrl || '' : '';
-      if (kind === 'thumb' && url) cacheThumbUrl(key, url);
-      if (kind === 'snap' && url) cacheSnap(key, url);
-      if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
-      return url;
-    }
-  })();
-  mediaFetches.set(requestKey, request);
-  request.finally(() => {
-    if (mediaFetches.get(requestKey) === request) mediaFetches.delete(requestKey);
-  }).catch(() => {});
-  return request;
-}
-
-/** True lazy-load via IntersectionObserver + thumb cache. */
-let thumbObserver = null;
-let canvasMediaObserver = null;
-
-function getThumbObserver() {
-  if (thumbObserver) return thumbObserver;
-  if (typeof IntersectionObserver === 'undefined') return null;
-  thumbObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const img = entry.target;
-        thumbObserver.unobserve(img);
-        if (img.dataset.canvasMedia === 'true') wireCanvasMedia(img);
-        else loadThumbInto(img);
-      }
-    },
-    { root: null, rootMargin: '240px 0px', threshold: 0.01 }
-  );
-  return thumbObserver;
-}
-
-function getCanvasMediaObserver() {
-  if (canvasMediaObserver) return canvasMediaObserver;
-  if (typeof IntersectionObserver === 'undefined' || !canvasViewportEl) return null;
-  canvasMediaObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const img = entry.target;
-        canvasMediaObserver.unobserve(img);
-        if (img.dataset.noteAttachmentKey) loadStickerAttachmentInto(img);
-        else loadCanvasMediaInto(img);
-      }
-    },
-    { root: canvasViewportEl, rootMargin: '320px', threshold: 0.01 }
-  );
-  return canvasMediaObserver;
-}
-
-function disconnectCanvasMediaObserver() {
-  try {
-    canvasMediaObserver?.disconnect?.();
-  } catch {
-    // ignore
-  }
-  canvasMediaObserver = null;
-}
-
-function probeCanvasMediaUrl(url) {
-  if (!url || typeof Image === 'undefined') return Promise.resolve(Boolean(url));
-  canvasPendingMediaUrls.add(url);
-  return new Promise((resolve) => {
-    const probe = new Image();
-    let settled = false;
-    const finish = (ok) => {
-      if (settled) return;
-      settled = true;
-      canvasPendingMediaUrls.delete(url);
-      resolve(ok);
-    };
-    probe.onload = () => finish(true);
-    probe.onerror = () => finish(false);
-    probe.src = url;
-    if (typeof probe.decode === 'function') {
-      probe.decode().then(() => finish(true)).catch(() => finish(false));
-    }
-  });
-}
-
-function forgetCachedMediaUrl(key, kind, url) {
-  const cache = kind === 'snap'
-    ? snapCache
-    : kind === 'attachment' ? attachmentUrlCache : thumbUrlCache;
-  if (cache.get(key) !== url) return;
-  cache.delete(key);
-  revokeObjectUrl(url);
-}
-
-function pruneAttachmentUrlCache(items = allTabs) {
-  const keep = new Set();
-  for (const item of items || []) {
-    const notes = item.kind === 'group' ? item.notes || [] : item.kind === 'note' ? [item] : [];
-    for (const note of notes) {
-      for (const attachment of note.attachments || []) {
-        keep.add(Media.mediaKeyNoteAttachment(note.id, attachment.id));
-      }
-    }
-  }
-  for (const [key, url] of attachmentUrlCache) {
-    if (keep.has(key)) continue;
-    attachmentUrlCache.delete(key);
-    revokeObjectUrl(url);
-  }
-}
-
-function loadThumbInto(img) {
-  if (!img) return;
-  const key = img.dataset.mediaKey;
-  if (!key || img.dataset.loaded === '1') return;
-  img.dataset.loaded = '1';
-  if (thumbUrlCache.has(key)) {
-    img.src = thumbUrlCache.get(key);
-    return;
-  }
-  fetchMediaUrl(key, 'thumb').then((url) => {
-    if (url && img.isConnected) img.src = url;
-  });
-}
-
-function canvasPreferredMediaKind() {
-  return canvasLayout.viewport.zoom > 1 ? 'snap' : 'thumb';
-}
-
-function canvasMediaKindForImage(img) {
-  const preferred = canvasPreferredMediaKind();
-  return preferred === 'snap' && img?.dataset.canvasHasSnap === 'false' ? 'thumb' : preferred;
-}
-
-function loadCanvasMediaInto(img) {
-  if (!img) return;
-  const key = img.dataset.mediaKey;
-  if (!key) return;
-  const preferred = canvasMediaKindForImage(img);
-  const fallback = preferred === 'snap'
-    ? 'thumb'
-    : img.dataset.canvasHasSnap === 'true' ? 'snap' : '';
-  const token = String((Number(img.dataset.canvasLoadToken) || 0) + 1);
-  img.dataset.canvasLoadToken = token;
-  img.dataset.canvasLoadingKind = preferred;
-  (async () => {
-    let loadedKind = preferred;
-    let preferredFailed = false;
-    let url = await fetchMediaUrl(key, preferred);
-    if (url && !(await probeCanvasMediaUrl(url))) {
-      if (preferred === 'snap') forgetCachedMediaUrl(key, 'snap', url);
-      preferredFailed = preferred === 'snap';
-      url = '';
-    }
-    if (!url) {
-      loadedKind = fallback;
-      url = fallback ? await fetchMediaUrl(key, fallback) : '';
-      if (url && !(await probeCanvasMediaUrl(url))) {
-        if (fallback === 'snap') forgetCachedMediaUrl(key, 'snap', url);
-        url = '';
-      }
-    }
-    if (img.dataset.canvasLoadToken !== token) return;
-    if (preferredFailed) img.dataset.canvasSnapState = 'unavailable';
-    if (!url) {
-      if (preferred === 'snap') img.dataset.canvasSnapState = 'unavailable';
-      delete img.dataset.canvasLoadingKind;
-      return;
-    }
-    if (!img.isConnected) return;
-    img.src = url;
-    img.dataset.canvasLoadedKind = loadedKind;
-    if (loadedKind === 'snap') delete img.dataset.canvasSnapState;
-    delete img.dataset.canvasLoadingKind;
-  })().catch(() => {
-    if (img.dataset.canvasLoadToken === token) delete img.dataset.canvasLoadingKind;
-  });
-}
-
-function loadStickerAttachmentInto(img) {
-  if (!img) return;
-  const key = img.dataset.noteAttachmentKey;
-  if (!key || img.dataset.noteAttachmentLoaded === '1' || img.dataset.noteAttachmentLoading === '1') return;
-  img.dataset.noteAttachmentLoading = '1';
-  fetchMediaUrl(key, 'attachment').then((url) => {
-    if (!img.isConnected) return;
-    if (url) {
-      img.src = url;
-      img.dataset.noteAttachmentLoaded = '1';
-    } else if (img.dataset.attachmentId) {
-      img.replaceWith(Object.assign(document.createElement('span'), {
-        className: 'note-attachment-missing',
-        textContent: t('noteAttachmentMissing'),
-      }));
-    }
-    delete img.dataset.noteAttachmentLoading;
-  }).catch(() => {
-    if (img.isConnected) delete img.dataset.noteAttachmentLoading;
-  });
-}
-
-function observeStickerAttachment(img) {
-  if (!img || !img.dataset.noteAttachmentKey) return;
-  if (attachmentUrlCache.has(img.dataset.noteAttachmentKey)) {
-    const key = img.dataset.noteAttachmentKey;
-    const url = attachmentUrlCache.get(key);
-    attachmentUrlCache.delete(key);
-    attachmentUrlCache.set(key, url);
-    img.src = url;
-    img.dataset.noteAttachmentLoaded = '1';
-    return;
-  }
-  const observer = getCanvasMediaObserver();
-  if (!observer) {
-    loadStickerAttachmentInto(img);
-    return;
-  }
-  const viewportRect = canvasViewportEl?.getBoundingClientRect?.();
-  const imageRect = img.getBoundingClientRect?.();
-  const margin = 320;
-  if (!img.isConnected) {
-    observer.observe(img);
-    return;
-  }
-  const isNearViewport = Boolean(
-    viewportRect && imageRect &&
-    imageRect.bottom >= viewportRect.top - margin &&
-    imageRect.top <= viewportRect.bottom + margin &&
-    imageRect.right >= viewportRect.left - margin &&
-    imageRect.left <= viewportRect.right + margin
-  );
-  observer.unobserve(img);
-  if (isNearViewport) loadStickerAttachmentInto(img);
-  else observer.observe(img);
-}
-
-function loadCanvasThumbFallback(img) {
-  if (!img) return;
-  const key = img.dataset.mediaKey;
-  if (!key) return;
-  const token = String((Number(img.dataset.canvasLoadToken) || 0) + 1);
-  img.dataset.canvasLoadToken = token;
-  img.dataset.canvasLoadingKind = 'thumb';
-  fetchMediaUrl(key, 'thumb').then(async (url) => {
-    if (!url || !(await probeCanvasMediaUrl(url))) {
-      if (img.dataset.canvasLoadToken === token) delete img.dataset.canvasLoadingKind;
-      return;
-    }
-    if (img.dataset.canvasLoadToken !== token || !img.isConnected) return;
-    img.src = url;
-    img.dataset.canvasLoadedKind = 'thumb';
-    delete img.dataset.canvasLoadingKind;
-  }).catch(() => {
-    if (img.dataset.canvasLoadToken === token) delete img.dataset.canvasLoadingKind;
-  });
-}
-
-function observeCanvasMedia(img) {
-  if (!img) return;
-  const key = img.dataset.mediaKey;
-  if (!key) return;
-  const preferred = canvasMediaKindForImage(img);
-  const previousPreferred = img.dataset.canvasPreferredKind;
-  img.dataset.canvasPreferredKind = preferred;
-  if (previousPreferred !== preferred) delete img.dataset.canvasSnapState;
-  if (
-    img.dataset.canvasLoadedKind === preferred ||
-    img.dataset.canvasLoadingKind === preferred
-  ) {
-    return;
-  }
-  if (preferred === 'snap' && img.dataset.canvasSnapState === 'unavailable') return;
-  const obs = getCanvasMediaObserver();
-  if (!obs) {
-    loadCanvasMediaInto(img);
-    return;
-  }
-  obs.unobserve(img);
-  const viewportRect = canvasViewportEl?.getBoundingClientRect?.();
-  const imageRect = img.getBoundingClientRect?.();
-  const margin = 320;
-  const isNearViewport = Boolean(
-    viewportRect && imageRect &&
-    imageRect.bottom >= viewportRect.top - margin &&
-    imageRect.top <= viewportRect.bottom + margin &&
-    imageRect.right >= viewportRect.left - margin &&
-    imageRect.left <= viewportRect.right + margin
-  );
-  if (isNearViewport) loadCanvasMediaInto(img);
-  else obs.observe(img);
-}
-
-function refreshCanvasMediaQuality() {
-  canvasNodesEl?.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-}
-
-function scheduleCanvasMediaQualityRefresh() {
-  if (canvasMediaQualityRaf) return;
-  const schedule = typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame
-    : (callback) => setTimeout(callback, 16);
-  canvasMediaQualityRaf = schedule(() => {
-    canvasMediaQualityRaf = 0;
-    refreshCanvasMediaQuality();
-  });
-}
-
-function handleCanvasMediaError(img) {
-  if (!img || img.dataset.canvasLoadedKind !== 'snap') return;
-  const key = img.dataset.mediaKey;
-  const failedUrl = img.currentSrc || img.src;
-  forgetCachedMediaUrl(key, 'snap', failedUrl);
-  img.dataset.canvasSnapState = 'unavailable';
-  delete img.dataset.canvasLoadedKind;
-  loadCanvasThumbFallback(img);
-}
-
-function wireCanvasMedia(img) {
-  if (!img) return;
-  if (img.dataset.canvasMediaWired !== 'true') {
-    img.dataset.canvasMediaWired = 'true';
-    img.addEventListener('error', () => handleCanvasMediaError(img));
-  }
-  thumbObserver?.unobserve?.(img);
-  observeCanvasMedia(img);
-}
-
-function observeThumb(img) {
-  if (!img) return;
-  const key = img.dataset.mediaKey;
-  if (!key || img.dataset.loaded === '1') return;
-  // Cache hit: paint immediately (no flash on search re-render)
-  if (thumbUrlCache.has(key)) {
-    img.dataset.loaded = '1';
-    img.src = thumbUrlCache.get(key);
-    return;
-  }
-  const obs = getThumbObserver();
-  if (!obs) {
-    loadThumbInto(img);
-    return;
-  }
-  obs.observe(img);
-}
-
-function mediaKeyForItem(item) {
-  if (!item) return '';
-  if (item.kind === 'group') return '';
-  return Media ? Media.mediaKeyTab(item.id) : `t:${item.id}`;
-}
-
-function mediaKeyForMember(groupId, memberId) {
-  return Media ? Media.mediaKeyMember(groupId, memberId) : `g:${groupId}:${memberId}`;
-}
-
-const I18N = {
-  zh: {
-    appName: 'TabWall',
-    quickAddTab: '儲存目前分頁',
-    quickAddGroup: '儲存目前 Group',
-    quickAddUrl: '貼上 URL',
-    quickAddMenuTitle: '新增選項',
-    canvasOrganize: '畫布整理',
-    manualAddTop: '新增卡片',
-    quickAddSaved: '已送出存檔',
-    quickAddGroupSaved: '已送出 Group 存檔',
-    quickAddNoTarget: '目前沒有可存檔的分頁',
-    quickAddNoGroup: '目前分頁不在 Group 中',
-    quickAddRestricted: '此頁面受 Chrome 限制，無法直接存檔',
-    quickAddSelf: '目前已是 TabWall，請貼上 URL 或使用 Chrome 快捷鍵存檔',
-    quickAddFailed: '存檔失敗：{error}',
-    pinnedOnly: '已固定',
-    pin: '固定項目',
-    unpin: '取消固定',
-    pinnedOn: '已固定項目',
-    pinnedOff: '已取消固定',
-    pinFailed: '固定狀態儲存失敗',
-    tagApplyFilter: '套用此 tag 篩選',
-    moreTools: '更多工具',
-    savedAt: '儲存於 {time}',
-    settingsGeneral: '一般',
-    settingsAutomation: '儲存規則',
-    settingsDisplay: '顯示',
-    settingsTools: '整理',
-    settingsBackup: '備份',
-    settingsShortcuts: '快捷鍵',
-    settingsDiagnostic: '診斷',
-    settingsAutoSaved: '已自動儲存',
-    done: '完成',
-    loadFailed: '資料讀取失敗，已保留目前畫面。',
-    searchPh: '搜尋…  空格/&& 且、|| 或（不分大小寫）',
-    searchRegexPh: '正規表示式（預設 i；或 /pattern/flags）',
-    searchRegexTitle: '正規表示式搜尋',
-    searchPhTag: '搜尋 tag…  && 且、|| 或',
-    searchPhNote: '搜尋 note…',
-    searchPhGroup: '搜尋群組名稱或成員…',
-    searchPhDomain: '搜尋網域（僅分頁與群組成員）…',
-    searchPhTagRegex: 'Regex 搜尋 tag…',
-    searchPhNoteRegex: 'Regex 搜尋 note…',
-    searchPhGroupRegex: '群組／成員正規表示式…',
-    searchPhDomainRegex: 'Regex 搜尋網域…',
-    searchScopeClear: '清除欄位模式（或 all + Tab）',
-    searchTagSuggestTitle: 'Tag 建議',
-    searchTagSuggestEmpty: '找不到符合的 tag',
-    searchTagSuggestHint: '↑↓ 選擇 · Enter/Tab 以 && 加入 · Alt+Enter 以 || 加入 · Esc 關閉',
-    searchTagSuggestOr: '以 || 加入',
-    searchTagSuggestRemove: '已加入，點擊移除',
-    helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
-    helpShortcutSearchMode:
-      '搜尋框輸入 t/tag、n/note、g/group、d/domain、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
-    searchHitsCount: '命中 {n} 個分頁',
-    searchHitGroupMeta: '符合 group 名稱／note／tags',
-    searchHitsMore: '還有 {n} 個…',
-    stackTitle: 'Stack',
-    stackHint: '拖曳卡片到另一張的標題區可組成 Stack，還原為 Tab Group',
-    stackMerged: '已合併為 Stack',
-    stackFailed: '無法合併',
-    canvasNeedTwo: '至少選取兩個項目才能建立 Stack',
-    canvasNewStack: '新 Stack',
-    canvasStackHint: '為選取的項目命名，之後會以 Tab Group 還原。',
-    canvasStackPlaceholder: 'Stack 名稱',
-    canvasSnapshot: '快照',
-    canvasNodeHint: '單擊預覽快照；雙擊還原；按住拖曳移動',
-    canvasAddNote: '新增 Sticker Note',
-    canvasContextMenuLabel: '畫布選單',
-    canvasCtxSortDate: '按日期排序',
-    canvasCtxArrangeAlign: '重新對齊卡片',
-    canvasCtxBackup: '備份資料',
-    canvasCtxAddNote: '新增 Sticker Note',
-    canvasCtxSortedDate: '已改為依日期排序',
-    canvasNotePlaceHint: '點擊空白畫布放置 Sticker Note；按 Esc 取消',
-    noteKind: 'Sticker Note',
-    noteTitlePh: 'Note 標題',
-    noteMarkdownPh: '以 Markdown 撰寫…',
-    notePreview: '即時預覽',
-    noteAttachments: '圖片附件',
-    noteAttachAdd: '插入圖片',
-    noteAttachDrop: '拖曳或貼上圖片到這裡',
-    noteAttachmentDelete: '移除圖片',
-    noteAttachmentMissing: '圖片尚未匯入',
-    noteEditHeading: '編輯 Sticker Note',
-    noteSave: '儲存 Note',
-    noteCancel: '取消編輯',
-    noteUntitled: 'Sticker Note',
-    noteCount: '{n} 張圖片',
-    noteImageNormalizing: '正在處理圖片…',
-    noteImageUsage: '附件容量：{used}／{noteLimit}（全域 {globalUsed}／{globalLimit}）',
-    noteImageSourceTooLarge: '圖片原始檔超過 24 MiB',
-    noteImageDecodeTooLarge: '圖片解析度過高，無法安全處理',
-    noteImageOutputTooLarge: '圖片壓縮後仍超過 24 MiB',
-    noteImageInvalid: '圖片格式無法處理',
-    noteImageTooMany: '一次加入的圖片超過剩餘附件數量',
-    noteImageQuotaExceeded: '附件容量已達上限',
-    backupFullTooLarge: '完整備份超過 256 MiB，請改用精簡備份或分批匯出',
-    canvasArrange: '排列',
-    canvasArrangeGrid: '棋盤',
-    canvasArrangeAlign: '對齊格式',
-    canvasSnap: '吸附格線',
-    canvasResetView: '重設視角',
-    canvasDropStack: '拖曳到這裡建立 Stack',
-    canvasSelect: '選取',
-    canvasPan: '平移',
-    canvasArea: '框選區域',
-    canvasLink: '連結',
-    canvasLinkHandleTop: '從卡片上方建立連結',
-    canvasLinkHandleRight: '從卡片右側建立連結',
-    canvasLinkHandleBottom: '從卡片下方建立連結',
-    canvasLinkHandleLeft: '從卡片左側建立連結',
-    canvasRailResize: '調整畫布側邊欄寬度',
-    canvasRailCollapse: '收合畫布側邊欄',
-    canvasRailExpand: '展開畫布側邊欄',
-    canvasRailCollapsedValue: '已收合',
-    canvasMinimapLabel: '畫布預覽',
-    canvasMinimapViewport: '拖曳以平移畫布',
-    canvasConnectionsLabel: '畫布連線',
-    canvasConnectionSelected: '已選取 1 條線段',
-    canvasDeleteConnection: '刪除線段',
-    settingsCanvas: '畫布',
-    canvasSettingsTitle: '畫布設定',
-    canvasSettingsHint: '調整畫布的操作方式；位置與視角會自動儲存。',
-    canvasSortTitle: '排序',
-    canvasSortLabel: '排序方式',
-    canvasArrangeTitle: '排列',
-    canvasZoomControlsLabel: '縮放控制',
-    canvasZoomOut: '縮小',
-    canvasZoomIn: '放大',
-    canvasZoomValueLabel: '縮放比例',
-    canvasZoomSliderLabel: '調整縮放比例',
-    canvasZoomMenuLabel: '縮放選項',
-    canvasZoomFitWidth: '符合寬度',
-    canvasZoomFitScreen: '符合畫面',
-    canvasZoomReset: '重設',
-    canvasOpen: '開啟',
-    canvasMoveToStack: '移至 Stack',
-    canvasCreateStack: '建立 Stack',
-    canvasView: '畫布',
-    cards: '卡片',
-    list: '列表',
-    sort: '排序',
-    sortDate: '日期',
-    sortFqdn: 'FQDN',
-    sortGroup: 'Group',
-    copied: '已複製連結',
-    copyFailed: '複製失敗',
-    copyLink: '複製連結',
-    cols: '欄數',
-    colsTitle: '卡片欄數 4–10',
-    themeToggle: '切換主題',
-    settings: '設定',
-    close: '關閉',
-    afterSaveTitle: '儲存分頁後的行為',
-    afterSaveClose: '關閉該分頁',
-    afterSaveKeep: '不額外執行動作（僅儲存）',
-    presaveHeading: '儲存前編輯',
-    presaveHint: '快速編輯 note / tag，確認後才會真正儲存。',
-    presaveSaveAndClose: '儲存並關閉分頁',
-    presaveSaveKeep: '儲存',
-    presaveFailed: '儲存失敗，請重試。',
-    presaveSettingTitle: '儲存前編輯',
-    presaveSettingLabel: '儲存前先編輯 Note／Tag',
-    presaveSettingHint: '儲存單一分頁時，先跳出面板讓你快速編輯 note／tag，確認後才真正儲存（不含 Group 儲存）。',
-    autoSaveMetadataTitle: '自動 Note／Tag',
-    autoSaveMetadataHint: '儲存目前分頁或 Group 成員時，依 domain／page title 自動附加 note 與 tag。條件不分大小寫；note 逐行去重，tag 合併去重。',
-    autoSaveMetadataEnable: '啟用自動 Note／Tag 規則',
-    autoSaveMetadataAddRule: '新增規則',
-    autoSaveMetadataRule: '規則 {n}',
-    autoSaveMetadataRuleEnable: '啟用此規則',
-    autoSaveMetadataLogic: '條件運算',
-    autoSaveMetadataAnd: '全部符合（AND）',
-    autoSaveMetadataOr: '任一符合（OR）',
-    autoSaveMetadataCondition: '條件',
-    autoSaveMetadataAddCondition: '新增條件',
-    autoSaveMetadataDeleteCondition: '刪除條件',
-    autoSaveMetadataDeleteRule: '刪除規則',
-    autoSaveMetadataField: '欄位',
-    autoSaveMetadataDomain: 'Domain／FQDN',
-    autoSaveMetadataTitleField: 'Page title',
-    autoSaveMetadataOperator: '判斷式',
-    autoSaveMetadataMatch: 'Match',
-    autoSaveMetadataContains: 'Contains',
-    autoSaveMetadataStartsWith: 'Starts with',
-    autoSaveMetadataEndsWith: 'Ends with',
-    autoSaveMetadataRegex: 'Regex',
-    autoSaveMetadataNot: 'Not',
-    autoSaveMetadataValuePh: '輸入文字或正規表示式',
-    autoSaveMetadataActions: '命中後附加',
-    autoSaveMetadataNote: 'Note（每行一段）',
-    autoSaveMetadataNotePh: '要附加的 note…',
-    autoSaveMetadataTags: 'Tags',
-    autoSaveMetadataTagPh: '輸入 tag 後按 Enter／Tab',
-    autoSaveMetadataRemoveTag: '移除 tag',
-    autoSaveMetadataEmpty: '尚未建立規則。',
-    themeTitle: '主題',
-    langTitle: '語言 / Language',
-    defaultColsTitle: '預設欄數',
-    defaultViewTitle: '預設檢視',
-    otherTitle: '其它',
-    openWithSearchFocus: '開啟時聚焦搜尋框',
-    restore: '還原分頁',
-    noSnapshot: '此項目無全尺寸快照，顯示縮圖。',
-    editHeading: '編輯 Note / Tags',
-    note: 'Note',
-    notePh: '加入備註…',
-    tags: 'Tags',
-    tagsHint: '輸入後按 Tab 新增',
-    tagPh: '輸入 tag',
-    cancel: '取消',
-    save: '儲存',
-    savedCount: '已存 {n} 個',
-    countTabs: '{n} 個暫存分頁',
-    countFiltered: '{shown} / {total}',
-    emptyTitle: '尚無暫存分頁',
-    emptyBody:
-      '在網頁按下 <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> 存分頁；在 Group 內按 <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 存整個群組。<br/>開啟後按 <kbd>/</kbd> 可搜尋。',
-    noResultsTitle: '沒有符合的結果',
-    noResultsBody: '試試其他關鍵字，或清除搜尋。',
-    expand: '放大',
-    edit: '編輯 note / tags',
-    delete: '刪除',
-    viewMode: '檢視模式',
-    tagsManage: 'Tags',
-    tagsManageTitle: 'Tag 管理',
-    tagSearchPh: '搜尋 tag…',
-    tagAddPh: '新 tag 名稱',
-    add: '新增',
-    rename: '編輯',
-    tagCount: '{n} 個分頁',
-    tagEmpty: '尚無 tag',
-    tagRenamePrompt: '輸入新的 tag 名稱',
-    tagDeleteConfirm: '刪除 tag「{name}」？將從所有 saved tabs 移除。',
-    backupTitle: '備份與還原',
-    exportBackup: '匯出備份',
-    exportLite: '匯出精簡',
-    exportFull: '匯出完整 ZIP',
-    importBackup: '還原（覆蓋）',
-    importAppend: '匯入（附加）',
-    backupExported: '已匯出備份',
-    backupExporting: '匯出中…',
-    backupImporting: '匯入中…',
-    backupImported: '已還原備份',
-    backupAppended: '已附加 {n} 項',
-    backupConfirm: '還原將覆寫目前所有 TabWall 資料，確定？',
-    backupAppendConfirm: '將附加備份中的項目到現有清單（不刪除現有卡片），確定？',
-    backupInvalid: '備份檔無效',
-    backupInvalidDetail: '備份無法匯入：{error}',
-    backupLegacyNotice: '已相容匯入舊版 v{version} 備份。',
-    backupColorNotice: '已將 {n} 個舊版群組色轉換為目前格式。',
-    backupFaviconNotice: '略過 {n} 個超出限制或格式無效的 favicon。',
-    backupStoredOnly: '保留 {n} 個 file URL；這些項目不可直接還原。',
-    backupError: '操作失敗',
-    backupHint: '精簡不含截圖（檔案小）；完整 ZIP 含圖片二進位。覆蓋會取代全部資料；附加只新增。',
-    diagLogTitle: '診斷日誌',
-    diagLogHint: '匯出／匯入／自動備份等事件。可複製給除錯用。',
-    diagLogRefresh: '重新整理',
-    diagLogCopy: '複製',
-    diagLogClear: '清除',
-    diagLogEmpty: '尚無日誌',
-    diagLogCopied: '已複製',
-    manualAddTitle: '手動新增卡片',
-    manualAddHint: '每行一個 URL。用 #GROUP:名稱 上下包住多行可建成群組。',
-    manualAddPh:
-      'https://example.com/a\nhttps://example.com/b\n\n#GROUP:工作\nhttps://jira.example.com\nhttps://wiki.example.com\n#GROUP:工作',
-    manualAddSubmit: '新增卡片',
-    manualAddOk: '已新增 {n} 項',
-    manualAddEmpty: '沒有可新增的 URL',
-    manualAddSkipped: '（略過 {n} 行）',
-    autoBackupTitle: '自動備份',
-    autoBackupHint:
-      '寫入「瀏覽器設定的下載位置」下的子資料夾（不一定是 Downloads；可在 chrome://settings/downloads 查看）。不上傳。',
-    autoBackupEnable: '啟用自動備份',
-    autoBackupSubfolder: '下載位置子資料夾',
-    autoBackupSubfolderHint: '相對於 Chrome 下載位置，例如 TabWall-Backups',
-    autoBackupLocation: '備份位置',
-    autoBackupLocationPending: '下載位置 / {subfolder}（成功備份後顯示完整路徑）',
-    autoBackupLocationStale: '路徑待更新 — 請按「立即備份」以寫入目前下載位置',
-    autoBackupMode: '格式',
-    autoBackupModeLite: '精簡 JSON',
-    autoBackupModeFull: '完整 ZIP',
-    autoBackupOnChange: '資料變更後也備份',
-    autoBackupEvery: '每',
-    autoBackupUnitMinute: '分鐘',
-    autoBackupUnitHour: '小時',
-    autoBackupUnitDay: '天',
-    autoBackupMaxKeep: '最多保留',
-    autoBackupMaxKeepUnit: '份',
-    autoBackupNow: '立即備份',
-    autoBackupShowFolder: '開啟下載資料夾',
-    autoBackupRunning: '備份中…',
-    autoBackupOk: '已備份：{file}',
-    autoBackupLastOk: '上次成功：{time}',
-    autoBackupErrWrite: '寫入失敗',
-    autoBackupErrExport: '匯出失敗',
-    autoBackupErrDisabled: '請先啟用自動備份，或使用立即備份',
-    selectMode: '選擇',
-    selectModeOn: '選擇中',
-    batchRestore: '還原',
-    batchEdit: 'Note / Tags',
-    batchExportLite: '匯出精簡',
-    batchExportFull: '匯出完整',
-    batchDelete: '刪除',
-    batchClear: '取消',
-    batchCount: '已選 {n}',
-    batchExportEmpty: '請先選擇卡片',
-    importPickTitle: '選擇要還原的項目',
-    importPickHint: '勾選要寫入的 tab／group。預設全選。可點「預覽」查看縮圖／成員。',
-    importPickAll: '全選',
-    importPickNone: '全不選',
-    importPickConfirm: '確認還原',
-    importPickCount: '已選 {n} / {total}',
-    importPickEmpty: '請至少選擇一項',
-    importPickModeReplace: '模式：覆蓋現有資料',
-    importPickModeAppend: '模式：附加到現有資料',
-    importPickPreview: '預覽',
-    importPreviewNoImage: '此項目無縮圖／快照（精簡備份僅含文字）',
-    importPreviewGroupEmpty: '此 group 無成員',
-    batchDeleteConfirm: '刪除選取的 {n} 項？',
-    batchEditHeading: '批次編輯 Note / Tags',
-    batchEditSub: 'Note 非空則覆寫；Tags 預設合併到各項目',
-    editFailed: '儲存失敗',
-    help: '說明',
-    helpTitle: '說明',
-    helpShortcutsTitle: '快捷鍵',
-    helpShortcutSave: '儲存目前分頁（截圖）',
-    helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）',
-    helpShortcutGroup: '儲存目前 Tab Group',
-    helpShortcutWall: '開關 TabWall 空間畫布',
-    helpShortcutChrome: '以上四項快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。',
-    helpShortcutSearch: '聚焦搜尋',
-    helpShortcutSettings: '開啟／關閉設定（⌥⌘S）',
-    helpShortcutEsc: '關閉浮層／空間畫布',
-    helpShortcutArrows: '快照上一張／下一張',
-    shortcutsTitle: 'Chrome 快捷鍵',
-    shortcutsHint:
-      '快捷鍵由 Chrome 管理。安裝時會採用 manifest 預設值；若要設定或修改，請在 Chrome 設定頁操作。',
-    shortcutsOpenChrome: '在 Chrome 設定管理快捷鍵',
-    shortcutsChromeOpened: '已開啟 Chrome 快捷鍵設定頁。請在 Chrome 中設定或修改。',
-    shortcutsChromeOpenFailed: '無法開啟 Chrome 快捷鍵設定頁。',
-    shortcutsChromeBound: 'Chrome 快捷鍵：{s}',
-    shortcutsChromeUnbound: 'Chrome 快捷鍵：未綁定',
-    dedupeTitle: '偵測到重複 URL',
-    dedupeConflictHint: '牆內已有相同完整 URL 的分頁。請選擇如何處置。',
-    dedupeExisting: '既有項目',
-    dedupeKeepBoth: '保留兩者',
-    dedupeReplace: '取代舊項',
-    dedupeCancel: '取消',
-    dedupeScanTitle: '去重複',
-    dedupeScanHint: '掃描已存分頁中 URL 完全相同的項目，由你決定保留哪些。',
-    dedupeScan: '掃描重複',
-    dedupeNoDupes: '未發現重複',
-    dedupeKeepNewest: '只留最新',
-    dedupeKeepOldest: '只留最舊',
-    dedupeKeepAll: '全部保留',
-    dedupeApply: '套用',
-    dedupeApplyOk: '已刪除 {n} 筆重複',
-    dedupeApplyNone: '沒有需要刪除的項目',
-    dedupeCount: '{n} 筆',
-    dedupeSavedAt: '儲存於 {t}',
-    helpDedupeBody:
-      '存分頁時若 URL 已存在會詢問你如何處置。工具列「掃描重複」可掃描整牆並人工保留／刪除。',
-    helpBasicTitle: '基本使用',
-    helpBasicBody:
-      '點縮圖還原、標題複製連結；編輯按鈕管理 note／tags；展開按鈕查看快照；刪除按鈕移除項目。拖曳可重排；拖到另一張卡片標題區稍停可組成 Stack（還原為 Tab Group）。',
-    helpGroupTitle: 'Tab Group / Stack',
-    helpGroupBody:
-      'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。成員面板可預覽、編輯、還原單一或整個 group。',
-    helpSelectTitle: '複選',
-    helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
-    helpBackupTitle: '備份',
-    helpBackupBody:
-      '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾。',
-    helpLimitsTitle: '限制',
-    helpLimitsBody:
-      'chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。',
-    groupTabs: '{n} 個分頁',
-    unnamedGroup: '未命名群組',
-    restoreGroup: '還原整個 Group',
-    restoreGroupConfirm: '還原群組「{title}」（{n} 個分頁）？',
-    expandGroup: '展開成員',
-    collapseGroup: '收合',
-    afterSaveGroupTitle: '儲存 Group 後',
-    saveGroupCaptureTitle: 'Group 截圖',
-    captureAll: '全部成員',
-    captureNone: '不截圖（僅結構）',
-    captureActive: '僅目前分頁',
-    restoreGroupInTitle: '還原 Group 到',
-    restoreCurrentWindow: '目前視窗',
-    restoreNewWindow: '新視窗',
-    memberRestore: '還原此分頁',
-    storedOnly: '不可直接還原',
-    storedOnlyShort: 'file',
-    restoreRestricted: '此 URL 不支援直接還原，項目已保留。',
-    restoreSkipped: '群組已還原，略過 {n} 個不可直接還原的成員。',
-    memberSnapshot: '快照',
-    memberEdit: 'Note / Tags',
-    editMemberHeading: '編輯成員 Note / Tags',
-  },
-  en: {
-    appName: 'TabWall',
-    quickAddTab: 'Save current tab',
-    quickAddGroup: 'Save current Group',
-    quickAddUrl: 'Paste URL',
-    quickAddMenuTitle: 'Add options',
-    canvasOrganize: 'Organize canvas',
-    manualAddTop: 'Add cards',
-    quickAddSaved: 'Save request sent',
-    quickAddGroupSaved: 'Group save request sent',
-    quickAddNoTarget: 'There is no tab available to save',
-    quickAddNoGroup: 'The current tab is not in a Group',
-    quickAddRestricted: 'Chrome restricts this page from being saved directly',
-    quickAddSelf: 'TabWall is the current page; paste a URL or use a Chrome shortcut',
-    quickAddFailed: 'Save failed: {error}',
-    pinnedOnly: 'Pinned',
-    pin: 'Pin item',
-    unpin: 'Unpin item',
-    pinnedOn: 'Item pinned',
-    pinnedOff: 'Item unpinned',
-    pinFailed: 'Could not save pinned state',
-    tagApplyFilter: 'Filter by this tag',
-    moreTools: 'More tools',
-    savedAt: 'Saved {time}',
-    settingsGeneral: 'General',
-    settingsAutomation: 'Save rules',
-    settingsDisplay: 'Display',
-    settingsTools: 'Organize',
-    settingsBackup: 'Backup',
-    settingsShortcuts: 'Shortcuts',
-    settingsDiagnostic: 'Diagnostics',
-    settingsAutoSaved: 'Saved automatically',
-    done: 'Done',
-    loadFailed: 'Data could not be loaded; the current view was kept.',
-    searchPh: 'Search…  space/&& AND, || OR (case-insensitive)',
-    searchRegexPh: 'Regex (default i; or /pattern/flags)',
-    searchRegexTitle: 'Regex search',
-    searchPhTag: 'Search tags…  && AND, || OR',
-    searchPhNote: 'Search notes…',
-    searchPhGroup: 'Search group name or member tabs…',
-    searchPhDomain: 'Search domains (tabs and group members only)…',
-    searchPhTagRegex: 'Regex search tags…',
-    searchPhNoteRegex: 'Regex search notes…',
-    searchPhGroupRegex: 'Group/member regex…',
-    searchPhDomainRegex: 'Regex search domains…',
-    searchScopeClear: 'Clear field mode (or all + Tab)',
-    searchTagSuggestTitle: 'Tag suggestions',
-    searchTagSuggestEmpty: 'No matching tags',
-    searchTagSuggestHint: '↑↓ move · Enter/Tab add with && · Alt+Enter add with || · Esc close',
-    searchTagSuggestOr: 'Add with ||',
-    searchTagSuggestRemove: 'Added — click to remove',
-    helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
-    helpShortcutSearchMode:
-      'In search, type t/tag, n/note, g/group, d/domain, or re/regex then Tab; all + Tab resets scope',
-    searchHitsCount: '{n} matching tab(s)',
-    searchHitGroupMeta: 'Matched group title / note / tags',
-    searchHitsMore: '+{n} more…',
-    stackTitle: 'Stack',
-    stackHint: 'Drag a card onto another card’s title area to stack; restore as a Tab Group',
-    stackMerged: 'Stacked',
-    stackFailed: 'Could not stack',
-    canvasNeedTwo: 'Select at least two items to create a Stack',
-    canvasNewStack: 'New Stack',
-    canvasStackHint: 'Name the selected items; the Stack can be restored as a Tab Group.',
-    canvasStackPlaceholder: 'Stack name',
-    canvasSnapshot: 'Snapshot',
-    canvasNodeHint: 'Click to preview; double-click to restore; drag to move',
-    canvasAddNote: 'Add Sticker Note',
-    canvasContextMenuLabel: 'Canvas menu',
-    canvasCtxSortDate: 'Sort by date',
-    canvasCtxArrangeAlign: 'Realign cards',
-    canvasCtxBackup: 'Backup data',
-    canvasCtxAddNote: 'Add Sticker Note',
-    canvasCtxSortedDate: 'Sorted by date',
-    canvasNotePlaceHint: 'Click an empty canvas area to place a Sticker Note; Esc cancels',
-    noteKind: 'Sticker Note',
-    noteTitlePh: 'Note title',
-    noteMarkdownPh: 'Write in Markdown…',
-    notePreview: 'Live preview',
-    noteAttachments: 'Image attachments',
-    noteAttachAdd: 'Insert images',
-    noteAttachDrop: 'Drop or paste images here',
-    noteAttachmentDelete: 'Remove image',
-    noteAttachmentMissing: 'Image not imported',
-    noteEditHeading: 'Edit Sticker Note',
-    noteSave: 'Save Note',
-    noteCancel: 'Cancel editing',
-    noteUntitled: 'Sticker Note',
-    noteCount: '{n} image(s)',
-    noteImageNormalizing: 'Processing image…',
-    noteImageUsage: 'Attachments: {used}/{noteLimit} (global {globalUsed}/{globalLimit})',
-    noteImageSourceTooLarge: 'The source image exceeds 24 MiB',
-    noteImageDecodeTooLarge: 'The image resolution is too high to process safely',
-    noteImageOutputTooLarge: 'The compressed image still exceeds 24 MiB',
-    noteImageInvalid: 'The image format could not be processed',
-    noteImageTooMany: 'The batch exceeds the remaining attachment slots',
-    noteImageQuotaExceeded: 'The attachment quota has been reached',
-    backupFullTooLarge: 'Full backup exceeds 256 MiB; use lite backup or export in smaller batches',
-    canvasArrange: 'Arrange',
-    canvasArrangeGrid: 'Grid',
-    canvasArrangeAlign: 'Aligned rows',
-    canvasSnap: 'Snap to grid',
-    canvasResetView: 'Reset view',
-    canvasDropStack: 'Drop here to create a Stack',
-    canvasSelect: 'Select',
-    canvasPan: 'Pan',
-    canvasArea: 'Select area',
-    canvasLink: 'Link',
-    canvasLinkHandleTop: 'Create a connection from the top of this card',
-    canvasLinkHandleRight: 'Create a connection from the right of this card',
-    canvasLinkHandleBottom: 'Create a connection from the bottom of this card',
-    canvasLinkHandleLeft: 'Create a connection from the left of this card',
-    canvasRailResize: 'Adjust Canvas sidebar width',
-    canvasRailCollapse: 'Collapse Canvas sidebar',
-    canvasRailExpand: 'Expand Canvas sidebar',
-    canvasRailCollapsedValue: 'Collapsed',
-    canvasMinimapLabel: 'Canvas preview',
-    canvasMinimapViewport: 'Drag to pan the canvas',
-    canvasConnectionsLabel: 'Canvas connections',
-    canvasConnectionSelected: '1 connection selected',
-    canvasDeleteConnection: 'Delete connection',
-    settingsCanvas: 'Canvas',
-    canvasSettingsTitle: 'Canvas settings',
-    canvasSettingsHint: 'Adjust canvas behavior; positions and viewport are saved automatically.',
-    canvasSortTitle: 'Sort',
-    canvasSortLabel: 'Sort by',
-    canvasArrangeTitle: 'Arrange',
-    canvasZoomControlsLabel: 'Zoom controls',
-    canvasZoomOut: 'Zoom out',
-    canvasZoomIn: 'Zoom in',
-    canvasZoomValueLabel: 'Zoom level',
-    canvasZoomSliderLabel: 'Adjust zoom level',
-    canvasZoomMenuLabel: 'Zoom options',
-    canvasZoomFitWidth: 'Fit to width',
-    canvasZoomFitScreen: 'Fit to screen',
-    canvasZoomReset: 'Reset',
-    canvasOpen: 'Open',
-    canvasMoveToStack: 'Move to Stack',
-    canvasCreateStack: 'Create Stack',
-    canvasView: 'Canvas',
-    cards: 'Cards',
-    list: 'List',
-    sort: 'Sort',
-    sortDate: 'Date',
-    sortFqdn: 'FQDN',
-    sortGroup: 'Group',
-    copied: 'Link copied',
-    copyFailed: 'Copy failed',
-    copyLink: 'Copy link',
-    cols: 'Cols',
-    colsTitle: 'Card columns 4–10',
-    themeToggle: 'Toggle theme',
-    settings: 'Settings',
-    close: 'Close',
-    afterSaveTitle: 'After saving a tab',
-    afterSaveClose: 'Close the tab',
-    afterSaveKeep: 'Keep the tab open (save only)',
-    presaveHeading: 'Edit before saving',
-    presaveHint: 'Quickly edit the note / tags — it only saves once you confirm.',
-    presaveSaveAndClose: 'Save and close tab',
-    presaveSaveKeep: 'Save',
-    presaveFailed: 'Save failed, please try again.',
-    presaveSettingTitle: 'Edit before saving',
-    presaveSettingLabel: 'Edit note/tags before saving',
-    presaveSettingHint: 'When saving a single tab, show a panel to quickly edit note/tags before it actually saves (group saves are unaffected).',
-    autoSaveMetadataTitle: 'Automatic note / tag',
-    autoSaveMetadataHint: 'When saving a tab or Group member, append notes and tags based on its domain or page title. Matching is case-insensitive; notes and tags are deduplicated.',
-    autoSaveMetadataEnable: 'Enable automatic note / tag rules',
-    autoSaveMetadataAddRule: 'Add rule',
-    autoSaveMetadataRule: 'Rule {n}',
-    autoSaveMetadataRuleEnable: 'Enable this rule',
-    autoSaveMetadataLogic: 'Condition logic',
-    autoSaveMetadataAnd: 'All conditions (AND)',
-    autoSaveMetadataOr: 'Any condition (OR)',
-    autoSaveMetadataCondition: 'Conditions',
-    autoSaveMetadataAddCondition: 'Add condition',
-    autoSaveMetadataDeleteCondition: 'Delete condition',
-    autoSaveMetadataDeleteRule: 'Delete rule',
-    autoSaveMetadataField: 'Field',
-    autoSaveMetadataDomain: 'Domain / FQDN',
-    autoSaveMetadataTitleField: 'Page title',
-    autoSaveMetadataOperator: 'Matcher',
-    autoSaveMetadataMatch: 'Match',
-    autoSaveMetadataContains: 'Contains',
-    autoSaveMetadataStartsWith: 'Starts with',
-    autoSaveMetadataEndsWith: 'Ends with',
-    autoSaveMetadataRegex: 'Regex',
-    autoSaveMetadataNot: 'Not',
-    autoSaveMetadataValuePh: 'Text or regular expression',
-    autoSaveMetadataActions: 'Append when matched',
-    autoSaveMetadataNote: 'Note (one entry per line)',
-    autoSaveMetadataNotePh: 'Note to append…',
-    autoSaveMetadataTags: 'Tags',
-    autoSaveMetadataTagPh: 'Type a tag, then press Enter / Tab',
-    autoSaveMetadataRemoveTag: 'Remove tag',
-    autoSaveMetadataEmpty: 'No rules yet.',
-    themeTitle: 'Theme',
-    langTitle: 'Language',
-    defaultColsTitle: 'Default columns',
-    defaultViewTitle: 'Default view',
-    otherTitle: 'Other',
-    openWithSearchFocus: 'Focus search when opening',
-    restore: 'Restore tab',
-    noSnapshot: 'No full snapshot; showing thumbnail.',
-    editHeading: 'Edit note / tags',
-    note: 'Note',
-    notePh: 'Add a note…',
-    tags: 'Tags',
-    tagsHint: 'Type then press Tab to add',
-    tagPh: 'Add a tag',
-    cancel: 'Cancel',
-    save: 'Save',
-    savedCount: '{n} saved',
-    countTabs: '{n} parked tabs',
-    countFiltered: '{shown} / {total}',
-    emptyTitle: 'No parked tabs yet',
-    emptyBody:
-      'Press <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> to park a tab; <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> to park the whole Tab Group.<br/>Press <kbd>/</kbd> to search.',
-    noResultsTitle: 'No matches',
-    noResultsBody: 'Try another query or clear the search.',
-    expand: 'Expand',
-    edit: 'Edit note / tags',
-    delete: 'Delete',
-    viewMode: 'View mode',
-    tagsManage: 'Tags',
-    tagsManageTitle: 'Tag manager',
-    tagSearchPh: 'Search tags…',
-    tagAddPh: 'New tag name',
-    add: 'Add',
-    rename: 'Edit',
-    tagCount: '{n} tabs',
-    tagEmpty: 'No tags yet',
-    tagRenamePrompt: 'Enter new tag name',
-    tagDeleteConfirm: 'Delete tag "{name}"? It will be removed from all saved tabs.',
-    backupTitle: 'Backup & restore',
-    exportBackup: 'Export',
-    exportLite: 'Export lite',
-    exportFull: 'Export full ZIP',
-    importBackup: 'Restore (replace)',
-    importAppend: 'Import (append)',
-    backupExported: 'Backup exported',
-    backupExporting: 'Exporting…',
-    backupImporting: 'Importing…',
-    backupImported: 'Backup restored',
-    backupAppended: 'Appended {n} item(s)',
-    backupConfirm: 'Restore will overwrite all current TabWall data. Continue?',
-    backupAppendConfirm: 'Append backup items to the current wall (existing cards stay). Continue?',
-    backupInvalid: 'Invalid backup file',
-    backupInvalidDetail: 'Backup could not be imported: {error}',
-    backupLegacyNotice: 'Legacy v{version} backup compatibility was applied.',
-    backupColorNotice: 'Converted {n} legacy group color(s) to the current format.',
-    backupFaviconNotice: 'Skipped {n} favicon(s) that exceeded limits or had an invalid format.',
-    backupStoredOnly: '{n} file URL(s) were kept but cannot be restored directly.',
-    backupError: 'Operation failed',
-    backupHint: 'Lite omits screenshots (small). Full ZIP stores binary images. Replace overwrites all; append only adds.',
-    diagLogTitle: 'Diagnostic log',
-    diagLogHint: 'Events for export / import / auto-backup. Copy for debugging.',
-    diagLogRefresh: 'Refresh',
-    diagLogCopy: 'Copy',
-    diagLogClear: 'Clear',
-    diagLogEmpty: 'No log entries yet',
-    diagLogCopied: 'Copied',
-    manualAddTitle: 'Add cards manually',
-    manualAddHint: 'One URL per line. Wrap lines with #GROUP:Name to create a group.',
-    manualAddPh:
-      'https://example.com/a\nhttps://example.com/b\n\n#GROUP:Work\nhttps://jira.example.com\nhttps://wiki.example.com\n#GROUP:Work',
-    manualAddSubmit: 'Add cards',
-    manualAddOk: 'Added {n} item(s)',
-    manualAddEmpty: 'No valid URLs to add',
-    manualAddSkipped: '({n} line(s) skipped)',
-    autoBackupTitle: 'Auto backup',
-    autoBackupHint:
-      'Writes under Chrome’s configured download location (not always ~/Downloads — see chrome://settings/downloads). Never uploaded.',
-    autoBackupEnable: 'Enable auto backup',
-    autoBackupSubfolder: 'Subfolder under download location',
-    autoBackupSubfolderHint: 'Relative to Chrome’s download location, e.g. TabWall-Backups',
-    autoBackupLocation: 'Backup location',
-    autoBackupLocationPending: 'Download location / {subfolder} (full path after a successful backup)',
-    autoBackupLocationStale: 'Path outdated — click Backup now to write to the current download location',
-    autoBackupMode: 'Format',
-    autoBackupModeLite: 'Lite JSON',
-    autoBackupModeFull: 'Full ZIP',
-    autoBackupOnChange: 'Also backup after data changes',
-    autoBackupEvery: 'Every',
-    autoBackupUnitMinute: 'minutes',
-    autoBackupUnitHour: 'hours',
-    autoBackupUnitDay: 'days',
-    autoBackupMaxKeep: 'Keep at most',
-    autoBackupMaxKeepUnit: 'copies',
-    autoBackupNow: 'Backup now',
-    autoBackupShowFolder: 'Open Downloads folder',
-    autoBackupRunning: 'Backing up…',
-    autoBackupOk: 'Saved: {file}',
-    autoBackupLastOk: 'Last success: {time}',
-    autoBackupErrWrite: 'Write failed',
-    autoBackupErrExport: 'Export failed',
-    autoBackupErrDisabled: 'Enable auto backup first, or use Backup now',
-    selectMode: 'Select',
-    selectModeOn: 'Selecting',
-    batchRestore: 'Restore',
-    batchEdit: 'Note / Tags',
-    batchExportLite: 'Export lite',
-    batchExportFull: 'Export full',
-    batchDelete: 'Delete',
-    batchClear: 'Cancel',
-    batchCount: '{n} selected',
-    batchExportEmpty: 'Select cards first',
-    importPickTitle: 'Choose items to restore',
-    importPickHint: 'Check tabs/groups to write. All selected by default. Use Preview for thumbs / members.',
-    importPickAll: 'Select all',
-    importPickNone: 'Select none',
-    importPickConfirm: 'Confirm restore',
-    importPickCount: '{n} / {total} selected',
-    importPickEmpty: 'Select at least one item',
-    importPickModeReplace: 'Mode: replace existing data',
-    importPickModeAppend: 'Mode: append to existing data',
-    importPickPreview: 'Preview',
-    importPreviewNoImage: 'No thumbnail/snapshot (lite backup is text-only)',
-    importPreviewGroupEmpty: 'This group has no members',
-    batchDeleteConfirm: 'Delete {n} selected items?',
-    batchEditHeading: 'Batch edit note / tags',
-    batchEditSub: 'Non-empty note overwrites; tags are merged by default',
-    editFailed: 'Save failed',
-    help: 'Help',
-    helpTitle: 'Help',
-    helpShortcutsTitle: 'Shortcuts',
-    helpShortcutSave: 'Park current tab (screenshot)',
-    helpShortcutSaveKeep: 'Park current tab or Tab Group (keep open)',
-    helpShortcutGroup: 'Park current Tab Group',
-    helpShortcutWall: 'Toggle TabWall canvas',
-    helpShortcutChrome: 'The four action shortcuts are managed by Chrome. Configure them in Chrome shortcut settings.',
-    helpShortcutSearch: 'Focus search',
-    helpShortcutSettings: 'Open / close settings (⌥⌘S / Alt+Win+S)',
-    helpShortcutEsc: 'Close panels / canvas',
-    helpShortcutArrows: 'Previous / next snapshot',
-    shortcutsTitle: 'Chrome Shortcuts',
-    shortcutsHint:
-      'Shortcuts are managed by Chrome. The manifest defaults are used at install time; configure or change them in Chrome shortcut settings.',
-    shortcutsOpenChrome: 'Manage shortcuts in Chrome settings',
-    shortcutsChromeOpened: 'Chrome shortcut settings opened. Configure or change the shortcuts there.',
-    shortcutsChromeOpenFailed: 'Unable to open Chrome shortcut settings.',
-    shortcutsChromeBound: 'Chrome shortcut: {s}',
-    shortcutsChromeUnbound: 'Chrome shortcut: not set',
-    dedupeTitle: 'Duplicate URL detected',
-    dedupeConflictHint: 'This exact URL is already parked. Choose what to do.',
-    dedupeExisting: 'Existing items',
-    dedupeKeepBoth: 'Keep both',
-    dedupeReplace: 'Replace old',
-    dedupeCancel: 'Cancel',
-    dedupeScanTitle: 'Deduplicate',
-    dedupeScanHint: 'Scan parked tabs with identical full URLs and choose what to keep.',
-    dedupeScan: 'Scan duplicates',
-    dedupeNoDupes: 'No duplicates found',
-    dedupeKeepNewest: 'Keep newest',
-    dedupeKeepOldest: 'Keep oldest',
-    dedupeKeepAll: 'Keep all',
-    dedupeApply: 'Apply',
-    dedupeApplyOk: 'Removed {n} duplicate(s)',
-    dedupeApplyNone: 'Nothing to remove',
-    dedupeCount: '{n} items',
-    dedupeSavedAt: 'Saved {t}',
-    helpDedupeBody:
-      'Saving a tab with an existing URL asks you how to proceed. Use the toolbar “Scan duplicates” to clean the wall.',
-    helpBasicTitle: 'Basics',
-    helpBasicBody:
-      'Thumbnail restores; title copies the link; use Edit for notes/tags, Expand for snapshots, and Delete to remove. Drag to reorder, or drop onto another card’s title area to stack (restores as a Tab Group).',
-    helpGroupTitle: 'Tab Groups / Stacks',
-    helpGroupBody:
-      'Alt+Shift+G parks a group; stacking tabs also builds a group. The member panel previews, edits, and restores one or all members.',
-    helpSelectTitle: 'Multi-select',
-    helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
-    helpBackupTitle: 'Backup',
-    helpBackupBody:
-      'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder.',
-    helpLimitsTitle: 'Limits',
-    helpLimitsBody:
-      'chrome:// pages cannot be captured or injected into. TabWall storage is not Chrome’s built-in Save group.',
-    groupTabs: '{n} tabs',
-    unnamedGroup: 'Untitled group',
-    restoreGroup: 'Restore entire group',
-    restoreGroupConfirm: 'Restore group “{title}” ({n} tabs)?',
-    expandGroup: 'Show members',
-    collapseGroup: 'Collapse',
-    afterSaveGroupTitle: 'After saving a group',
-    saveGroupCaptureTitle: 'Group capture',
-    captureAll: 'All members',
-    captureNone: 'None (structure only)',
-    captureActive: 'Active tab only',
-    restoreGroupInTitle: 'Restore group to',
-    restoreCurrentWindow: 'Current window',
-    restoreNewWindow: 'New window',
-    memberRestore: 'Restore this tab',
-    storedOnly: 'Cannot restore directly',
-    storedOnlyShort: 'file',
-    restoreRestricted: 'This URL cannot be restored directly; the item was kept.',
-    restoreSkipped: 'Group restored; skipped {n} member(s) that cannot be restored directly.',
-    memberSnapshot: 'Snapshot',
-    memberEdit: 'Note / Tags',
-    editMemberHeading: 'Edit member note / tags',
-  },
-};
+// Media thumb/snap/attachment URL cache + lazy load lives in parkMediaUi.js
+// (bound near SearchUi once page state/DOM refs exist).
+const I18N = self.TabWallI18n;
 
 const gridEl = document.getElementById('grid');
 const canvasView = document.getElementById('canvasView');
@@ -1624,30 +279,7 @@ let pendingImportMode = 'replace';
 const uiLogBuffer = [];
 const UI_LOG_MAX = 150;
 
-function uiLog(level, tag, msg, detail) {
-  const entry = {
-    t: Date.now(),
-    level: level || 'info',
-    tag: String(tag || 'ui'),
-    msg: String(msg || ''),
-    detail: detail != null ? String(detail).slice(0, 800) : '',
-  };
-  uiLogBuffer.push(entry);
-  while (uiLogBuffer.length > UI_LOG_MAX) uiLogBuffer.shift();
-  const line = `[TabWall][${entry.tag}] ${entry.msg}${entry.detail ? ' | ' + entry.detail : ''}`;
-  if (level === 'error') console.error(line);
-  else if (level === 'warn') console.warn(line);
-  else console.log(line);
-  // Best-effort forward to SW buffer
-  sendMessage({
-    type: 'LOG',
-    level: entry.level,
-    tag: entry.tag,
-    msg: entry.msg,
-    detail: entry.detail,
-  }).catch(() => {});
-  return entry;
-}
+function uiLog(...args) { return AppHelpers.uiLog(...args); }
 
 function formatLogEntry(e) {
   const ts = new Date(e.t).toISOString().replace('T', ' ').replace('Z', '');
@@ -1655,23 +287,7 @@ function formatLogEntry(e) {
   return `${ts} [${e.level}] [${e.tag}] ${e.msg}${d}`;
 }
 
-async function refreshDiagLogPanel() {
-  if (!diagLogText) return;
-  const res = await sendMessage({ type: 'GET_LOGS' });
-  const swLogs = res?.ok && Array.isArray(res.logs) ? res.logs : [];
-  const merged = [...swLogs, ...uiLogBuffer].sort((a, b) => a.t - b.t);
-  // Dedupe near-identical consecutive lines
-  const lines = [];
-  let prev = '';
-  for (const e of merged) {
-    const line = formatLogEntry(e);
-    if (line === prev) continue;
-    lines.push(line);
-    prev = line;
-  }
-  diagLogText.value = lines.length ? lines.join('\n') : t('diagLogEmpty');
-  if (diagLogStatus) diagLogStatus.textContent = '';
-}
+async function refreshDiagLogPanel(...args) { return await AppHelpers.refreshDiagLogPanel(...args); }
 
 diagLogRefreshBtn?.addEventListener('click', () => {
   refreshDiagLogPanel();
@@ -1804,7 +420,6 @@ let canvasRailResizeState = null;
 let canvasRailResizeFrame = 0;
 let canvasMinimapProjection = null;
 let canvasMinimapDragState = null;
-let canvasMediaQualityRaf = 0;
 let canvasSessionFallback = false;
 let canvasNeedsInitialCenter = false;
 let canvasInitialCenterRaf = 0;
@@ -1828,10 +443,623 @@ const canvasNodeClickSuppressUntil = new Map();
 let query = '';
 /** @type {'all'|'tag'|'note'} */
 let searchScope = 'all';
-/** @type {{ raw: string, re: RegExp|null, err: string|null }} */
-let compiledSearch = { raw: '', re: null, err: null };
 /** @type {typeof DEFAULT_SETTINGS} */
 let settings = { ...DEFAULT_SETTINGS };
+
+// Media UI (thumb/snap/lazy load) lives in parkMediaUi.js.
+MediaUi.bind({
+  sendMessage: (payload) => sendMessage(payload),
+  getCanvasViewportEl: () => canvasViewportEl,
+  getCanvasNodesEl: () => canvasNodesEl,
+  getCanvasZoom: () => canvasLayout?.viewport?.zoom ?? 1,
+  getAllTabs: () => allTabs,
+  t: (key, vars) => t(key, vars),
+});
+const snapCache = MediaUi.snapCache;
+const cacheSnap = MediaUi.cacheSnap;
+const fetchMediaUrl = MediaUi.fetchMediaUrl;
+const wireCanvasMedia = MediaUi.wireCanvasMedia;
+const observeThumb = MediaUi.observeThumb;
+const observeStickerAttachment = MediaUi.observeStickerAttachment;
+const disconnectCanvasMediaObserver = MediaUi.disconnectCanvasMediaObserver;
+const pruneAttachmentUrlCache = MediaUi.pruneAttachmentUrlCache;
+const refreshCanvasMediaQuality = MediaUi.refreshCanvasMediaQuality;
+const scheduleCanvasMediaQualityRefresh = MediaUi.scheduleCanvasMediaQualityRefresh;
+const mediaKeyForItem = MediaUi.mediaKeyForItem;
+const mediaKeyForMember = MediaUi.mediaKeyForMember;
+
+// Canvas render surface (node HTML / arrange / minimap / connections) lives in parkCanvasRender.js.
+CanvasRender.bind({
+  canvasNodeElements,
+  canvasConnectionElements,
+  canvasMinimapElements,
+  canvasNodeClickSuppressUntil,
+  t: (key, vars) => t(key, vars),
+  escapeHtml: (s) => escapeHtml(s),
+  escapeAttr: (s) => escapeAttr(s),
+  iconSvg: (name) => iconSvg(name),
+  groupCoverHtml: (item, opts) => groupCoverHtml(item, opts),
+  itemTitle: (item) => itemTitle(item),
+  formatSavedAt: (ts) => formatSavedAt(ts),
+  domainOf: (url) => domainOf(url),
+  mediaKeyForItem: (item) => mediaKeyForItem(item),
+  activeCanvasSelection: () => activeCanvasSelection(),
+  canvasPositionFor: (id, index) => canvasPositionFor(id, index),
+  canvasStoreSnapshot: () => canvasStoreSnapshot(),
+  canvasNodeWorldRect: (node) => canvasNodeWorldRect(node),
+  getCanvasSearchContext: () => getCanvasSearchContext(),
+  canvasSearchLayoutFor: (sc) => canvasSearchLayoutFor(sc),
+  isCanvasSearchPreviewActive: (sc) => isCanvasSearchPreviewActive(sc),
+  ensureCanvasStore: () => ensureCanvasStore(),
+  updateSavedBadge: () => updateSavedBadge(),
+  syncCanvasIndexUi: () => syncCanvasIndexUi(),
+  updateBatchBar: () => updateBatchBar(),
+  updateCanvasTransform: () => updateCanvasTransform(),
+  updateCanvasNodeSelection: () => updateCanvasNodeSelection(),
+  wireCanvasNodeActions: (node) => wireCanvasNodeActions(node),
+  wireCanvasMedia: (img) => wireCanvasMedia(img),
+  wireFavicon: (el) => wireFavicon(el),
+  appendGroupSearchHits: (node, item) => appendGroupSearchHits(node, item),
+  wireStickerAttachmentImages: (root, note) => wireStickerAttachmentImages(root, note),
+  cancelCanvasNodeClick: (id) => cancelCanvasNodeClick(id),
+  wireCanvasConnectionPath: (path, connection, connectionId, zone) => wireCanvasConnectionPath(path, connection, connectionId, zone),
+  snapCanvasPosition: (position) => snapCanvasPosition(position),
+  canvasViewportEl: () => canvasViewportEl,
+  canvasConnectionsEl: () => canvasConnectionsEl,
+  canvasNodesEl: () => canvasNodesEl,
+  canvasMinimap: () => canvasMinimap,
+  canvasMinimapViewport: () => canvasMinimapViewport,
+  canvasDropZone: () => canvasDropZone,
+  canvasLayout: () => canvasLayout,
+  canvasConnectionDragState: () => canvasConnectionDragState,
+  canvasConnectionDraftEl: () => canvasConnectionDraftEl,
+  setCanvasConnectionDraftEl: (el) => { canvasConnectionDraftEl = el; },
+  canvasConnectionSourceId: () => canvasConnectionSourceId,
+  selectedCanvasConnectionId: () => selectedCanvasConnectionId,
+  setSelectedCanvasConnectionId: (id) => { selectedCanvasConnectionId = id; },
+  canvasMinimapDragState: () => canvasMinimapDragState,
+  canvasMinimapProjection: () => canvasMinimapProjection,
+  setCanvasMinimapProjection: (p) => { canvasMinimapProjection = p; },
+  allTabs: () => allTabs,
+  query: () => query,
+  settings: () => settings,
+  // Observers live inside parkMediaUi.js; unobserve is best-effort.
+  thumbObserver: () => null,
+  canvasMediaObserver: () => null,
+  canvasItemById: (id) => canvasItemById(id),
+  CANVAS_CONNECTION_HIT_WIDTH: () => CANVAS_CONNECTION_HIT_WIDTH,
+});
+
+// Compact live env for panel + domain modules (no eval/with).
+function bindPanelModules() {
+  const env = Object.create(null);
+  const ro = {
+    "activeCanvasSelection": () => activeCanvasSelection,
+    "applyCanvasRailUi": () => applyCanvasRailUi,
+    "applyCanvasSearchPointerPreview": () => applyCanvasSearchPointerPreview,
+    "applyCanvasZoomAction": () => applyCanvasZoomAction,
+    "applyCardCols": () => applyCardCols,
+    "applyI18n": () => applyI18n,
+    "applyViewMode": () => applyViewMode,
+    "armCanvasNotePlacement": () => armCanvasNotePlacement,
+    "arrangeCanvas": () => arrangeCanvas,
+    "arrangeCanvasAlign": () => arrangeCanvasAlign,
+    "arrangeCanvasGrid": () => arrangeCanvasGrid,
+    "AUTO_SAVE_METADATA_MAX_CONDITIONS": () => AUTO_SAVE_METADATA_MAX_CONDITIONS,
+    "AUTO_SAVE_METADATA_MAX_RULES": () => AUTO_SAVE_METADATA_MAX_RULES,
+    "AUTO_SAVE_METADATA_OPERATORS": () => AUTO_SAVE_METADATA_OPERATORS,
+    "autoBackupEnabledEl": () => autoBackupEnabledEl,
+    "autoBackupErrorText": () => autoBackupErrorText,
+    "autoBackupIntervalMinutes": () => autoBackupIntervalMinutes,
+    "autoBackupIntervalUnitEl": () => autoBackupIntervalUnitEl,
+    "autoBackupIntervalValueEl": () => autoBackupIntervalValueEl,
+    "autoBackupLocationLabelEl": () => autoBackupLocationLabelEl,
+    "autoBackupMaxKeepEl": () => autoBackupMaxKeepEl,
+    "autoBackupNowBtn": () => autoBackupNowBtn,
+    "autoBackupOnChangeEl": () => autoBackupOnChangeEl,
+    "autoBackupShowFolderBtn": () => autoBackupShowFolderBtn,
+    "autoBackupStatusEl": () => autoBackupStatusEl,
+    "autoBackupSubfolderEl": () => autoBackupSubfolderEl,
+    "autoSaveMetadataAddRuleBtn": () => autoSaveMetadataAddRuleBtn,
+    "autoSaveMetadataEnabledEl": () => autoSaveMetadataEnabledEl,
+    "autoSaveMetadataRulesEl": () => autoSaveMetadataRulesEl,
+    "backupStatus": () => backupStatus,
+    "batchBar": () => batchBar,
+    "batchCount": () => batchCount,
+    "batchDelete": () => batchDelete,
+    "batchRestore": () => batchRestore,
+    "Build": () => Build,
+    "cacheSnap": () => cacheSnap,
+    "cancelCanvasConnectionDrag": () => cancelCanvasConnectionDrag,
+    "cancelCanvasNodeClick": () => cancelCanvasNodeClick,
+    "cancelCanvasPointer": () => cancelCanvasPointer,
+    "CANVAS_CONNECTION_MAX_CURVE_OFFSET": () => CANVAS_CONNECTION_MAX_CURVE_OFFSET,
+    "CANVAS_FIT_PADDING": () => CANVAS_FIT_PADDING,
+    "CANVAS_LAYOUT_VERSION": () => CANVAS_LAYOUT_VERSION,
+    "CANVAS_MIDDLE_CLICK_DELAY": () => CANVAS_MIDDLE_CLICK_DELAY,
+    "CANVAS_NODE_CLICK_DELAY": () => CANVAS_NODE_CLICK_DELAY,
+    "CANVAS_RAIL_COLLAPSE_THRESHOLD": () => CANVAS_RAIL_COLLAPSE_THRESHOLD,
+    "CANVAS_RAIL_COLLAPSED_WIDTH": () => CANVAS_RAIL_COLLAPSED_WIDTH,
+    "CANVAS_RAIL_KEYBOARD_STEP": () => CANVAS_RAIL_KEYBOARD_STEP,
+    "CANVAS_RAIL_MAX_WIDTH": () => CANVAS_RAIL_MAX_WIDTH,
+    "CANVAS_WHEEL_ZOOM_FRAME_LIMIT": () => CANVAS_WHEEL_ZOOM_FRAME_LIMIT,
+    "CANVAS_WHEEL_ZOOM_SENSITIVITY": () => CANVAS_WHEEL_ZOOM_SENSITIVITY,
+    "CANVAS_ZOOM_MAX": () => CANVAS_ZOOM_MAX,
+    "CANVAS_ZOOM_MIN": () => CANVAS_ZOOM_MIN,
+    "CANVAS_ZOOM_STEP": () => CANVAS_ZOOM_STEP,
+    "canvasAction": () => canvasAction,
+    "canvasAddNoteBtn": () => canvasAddNoteBtn,
+    "canvasBoundsForItems": () => canvasBoundsForItems,
+    "canvasConnectionClickSuppressUntil": () => canvasConnectionClickSuppressUntil,
+    "canvasConnectionHandlePointForId": () => canvasConnectionHandlePointForId,
+    "canvasConnectionId": () => canvasConnectionId,
+    "canvasConnectionPointerDownAt": () => canvasConnectionPointerDownAt,
+    "canvasConnectionPosition": () => canvasConnectionPosition,
+    "canvasConnectionsEl": () => canvasConnectionsEl,
+    "canvasContextBar": () => canvasContextBar,
+    "canvasContextMenu": () => canvasContextMenu,
+    "canvasDefaultPosition": () => canvasDefaultPosition,
+    "canvasDisplayPosition": () => canvasDisplayPosition,
+    "canvasDropZone": () => canvasDropZone,
+    "canvasItemById": () => canvasItemById,
+    "canvasItemPassesIndexFilter": () => canvasItemPassesIndexFilter,
+    "canvasMinimap": () => canvasMinimap,
+    "canvasMinimapViewport": () => canvasMinimapViewport,
+    "canvasMoveSelected": () => canvasMoveSelected,
+    "canvasNodeActionEntries": () => canvasNodeActionEntries,
+    "canvasNodeClickSuppressUntil": () => canvasNodeClickSuppressUntil,
+    "canvasNodeClickTimers": () => canvasNodeClickTimers,
+    "canvasNodeElements": () => canvasNodeElements,
+    "canvasNodesEl": () => canvasNodesEl,
+    "canvasNodeWorldRectFromState": () => canvasNodeWorldRectFromState,
+    "canvasOrganizeBtn": () => canvasOrganizeBtn,
+    "canvasOrganizePanel": () => canvasOrganizePanel,
+    "canvasPointFromEvent": () => canvasPointFromEvent,
+    "canvasRailResize": () => canvasRailResize,
+    "canvasRailToggle": () => canvasRailToggle,
+    "canvasSearchLayoutFor": () => canvasSearchLayoutFor,
+    "canvasSearchPreviewKey": () => canvasSearchPreviewKey,
+    "canvasSearchPreviewSelectedIds": () => canvasSearchPreviewSelectedIds,
+    "canvasSelectionEl": () => canvasSelectionEl,
+    "canvasSelectNode": () => canvasSelectNode,
+    "canvasStackCancel": () => canvasStackCancel,
+    "canvasStackConfirm": () => canvasStackConfirm,
+    "canvasStackDialog": () => canvasStackDialog,
+    "canvasStackTitle": () => canvasStackTitle,
+    "CanvasStoreApi": () => CanvasStoreApi,
+    "canvasStoreSnapshot": () => canvasStoreSnapshot,
+    "canvasTargetAt": () => canvasTargetAt,
+    "canvasView": () => canvasView,
+    "canvasViewportEl": () => canvasViewportEl,
+    "canvasViewportSize": () => canvasViewportSize,
+    "canvasWheelZoomFactor": () => canvasWheelZoomFactor,
+    "canvasWheelZoomSensitivity": () => canvasWheelZoomSensitivity,
+    "canvasWorldEl": () => canvasWorldEl,
+    "canvasWorldScaleEl": () => canvasWorldScaleEl,
+    "canvasWorldViewportCenter": () => canvasWorldViewportCenter,
+    "canvasZoomMenu": () => canvasZoomMenu,
+    "canvasZoomSlider": () => canvasZoomSlider,
+    "canvasZoomValue": () => canvasZoomValue,
+    "canvasZoomValueWrap": () => canvasZoomValueWrap,
+    "cardColsEl": () => cardColsEl,
+    "centerDedupeBox": () => centerDedupeBox,
+    "clampCols": () => clampCols,
+    "clampInt": () => clampInt,
+    "cleanupCardDragVisual": () => cleanupCardDragVisual,
+    "clearCanvasMiddleClickSequence": () => clearCanvasMiddleClickSequence,
+    "clearCanvasPointerUi": () => clearCanvasPointerUi,
+    "clearStackHover": () => clearStackHover,
+    "closeAllFloatsExcept": () => closeAllFloatsExcept,
+    "closeCanvasContextMenu": () => closeCanvasContextMenu,
+    "closeCanvasStackDialog": () => closeCanvasStackDialog,
+    "closeCanvasZoomMenu": () => closeCanvasZoomMenu,
+    "closeImportPickBox": () => closeImportPickBox,
+    "closeQuickMenus": () => closeQuickMenus,
+    "closeSettingsBox": () => closeSettingsBox,
+    "closeStickerNoteEditor": () => closeStickerNoteEditor,
+    "colsControl": () => colsControl,
+    "colsValueEl": () => colsValueEl,
+    "commitCanvasRailState": () => commitCanvasRailState,
+    "conflictCancel": () => conflictCancel,
+    "conflictIncomingTitle": () => conflictIncomingTitle,
+    "conflictIncomingUrl": () => conflictIncomingUrl,
+    "conflictKeepBoth": () => conflictKeepBoth,
+    "conflictMatchList": () => conflictMatchList,
+    "conflictModal": () => conflictModal,
+    "conflictReplace": () => conflictReplace,
+    "copySavedLink": () => copySavedLink,
+    "countEl": () => countEl,
+    "countStoredOnlyUrls": () => countStoredOnlyUrls,
+    "createCanvasStackFromSelection": () => createCanvasStackFromSelection,
+    "dedupeApplyBtn": () => dedupeApplyBtn,
+    "dedupeBox": () => dedupeBox,
+    "dedupeCloseX": () => dedupeCloseX,
+    "dedupeClustersEl": () => dedupeClustersEl,
+    "dedupeDrag": () => dedupeDrag,
+    "dedupeRescanBtn": () => dedupeRescanBtn,
+    "dedupeStatus": () => dedupeStatus,
+    "DEFAULT_AUTO_BACKUP": () => DEFAULT_AUTO_BACKUP,
+    "DEFAULT_CANVAS_VIEWPORT": () => DEFAULT_CANVAS_VIEWPORT,
+    "DEFAULT_SETTINGS": () => DEFAULT_SETTINGS,
+    "deleteCanvasConnection": () => deleteCanvasConnection,
+    "deleteGroupNote": () => deleteGroupNote,
+    "deleteItem": () => deleteItem,
+    "detachCardDragListeners": () => detachCardDragListeners,
+    "diagLogStatus": () => diagLogStatus,
+    "diagLogText": () => diagLogText,
+    "disconnectCanvasMediaObserver": () => disconnectCanvasMediaObserver,
+    "domainOf": () => domainOf,
+    "DRAG_THRESHOLD": () => DRAG_THRESHOLD,
+    "editBox": () => editBox,
+    "editChips": () => editChips,
+    "editHeading": () => editHeading,
+    "editItemTitle": () => editItemTitle,
+    "editNote": () => editNote,
+    "editSub": () => editSub,
+    "editTagDraft": () => editTagDraft,
+    "ensureCanvasStore": () => ensureCanvasStore,
+    "escapeAttr": () => escapeAttr,
+    "escapeHtml": () => escapeHtml,
+    "exportLiteBackup": () => exportLiteBackup,
+    "fetchMediaUrl": () => fetchMediaUrl,
+    "findStackTargetAt": () => findStackTargetAt,
+    "finishCanvasSearchPointer": () => finishCanvasSearchPointer,
+    "flipCards": () => flipCards,
+    "floatBackdrop": () => floatBackdrop,
+    "flushCanvasPointerFrame": () => flushCanvasPointerFrame,
+    "formatLogEntry": () => formatLogEntry,
+    "formatNoteBytes": () => formatNoteBytes,
+    "formatNoteMediaError": () => formatNoteMediaError,
+    "formatSavedAt": () => formatSavedAt,
+    "getCanvasSearchContext": () => getCanvasSearchContext,
+    "getCanvasVisibleTabs": () => getCanvasVisibleTabs,
+    "getGroupSearchMatch": () => getGroupSearchMatch,
+    "getVisibleTabs": () => getVisibleTabs,
+    "gridEl": () => gridEl,
+    "gridNodeElements": () => gridNodeElements,
+    "gridNodeRenderKey": () => gridNodeRenderKey,
+    "GROUP_COLORS": () => GROUP_COLORS,
+    "groupCoverHtml": () => groupCoverHtml,
+    "handleCanvasContextMenuAction": () => handleCanvasContextMenuAction,
+    "handleCardSelectClick": () => handleCardSelectClick,
+    "helpBox": () => helpBox,
+    "helpBtn": () => helpBtn,
+    "iconSvg": () => iconSvg,
+    "importPickBox": () => importPickBox,
+    "importPickCount": () => importPickCount,
+    "importPickHintEl": () => importPickHintEl,
+    "importPickList": () => importPickList,
+    "importPickStatus": () => importPickStatus,
+    "importPreviewBody": () => importPreviewBody,
+    "importPreviewOverlay": () => importPreviewOverlay,
+    "importPreviewTitle": () => importPreviewTitle,
+    "importPreviewUrl": () => importPreviewUrl,
+    "initDedupeUi": () => initDedupeUi,
+    "initQuickCaptureUi": () => initQuickCaptureUi,
+    "isCanvasContextMenuOpen": () => isCanvasContextMenuOpen,
+    "isCanvasSearchPreviewActive": () => isCanvasSearchPreviewActive,
+    "isMultiSelectModifier": () => isMultiSelectModifier,
+    "isStoredOnlyUrl": () => isStoredOnlyUrl,
+    "isTypingTarget": () => isTypingTarget,
+    "itemTitle": () => itemTitle,
+    "lbCounter": () => lbCounter,
+    "lbGroupMosaic": () => lbGroupMosaic,
+    "lbImage": () => lbImage,
+    "lbNext": () => lbNext,
+    "lbPrev": () => lbPrev,
+    "lbRestore": () => lbRestore,
+    "lbSnapHint": () => lbSnapHint,
+    "lbTitle": () => lbTitle,
+    "lbUrl": () => lbUrl,
+    "lightbox": () => lightbox,
+    "linkTextForItem": () => linkTextForItem,
+    "loadList": () => loadList,
+    "loadSettings": () => loadSettings,
+    "loadStatusEl": () => loadStatusEl,
+    "manualAddPanel": () => manualAddPanel,
+    "manualAddTopBtn": () => manualAddTopBtn,
+    "markTagSuggestIndexDirty": () => markTagSuggestIndexDirty,
+    "Media": () => Media,
+    "mediaKeyForItem": () => mediaKeyForItem,
+    "mediaKeyForMember": () => mediaKeyForMember,
+    "membersBox": () => membersBox,
+    "membersList": () => membersList,
+    "membersTitle": () => membersTitle,
+    "moreToolsBtn": () => moreToolsBtn,
+    "moreToolsMenu": () => moreToolsMenu,
+    "normalizeAutoBackup": () => normalizeAutoBackup,
+    "normalizeCanvasCurveOffset": () => normalizeCanvasCurveOffset,
+    "normalizeCanvasLayoutLocal": () => normalizeCanvasLayoutLocal,
+    "normalizeCanvasRailSettings": () => normalizeCanvasRailSettings,
+    "normalizeCanvasRailWidth": () => normalizeCanvasRailWidth,
+    "normalizeNoteProjection": () => normalizeNoteProjection,
+    "normalizeParkedList": () => normalizeParkedList,
+    "normalizeSortBy": () => normalizeSortBy,
+    "NoteMedia": () => NoteMedia,
+    "observeStickerAttachment": () => observeStickerAttachment,
+    "observeThumb": () => observeThumb,
+    "openCanvasContextMenu": () => openCanvasContextMenu,
+    "openCanvasGroupLightbox": () => openCanvasGroupLightbox,
+    "openCanvasStackDialog": () => openCanvasStackDialog,
+    "openConflictModal": () => openConflictModal,
+    "openDedupeBtn": () => openDedupeBtn,
+    "openEditBox": () => openEditBox,
+    "openLightbox": () => openLightbox,
+    "openManualAddPanel": () => openManualAddPanel,
+    "openMembersBox": () => openMembersBox,
+    "openPreSaveModal": () => openPreSaveModal,
+    "openStickerNoteEditor": () => openStickerNoteEditor,
+    "openWithSearchFocusEl": () => openWithSearchFocusEl,
+    "PARENT_ORIGIN": () => PARENT_ORIGIN,
+    "pinnedOnlyBtn": () => pinnedOnlyBtn,
+    "placeFloatBox": () => placeFloatBox,
+    "placeMembersBoxCentered": () => placeMembersBoxCentered,
+    "placeStickerNoteAt": () => placeStickerNoteAt,
+    "postToParent": () => postToParent,
+    "preSaveCancel": () => preSaveCancel,
+    "preSaveChips": () => preSaveChips,
+    "preSaveConfirm": () => preSaveConfirm,
+    "preSaveError": () => preSaveError,
+    "preSaveModal": () => preSaveModal,
+    "preSaveNote": () => preSaveNote,
+    "preSaveTagDraft": () => preSaveTagDraft,
+    "preSaveTitle": () => preSaveTitle,
+    "preSaveUrl": () => preSaveUrl,
+    "pruneAttachmentUrlCache": () => pruneAttachmentUrlCache,
+    "queueCardPointerMove": () => queueCardPointerMove,
+    "quickAddBtn": () => quickAddBtn,
+    "quickAddGroupMenu": () => quickAddGroupMenu,
+    "quickAddMenu": () => quickAddMenu,
+    "quickAddMenuBtn": () => quickAddMenuBtn,
+    "quickAddTabMenu": () => quickAddTabMenu,
+    "quickAddUrlMenu": () => quickAddUrlMenu,
+    "refreshCanvasMediaQuality": () => refreshCanvasMediaQuality,
+    "refreshCanvasSearchPreview": () => refreshCanvasSearchPreview,
+    "refreshDiagLogPanel": () => refreshDiagLogPanel,
+    "refreshTagManager": () => refreshTagManager,
+    "removeGridNode": () => removeGridNode,
+    "renderCanvas": () => renderCanvas,
+    "renderCanvasConnections": () => renderCanvasConnections,
+    "renderCanvasMinimap": () => renderCanvasMinimap,
+    "renderCanvasStackIndex": () => renderCanvasStackIndex,
+    "renderGrid": () => renderGrid,
+    "resetCanvasNotePlacement": () => resetCanvasNotePlacement,
+    "resetCanvasView": () => resetCanvasView,
+    "restoreItem": () => restoreItem,
+    "restoreMember": () => restoreMember,
+    "runCanvasNodeAction": () => runCanvasNodeAction,
+    "runLocalAutoBackup": () => runLocalAutoBackup,
+    "saveSettings": () => saveSettings,
+    "scheduleCanvasMediaQualityRefresh": () => scheduleCanvasMediaQualityRefresh,
+    "scheduleInitialCanvasCenter": () => scheduleInitialCanvasCenter,
+    "SEARCH_HIT_LIMIT": () => SEARCH_HIT_LIMIT,
+    "searchEl": () => searchEl,
+    "SearchQuery": () => SearchQuery,
+    "selectModeBtn": () => selectModeBtn,
+    "sendMessage": () => sendMessage,
+    "setCanvasActiveTool": () => setCanvasActiveTool,
+    "setCanvasIndexFilter": () => setCanvasIndexFilter,
+    "setCanvasSelection": () => setCanvasSelection,
+    "setCanvasZoom": () => setCanvasZoom,
+    "setClusterKeepMode": () => setClusterKeepMode,
+    "setSearchQueryFromInput": () => setSearchQueryFromInput,
+    "setSelectMode": () => setSelectMode,
+    "SETTINGS_KEY": () => SETTINGS_KEY,
+    "settingsBox": () => settingsBox,
+    "settingsBtn": () => settingsBtn,
+    "settingsCardCols": () => settingsCardCols,
+    "settingsColsValue": () => settingsColsValue,
+    "settingsDoneBtn": () => settingsDoneBtn,
+    "settingsEl": () => settingsEl,
+    "settingsNav": () => settingsNav,
+    "settingsPreSaveEdit": () => settingsPreSaveEdit,
+    "settingsSaveStatus": () => settingsSaveStatus,
+    "showCopyToast": () => showCopyToast,
+    "snapCache": () => snapCache,
+    "snapCanvasPosition": () => snapCanvasPosition,
+    "snapshotCardRects": () => snapshotCardRects,
+    "sortByEl": () => sortByEl,
+    "STACK_DWELL_MS": () => STACK_DWELL_MS,
+    "stickerNoteAttachments": () => stickerNoteAttachments,
+    "stickerNoteBox": () => stickerNoteBox,
+    "stickerNoteChips": () => stickerNoteChips,
+    "stickerNoteDrop": () => stickerNoteDrop,
+    "stickerNoteMarkdown": () => stickerNoteMarkdown,
+    "stickerNoteMediaStatus": () => stickerNoteMediaStatus,
+    "stickerNotePreview": () => stickerNotePreview,
+    "stickerNoteSave": () => stickerNoteSave,
+    "stickerNoteTagDraft": () => stickerNoteTagDraft,
+    "stickerNoteTitle": () => stickerNoteTitle,
+    "suppressCanvasNodeClick": () => suppressCanvasNodeClick,
+    "syncAutoBackupUi": () => syncAutoBackupUi,
+    "syncCanvasOrganizeUi": () => syncCanvasOrganizeUi,
+    "syncFloatBackdrop": () => syncFloatBackdrop,
+    "syncQuickCaptureAvailability": () => syncQuickCaptureAvailability,
+    "syncSearchRegexUi": () => syncSearchRegexUi,
+    "syncSearchScopeUi": () => syncSearchScopeUi,
+    "syncSettingsUi": () => syncSettingsUi,
+    "t": () => t,
+    "tagAddInput": () => tagAddInput,
+    "tagManageList": () => tagManageList,
+    "tagsBox": () => tagsBox,
+    "tagsBtn": () => tagsBtn,
+    "tagSearch": () => tagSearch,
+    "themeBtn": () => themeBtn,
+    "toggleCanvasZoomMenu": () => toggleCanvasZoomMenu,
+    "toggleHeaderPopover": () => toggleHeaderPopover,
+    "togglePinned": () => togglePinned,
+    "toggleSelect": () => toggleSelect,
+    "UI_LOG_MAX": () => UI_LOG_MAX,
+    "uiLog": () => uiLog,
+    "uiLogBuffer": () => uiLogBuffer,
+    "updateBatchBar": () => updateBatchBar,
+    "updateCanvasNodePositions": () => updateCanvasNodePositions,
+    "updateCanvasNodeSelection": () => updateCanvasNodeSelection,
+    "updateCanvasTransform": () => updateCanvasTransform,
+    "updateGridSelectionUi": () => updateGridSelectionUi,
+    "updateSavedBadge": () => updateSavedBadge,
+    "versionBadge": () => versionBadge,
+    "viewModeBtn": () => viewModeBtn,
+    "viewModeCanvasIcon": () => viewModeCanvasIcon,
+    "viewModeLabel": () => viewModeLabel,
+    "viewModeListIcon": () => viewModeListIcon,
+    "withUiActionLock": () => withUiActionLock,
+  };
+  const rw = {
+    "allTabs": { get: () => allTabs, set: (v) => { allTabs = v; } },
+    "autoBackupLocalRunning": { get: () => autoBackupLocalRunning, set: (v) => { autoBackupLocalRunning = v; } },
+    "canvasActiveTool": { get: () => canvasActiveTool, set: (v) => { canvasActiveTool = v; } },
+    "canvasConnectionDragState": { get: () => canvasConnectionDragState, set: (v) => { canvasConnectionDragState = v; } },
+    "canvasConnectionSourceId": { get: () => canvasConnectionSourceId, set: (v) => { canvasConnectionSourceId = v; } },
+    "canvasContextMenuState": { get: () => canvasContextMenuState, set: (v) => { canvasContextMenuState = v; } },
+    "canvasGeometryObserver": { get: () => canvasGeometryObserver, set: (v) => { canvasGeometryObserver = v; } },
+    "canvasIndexFilter": { get: () => canvasIndexFilter, set: (v) => { canvasIndexFilter = v; } },
+    "canvasInitialCenterRaf": { get: () => canvasInitialCenterRaf, set: (v) => { canvasInitialCenterRaf = v; } },
+    "canvasInteractionGeneration": { get: () => canvasInteractionGeneration, set: (v) => { canvasInteractionGeneration = v; } },
+    "canvasLastMiddleClickAt": { get: () => canvasLastMiddleClickAt, set: (v) => { canvasLastMiddleClickAt = v; } },
+    "canvasLastPointerEvent": { get: () => canvasLastPointerEvent, set: (v) => { canvasLastPointerEvent = v; } },
+    "canvasLayout": { get: () => canvasLayout, set: (v) => { canvasLayout = v; } },
+    "canvasLoadGeneration": { get: () => canvasLoadGeneration, set: (v) => { canvasLoadGeneration = v; } },
+    "canvasMiddleClickTimer": { get: () => canvasMiddleClickTimer, set: (v) => { canvasMiddleClickTimer = v; } },
+    "canvasMinimapDragState": { get: () => canvasMinimapDragState, set: (v) => { canvasMinimapDragState = v; } },
+    "canvasMinimapProjection": { get: () => canvasMinimapProjection, set: (v) => { canvasMinimapProjection = v; } },
+    "canvasNeedsInitialCenter": { get: () => canvasNeedsInitialCenter, set: (v) => { canvasNeedsInitialCenter = v; } },
+    "canvasNotePlacementArmed": { get: () => canvasNotePlacementArmed, set: (v) => { canvasNotePlacementArmed = v; } },
+    "canvasPointerRaf": { get: () => canvasPointerRaf, set: (v) => { canvasPointerRaf = v; } },
+    "canvasPointerState": { get: () => canvasPointerState, set: (v) => { canvasPointerState = v; } },
+    "canvasQueuedPointerEvent": { get: () => canvasQueuedPointerEvent, set: (v) => { canvasQueuedPointerEvent = v; } },
+    "canvasRailResizeFrame": { get: () => canvasRailResizeFrame, set: (v) => { canvasRailResizeFrame = v; } },
+    "canvasRailResizeState": { get: () => canvasRailResizeState, set: (v) => { canvasRailResizeState = v; } },
+    "canvasSearchPreview": { get: () => canvasSearchPreview, set: (v) => { canvasSearchPreview = v; } },
+    "canvasSessionFallback": { get: () => canvasSessionFallback, set: (v) => { canvasSessionFallback = v; } },
+    "canvasSnapToGrid": { get: () => canvasSnapToGrid, set: (v) => { canvasSnapToGrid = v; } },
+    "canvasSpacePressed": { get: () => canvasSpacePressed, set: (v) => { canvasSpacePressed = v; } },
+    "canvasStore": { get: () => canvasStore, set: (v) => { canvasStore = v; } },
+    "canvasZoomWheelFrame": { get: () => canvasZoomWheelFrame, set: (v) => { canvasZoomWheelFrame = v; } },
+    "canvasZoomWheelState": { get: () => canvasZoomWheelState, set: (v) => { canvasZoomWheelState = v; } },
+    "cardPointerRaf": { get: () => cardPointerRaf, set: (v) => { cardPointerRaf = v; } },
+    "cardQueuedPointerEvent": { get: () => cardQueuedPointerEvent, set: (v) => { cardQueuedPointerEvent = v; } },
+    "copyToastTimer": { get: () => copyToastTimer, set: (v) => { copyToastTimer = v; } },
+    "dedupeState": { get: () => dedupeState, set: (v) => { dedupeState = v; } },
+    "dragState": { get: () => dragState, set: (v) => { dragState = v; } },
+    "editContext": { get: () => editContext, set: (v) => { editContext = v; } },
+    "editingId": { get: () => editingId, set: (v) => { editingId = v; } },
+    "editTagList": { get: () => editTagList, set: (v) => { editTagList = v; } },
+    "expandedId": { get: () => expandedId, set: (v) => { expandedId = v; } },
+    "expandedMeta": { get: () => expandedMeta, set: (v) => { expandedMeta = v; } },
+    "gridNodeIsList": { get: () => gridNodeIsList, set: (v) => { gridNodeIsList = v; } },
+    "lastAnchorId": { get: () => lastAnchorId, set: (v) => { lastAnchorId = v; } },
+    "lightboxNav": { get: () => lightboxNav, set: (v) => { lightboxNav = v; } },
+    "loadListTimer": { get: () => loadListTimer, set: (v) => { loadListTimer = v; } },
+    "membersGroupId": { get: () => membersGroupId, set: (v) => { membersGroupId = v; } },
+    "pendingImportPick": { get: () => pendingImportPick, set: (v) => { pendingImportPick = v; } },
+    "pinnedOnly": { get: () => pinnedOnly, set: (v) => { pinnedOnly = v; } },
+    "preSaveContext": { get: () => preSaveContext, set: (v) => { preSaveContext = v; } },
+    "preSaveTagList": { get: () => preSaveTagList, set: (v) => { preSaveTagList = v; } },
+    "query": { get: () => query, set: (v) => { query = v; } },
+    "searchScope": { get: () => searchScope, set: (v) => { searchScope = v; } },
+    "selectedCanvasConnectionId": { get: () => selectedCanvasConnectionId, set: (v) => { selectedCanvasConnectionId = v; } },
+    "selectedIds": { get: () => selectedIds, set: (v) => { selectedIds = v; } },
+    "selectMode": { get: () => selectMode, set: (v) => { selectMode = v; } },
+    "settings": { get: () => settings, set: (v) => { settings = v; } },
+    "settingsSection": { get: () => settingsSection, set: (v) => { settingsSection = v; } },
+    "stickerNoteContext": { get: () => stickerNoteContext, set: (v) => { stickerNoteContext = v; } },
+    "stickerNoteDraftAttachments": { get: () => stickerNoteDraftAttachments, set: (v) => { stickerNoteDraftAttachments = v; } },
+    "stickerNoteMediaBusy": { get: () => stickerNoteMediaBusy, set: (v) => { stickerNoteMediaBusy = v; } },
+    "stickerNoteTagList": { get: () => stickerNoteTagList, set: (v) => { stickerNoteTagList = v; } },
+    "stickerNoteUsageRequest": { get: () => stickerNoteUsageRequest, set: (v) => { stickerNoteUsageRequest = v; } },
+    "suppressSettingsOnChanged": { get: () => suppressSettingsOnChanged, set: (v) => { suppressSettingsOnChanged = v; } },
+    "suppressSettingsTimer": { get: () => suppressSettingsTimer, set: (v) => { suppressSettingsTimer = v; } },
+    "tagFilter": { get: () => tagFilter, set: (v) => { tagFilter = v; } },
+    "tagStats": { get: () => tagStats, set: (v) => { tagStats = v; } },
+  };
+  for (const [name, get] of Object.entries(ro)) {
+    Object.defineProperty(env, name, { enumerable: true, configurable: true, get });
+  }
+  for (const [name, acc] of Object.entries(rw)) {
+    Object.defineProperty(env, name, { enumerable: true, configurable: true, get: acc.get, set: acc.set });
+  }
+  SettingsUi.bind(env);
+  ImportExport.bind(env);
+  StickerUi.bind(env);
+  CanvasIx.bind(env);
+  CanvasChrome.bind(env);
+  ListUi.bind(env);
+  WorkspaceUi.bind(env);
+  AppHelpers.bind(env);
+}
+bindPanelModules();
+
+// Search match/compile lives in parkSearchQuery.js (bind getters to page state).
+SearchQuery.bind({
+  getSearchScope: () => searchScope,
+  getSearchRegex: () => Boolean(settings.searchRegex),
+  getQuery: () => query,
+});
+// Search UI (tag suggest / input / regex) lives in parkSearchUi.js.
+SearchUi.bind({
+  getSearchEl: () => searchEl,
+  getSearchRegexBtn: () => searchRegexBtn,
+  getSearchWrap: () => searchWrap,
+  getSearchScopeChip: () => searchScopeChip,
+  getSearchTagSuggest: () => searchTagSuggest,
+  getQuery: () => query,
+  setQuery: (q) => {
+    query = q;
+  },
+  getSearchScope: () => searchScope,
+  setSearchScope: (s) => {
+    searchScope = s;
+  },
+  getSearchRegex: () => Boolean(settings.searchRegex),
+  getAllTabs: () => allTabs,
+  t: (key, vars) => t(key, vars),
+  itemTagNames: (item) => SearchQuery.itemTagNames(item),
+  isTagExpressionMode: () => SearchQuery.isTagExpressionMode(),
+  compileSearchQuery: (raw) => SearchQuery.compileSearchQuery(raw),
+  resetCompiledSearch: () => SearchQuery.resetCompiledSearch(),
+  renderGrid: () => renderGrid(),
+  saveSettings: (partial) => saveSettings(partial),
+});
+SearchUi.init();
+function syncSearchRegexUi() {
+  return SearchUi.syncSearchRegexUi();
+}
+function syncSearchScopeUi() {
+  return SearchUi.syncSearchScopeUi();
+}
+function setSearchQueryFromInput(opts) {
+  return SearchUi.setSearchQueryFromInput(opts);
+}
+function isSearchInCustomMode() {
+  return SearchUi.isSearchInCustomMode();
+}
+async function resetSearchModesToDefault() {
+  return SearchUi.resetSearchModesToDefault();
+}
+function markTagSuggestIndexDirty() {
+  SearchUi.markTagSuggestIndexDirty();
+}
+const domainOf = SearchQuery.domainOf;
+const parseRegexInput = SearchQuery.parseRegexInput;
+const compileSearchQuery = SearchQuery.compileSearchQuery;
+const isTagExpressionMode = SearchQuery.isTagExpressionMode;
+const parseTagQuery = SearchQuery.parseTagQuery;
+const compileTagQuery = SearchQuery.compileTagQuery;
+const tagsMatchQuery = SearchQuery.tagsMatchQuery;
+const itemTagNames = SearchQuery.itemTagNames;
+const memberTagNames = SearchQuery.memberTagNames;
+const groupMetaTagNames = SearchQuery.groupMetaTagNames;
+const matchesPlainQuery = SearchQuery.matchesPlainQuery;
+const textMatchesQuery = SearchQuery.textMatchesQuery;
+const itemHaystack = SearchQuery.itemHaystack;
+const memberHaystack = SearchQuery.memberHaystack;
+const groupMetaHaystack = SearchQuery.groupMetaHaystack;
+const getMatchingMembers = SearchQuery.getMatchingMembers;
+const groupMetaMatches = SearchQuery.groupMetaMatches;
+const getGroupSearchMatch = SearchQuery.getGroupSearchMatch;
+const matchesQuery = SearchQuery.matchesQuery;
+
 /** @type {string|null} */
 let expandedId = null;
 /** @type {{ type?: 'member' | 'group', groupId?: string } | null} */
@@ -1861,14 +1089,6 @@ let preSaveContext = null;
 /** @type {Array<{ name: string, count: number }>} */
 let tagStats = [];
 let tagFilter = '';
-let tagSuggestOpen = false;
-/** @type {Array<{ name: string, count: number }>} */
-let tagSuggestRows = [];
-let tagSuggestActive = -1;
-/** @type {Map<string, { name: string, count: number }>|null} */
-let tagSuggestIndex = null;
-let tagSuggestIndexDirty = true;
-const TAG_SUGGEST_LIMIT = 12;
 let pinnedOnly = false;
 let canvasIndexFilter = 'all';
 /** @type {{ key: string, revision: number, positions: Record<string, any>, mode: 'grid'|'align' } | null} */
@@ -1881,19 +1101,7 @@ let selectedIds = new Set();
 let lastAnchorId = null;
 let copyToastTimer = null;
 
-function canvasStoreSnapshot() {
-  return canvasStore?.getState?.() || {
-    items: allTabs,
-    layout: canvasLayout,
-    baseLayout: canvasLayout,
-    viewport: { ...canvasLayout.viewport },
-    revision: 0,
-    selectedIds: new Set(selectedIds),
-    interaction: null,
-    pendingOperations: [],
-    sync: { status: 'idle', attempt: 0, error: '' },
-  };
-}
+function canvasStoreSnapshot(...args) { return AppHelpers.canvasStoreSnapshot(...args); }
 
 function activeCanvasSelection() {
   return canvasStoreSnapshot().selectedIds;
@@ -1904,57 +1112,11 @@ function clearAllSelections() {
   selectedIds.clear();
 }
 
-function updateCanvasSyncStatus(sync = canvasStoreSnapshot().sync) {
-  const el = document.getElementById('canvasSyncStatus');
-  if (!el) return;
-  const labels = {
-    dirty: '未同步',
-    saving: '儲存中',
-    retrying: '重試中',
-    error: '同步失敗',
-  };
-  el.textContent = labels[sync?.status] || '';
-  if (sync?.status) el.dataset.state = sync.status;
-  else delete el.dataset.state;
-  if (sync?.error) el.title = String(sync.error);
-  else el.removeAttribute('title');
-}
+function updateCanvasSyncStatus(...args) { return AppHelpers.updateCanvasSyncStatus(...args); }
 
-function handleCanvasStoreChange(snapshot, action = {}) {
-  canvasLayout = snapshot.layout;
-  if (settings.viewMode === 'canvas') selectedIds = new Set(snapshot.selectedIds);
-  updateCanvasSyncStatus(snapshot.sync);
-  const fullRender = new Set(['ITEMS_SET', 'HYDRATE', 'REMOTE_LAYOUT']).has(action.type);
-  if (fullRender && settings.viewMode === 'canvas' && !canvasSessionFallback) renderCanvas();
-  else if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
-    updateCanvasTransform();
-    const searchContext = getCanvasSearchContext();
-    updateCanvasNodePositions(snapshot, searchContext);
-    updateCanvasNodeSelection();
-    renderCanvasConnections(searchContext);
-    renderCanvasMinimap(searchContext.items);
-    updateBatchBar();
-    if (action.type === 'OPERATION_COMMIT' || action.type === 'SYNC_ERROR' || action.type === 'SYNC_FAILED') {
-      if (action.operation?.type === 'zoom') scheduleCanvasMediaQualityRefresh();
-      else refreshCanvasMediaQuality();
-    }
-  }
-}
+function handleCanvasStoreChange(...args) { return AppHelpers.handleCanvasStoreChange(...args); }
 
-function ensureCanvasStore() {
-  if (canvasStore || !CanvasStoreApi?.createCanvasStore) return canvasStore;
-  canvasStore = CanvasStoreApi.createCanvasStore({
-    items: allTabs,
-    layout: canvasLayout,
-    sendPatch: ({ layout, baseRevision }) => sendMessage({
-      type: 'PATCH_CANVAS_LAYOUT',
-      layout,
-      baseRevision,
-    }),
-    onChange: handleCanvasStoreChange,
-  });
-  return canvasStore;
-}
+function ensureCanvasStore(...args) { return AppHelpers.ensureCanvasStore(...args); }
 
 ensureCanvasStore();
 
@@ -2074,88 +1236,15 @@ function applyI18n() {
   if (typeof renderAutoSaveMetadataRules === 'function') renderAutoSaveMetadataRules();
 }
 
-async function closeStandaloneTab() {
-  try {
-    const tab = await chrome.tabs.getCurrent();
-    if (tab?.id != null) {
-      await chrome.tabs.remove(tab.id);
-      return;
-    }
-  } catch {
-    // Fall back to window.close below.
-  }
-  try {
-    window.close();
-  } catch {
-    // ignore
-  }
-}
+async function closeStandaloneTab(...args) { return await AppHelpers.closeStandaloneTab(...args); }
 
-function requestHostClose() {
-  if (window.parent && window.parent !== window) {
-    try {
-      if (postToParent({ type: 'TABWALL_CLOSE' })) return;
-    } catch {
-      // ignore
-    }
-    try {
-      window.close();
-    } catch {
-      // ignore
-    }
-    return;
-  }
-  closeStandaloneTab();
-}
+function requestHostClose(...args) { return AppHelpers.requestHostClose(...args); }
 
-function sendMessage(payload) {
-  return new Promise((resolve) => {
-    try {
-      chrome.runtime.sendMessage(payload, (response) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(response || { ok: false, error: 'empty_response' });
-      });
-    } catch (err) {
-      resolve({ ok: false, error: String(err) });
-    }
-  });
-}
+function sendMessage(...args) { return AppHelpers.sendMessage(...args); }
 
-function quickCaptureErrorText(error) {
-  switch (String(error || '')) {
-    case 'self_tab':
-      return t('quickAddSelf');
-    case 'restricted_url':
-      return t('quickAddRestricted');
-    case 'not_in_group':
-      return t('quickAddNoGroup');
-    case 'no_tab':
-      return t('quickAddNoTarget');
-    default:
-      return t('quickAddFailed', { error: error || 'unknown' });
-  }
-}
+function quickCaptureErrorText(...args) { return WorkspaceUi.quickCaptureErrorText(...args); }
 
-async function handleQuickCaptureResult(result) {
-  if (!result) return;
-  if (!result.ok) {
-    showCopyToast(quickCaptureErrorText(result.error));
-    return;
-  }
-  if (result.presave) {
-    // Pre-save edit panel is about to open in this same overlay — nothing saved yet.
-    return;
-  }
-  if (result.conflict) {
-    showCopyToast(t('quickAddSaved'));
-    return;
-  }
-  showCopyToast(result.tabCount ? t('quickAddGroupSaved') : t('quickAddSaved'));
-  await loadList();
-}
+async function handleQuickCaptureResult(...args) { return await WorkspaceUi.handleQuickCaptureResult(...args); }
 
 function setHeaderPopoverState(button, panel, open) {
   if (!button || !panel) return;
@@ -2216,83 +1305,11 @@ function syncCanvasOrganizeUi(mode = settings.viewMode) {
   if (!visible) setHeaderPopoverState(canvasOrganizeBtn, canvasOrganizePanel, false);
 }
 
-function syncQuickCaptureAvailability() {
-  const hasHost = Boolean(PARENT_ORIGIN);
-  if (quickAddBtn) {
-    quickAddBtn.disabled = !hasHost;
-    quickAddBtn.title = hasHost ? t('quickAddTab') : t('quickAddSelf');
-    quickAddBtn.setAttribute('aria-label', t('quickAddTab'));
-  }
-  if (quickAddTabMenu) {
-    quickAddTabMenu.disabled = !hasHost;
-    quickAddTabMenu.title = hasHost ? t('quickAddTab') : t('quickAddSelf');
-  }
-  if (quickAddGroupMenu) {
-    quickAddGroupMenu.disabled = !hasHost;
-    quickAddGroupMenu.title = hasHost ? t('quickAddGroup') : t('quickAddSelf');
-  }
-}
+function syncQuickCaptureAvailability(...args) { return AppHelpers.syncQuickCaptureAvailability(...args); }
 
-async function requestQuickCapture(kind) {
-  closeQuickMenus();
-  if (kind === 'url') {
-    openManualAddPanel();
-    return;
-  }
-  if (kind === 'tab' && !PARENT_ORIGIN) {
-    showCopyToast(t('quickAddSelf'));
-    return;
-  }
-  if (kind === 'tab' && PARENT_ORIGIN) {
-    if (!postToParent({ type: 'TABWALL_SAVE_ACTIVE' })) {
-      showCopyToast(t('quickAddNoTarget'));
-    }
-    return;
-  }
-  const result = await sendMessage({ type: 'SAVE_ACTIVE_GROUP' });
-  await handleQuickCaptureResult(result);
-}
+async function requestQuickCapture(...args) { return await WorkspaceUi.requestQuickCapture(...args); }
 
-function initQuickCaptureUi() {
-  syncQuickCaptureAvailability();
-  quickAddBtn?.addEventListener('click', () => requestQuickCapture('tab'));
-  quickAddTabMenu?.addEventListener('click', () => requestQuickCapture('tab'));
-  quickAddGroupMenu?.addEventListener('click', () => requestQuickCapture('group'));
-  quickAddUrlMenu?.addEventListener('click', () => requestQuickCapture('url'));
-  canvasOrganizeBtn?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = Boolean(canvasOrganizePanel && canvasOrganizePanel.hidden);
-    toggleHeaderPopover(canvasOrganizeBtn, canvasOrganizePanel, open);
-  });
-  manualAddTopBtn?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = Boolean(manualAddPanel && manualAddPanel.hidden);
-    toggleHeaderPopover(manualAddTopBtn, manualAddPanel, open);
-  });
-  quickAddMenuBtn?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = Boolean(quickAddMenu && quickAddMenu.hidden);
-    closeQuickMenus();
-    if (quickAddMenu && open) {
-      quickAddMenu.hidden = false;
-      quickAddMenuBtn.setAttribute('aria-expanded', 'true');
-    }
-  });
-  moreToolsBtn?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = Boolean(moreToolsMenu && moreToolsMenu.hidden);
-    closeQuickMenus();
-    if (moreToolsMenu && open) {
-      moreToolsMenu.hidden = false;
-      moreToolsBtn.setAttribute('aria-expanded', 'true');
-    }
-  });
-  document.addEventListener('pointerdown', (event) => {
-    if (!event.target.closest?.('#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap')) {
-      closeQuickMenus();
-    }
-  });
-}
+function initQuickCaptureUi(...args) { return WorkspaceUi.initQuickCaptureUi(...args); }
 
 function escapeHtml(str) {
   return String(str ?? '')
@@ -2305,14 +1322,6 @@ function escapeHtml(str) {
 
 function escapeAttr(str) {
   return escapeHtml(str).replace(/`/g, '&#96;');
-}
-
-function domainOf(url) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return '';
-  }
 }
 
 function isTypingTarget(el) {
@@ -2331,9 +1340,6 @@ function normalizeSortBy(value) {
   return value === 'domain' || value === 'group-first' ? value : 'newest';
 }
 
-
-// ─── Settings ──────────────────────────────────────────────────────
-
 function clampInt(n, min, max, fallback) {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -2351,1406 +1357,162 @@ function normalizeCanvasRailSettings(target) {
   return target;
 }
 
-function newAutoSaveMetadataRuleId() {
-  try {
-    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
-  } catch {
-    // Fall through to an opaque local id.
-  }
-  return `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+function newAutoSaveMetadataRuleId(...args) { return SettingsUi.newAutoSaveMetadataRuleId(...args); }
 
-function normalizeAutoSaveMetadataTags(tags) {
-  if (!Array.isArray(tags)) return [];
-  return [...new Set(
-    tags
-      .map((tag) => String(tag ?? '').trim().slice(0, 128))
-      .filter(Boolean)
-  )].slice(0, 100);
-}
+function normalizeAutoSaveMetadataTags(...args) { return SettingsUi.normalizeAutoSaveMetadataTags(...args); }
 
-function normalizeAutoSaveMetadataCondition(raw) {
-  const condition = raw && typeof raw === 'object' ? raw : {};
-  return {
-    field: condition.field === 'title' ? 'title' : 'domain',
-    operator: AUTO_SAVE_METADATA_OPERATORS.includes(condition.operator)
-      ? condition.operator
-      : 'match',
-    negate: condition.negate === true,
-    value: String(condition.value ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 2048).trim(),
-  };
-}
+function normalizeAutoSaveMetadataCondition(...args) { return SettingsUi.normalizeAutoSaveMetadataCondition(...args); }
 
-function normalizeAutoSaveMetadataRule(raw) {
-  const rule = raw && typeof raw === 'object' ? raw : {};
-  return {
-    id: typeof rule.id === 'string' && rule.id ? rule.id.slice(0, 128) : newAutoSaveMetadataRuleId(),
-    enabled: rule.enabled !== false,
-    logic: rule.logic === 'OR' ? 'OR' : 'AND',
-    conditions: Array.isArray(rule.conditions)
-      ? rule.conditions
-          .slice(0, AUTO_SAVE_METADATA_MAX_CONDITIONS)
-          .map(normalizeAutoSaveMetadataCondition)
-      : [],
-    note: String(rule.note ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, 20000),
-    tags: normalizeAutoSaveMetadataTags(rule.tags),
-  };
-}
+function normalizeAutoSaveMetadataRule(...args) { return SettingsUi.normalizeAutoSaveMetadataRule(...args); }
 
-function normalizeAutoSaveMetadata(raw) {
-  const source = raw && typeof raw === 'object' ? raw : {};
-  return {
-    enabled: source.enabled === true,
-    rules: Array.isArray(source.rules)
-      ? source.rules.slice(0, AUTO_SAVE_METADATA_MAX_RULES).map(normalizeAutoSaveMetadataRule)
-      : [],
-  };
-}
+function normalizeAutoSaveMetadata(...args) { return SettingsUi.normalizeAutoSaveMetadata(...args); }
 
-function newAutoSaveMetadataRule() {
-  return {
-    id: newAutoSaveMetadataRuleId(),
-    enabled: true,
-    logic: 'AND',
-    conditions: [{ field: 'domain', operator: 'contains', negate: false, value: '' }],
-    note: '',
-    tags: [],
-  };
-}
+function newAutoSaveMetadataRule(...args) { return SettingsUi.newAutoSaveMetadataRule(...args); }
 
-function sanitizeSubfolder(raw) {
-  let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/');
-  s = s.replace(/^\/+/, '');
-  const parts = s
-    .split('/')
-    .map((p) => p.trim())
-    .filter((p) => p && p !== '.' && p !== '..')
-    .map((p) => p.replace(/[?%*:|"<>]/g, '_').replace(/^\.+/, ''));
-  s = parts.join('/');
-  if (!s) s = 'TabWall-Backups';
-  if (s.length > 180) s = s.slice(0, 180);
-  return s;
-}
+function sanitizeSubfolder(...args) { return SettingsUi.sanitizeSubfolder(...args); }
 
-function normalizeIntervalUnit(u) {
-  if (u === 'minute' || u === 'minutes') return 'minute';
-  if (u === 'day' || u === 'days') return 'day';
-  return 'hour';
-}
+function normalizeIntervalUnit(...args) { return SettingsUi.normalizeIntervalUnit(...args); }
 
-function intervalValueBounds(unit) {
-  if (unit === 'minute') return { min: 10, max: 1440, fallback: 60 };
-  if (unit === 'day') return { min: 1, max: 7, fallback: 1 };
-  return { min: 1, max: 168, fallback: 24 };
-}
+function intervalValueBounds(...args) { return SettingsUi.intervalValueBounds(...args); }
 
-function normalizeAutoBackup(raw) {
-  const o = raw && typeof raw === 'object' ? raw : {};
-  let unit = normalizeIntervalUnit(o.intervalUnit);
-  let valueRaw = o.intervalValue;
-  if (valueRaw == null && o.intervalHours != null) {
-    unit = 'hour';
-    valueRaw = o.intervalHours;
-  }
-  const bounds = intervalValueBounds(unit);
-  const subfolder = sanitizeSubfolder(
-    o.subfolder != null && String(o.subfolder).trim() !== ''
-      ? o.subfolder
-      : o.folderName || 'TabWall-Backups'
-  );
-  return {
-    enabled: Boolean(o.enabled),
-    mode: o.mode === 'full' ? 'full' : 'lite',
-    onChange: o.onChange !== false,
-    intervalUnit: unit,
-    intervalValue: clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
-    maxKeep: clampInt(o.maxKeep, 1, 99, 5),
-    subfolder,
-    folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
-    lastSuccessAt: Number(o.lastSuccessAt) || 0,
-    lastError: typeof o.lastError === 'string' ? o.lastError : '',
-    dirtyAt: Number(o.dirtyAt) || 0,
-  };
-}
+function normalizeAutoBackup(...args) { return SettingsUi.normalizeAutoBackup(...args); }
 
-function autoBackupIntervalMinutes(ab) {
-  const n = normalizeAutoBackup(ab);
-  if (n.intervalUnit === 'minute') return n.intervalValue;
-  if (n.intervalUnit === 'day') return n.intervalValue * 24 * 60;
-  return n.intervalValue * 60;
-}
+function autoBackupIntervalMinutes(...args) { return SettingsUi.autoBackupIntervalMinutes(...args); }
 
-function syncIntervalInputBounds() {
-  if (!autoBackupIntervalValueEl || !autoBackupIntervalUnitEl) return;
-  const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl.value);
-  const bounds = intervalValueBounds(unit);
-  autoBackupIntervalValueEl.min = String(bounds.min);
-  autoBackupIntervalValueEl.max = String(bounds.max);
-  const v = clampInt(autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
-  autoBackupIntervalValueEl.value = String(v);
-}
+function syncIntervalInputBounds(...args) { return SettingsUi.syncIntervalInputBounds(...args); }
 
-async function loadSettings() {
-  const data = await chrome.storage.local.get(SETTINGS_KEY);
-  const merged = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
-  merged.cardCols = clampCols(merged.cardCols);
-  if (merged.viewMode === 'cards') merged.viewMode = 'canvas';
-  if (merged.viewMode !== 'list') merged.viewMode = 'canvas';
-  if (merged.defaultViewMode === 'cards') merged.defaultViewMode = 'canvas';
-  if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'canvas';
-  if (merged.locale !== 'en') merged.locale = 'zh';
-  merged.sortBy = normalizeSortBy(merged.sortBy);
-  // Local shortcut settings were removed; discard the legacy field on the next write.
-  delete merged.shortcuts;
-  merged.autoBackup = normalizeAutoBackup({
-    ...DEFAULT_AUTO_BACKUP,
-    ...(merged.autoBackup || {}),
-  });
-  merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
-  merged.canvasSnap = merged.canvasSnap !== false;
-  normalizeCanvasRailSettings(merged);
-  return merged;
-}
+async function loadSettings(...args) { return await SettingsUi.loadSettings(...args); }
 
 /** Skip our own storage writes in onChanged (avoids full UI rebuild echo). */
 let suppressSettingsOnChanged = false;
 let suppressSettingsTimer = null;
 
-async function saveSettings(partial) {
-  let patch = { ...(partial || {}) };
-  if (patch.cardCols != null) patch.cardCols = clampCols(patch.cardCols);
-  if (patch.sortBy != null) patch.sortBy = normalizeSortBy(patch.sortBy);
-  if (patch.canvasRailWidth != null) patch.canvasRailWidth = normalizeCanvasRailWidth(patch.canvasRailWidth);
-  if (patch.canvasRailCollapsed != null) patch.canvasRailCollapsed = patch.canvasRailCollapsed === true;
-  if (patch.autoBackup) {
-    patch.autoBackup = normalizeAutoBackup({ ...settings.autoBackup, ...patch.autoBackup });
-  }
-  if (patch.autoSaveMetadata) {
-    patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);
-  }
-  suppressSettingsOnChanged = true;
-  if (suppressSettingsTimer) clearTimeout(suppressSettingsTimer);
-  try {
-    const res = await sendMessage({ type: 'PATCH_SETTINGS', partial: patch });
-    if (!res?.ok || !res.settings) {
-      uiLog('error', 'settings', 'save failed', res?.error || 'unknown');
-      return settings;
-    }
-    settings = { ...settings, ...res.settings };
-    if (settings.autoBackup) settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
-    if (settingsSaveStatus) {
-      settingsSaveStatus.textContent = t('settingsAutoSaved');
-      settingsSaveStatus.dataset.state = 'saved';
-    }
-    return settings;
-  } finally {
-    // chrome.storage.onChanged may fire async after set resolves
-    suppressSettingsTimer = setTimeout(() => {
-      suppressSettingsOnChanged = false;
-      suppressSettingsTimer = null;
-    }, 50);
-  }
-}
+async function saveSettings(...args) { return await SettingsUi.saveSettings(...args); }
 
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
-  themeBtn.textContent = theme === 'light' ? 'Dark' : 'Light';
-}
+function applyTheme(...args) { return SettingsUi.applyTheme(...args); }
 
-function applyCanvasRailUi({ width = settings.canvasRailWidth, collapsed = settings.canvasRailCollapsed } = {}) {
-  if (!canvasView) return;
-  const normalizedWidth = normalizeCanvasRailWidth(width);
-  const isCollapsed = collapsed === true;
-  const visibleWidth = isCollapsed ? CANVAS_RAIL_COLLAPSED_WIDTH : normalizedWidth;
-  canvasView.style.setProperty('--canvas-rail-width', `${visibleWidth}px`);
-  canvasView.dataset.canvasRailCollapsed = isCollapsed ? 'true' : 'false';
-  if (canvasRailResize) {
-    canvasRailResize.title = t('canvasRailResize');
-    canvasRailResize.setAttribute('aria-label', t('canvasRailResize'));
-    canvasRailResize.setAttribute('aria-valuemin', String(CANVAS_RAIL_COLLAPSED_WIDTH));
-    canvasRailResize.setAttribute('aria-valuemax', String(CANVAS_RAIL_MAX_WIDTH));
-    canvasRailResize.setAttribute('aria-valuenow', String(visibleWidth));
-    canvasRailResize.setAttribute(
-      'aria-valuetext',
-      isCollapsed ? t('canvasRailCollapsedValue') : `${normalizedWidth}px`
-    );
-  }
-  if (canvasRailToggle) {
-    const label = t(isCollapsed ? 'canvasRailExpand' : 'canvasRailCollapse');
-    canvasRailToggle.title = label;
-    canvasRailToggle.setAttribute('aria-label', label);
-    canvasRailToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-  }
-}
+function applyCanvasRailUi(...args) { return SettingsUi.applyCanvasRailUi(...args); }
 
-function syncViewModeButton(mode) {
-  if (!viewModeBtn) return;
-  const target = mode === 'canvas' ? 'list' : 'canvas';
-  const label = t(target === 'list' ? 'list' : 'canvasView');
-  if (viewModeLabel) viewModeLabel.textContent = label;
-  if (viewModeListIcon) viewModeListIcon.hidden = target !== 'list';
-  if (viewModeCanvasIcon) viewModeCanvasIcon.hidden = target !== 'canvas';
-  viewModeBtn.dataset.viewTarget = target;
-  viewModeBtn.title = label;
-  viewModeBtn.setAttribute('aria-label', label);
-}
+function syncViewModeButton(...args) { return SettingsUi.syncViewModeButton(...args); }
 
-function applyViewMode(mode) {
-  closeCanvasContextMenu();
-  if (mode !== 'list' && mode !== 'canvas') mode = 'canvas';
-  const isList = mode === 'list';
-  const isCanvas = mode === 'canvas';
-  if (!isCanvas) canvasSearchPreview = null;
-  gridEl.classList.toggle('cards', !isList);
-  gridEl.classList.toggle('list', isList);
-  syncViewModeButton(mode);
-  colsControl.classList.toggle('visible', !isList && !isCanvas);
-  if (canvasView) canvasView.hidden = !isCanvas;
-  if (canvasView) canvasView.setAttribute('aria-hidden', isCanvas ? 'false' : 'true');
-  document.body.classList.toggle('canvas-mode', isCanvas);
-  syncCanvasOrganizeUi(mode);
-  if (!isCanvas) closeCanvasZoomMenu();
-  if (isCanvas) scheduleInitialCanvasCenter();
-}
+function applyViewMode(...args) { return SettingsUi.applyViewMode(...args); }
 
-function applyCardCols(cols) {
-  const n = clampCols(cols);
-  gridEl.style.setProperty('--cols', String(n));
-  cardColsEl.value = String(n);
-  colsValueEl.textContent = String(n);
-  if (settingsCardCols) {
-    settingsCardCols.value = String(n);
-    settingsColsValue.textContent = String(n);
-  }
-}
+function applyCardCols(...args) { return SettingsUi.applyCardCols(...args); }
 
-function updateSavedBadge() {
-  const n = allTabs.length;
-  const isCanvasUi = settings.viewMode === 'canvas' && !canvasSessionFallback;
-  const visible = isCanvasUi ? getCanvasVisibleTabs().length : getVisibleTabs().length;
-  const canvasFiltered = isCanvasUi && canvasIndexFilter !== 'all';
-  countEl.textContent =
-    (query || pinnedOnly || canvasFiltered) && visible !== n
-      ? t('countFiltered', { shown: visible, total: n })
-      : t('countTabs', { n });
-}
+function updateSavedBadge(...args) { return SettingsUi.updateSavedBadge(...args); }
 
-function syncPinnedFilterUi() {
-  if (!pinnedOnlyBtn) return;
-  pinnedOnlyBtn.classList.toggle('active', pinnedOnly);
-  pinnedOnlyBtn.setAttribute('aria-pressed', pinnedOnly ? 'true' : 'false');
-}
+function syncPinnedFilterUi(...args) { return SettingsUi.syncPinnedFilterUi(...args); }
 
-function syncSettingsUi() {
-  applyTheme(settings.theme);
-  applyViewMode(settings.viewMode);
-  applyCardCols(settings.cardCols);
-  canvasSnapToGrid = settings.canvasSnap !== false;
-  const canvasSnapInput = document.getElementById('settingsCanvasSnap');
-  if (canvasSnapInput) canvasSnapInput.checked = canvasSnapToGrid;
-  syncPinnedFilterUi();
-  settings.sortBy = normalizeSortBy(settings.sortBy);
-  sortByEl.value = settings.sortBy;
-  openWithSearchFocusEl.checked = Boolean(settings.openWithSearchFocus);
-  if (settingsPreSaveEdit) settingsPreSaveEdit.checked = settings.preSaveEdit !== false;
+function syncSettingsUi(...args) { return SettingsUi.syncSettingsUi(...args); }
 
-  const after =
-    settingsEl.querySelector(`input[name="afterSave"][value="${settings.afterSave}"]`) ||
-    settingsEl.querySelector('input[name="afterSave"][value="close"]');
-  if (after) after.checked = true;
-
-  const afterG =
-    settingsEl.querySelector(
-      `input[name="afterSaveGroup"][value="${settings.afterSaveGroup || 'close'}"]`
-    ) || settingsEl.querySelector('input[name="afterSaveGroup"][value="close"]');
-  if (afterG) afterG.checked = true;
-
-  const cap =
-    settingsEl.querySelector(
-      `input[name="saveGroupCapture"][value="${settings.saveGroupCapture || 'all'}"]`
-    ) || settingsEl.querySelector('input[name="saveGroupCapture"][value="all"]');
-  if (cap) cap.checked = true;
-
-  const rg =
-    settingsEl.querySelector(
-      `input[name="restoreGroupIn"][value="${settings.restoreGroupIn || 'currentWindow'}"]`
-    ) || settingsEl.querySelector('input[name="restoreGroupIn"][value="currentWindow"]');
-  if (rg) rg.checked = true;
-
-  const themeRadio =
-    settingsEl.querySelector(`input[name="theme"][value="${settings.theme}"]`) ||
-    settingsEl.querySelector('input[name="theme"][value="dark"]');
-  if (themeRadio) themeRadio.checked = true;
-
-  const localeRadio =
-    settingsEl.querySelector(`input[name="locale"][value="${settings.locale}"]`) ||
-    settingsEl.querySelector('input[name="locale"][value="zh"]');
-  if (localeRadio) localeRadio.checked = true;
-
-  const viewRadio =
-    settingsEl.querySelector(
-      `input[name="defaultViewMode"][value="${settings.defaultViewMode || 'canvas'}"]`
-    ) || settingsEl.querySelector('input[name="defaultViewMode"][value="canvas"]');
-  if (viewRadio) viewRadio.checked = true;
-
-  syncAutoBackupUi();
-  syncAutoSaveMetadataUi();
-
-  applyI18n();
-  refreshChromeCommandLabels();
-  syncSearchRegexUi();
-}
-
-function autoBackupErrorText(code, detail) {
-  let base = '';
-  switch (code) {
-    case 'export_failed':
-    case 'build_failed':
-      base = t('autoBackupErrExport');
-      break;
-    case 'write_failed':
-    case 'busy':
-      base = t('autoBackupErrWrite');
-      break;
-    case 'disabled':
-      base = t('autoBackupErrDisabled');
-      break;
-    default:
-      base = code ? t('autoBackupErrWrite') : '';
-  }
-  if (base && detail) return `${base}: ${detail}`;
-  return base;
-}
+function autoBackupErrorText(...args) { return SettingsUi.autoBackupErrorText(...args); }
 
 /** True if stored absolute path looks like it belongs to current subfolder. */
-function folderPathMatchesSubfolder(folderPath, subfolder) {
-  if (!folderPath || !subfolder) return false;
-  const norm = String(folderPath).replace(/[/\\]+$/, '');
-  const base = norm.split(/[/\\]/).pop() || '';
-  return base === subfolder || norm.endsWith('/' + subfolder) || norm.endsWith('\\' + subfolder);
-}
+function folderPathMatchesSubfolder(...args) { return SettingsUi.folderPathMatchesSubfolder(...args); }
 
-function syncAutoBackupUi() {
-  const ab = normalizeAutoBackup(settings.autoBackup);
-  settings.autoBackup = ab;
-  if (autoBackupEnabledEl) autoBackupEnabledEl.checked = ab.enabled;
-  if (autoBackupOnChangeEl) autoBackupOnChangeEl.checked = ab.onChange;
-  if (autoBackupIntervalUnitEl) autoBackupIntervalUnitEl.value = ab.intervalUnit;
-  if (autoBackupIntervalValueEl) {
-    autoBackupIntervalValueEl.value = String(ab.intervalValue);
-    syncIntervalInputBounds();
-    autoBackupIntervalValueEl.value = String(ab.intervalValue);
-  }
-  if (autoBackupMaxKeepEl) autoBackupMaxKeepEl.value = String(ab.maxKeep);
-  if (autoBackupSubfolderEl && document.activeElement !== autoBackupSubfolderEl) {
-    autoBackupSubfolderEl.value = ab.subfolder;
-  }
-  const modeRadio =
-    settingsEl.querySelector(`input[name="autoBackupMode"][value="${ab.mode}"]`) ||
-    settingsEl.querySelector('input[name="autoBackupMode"][value="lite"]');
-  if (modeRadio) modeRadio.checked = true;
+function syncAutoBackupUi(...args) { return SettingsUi.syncAutoBackupUi(...args); }
 
-  if (autoBackupLocationLabelEl) {
-    if (ab.folderPath && folderPathMatchesSubfolder(ab.folderPath, ab.subfolder)) {
-      autoBackupLocationLabelEl.textContent = ab.folderPath;
-      autoBackupLocationLabelEl.style.color = 'var(--text)';
-      autoBackupLocationLabelEl.setAttribute('title', ab.folderPath);
-    } else if (ab.folderPath && !folderPathMatchesSubfolder(ab.folderPath, ab.subfolder)) {
-      autoBackupLocationLabelEl.textContent = t('autoBackupLocationStale');
-      autoBackupLocationLabelEl.style.color = 'var(--muted)';
-      autoBackupLocationLabelEl.setAttribute('title', ab.folderPath);
-    } else {
-      autoBackupLocationLabelEl.textContent = t('autoBackupLocationPending', {
-        subfolder: ab.subfolder || 'TabWall-Backups',
-      });
-      autoBackupLocationLabelEl.style.color = 'var(--muted)';
-      autoBackupLocationLabelEl.removeAttribute('title');
-    }
-  }
+function autoSaveMetadataFieldOptions(...args) { return SettingsUi.autoSaveMetadataFieldOptions(...args); }
 
-  if (autoBackupStatusEl) {
-    const parts = [];
-    if (ab.lastSuccessAt) {
-      parts.push(t('autoBackupLastOk', { time: formatSavedAt(ab.lastSuccessAt) }));
-    }
-    if (ab.lastError) {
-      const errText = autoBackupErrorText(ab.lastError);
-      if (errText) parts.push(errText);
-    }
-    autoBackupStatusEl.textContent = parts.join(' · ');
-  }
-}
+function autoSaveMetadataOperatorOptions(...args) { return SettingsUi.autoSaveMetadataOperatorOptions(...args); }
 
-function autoSaveMetadataFieldOptions(selected) {
-  return [
-    ['domain', 'autoSaveMetadataDomain'],
-    ['title', 'autoSaveMetadataTitleField'],
-  ]
-    .map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${escapeHtml(t(key))}</option>`)
-    .join('');
-}
+function renderAutoSaveMetadataRules(...args) { return SettingsUi.renderAutoSaveMetadataRules(...args); }
 
-function autoSaveMetadataOperatorOptions(selected) {
-  return [
-    ['match', 'autoSaveMetadataMatch'],
-    ['contains', 'autoSaveMetadataContains'],
-    ['startsWith', 'autoSaveMetadataStartsWith'],
-    ['endsWith', 'autoSaveMetadataEndsWith'],
-    ['regex', 'autoSaveMetadataRegex'],
-  ]
-    .map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${escapeHtml(t(key))}</option>`)
-    .join('');
-}
+function syncAutoSaveMetadataUi(...args) { return SettingsUi.syncAutoSaveMetadataUi(...args); }
 
-function renderAutoSaveMetadataRules() {
-  if (!autoSaveMetadataRulesEl) return;
-  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
-  const rules = settings.autoSaveMetadata.rules;
-  if (!rules.length) {
-    autoSaveMetadataRulesEl.innerHTML = `<div class="auto-save-rule-empty">${escapeHtml(t('autoSaveMetadataEmpty'))}</div>`;
-    return;
-  }
+async function persistAutoSaveMetadata(...args) { return await SettingsUi.persistAutoSaveMetadata(...args); }
 
-  autoSaveMetadataRulesEl.innerHTML = rules.map((rule, ruleIndex) => `
-    <article class="auto-save-rule-card" data-auto-save-rule="${ruleIndex}">
-      <div class="auto-save-rule-header">
-        <label class="inline auto-save-rule-enabled">
-          <input type="checkbox" data-auto-save-rule-prop="enabled" ${rule.enabled ? 'checked' : ''} />
-          <span>${escapeHtml(t('autoSaveMetadataRuleEnable'))}</span>
-        </label>
-        <strong>${escapeHtml(t('autoSaveMetadataRule', { n: ruleIndex + 1 }))}</strong>
-        <button type="button" class="btn auto-save-rule-delete" data-auto-save-action="delete-rule" title="${escapeAttr(t('autoSaveMetadataDeleteRule'))}">${escapeHtml(t('delete'))}</button>
-      </div>
-      <div class="auto-save-rule-row">
-        <label class="inline">
-          <span>${escapeHtml(t('autoSaveMetadataLogic'))}</span>
-          <select data-auto-save-rule-prop="logic" aria-label="${escapeAttr(t('autoSaveMetadataLogic'))}">
-            <option value="AND"${rule.logic === 'AND' ? ' selected' : ''}>${escapeHtml(t('autoSaveMetadataAnd'))}</option>
-            <option value="OR"${rule.logic === 'OR' ? ' selected' : ''}>${escapeHtml(t('autoSaveMetadataOr'))}</option>
-          </select>
-        </label>
-      </div>
-      <div class="auto-save-condition-heading">
-        <span>${escapeHtml(t('autoSaveMetadataCondition'))}</span>
-        <button type="button" class="btn" data-auto-save-action="add-condition">${escapeHtml(t('autoSaveMetadataAddCondition'))}</button>
-      </div>
-      <div class="auto-save-condition-list">
-        ${rule.conditions.map((condition, conditionIndex) => `
-          <div class="auto-save-condition-row" data-auto-save-condition="${conditionIndex}">
-            <select data-auto-save-condition-prop="field" aria-label="${escapeAttr(t('autoSaveMetadataField'))}">${autoSaveMetadataFieldOptions(condition.field)}</select>
-            <select data-auto-save-condition-prop="operator" aria-label="${escapeAttr(t('autoSaveMetadataOperator'))}">${autoSaveMetadataOperatorOptions(condition.operator)}</select>
-            <label class="inline auto-save-condition-not">
-              <input type="checkbox" data-auto-save-condition-prop="negate" ${condition.negate ? 'checked' : ''} />
-              <span>${escapeHtml(t('autoSaveMetadataNot'))}</span>
-            </label>
-            <input type="text" class="settings-input auto-save-condition-value" data-auto-save-condition-prop="value" value="${escapeAttr(condition.value)}" placeholder="${escapeAttr(t('autoSaveMetadataValuePh'))}" />
-            <button type="button" class="btn auto-save-condition-delete" data-auto-save-action="delete-condition" title="${escapeAttr(t('autoSaveMetadataDeleteCondition'))}">${escapeHtml(t('delete'))}</button>
-          </div>
-        `).join('')}
-      </div>
-      <div class="auto-save-actions-heading">${escapeHtml(t('autoSaveMetadataActions'))}</div>
-      <label class="auto-save-note-field">
-        <span>${escapeHtml(t('autoSaveMetadataNote'))}</span>
-        <textarea class="settings-textarea" rows="3" data-auto-save-rule-prop="note" placeholder="${escapeAttr(t('autoSaveMetadataNotePh'))}">${escapeHtml(rule.note)}</textarea>
-      </label>
-      <div class="auto-save-tags-field">
-        <span>${escapeHtml(t('autoSaveMetadataTags'))}</span>
-        <div class="auto-save-tag-editor">
-          <div class="auto-save-tag-list">
-            ${rule.tags.map((tag, tagIndex) => `
-              <span class="tag-chip auto-save-tag-chip">${escapeHtml(tag)}<button type="button" aria-label="${escapeAttr(t('autoSaveMetadataRemoveTag'))}" data-auto-save-action="remove-tag" data-auto-save-tag-index="${tagIndex}">${iconSvg('close')}</button></span>
-            `).join('')}
-            <input type="text" class="settings-input auto-save-tag-input" data-auto-save-tag-input data-rule-index="${ruleIndex}" placeholder="${escapeAttr(t('autoSaveMetadataTagPh'))}" autocomplete="off" />
-          </div>
-        </div>
-      </div>
-    </article>
-  `).join('');
-}
+async function commitAutoSaveMetadataTag(...args) { return await SettingsUi.commitAutoSaveMetadataTag(...args); }
 
-function syncAutoSaveMetadataUi() {
-  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
-  if (autoSaveMetadataEnabledEl) autoSaveMetadataEnabledEl.checked = settings.autoSaveMetadata.enabled;
-  renderAutoSaveMetadataRules();
-}
+function initAutoSaveMetadataUi(...args) { return SettingsUi.initAutoSaveMetadataUi(...args); }
 
-async function persistAutoSaveMetadata() {
-  settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
-  await saveSettings({ autoSaveMetadata: settings.autoSaveMetadata });
-}
+async function refreshChromeCommandLabels(...args) { return await SettingsUi.refreshChromeCommandLabels(...args); }
 
-async function commitAutoSaveMetadataTag(input) {
-  const raw = input?.value?.trim() || '';
-  if (!raw) return;
-  const ruleIndex = Number(input.dataset.ruleIndex);
-  const rule = settings.autoSaveMetadata.rules[ruleIndex];
-  if (!rule) return;
-  if (!rule.tags.includes(raw)) rule.tags.push(raw);
-  input.value = '';
-  renderAutoSaveMetadataRules();
-  await persistAutoSaveMetadata();
-}
+function refreshChromeCommandLabelsOnFocus(...args) { return SettingsUi.refreshChromeCommandLabelsOnFocus(...args); }
 
-function initAutoSaveMetadataUi() {
-  autoSaveMetadataEnabledEl?.addEventListener('change', async () => {
-    settings.autoSaveMetadata.enabled = autoSaveMetadataEnabledEl.checked;
-    await persistAutoSaveMetadata();
-  });
+async function openChromeShortcutsForApply(...args) { return await SettingsUi.openChromeShortcutsForApply(...args); }
 
-  autoSaveMetadataAddRuleBtn?.addEventListener('click', async () => {
-    if (settings.autoSaveMetadata.rules.length >= AUTO_SAVE_METADATA_MAX_RULES) return;
-    settings.autoSaveMetadata.rules.push(newAutoSaveMetadataRule());
-    await persistAutoSaveMetadata();
-    renderAutoSaveMetadataRules();
-  });
+function initChromeShortcutsUi(...args) { return SettingsUi.initChromeShortcutsUi(...args); }
 
-  autoSaveMetadataRulesEl?.addEventListener('click', async (event) => {
-    const action = event.target.closest?.('[data-auto-save-action]');
-    if (!action) return;
-    const card = action.closest('[data-auto-save-rule]');
-    if (!card) return;
-    const ruleIndex = Number(card.dataset.autoSaveRule);
-    const rule = settings.autoSaveMetadata.rules[ruleIndex];
-    if (!rule) return;
+async function initSettingsUi(...args) { return await SettingsUi.initSettingsUi(...args); }
 
-    if (action.dataset.autoSaveAction === 'add-condition') {
-      if (rule.conditions.length >= AUTO_SAVE_METADATA_MAX_CONDITIONS) return;
-      rule.conditions.push({ field: 'domain', operator: 'contains', negate: false, value: '' });
-    } else if (action.dataset.autoSaveAction === 'delete-condition') {
-      const conditionRow = action.closest('[data-auto-save-condition]');
-      const conditionIndex = Number(conditionRow?.dataset.autoSaveCondition);
-      if (Number.isInteger(conditionIndex)) rule.conditions.splice(conditionIndex, 1);
-    } else if (action.dataset.autoSaveAction === 'delete-rule') {
-      settings.autoSaveMetadata.rules.splice(ruleIndex, 1);
-    } else if (action.dataset.autoSaveAction === 'remove-tag') {
-      const tagIndex = Number(action.dataset.autoSaveTagIndex);
-      if (Number.isInteger(tagIndex)) rule.tags.splice(tagIndex, 1);
-    } else {
-      return;
-    }
-    await persistAutoSaveMetadata();
-    renderAutoSaveMetadataRules();
-  });
+function formatSavedAt(...args) { return ListUi.formatSavedAt(...args); }
 
-  autoSaveMetadataRulesEl?.addEventListener('change', async (event) => {
-    const tagInput = event.target.closest?.('[data-auto-save-tag-input]');
-    if (tagInput) {
-      await commitAutoSaveMetadataTag(tagInput);
-      return;
-    }
-    const card = event.target.closest?.('[data-auto-save-rule]');
-    if (!card) return;
-    const ruleIndex = Number(card.dataset.autoSaveRule);
-    const rule = settings.autoSaveMetadata.rules[ruleIndex];
-    if (!rule) return;
-    const ruleProp = event.target.closest?.('[data-auto-save-rule-prop]')?.dataset.autoSaveRuleProp;
-    if (ruleProp) {
-      rule[ruleProp] = ruleProp === 'enabled' ? event.target.checked : event.target.value;
-      await persistAutoSaveMetadata();
-      return;
-    }
-    const condition = event.target.closest?.('[data-auto-save-condition]');
-    const conditionProp = event.target.closest?.('[data-auto-save-condition-prop]')?.dataset.autoSaveConditionProp;
-    if (!condition || !conditionProp) return;
-    const conditionIndex = Number(condition.dataset.autoSaveCondition);
-    if (!rule.conditions[conditionIndex]) return;
-    rule.conditions[conditionIndex][conditionProp] = conditionProp === 'negate'
-      ? event.target.checked
-      : event.target.value;
-    await persistAutoSaveMetadata();
-  });
+function appendDedupeThumb(...args) { return WorkspaceUi.appendDedupeThumb(...args); }
 
-  autoSaveMetadataRulesEl?.addEventListener('keydown', async (event) => {
-    const input = event.target.closest?.('[data-auto-save-tag-input]');
-    if (!input || (event.key !== 'Enter' && event.key !== 'Tab')) return;
-    if (!input.value.trim()) return;
-    event.preventDefault();
-    await commitAutoSaveMetadataTag(input);
-  });
-}
+function appendDedupePreviewBtn(...args) { return WorkspaceUi.appendDedupePreviewBtn(...args); }
 
-async function refreshChromeCommandLabels() {
-  const res = await sendMessage({ type: 'GET_COMMANDS' });
-  const byName = new Map(
-    (res.ok && Array.isArray(res.commands) ? res.commands : []).map((c) => [c.name, c])
-  );
-  document.querySelectorAll('[data-chrome-cmd]').forEach((el) => {
-    const name = el.getAttribute('data-chrome-cmd');
-    const cmd = byName.get(name);
-    const sc = cmd?.shortcut || '';
-    el.textContent = sc
-      ? t('shortcutsChromeBound', { s: sc })
-      : t('shortcutsChromeUnbound');
-  });
-}
+function openConflictModal(...args) { return WorkspaceUi.openConflictModal(...args); }
 
-function refreshChromeCommandLabelsOnFocus() {
-  if (document.visibilityState !== 'visible') return;
-  refreshChromeCommandLabels().catch(() => {});
-}
+function closeConflictModal(...args) { return WorkspaceUi.closeConflictModal(...args); }
 
-async function openChromeShortcutsForApply() {
-  const res = await sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
-  showCopyToast(
-    res?.ok ? t('shortcutsChromeOpened') : t('shortcutsChromeOpenFailed')
-  );
-}
+async function resolveConflict(...args) { return await WorkspaceUi.resolveConflict(...args); }
 
-function initChromeShortcutsUi() {
-  const openChromeBtn = document.getElementById('openChromeShortcutsBtn');
-  if (openChromeBtn) {
-    openChromeBtn.addEventListener('click', () => {
-      openChromeShortcutsForApply();
-    });
-  }
+function initConflictUi(...args) { return WorkspaceUi.initConflictUi(...args); }
 
-  document.addEventListener('visibilitychange', refreshChromeCommandLabelsOnFocus);
-  window.addEventListener('focus', refreshChromeCommandLabelsOnFocus);
-}
+function renderPreSaveChips(...args) { return WorkspaceUi.renderPreSaveChips(...args); }
 
-async function initSettingsUi() {
-  settings = await loadSettings();
+function commitPreSaveTagDraft(...args) { return WorkspaceUi.commitPreSaveTagDraft(...args); }
 
-  // On open: apply default view if we want fresh open behavior
-  // Use stored viewMode if user toggled; defaultViewMode applied when viewMode missing
-  if (!settings.viewMode) {
-    settings.viewMode = settings.defaultViewMode || 'canvas';
-  }
+function openPreSaveModal(...args) { return WorkspaceUi.openPreSaveModal(...args); }
 
-  syncSettingsUi();
-  initAutoSaveMetadataUi();
+function closePreSaveModal(...args) { return WorkspaceUi.closePreSaveModal(...args); }
 
-  try {
-    versionBadge.textContent = `v${chrome.runtime.getManifest().version}`;
-  } catch {
-    versionBadge.textContent = 'v—';
-  }
+function cancelPreSave(...args) { return WorkspaceUi.cancelPreSave(...args); }
 
-  settingsEl.querySelectorAll('input[name="afterSave"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) await saveSettings({ afterSave: input.value });
-    });
-  });
+async function confirmPreSave(...args) { return await WorkspaceUi.confirmPreSave(...args); }
 
-  settingsPreSaveEdit?.addEventListener('change', async () => {
-    await saveSettings({ preSaveEdit: settingsPreSaveEdit.checked });
-  });
-
-  settingsEl.querySelectorAll('input[name="afterSaveGroup"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) await saveSettings({ afterSaveGroup: input.value });
-    });
-  });
-
-  settingsEl.querySelectorAll('input[name="saveGroupCapture"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) await saveSettings({ saveGroupCapture: input.value });
-    });
-  });
-
-  settingsEl.querySelectorAll('input[name="restoreGroupIn"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) await saveSettings({ restoreGroupIn: input.value });
-    });
-  });
-
-  // Auto backup controls
-  autoBackupEnabledEl?.addEventListener('change', async () => {
-    await saveSettings({ autoBackup: { enabled: autoBackupEnabledEl.checked } });
-    syncAutoBackupUi();
-  });
-  autoBackupOnChangeEl?.addEventListener('change', async () => {
-    await saveSettings({ autoBackup: { onChange: autoBackupOnChangeEl.checked } });
-  });
-  autoBackupSubfolderEl?.addEventListener('change', async () => {
-    const subfolder = sanitizeSubfolder(autoBackupSubfolderEl.value);
-    autoBackupSubfolderEl.value = subfolder;
-    // Clear stale absolute path from older FS-access / old subfolder
-    await saveSettings({ autoBackup: { subfolder, folderPath: '' } });
-    syncAutoBackupUi();
-  });
-  autoBackupIntervalUnitEl?.addEventListener('change', async () => {
-    const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl.value);
-    const bounds = intervalValueBounds(unit);
-    const value = clampInt(autoBackupIntervalValueEl?.value, bounds.min, bounds.max, bounds.fallback);
-    if (autoBackupIntervalValueEl) autoBackupIntervalValueEl.value = String(value);
-    syncIntervalInputBounds();
-    await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
-  });
-  autoBackupIntervalValueEl?.addEventListener('change', async () => {
-    const unit = normalizeIntervalUnit(autoBackupIntervalUnitEl?.value || 'hour');
-    const bounds = intervalValueBounds(unit);
-    const value = clampInt(autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
-    autoBackupIntervalValueEl.value = String(value);
-    await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
-  });
-  autoBackupMaxKeepEl?.addEventListener('change', async () => {
-    const maxKeep = clampInt(autoBackupMaxKeepEl.value, 1, 99, 5);
-    autoBackupMaxKeepEl.value = String(maxKeep);
-    await saveSettings({ autoBackup: { maxKeep } });
-  });
-  settingsEl.querySelectorAll('input[name="autoBackupMode"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) {
-        await saveSettings({ autoBackup: { mode: input.value === 'full' ? 'full' : 'lite' } });
-      }
-    });
-  });
-  autoBackupNowBtn?.addEventListener('click', async () => {
-    await runLocalAutoBackup({ force: true });
-  });
-  autoBackupShowFolderBtn?.addEventListener('click', async () => {
-    await sendMessage({ type: 'AUTO_BACKUP_SHOW_FOLDER' });
-  });
-
-  settingsEl.querySelectorAll('input[name="theme"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) {
-        await saveSettings({ theme: input.value });
-        applyTheme(input.value);
-      }
-    });
-  });
-
-  settingsEl.querySelectorAll('input[name="locale"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) {
-        await saveSettings({ locale: input.value });
-        applyI18n();
-        syncViewModeButton(settings.viewMode);
-        renderGrid();
-      }
-    });
-  });
-
-  settingsEl.querySelectorAll('input[name="defaultViewMode"]').forEach((input) => {
-    input.addEventListener('change', async () => {
-      if (input.checked) {
-        await saveSettings({
-          defaultViewMode: input.value,
-          viewMode: input.value,
-        });
-        applyViewMode(input.value);
-        renderGrid();
-      }
-    });
-  });
-
-  const settingsCanvasSnap = document.getElementById('settingsCanvasSnap');
-  settingsCanvasSnap?.addEventListener('change', async () => {
-    canvasSnapToGrid = settingsCanvasSnap.checked;
-    await saveSettings({ canvasSnap: canvasSnapToGrid });
-  });
-  document.getElementById('settingsCanvasResetView')?.addEventListener('click', () => {
-    document.getElementById('canvasResetView')?.click();
-  });
-
-  openWithSearchFocusEl.addEventListener('change', async () => {
-    await saveSettings({ openWithSearchFocus: openWithSearchFocusEl.checked });
-  });
-
-  settingsCardCols.addEventListener('input', () => {
-    applyCardCols(settingsCardCols.value);
-  });
-  settingsCardCols.addEventListener('change', async () => {
-    await saveSettings({ cardCols: clampCols(settingsCardCols.value) });
-  });
-
-  sortByEl?.addEventListener('change', async () => {
-    const sortBy = normalizeSortBy(sortByEl.value);
-    sortByEl.value = sortBy;
-    await saveSettings({ sortBy });
-    renderGrid();
-  });
-  canvasOrganizePanel?.querySelectorAll('[data-canvas-arrange]').forEach((button) => {
-    button.addEventListener('click', () => arrangeCanvas(button.dataset.canvasArrange));
-  });
-
-  initChromeShortcutsUi();
-  initDedupeUi();
-  initQuickCaptureUi();
-  initSettingsSections();
-
-  if (settings.openWithSearchFocus) {
-    setTimeout(() => searchEl.focus(), 50);
-  }
-
-  // Resume conflict modal if SW queued one before park loaded
-  sendMessage({ type: 'GET_PENDING_CONFLICT' }).then((res) => {
-    if (res?.ok && res.conflict) openConflictModal(res.conflict);
-  });
-  // Resume pre-save edit panel if SW queued one before park loaded (or the SW restarted mid-edit)
-  sendMessage({ type: 'GET_PENDING_PRESAVE' }).then((res) => {
-    if (res?.ok && res.preSave) openPreSaveModal(res.preSave);
-  });
-}
-
-// ─── Save conflict (human decision) ────────────────────────────────
-
-function formatSavedAt(ts) {
-  if (!ts) return '—';
-  try {
-    return new Date(ts).toLocaleString(settings.locale === 'en' ? 'en' : 'zh-Hant');
-  } catch {
-    return String(ts);
-  }
-}
-
-function appendDedupeThumb(parent, item) {
-  const mediaKey = mediaKeyForItem({ id: item.id, kind: 'tab' });
-  if (item.hasThumb || item.hasSnap) {
-    const img = document.createElement('img');
-    img.className = 'dedupe-thumb lazy-thumb';
-    img.alt = '';
-    img.draggable = false;
-    img.dataset.mediaKey = mediaKey;
-    parent.appendChild(img);
-    observeThumb(img);
-  } else {
-    const ph = document.createElement('span');
-    ph.className = 'dedupe-thumb placeholder';
-    ph.setAttribute('aria-hidden', 'true');
-    parent.appendChild(ph);
-  }
-}
-
-function appendDedupePreviewBtn(parent, item) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'icon-btn dedupe-preview-btn';
-  btn.title = t('expand');
-  btn.setAttribute('aria-label', t('expand'));
-  btn.innerHTML = iconSvg('expand');
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openLightbox({
-      kind: 'tab',
-      id: item.id,
-      title: item.title || item.url || 'Untitled',
-      url: item.url || '',
-      hasThumb: Boolean(item.hasThumb),
-      hasSnap: Boolean(item.hasSnap),
-      savedAt: item.savedAt || 0,
-    });
-  });
-  parent.appendChild(btn);
-}
-
-function openConflictModal(conflict) {
-  if (!conflictModal || !conflict) return;
-  conflictIncomingTitle.textContent = conflict.title || conflict.url || '—';
-  conflictIncomingUrl.textContent = conflict.url || '—';
-  conflictMatchList.innerHTML = '';
-  const matches = Array.isArray(conflict.matches) ? conflict.matches : [];
-  for (const m of matches) {
-    const li = document.createElement('li');
-    appendDedupeThumb(li, m);
-    const body = document.createElement('div');
-    body.className = 'di-body';
-    body.innerHTML = `
-      <div class="di-title">${escapeHtml(m.title || m.url || '—')}</div>
-      <div class="di-meta">${escapeHtml(t('dedupeSavedAt', { t: formatSavedAt(m.savedAt) }))}</div>
-    `;
-    li.appendChild(body);
-    appendDedupePreviewBtn(li, m);
-    conflictMatchList.appendChild(li);
-  }
-  conflictModal.classList.add('open');
-  conflictModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeConflictModal() {
-  if (!conflictModal) return;
-  conflictModal.classList.remove('open');
-  conflictModal.setAttribute('aria-hidden', 'true');
-}
-
-async function resolveConflict(decision) {
-  closeConflictModal();
-  const res = await sendMessage({ type: 'RESOLVE_SAVE_CONFLICT', decision });
-  if (decision !== 'cancel') {
-    await loadList();
-  }
-  if (res && !res.ok && res.error === 'no_pending') {
-    // expired — ignore
-  }
-}
-
-function initConflictUi() {
-  if (!conflictModal) return;
-  conflictCancel?.addEventListener('click', () => resolveConflict('cancel'));
-  conflictReplace?.addEventListener('click', () => resolveConflict('replace'));
-  conflictKeepBoth?.addEventListener('click', () => resolveConflict('keep-both'));
-  conflictModal.addEventListener('click', (e) => {
-    if (e.target === conflictModal) resolveConflict('cancel');
-  });
-}
-
-// ─── Pre-save edit panel (note/tag before a single-tab save commits) ──
-
-function renderPreSaveChips() {
-  if (!preSaveChips) return;
-  preSaveChips.innerHTML = '';
-  preSaveTagList.forEach((tag) => {
-    const chip = document.createElement('span');
-    chip.className = 'tag-chip';
-    chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">${iconSvg('close')}</button>`;
-    chip.querySelector('button').addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const currentIndex = preSaveTagList.indexOf(tag);
-      if (currentIndex === -1) return;
-      preSaveTagList.splice(currentIndex, 1);
-      renderPreSaveChips();
-    });
-    preSaveChips.appendChild(chip);
-  });
-}
-
-function commitPreSaveTagDraft() {
-  if (!preSaveTagDraft) return false;
-  const raw = preSaveTagDraft.value.trim();
-  if (!raw) return false;
-  if (!preSaveTagList.includes(raw)) preSaveTagList.push(raw);
-  preSaveTagDraft.value = '';
-  renderPreSaveChips();
-  sendMessage({ type: 'ADD_TAG', name: raw }).then(() => {
-    if (tagsBox.classList.contains('open')) refreshTagManager();
-  });
-  return true;
-}
-
-function openPreSaveModal(preSave) {
-  if (!preSaveModal || !preSave) return;
-  preSaveContext = preSave;
-  preSaveTitle.textContent = preSave.title || preSave.url || '—';
-  preSaveUrl.textContent = preSave.url || '—';
-  preSaveNote.value = preSave.note || '';
-  preSaveTagList = Array.isArray(preSave.tags) ? [...preSave.tags] : [];
-  if (preSaveTagDraft) preSaveTagDraft.value = '';
-  renderPreSaveChips();
-  if (preSaveError) preSaveError.textContent = '';
-  if (preSaveConfirm) {
-    preSaveConfirm.disabled = false;
-    preSaveConfirm.textContent = t(preSave.afterSave === 'close' ? 'presaveSaveAndClose' : 'presaveSaveKeep');
-  }
-  if (preSaveCancel) preSaveCancel.disabled = false;
-  preSaveModal.classList.add('open');
-  preSaveModal.setAttribute('aria-hidden', 'false');
-  setTimeout(() => preSaveNote.focus(), 0);
-}
-
-function closePreSaveModal() {
-  if (!preSaveModal) return;
-  preSaveModal.classList.remove('open');
-  preSaveModal.setAttribute('aria-hidden', 'true');
-  preSaveContext = null;
-  preSaveTagList = [];
-}
-
-function cancelPreSave() {
-  closePreSaveModal();
-  if (!postToParent({ type: 'TABWALL_PRESAVE_CANCEL' })) {
-    sendMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'cancel' });
-  }
-}
-
-async function confirmPreSave() {
-  if (!preSaveContext) return;
-  commitPreSaveTagDraft();
-  const note = preSaveNote.value;
-  const tags = [...preSaveTagList];
-  if (preSaveConfirm) preSaveConfirm.disabled = true;
-  if (preSaveCancel) preSaveCancel.disabled = true;
-  if (preSaveError) preSaveError.textContent = '';
-  // Inside the content-script overlay, the host hides the overlay before
-  // capturing the screenshot then destroys it on success — closePreSaveModal()
-  // isn't called here so the modal stays visible (with a usable error state)
-  // if the save fails.
-  if (postToParent({ type: 'TABWALL_PRESAVE_COMMIT', note, tags })) return;
-  // Standalone fallback (no host overlay to hide) — resolve directly.
-  const res = await sendMessage({ type: 'RESOLVE_PRESAVE_EDIT', decision: 'save', note, tags });
-  if (res?.ok) {
-    closePreSaveModal();
-    await loadList();
-    return;
-  }
-  if (preSaveConfirm) preSaveConfirm.disabled = false;
-  if (preSaveCancel) preSaveCancel.disabled = false;
-  if (preSaveError) preSaveError.textContent = t('presaveFailed');
-}
-
-function initPreSaveUi() {
-  if (!preSaveModal) return;
-  preSaveCancel?.addEventListener('click', () => cancelPreSave());
-  preSaveConfirm?.addEventListener('click', () => confirmPreSave());
-  preSaveModal.addEventListener('click', (e) => {
-    if (e.target === preSaveModal) cancelPreSave();
-  });
-  preSaveTagDraft?.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab' || e.key === 'Enter') {
-      if (preSaveTagDraft.value.trim()) {
-        e.preventDefault();
-        commitPreSaveTagDraft();
-      }
-      if (e.key === 'Enter') e.preventDefault();
-      return;
-    }
-    if (e.key === 'Backspace' && !preSaveTagDraft.value && preSaveTagList.length) {
-      e.preventDefault();
-      preSaveTagList.pop();
-      renderPreSaveChips();
-    }
-  });
-}
-
-// ─── Manual wall dedupe scan ───────────────────────────────────────
+function initPreSaveUi(...args) { return WorkspaceUi.initPreSaveUi(...args); }
 
 /** @type {Array<{url:string, items:object[], mode:string, keepIds:Set<string>}>} */
 let dedupeState = [];
 
-function closeDedupeBox(sync = true) {
-  if (!dedupeBox) return;
-  dedupeBox.classList.remove('open');
-  dedupeBox.setAttribute('aria-hidden', 'true');
-  if (sync) syncFloatBackdrop();
-}
+function closeDedupeBox(...args) { return WorkspaceUi.closeDedupeBox(...args); }
 
 function centerDedupeBox() {
   // Dedupe is a right-side drawer in the redesigned wall; keep the legacy
   // call sites harmless without writing inline left/top coordinates.
 }
 
-async function openDedupeBox() {
-  if (!dedupeBox) return;
-  closeAllFloatsExcept('dedupe');
-  closeSettingsBox(false);
-  dedupeBox.classList.add('open');
-  dedupeBox.setAttribute('aria-hidden', 'false');
-  syncFloatBackdrop();
-  centerDedupeBox();
-  await runDedupeScan();
-  requestAnimationFrame(() => {
-    centerDedupeBox();
-    requestAnimationFrame(() => centerDedupeBox());
-  });
-}
+async function openDedupeBox(...args) { return await WorkspaceUi.openDedupeBox(...args); }
 
-function setClusterKeepMode(cluster, mode) {
-  cluster.mode = mode;
-  const items = cluster.items || [];
-  cluster.keepIds = new Set();
-  if (mode === 'all') {
-    for (const it of items) cluster.keepIds.add(it.id);
-    return;
-  }
-  if (!items.length) return;
-  const sorted = [...items].sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
-  if (mode === 'newest') {
-    cluster.keepIds.add(sorted[sorted.length - 1].id);
-  } else if (mode === 'oldest') {
-    cluster.keepIds.add(sorted[0].id);
-  } else if (mode === 'manual') {
-    // keep whatever checkboxes currently say — default all checked if empty
-    for (const it of items) cluster.keepIds.add(it.id);
-  }
-}
+function setClusterKeepMode(...args) { return AppHelpers.setClusterKeepMode(...args); }
 
-function renderDedupeClusters() {
-  if (!dedupeClustersEl) return;
-  dedupeClustersEl.innerHTML = '';
-  if (!dedupeState.length) {
-    dedupeClustersEl.innerHTML = `<div class="dedupe-empty">${escapeHtml(t('dedupeNoDupes'))}</div>`;
-    if (dedupeStatus) dedupeStatus.textContent = t('dedupeNoDupes');
-    return;
-  }
-  if (dedupeStatus) {
-    dedupeStatus.textContent = t('dedupeCount', { n: dedupeState.length });
-  }
+function renderDedupeClusters(...args) { return WorkspaceUi.renderDedupeClusters(...args); }
 
-  dedupeState.forEach((cluster, idx) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'dedupe-cluster';
-    wrap.dataset.idx = String(idx);
+async function runDedupeScan(...args) { return await WorkspaceUi.runDedupeScan(...args); }
 
-    const tools = document.createElement('div');
-    tools.className = 'cluster-tools';
-    const mkBtn = (label, mode) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'btn' + (cluster.mode === mode ? ' primary' : '');
-      b.textContent = label;
-      b.addEventListener('click', () => {
-        setClusterKeepMode(cluster, mode);
-        renderDedupeClusters();
-      });
-      return b;
-    };
-    tools.append(
-      mkBtn(t('dedupeKeepAll'), 'all'),
-      mkBtn(t('dedupeKeepNewest'), 'newest'),
-      mkBtn(t('dedupeKeepOldest'), 'oldest')
-    );
+async function applyDedupeChoices(...args) { return await WorkspaceUi.applyDedupeChoices(...args); }
 
-    const urlEl = document.createElement('div');
-    urlEl.className = 'cluster-url';
-    urlEl.textContent = `${cluster.url} · ${t('dedupeCount', { n: cluster.items.length })}`;
+function initDedupeUi(...args) { return WorkspaceUi.initDedupeUi(...args); }
 
-    wrap.appendChild(urlEl);
-    wrap.appendChild(tools);
+function placeFloatBox(...args) { return WorkspaceUi.placeFloatBox(...args); }
 
-    for (const it of cluster.items) {
-      const row = document.createElement('div');
-      row.className = 'dedupe-item';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = cluster.keepIds.has(it.id);
-      cb.addEventListener('change', () => {
-        cluster.mode = 'manual';
-        if (cb.checked) cluster.keepIds.add(it.id);
-        else cluster.keepIds.delete(it.id);
-        // ensure at least one kept
-        if (cluster.keepIds.size === 0) {
-          cb.checked = true;
-          cluster.keepIds.add(it.id);
-        }
-      });
-      row.appendChild(cb);
-      appendDedupeThumb(row, it);
-      const body = document.createElement('div');
-      body.className = 'di-body';
-      body.innerHTML = `
-        <div class="di-title">${escapeHtml(it.title || '—')}</div>
-        <div class="di-meta">${escapeHtml(t('dedupeSavedAt', { t: formatSavedAt(it.savedAt) }))}</div>
-      `;
-      row.appendChild(body);
-      appendDedupePreviewBtn(row, it);
-      wrap.appendChild(row);
-    }
+function positionTagsBoxUnderButton(...args) { return WorkspaceUi.positionTagsBoxUnderButton(...args); }
 
-    dedupeClustersEl.appendChild(wrap);
-  });
-  centerDedupeBox();
-}
+function setupFloatDrag(...args) { return WorkspaceUi.setupFloatDrag(...args); }
 
-async function runDedupeScan() {
-  if (dedupeStatus) dedupeStatus.textContent = '…';
-  const res = await sendMessage({ type: 'SCAN_DUPLICATES' });
-  const clusters = res?.ok && Array.isArray(res.clusters) ? res.clusters : [];
-  dedupeState = clusters.map((c) => {
-    const cluster = {
-      url: c.url,
-      items: Array.isArray(c.items) ? c.items : [],
-      mode: 'newest',
-      keepIds: new Set(),
-    };
-    setClusterKeepMode(cluster, 'newest');
-    return cluster;
-  });
-  renderDedupeClusters();
-  requestAnimationFrame(() => centerDedupeBox());
-}
+function applySettingsSection(...args) { return SettingsUi.applySettingsSection(...args); }
 
-async function applyDedupeChoices() {
-  const ops = dedupeState
-    .filter((c) => c.keepIds.size > 0 && c.keepIds.size < c.items.length)
-    .map((c) => ({ url: c.url, keepIds: [...c.keepIds] }));
+function initSettingsSections(...args) { return SettingsUi.initSettingsSections(...args); }
 
-  if (!ops.length) {
-    if (dedupeStatus) dedupeStatus.textContent = t('dedupeApplyNone');
-    return;
-  }
+function anyFloatOpen(...args) { return WorkspaceUi.anyFloatOpen(...args); }
 
-  const res = await sendMessage({ type: 'APPLY_DEDUPE', ops });
-  if (res?.ok) {
-    if (dedupeStatus) dedupeStatus.textContent = t('dedupeApplyOk', { n: res.deleted || 0 });
-    await loadList();
-    await runDedupeScan();
-  } else if (dedupeStatus) {
-    dedupeStatus.textContent = res?.error || 'error';
-  }
-}
+function syncFloatBackdrop(...args) { return WorkspaceUi.syncFloatBackdrop(...args); }
 
-function initDedupeUi() {
-  initConflictUi();
-  initPreSaveUi();
-  openDedupeBtn?.addEventListener('click', async () => {
-    await openDedupeBox();
-  });
-  dedupeCloseX?.addEventListener('click', () => closeDedupeBox());
-  dedupeRescanBtn?.addEventListener('click', () => runDedupeScan());
-  dedupeApplyBtn?.addEventListener('click', () => applyDedupeChoices());
-  if (dedupeDrag && dedupeBox) setupFloatDrag(dedupeDrag, dedupeBox);
-}
+function closeAllFloatsExcept(...args) { return WorkspaceUi.closeAllFloatsExcept(...args); }
 
-function placeFloatBox(el) {
-  const w = el.offsetWidth || 440;
-  const h = el.offsetHeight || 360;
-  el.style.left = `${Math.max(16, Math.round((window.innerWidth - w) / 2))}px`;
-  el.style.top = `${Math.max(16, Math.round((window.innerHeight - h) / 2))}px`;
-}
+function openSettingsBox(...args) { return SettingsUi.openSettingsBox(...args); }
 
-function positionTagsBoxUnderButton() {
-  if (!tagsBtn || !tagsBox) return;
-  const rect = tagsBtn.getBoundingClientRect();
-  const w = tagsBox.offsetWidth || 360;
-  const h = tagsBox.offsetHeight || 420;
-  const left = Math.min(window.innerWidth - w - 8, Math.max(8, Math.round(rect.right - w)));
-  const top = Math.min(window.innerHeight - h - 8, Math.max(8, Math.round(rect.bottom + 8)));
-  tagsBox.style.left = `${left}px`;
-  tagsBox.style.top = `${top}px`;
-  tagsBox.style.right = 'auto';
-  tagsBox.style.bottom = 'auto';
-  tagsBox.style.transform = 'none';
-}
+function closeSettingsBox(...args) { return SettingsUi.closeSettingsBox(...args); }
 
-function setupFloatDrag(handle, box) {
-  if (!handle || !box) return;
-  if (box.matches('#settingsBox, #tagsBox, #helpBox, #dedupeBox')) return;
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let origLeft = 0;
-  let origTop = 0;
-  handle.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
-    dragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    const rect = box.getBoundingClientRect();
-    origLeft = rect.left;
-    origTop = rect.top;
-    handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-  handle.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    box.style.left = `${Math.min(window.innerWidth - box.offsetWidth - 8, Math.max(8, origLeft + e.clientX - startX))}px`;
-    box.style.top = `${Math.min(window.innerHeight - 40, Math.max(8, origTop + e.clientY - startY))}px`;
-  });
-  const end = (e) => {
-    if (!dragging) return;
-    dragging = false;
-    try {
-      handle.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-  };
-  handle.addEventListener('pointerup', end);
-  handle.addEventListener('pointercancel', end);
-}
+async function openTagsBox(...args) { return await WorkspaceUi.openTagsBox(...args); }
 
-function applySettingsSection(section = 'general') {
-  const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'shortcuts', 'diagnostic']);
-  settingsSection = allowed.has(section) ? section : 'general';
-  settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
-    block.hidden = block.dataset.settingsSection !== settingsSection;
-  });
-  settingsNav?.querySelectorAll('.settings-nav-btn[data-settings-section]').forEach((button) => {
-    const active = button.dataset.settingsSection === settingsSection;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-current', active ? 'page' : 'false');
-  });
-}
+function closeTagsBox(...args) { return WorkspaceUi.closeTagsBox(...args); }
 
-function initSettingsSections() {
-  settingsNav?.querySelectorAll('.settings-nav-btn[data-settings-section]').forEach((button) => {
-    button.addEventListener('click', () => applySettingsSection(button.dataset.settingsSection));
-  });
-  settingsDoneBtn?.addEventListener('click', () => closeSettingsBox());
-  applySettingsSection(settingsSection);
-}
+function openHelpBox(...args) { return WorkspaceUi.openHelpBox(...args); }
 
-function anyFloatOpen() {
-  return (
-    settingsBox.classList.contains('open') ||
-    tagsBox.classList.contains('open') ||
-    helpBox.classList.contains('open') ||
-    editBox.classList.contains('open') ||
-    membersBox.classList.contains('open') ||
-    (stickerNoteBox && stickerNoteBox.classList.contains('open')) ||
-    (dedupeBox && dedupeBox.classList.contains('open')) ||
-    (importPickBox && importPickBox.classList.contains('open')) ||
-    (canvasStackDialog && canvasStackDialog.classList.contains('open'))
-  );
-}
-
-function syncFloatBackdrop() {
-  if (anyFloatOpen()) {
-    floatBackdrop.classList.add('open');
-    floatBackdrop.setAttribute('aria-hidden', 'false');
-  } else {
-    floatBackdrop.classList.remove('open');
-    floatBackdrop.setAttribute('aria-hidden', 'true');
-  }
-}
-
-function closeAllFloatsExcept(except) {
-  if (except !== 'settings') closeSettingsBox(false);
-  if (except !== 'tags') closeTagsBox(false);
-  if (except !== 'help') closeHelpBox(false);
-  if (except !== 'edit') closeEditBox();
-  if (except !== 'members') closeMembersBox();
-  if (except !== 'stickerNote') closeStickerNoteEditor();
-  if (except !== 'dedupe') closeDedupeBox(false);
-  if (except !== 'importPick') closeImportPickBox(false);
-  if (except !== 'canvasStack') closeCanvasStackDialog();
-  syncFloatBackdrop();
-}
-
-function openSettingsBox() {
-  closeAllFloatsExcept('settings');
-  settingsBox.classList.add('open');
-  settingsBox.setAttribute('aria-hidden', 'false');
-  settingsBtn.classList.add('active');
-  applySettingsSection(settingsSection);
-  syncFloatBackdrop();
-  refreshChromeCommandLabels();
-  syncAutoBackupUi();
-  refreshDiagLogPanel().catch(() => {});
-}
-
-function closeSettingsBox(sync = true) {
-  settingsBox.classList.remove('open');
-  settingsBox.setAttribute('aria-hidden', 'true');
-  settingsBtn.classList.remove('active');
-  if (sync) syncFloatBackdrop();
-}
-
-async function openTagsBox() {
-  closeAllFloatsExcept('tags');
-  tagsBox.classList.add('open');
-  tagsBox.setAttribute('aria-hidden', 'false');
-  tagsBtn.classList.add('active');
-  positionTagsBoxUnderButton();
-  syncFloatBackdrop();
-  await refreshTagManager();
-  tagSearch.focus();
-}
-
-function closeTagsBox(sync = true) {
-  tagsBox.classList.remove('open');
-  tagsBox.setAttribute('aria-hidden', 'true');
-  tagsBtn.classList.remove('active');
-  if (sync) syncFloatBackdrop();
-}
-
-function openHelpBox() {
-  closeAllFloatsExcept('help');
-  helpBox.classList.add('open');
-  helpBox.setAttribute('aria-hidden', 'false');
-  helpBtn.classList.add('active');
-  syncFloatBackdrop();
-}
-
-function closeHelpBox(sync = true) {
-  helpBox.classList.remove('open');
-  helpBox.setAttribute('aria-hidden', 'true');
-  helpBtn.classList.remove('active');
-  if (sync) syncFloatBackdrop();
-}
+function closeHelpBox(...args) { return WorkspaceUi.closeHelpBox(...args); }
 
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -3846,529 +1608,6 @@ closeBtn.addEventListener('click', requestHostClose);
 closeBtn.innerHTML = iconSvg('close');
 closeBtn.setAttribute('aria-label', t('close'));
 closeBtn.title = t('close');
-
-// ─── Search ────────────────────────────────────────────────────────
-
-function searchPlaceholderText() {
-  const re = Boolean(settings.searchRegex);
-  if (searchScope === 'tag') return re ? t('searchPhTagRegex') : t('searchPhTag');
-  if (searchScope === 'note') return re ? t('searchPhNoteRegex') : t('searchPhNote');
-  if (searchScope === 'group') return re ? t('searchPhGroupRegex') : t('searchPhGroup');
-  if (searchScope === 'domain') return re ? t('searchPhDomainRegex') : t('searchPhDomain');
-  return re ? t('searchRegexPh') : t('searchPh');
-}
-
-function syncSearchScopeUi() {
-  const scoped = searchScope === 'tag' || searchScope === 'note' || searchScope === 'group' || searchScope === 'domain';
-  if (searchWrap) searchWrap.classList.toggle('has-scope', scoped);
-  if (searchScopeChip) {
-    if (scoped) {
-      searchScopeChip.hidden = false;
-      searchScopeChip.textContent = searchScope;
-      searchScopeChip.title = t('searchScopeClear');
-      searchScopeChip.setAttribute('aria-label', t('searchScopeClear'));
-    } else {
-      searchScopeChip.hidden = true;
-      searchScopeChip.textContent = '';
-    }
-  }
-  if (searchEl) {
-    searchEl.placeholder = searchPlaceholderText();
-    // "group" chip is wider than "tag"/"note" — pad input so caret is not covered
-    if (scoped && searchScopeChip) {
-      requestAnimationFrame(() => {
-        if (!searchEl || !searchScopeChip || searchScopeChip.hidden) return;
-        const w = searchScopeChip.offsetWidth || 0;
-        searchEl.style.paddingLeft = `${Math.max(52, w + 16)}px`;
-      });
-    } else {
-      searchEl.style.paddingLeft = '';
-    }
-  }
-  syncTagSuggest();
-}
-
-// ─── Tag-mode search suggestion dropdown ──────────────────────────
-
-/** Flat list of every token already in the query (any operator), lowercased. */
-function allTagQueryTokens(raw) {
-  return String(raw || '')
-    .split(/\s*(?:\|\||&&)\s*/)
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/** Splits the raw query into alternating {type:'token'|'op', value} entries, preserving exact text. */
-function tokenizeTagQuery(raw) {
-  const value = String(raw || '');
-  const result = [];
-  let lastIndex = 0;
-  const opRe = /\s*(\|\||&&)\s*/g;
-  let match;
-  while ((match = opRe.exec(value))) {
-    result.push({ type: 'token', value: value.slice(lastIndex, match.index) });
-    result.push({ type: 'op', value: match[1] });
-    lastIndex = opRe.lastIndex;
-  }
-  result.push({ type: 'token', value: value.slice(lastIndex) });
-  return result;
-}
-
-/** Token containing the caret in #search, as exact character offsets for splicing. */
-function currentTagToken() {
-  const value = searchEl.value;
-  const caret = searchEl.selectionStart ?? value.length;
-  const bounds = [0];
-  const opRe = /\|\||&&/g;
-  let match;
-  while ((match = opRe.exec(value))) {
-    bounds.push(match.index, match.index + match[0].length);
-  }
-  bounds.push(value.length);
-  for (let i = 0; i < bounds.length; i += 2) {
-    const start = bounds[i];
-    const end = bounds[i + 1];
-    if (caret >= start && caret <= end) return { start, end, text: value.slice(start, end) };
-  }
-  return { start: value.length, end: value.length, text: '' };
-}
-
-function buildTagSuggestIndex() {
-  const index = new Map();
-  for (const item of allTabs) {
-    for (const name of itemTagNames(item)) {
-      const key = String(name || '').trim();
-      if (!key) continue;
-      const lower = key.toLowerCase();
-      const entry = index.get(lower);
-      if (entry) entry.count += 1;
-      else index.set(lower, { name: key, count: 1 });
-    }
-  }
-  tagSuggestIndex = index;
-  tagSuggestIndexDirty = false;
-  return index;
-}
-
-function ensureTagSuggestIndex() {
-  if (tagSuggestIndexDirty || !tagSuggestIndex) return buildTagSuggestIndex();
-  return tagSuggestIndex;
-}
-
-/** Filters+ranks tags for the dropdown: exact > prefix > higher count > locale order. */
-function computeTagSuggestions(prefix) {
-  const index = ensureTagSuggestIndex();
-  const needle = String(prefix || '').trim().toLowerCase();
-  const all = [...index.values()];
-  const filtered = needle ? all.filter((tag) => tag.name.toLowerCase().includes(needle)) : all;
-  filtered.sort((a, b) => {
-    const aName = a.name.toLowerCase();
-    const bName = b.name.toLowerCase();
-    if (needle) {
-      const aExact = aName === needle;
-      const bExact = bName === needle;
-      if (aExact !== bExact) return aExact ? -1 : 1;
-      const aPrefix = aName.startsWith(needle);
-      const bPrefix = bName.startsWith(needle);
-      if (aPrefix !== bPrefix) return aPrefix ? -1 : 1;
-    }
-    if (a.count !== b.count) return b.count - a.count;
-    return a.name.localeCompare(b.name, 'zh-Hant');
-  });
-  return filtered.slice(0, TAG_SUGGEST_LIMIT);
-}
-
-function renderTagSuggest() {
-  if (!searchTagSuggest) return;
-  searchTagSuggest.innerHTML = '';
-  const selected = new Set(allTagQueryTokens(searchEl.value));
-  if (!tagSuggestRows.length) {
-    const empty = document.createElement('div');
-    empty.className = 'search-suggest-empty';
-    empty.textContent = t('searchTagSuggestEmpty');
-    searchTagSuggest.appendChild(empty);
-  } else {
-    tagSuggestRows.forEach((row, i) => {
-      const isSelected = selected.has(row.name.toLowerCase());
-      const el = document.createElement('div');
-      el.className = `search-suggest-row${i === tagSuggestActive ? ' active' : ''}${isSelected ? ' is-selected' : ''}`;
-      el.id = `searchTagSuggestRow-${i}`;
-      el.setAttribute('role', 'option');
-      el.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-      el.title = isSelected ? t('searchTagSuggestRemove') : row.name;
-
-      const name = document.createElement('span');
-      name.className = 'name';
-      name.textContent = row.name;
-      el.appendChild(name);
-
-      const count = document.createElement('span');
-      count.className = 'count';
-      count.textContent = String(row.count);
-      el.appendChild(count);
-
-      const orBtn = document.createElement('button');
-      orBtn.type = 'button';
-      orBtn.className = 'search-suggest-or';
-      orBtn.textContent = '||';
-      orBtn.title = t('searchTagSuggestOr');
-      orBtn.addEventListener('pointerdown', (e) => e.preventDefault());
-      orBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        acceptTagSuggestion(row.name, '||');
-      });
-      el.appendChild(orBtn);
-
-      el.addEventListener('pointerdown', (e) => e.preventDefault()); // keep focus in #search
-      el.addEventListener('click', () => {
-        if (isSelected) removeTagToken(row.name);
-        else acceptTagSuggestion(row.name, '&&');
-      });
-      searchTagSuggest.appendChild(el);
-    });
-  }
-  const hint = document.createElement('div');
-  hint.className = 'search-suggest-hint';
-  hint.textContent = t('searchTagSuggestHint');
-  searchTagSuggest.appendChild(hint);
-
-  if (tagSuggestActive >= 0) searchEl.setAttribute('aria-activedescendant', `searchTagSuggestRow-${tagSuggestActive}`);
-  else searchEl.removeAttribute('aria-activedescendant');
-}
-
-function openTagSuggest() {
-  if (!searchTagSuggest || tagSuggestOpen) return;
-  tagSuggestOpen = true;
-  searchTagSuggest.hidden = false;
-  searchEl.setAttribute('aria-expanded', 'true');
-}
-
-function closeTagSuggest() {
-  if (!searchTagSuggest || !tagSuggestOpen) return;
-  tagSuggestOpen = false;
-  tagSuggestActive = -1;
-  searchTagSuggest.hidden = true;
-  searchEl.setAttribute('aria-expanded', 'false');
-  searchEl.removeAttribute('aria-activedescendant');
-}
-
-/** Single entry point: recomputes suggestions from the caret token and opens/closes as needed. */
-function syncTagSuggest() {
-  if (!searchTagSuggest || !searchEl) return;
-  if (!isTagExpressionMode() || document.activeElement !== searchEl) {
-    closeTagSuggest();
-    return;
-  }
-  const { text } = currentTagToken();
-  tagSuggestRows = computeTagSuggestions(text);
-  tagSuggestActive = -1;
-  renderTagSuggest();
-  openTagSuggest();
-}
-
-function moveTagSuggestActive(delta) {
-  if (!tagSuggestRows.length) return;
-  const n = tagSuggestRows.length;
-  tagSuggestActive = ((tagSuggestActive + delta) % n + n) % n;
-  renderTagSuggest();
-  searchTagSuggest.querySelector(`#searchTagSuggestRow-${tagSuggestActive}`)?.scrollIntoView({ block: 'nearest' });
-}
-
-/** Replaces the caret token with `name` and (when it's the trailing token) appends the operator. */
-function acceptTagSuggestion(name, operator = '&&') {
-  const { start, end } = currentTagToken();
-  const value = searchEl.value;
-  const before = value.slice(0, start);
-  const after = value.slice(end);
-  let nextValue;
-  let caret;
-  if (!after.trim()) {
-    nextValue = `${before}${name} ${operator} `;
-    caret = nextValue.length;
-  } else {
-    nextValue = `${before}${name}${after}`;
-    caret = before.length + name.length;
-  }
-  searchEl.value = nextValue;
-  searchEl.setSelectionRange(caret, caret);
-  setSearchQueryFromInput({ immediate: true });
-  syncTagSuggest();
-  searchEl.focus();
-}
-
-/** Removes an already-selected tag token (and one adjacent operator) from the query. */
-function removeTagToken(name) {
-  const lower = String(name || '').trim().toLowerCase();
-  const tokens = tokenizeTagQuery(searchEl.value);
-  const idx = tokens.findIndex((entry) => entry.type === 'token' && entry.value.trim().toLowerCase() === lower);
-  if (idx === -1) return;
-  tokens.splice(idx, 1);
-  if (idx > 0 && tokens[idx - 1]?.type === 'op') tokens.splice(idx - 1, 1);
-  else if (tokens[idx]?.type === 'op') tokens.splice(idx, 1);
-  searchEl.value = tokens.map((entry) => entry.value).join('').trim();
-  searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
-  setSearchQueryFromInput({ immediate: true });
-  syncTagSuggest();
-  searchEl.focus();
-}
-
-function syncSearchRegexUi() {
-  const on = Boolean(settings.searchRegex);
-  if (searchRegexBtn) {
-    searchRegexBtn.classList.toggle('active', on);
-    searchRegexBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    searchRegexBtn.title = t('searchRegexTitle');
-  }
-  if (searchEl) {
-    searchEl.placeholder = searchPlaceholderText();
-    if (!on) {
-      searchEl.classList.remove('invalid');
-      searchEl.removeAttribute('aria-invalid');
-      searchEl.removeAttribute('title');
-    } else {
-      applySearchCompileState();
-    }
-  }
-  syncSearchScopeUi();
-}
-
-function clearSearchInputKeepFocus() {
-  if (!searchEl) return;
-  searchEl.value = '';
-  query = '';
-  compiledSearch = { raw: '', re: null, err: null };
-  searchEl.classList.remove('invalid');
-  searchEl.removeAttribute('aria-invalid');
-  searchEl.removeAttribute('title');
-  searchEl.focus();
-  if (searchRenderTimer) {
-    clearTimeout(searchRenderTimer);
-    searchRenderTimer = null;
-  }
-  syncTagSuggest();
-}
-
-/** Empty query matches everything — no need to rebuild the canvas. */
-function refilterSearchIfNeeded() {
-  if (searchRenderTimer) {
-    clearTimeout(searchRenderTimer);
-    searchRenderTimer = null;
-  }
-  if (query) renderGrid();
-  else {
-    renderGrid(); // scope change (e.g. group) must refilter even with empty query
-  }
-}
-
-async function applySearchTabToken(token) {
-  if (token === 'tag' || token === 'note' || token === 'group' || token === 'domain' || token === 'all') {
-    searchScope = token === 'all' ? 'all' : token;
-    clearSearchInputKeepFocus();
-    syncSearchScopeUi();
-    refilterSearchIfNeeded();
-    return;
-  }
-  if (token === 'regex') {
-    if (!settings.searchRegex) {
-      await saveSettings({ searchRegex: true });
-    }
-    clearSearchInputKeepFocus();
-    syncSearchRegexUi();
-    refilterSearchIfNeeded();
-  }
-}
-
-/** Initial search mode: scope=all, regex off. Returns true if anything changed. */
-async function resetSearchModesToDefault() {
-  let changed = false;
-  if (searchScope !== 'all') {
-    searchScope = 'all';
-    changed = true;
-  }
-  if (settings.searchRegex) {
-    await saveSettings({ searchRegex: false });
-    changed = true;
-  }
-  if (changed) {
-    syncSearchRegexUi();
-    refilterSearchIfNeeded();
-  }
-  return changed;
-}
-
-function isSearchInCustomMode() {
-  return searchScope !== 'all' || Boolean(settings.searchRegex);
-}
-
-function parseRegexInput(raw) {
-  const s = String(raw || '');
-  // /pattern/flags form (flags: only gimsuyv)
-  const m = /^\/((?:\\\/|[^/])+)\/([gimsuyv]*)$/.exec(s);
-  if (m) {
-    return { source: m[1], flags: m[2] || 'i' };
-  }
-  return { source: s, flags: 'i' };
-}
-
-function compileSearchQuery(raw) {
-  const trimmed = String(raw || '').trim();
-  if (!trimmed) {
-    compiledSearch = { raw: '', re: null, err: null };
-    return compiledSearch;
-  }
-  if (!settings.searchRegex) {
-    compiledSearch = { raw: trimmed, re: null, err: null };
-    return compiledSearch;
-  }
-  if (trimmed.length > MAX_SEARCH_REGEX_LENGTH) {
-    compiledSearch = { raw: trimmed, re: null, err: `pattern_too_long_${MAX_SEARCH_REGEX_LENGTH}` };
-    return compiledSearch;
-  }
-  try {
-    const { source, flags } = parseRegexInput(trimmed);
-    // Drop sticky/global to avoid lastIndex side effects on repeated .test
-    const safeFlags = flags.replace(/[gy]/g, '');
-    const re = new RegExp(source, safeFlags || 'i');
-    compiledSearch = { raw: trimmed, re, err: null };
-  } catch (err) {
-    compiledSearch = { raw: trimmed, re: null, err: String(err?.message || err) };
-  }
-  return compiledSearch;
-}
-
-function applySearchCompileState() {
-  if (!searchEl) return;
-  if (!settings.searchRegex || !query) {
-    searchEl.classList.remove('invalid');
-    searchEl.removeAttribute('aria-invalid');
-    if (settings.searchRegex) searchEl.removeAttribute('title');
-    return;
-  }
-  const { err } = compileSearchQuery(query);
-  if (err) {
-    searchEl.classList.add('invalid');
-    searchEl.setAttribute('aria-invalid', 'true');
-    searchEl.title = err;
-  } else {
-    searchEl.classList.remove('invalid');
-    searchEl.removeAttribute('aria-invalid');
-    searchEl.removeAttribute('title');
-  }
-}
-
-let searchRenderTimer = null;
-const SEARCH_RENDER_DEBOUNCE_MS = 120;
-
-function setSearchQueryFromInput({ immediate = false } = {}) {
-  // Keep original case for regex; plain mode lowercases inside matchesQuery
-  query = searchEl.value.trim();
-  compileSearchQuery(query);
-  applySearchCompileState();
-  if (immediate) {
-    if (searchRenderTimer) {
-      clearTimeout(searchRenderTimer);
-      searchRenderTimer = null;
-    }
-    renderGrid();
-    return;
-  }
-  if (searchRenderTimer) clearTimeout(searchRenderTimer);
-  searchRenderTimer = setTimeout(() => {
-    searchRenderTimer = null;
-    renderGrid();
-  }, SEARCH_RENDER_DEBOUNCE_MS);
-}
-
-searchEl.addEventListener('input', () => {
-  setSearchQueryFromInput({ immediate: false });
-  syncTagSuggest();
-});
-searchEl.addEventListener('focus', () => syncTagSuggest());
-searchEl.addEventListener('click', () => syncTagSuggest());
-document.addEventListener('pointerdown', (e) => {
-  if (tagSuggestOpen && !e.target.closest?.('#searchWrap')) closeTagSuggest();
-});
-
-const SEARCH_TAB_TOKENS = {
-  t: 'tag',
-  tag: 'tag',
-  n: 'note',
-  note: 'note',
-  g: 'group',
-  group: 'group',
-  d: 'domain',
-  domain: 'domain',
-  re: 'regex',
-  regex: 'regex',
-  a: 'all',
-  all: 'all',
-};
-
-searchEl.addEventListener('keydown', (e) => {
-  if (tagSuggestOpen) {
-    if (e.isComposing || e.keyCode === 229) return; // IME candidate window open — don't intercept
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      moveTagSuggestActive(e.key === 'ArrowDown' ? 1 : -1);
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      closeTagSuggest();
-      return;
-    }
-    if (
-      tagSuggestActive >= 0 &&
-      tagSuggestRows[tagSuggestActive] &&
-      (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey && !e.metaKey && !e.ctrlKey))
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      acceptTagSuggestion(tagSuggestRows[tagSuggestActive].name, e.altKey ? '||' : '&&');
-      return;
-    }
-  }
-
-  // Empty field + Backspace/Delete → leave tag/note/regex back to default
-  if (
-    (e.key === 'Backspace' || e.key === 'Delete') &&
-    searchEl.value === '' &&
-    !e.metaKey &&
-    !e.ctrlKey &&
-    !e.altKey
-  ) {
-    if (!isSearchInCustomMode()) return;
-    e.preventDefault();
-    e.stopPropagation();
-    resetSearchModesToDefault();
-    return;
-  }
-
-  if (e.key !== 'Tab' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
-  const token = searchEl.value.trim().toLowerCase();
-  const mode = SEARCH_TAB_TOKENS[token];
-  if (!mode) return;
-  e.preventDefault();
-  e.stopPropagation();
-  applySearchTabToken(mode);
-});
-
-if (searchScopeChip) {
-  searchScopeChip.addEventListener('click', () => {
-    applySearchTabToken('all');
-  });
-}
-
-if (searchRegexBtn) {
-  searchRegexBtn.addEventListener('click', async () => {
-    await saveSettings({ searchRegex: !settings.searchRegex });
-    syncSearchRegexUi();
-    compileSearchQuery(query);
-    applySearchCompileState();
-    refilterSearchIfNeeded();
-  });
-}
 
 document.addEventListener('keydown', (e) => {
   if (e.key === '/' && !isTypingTarget(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -4479,7 +1718,7 @@ document.addEventListener('keydown', (e) => {
       if (searchEl.value) {
         searchEl.value = '';
         query = '';
-        compiledSearch = { raw: '', re: null, err: null };
+        SearchQuery.resetCompiledSearch();
         searchEl.classList.remove('invalid');
         searchEl.removeAttribute('aria-invalid');
         searchEl.removeAttribute('title');
@@ -4509,30 +1748,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ─── Sort ──────────────────────────────────────────────────────────
-
-function sortTabs(list, sortBy) {
-  const arr = [...list];
-  switch (normalizeSortBy(sortBy)) {
-    case 'group-first':
-      return arr.sort((a, b) => {
-        const rank = (item) => item.kind === 'group' ? 0 : item.kind === 'note' ? 1 : 2;
-        const ga = rank(a);
-        const gb = rank(b);
-        if (ga !== gb) return ga - gb;
-        return (b.savedAt || 0) - (a.savedAt || 0);
-      });
-    case 'domain':
-      return arr.sort((a, b) => {
-        const da = a.kind === 'group' || a.kind === 'note' ? '' : domainOf(a.url);
-        const db = b.kind === 'group' || b.kind === 'note' ? '' : domainOf(b.url);
-        return da.localeCompare(db) || (b.savedAt || 0) - (a.savedAt || 0);
-      });
-    case 'newest':
-    default:
-      return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  }
-}
+function sortTabs(...args) { return AppHelpers.sortTabs(...args); }
 
 function linkTextForItem(item) {
   if (item.kind === 'group') {
@@ -4545,99 +1761,17 @@ function linkTextForItem(item) {
   return item.url || '';
 }
 
-function copyTextFallback(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.setAttribute('readonly', '');
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  ta.style.top = '0';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  ta.setSelectionRange(0, text.length);
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch {
-    ok = false;
-  }
-  ta.remove();
-  return ok;
-}
+function copyTextFallback(...args) { return AppHelpers.copyTextFallback(...args); }
 
-async function copySavedLink(item) {
-  const text = linkTextForItem(item);
-  if (!text) {
-    showCopyToast(t('copyFailed'));
-    return;
-  }
-  // Prefer sync fallback first while still in the user-gesture stack (iframe-safe)
-  if (copyTextFallback(text)) {
-    showCopyToast(t('copied'));
-    return;
-  }
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      showCopyToast(t('copied'));
-      return;
-    }
-  } catch {
-    // fall through
-  }
-  showCopyToast(t('copyFailed'));
-}
+async function copySavedLink(...args) { return await AppHelpers.copySavedLink(...args); }
 
-function showCopyToast(msg) {
-  let el = document.getElementById('copyToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'copyToast';
-    el.className = 'copy-toast';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-  el.classList.add('show');
-  if (copyToastTimer) clearTimeout(copyToastTimer);
-  copyToastTimer = setTimeout(() => {
-    el.classList.remove('show');
-  }, 1400);
-}
+function showCopyToast(...args) { return AppHelpers.showCopyToast(...args); }
 
 function isMultiSelectModifier(e) {
   return Boolean(e && (e.metaKey || e.ctrlKey || e.shiftKey));
 }
 
-function handleCardSelectClick(itemId, e) {
-  if (!e) {
-    if (!selectMode) setSelectMode(true);
-    toggleSelect(itemId);
-    lastAnchorId = itemId;
-    return;
-  }
-  const visible = getVisibleTabs();
-  const ids = visible.map((x) => x.id);
-  const idx = ids.indexOf(itemId);
-  if (e.shiftKey && lastAnchorId) {
-    const a = ids.indexOf(lastAnchorId);
-    if (a >= 0 && idx >= 0) {
-      if (!selectMode) setSelectMode(true);
-      const lo = Math.min(a, idx);
-      const hi = Math.max(a, idx);
-      for (let i = lo; i <= hi; i++) selectedIds.add(ids[i]);
-      updateBatchBar();
-      renderGrid();
-      return;
-    }
-  }
-  // ⌘/Ctrl toggle, Shift 起點, 或已在選擇模式：切換此項
-  if (selectMode || e.metaKey || e.ctrlKey || e.shiftKey) {
-    if (!selectMode) setSelectMode(true);
-    toggleSelect(itemId);
-    lastAnchorId = itemId;
-  }
-}
+function handleCardSelectClick(...args) { return AppHelpers.handleCardSelectClick(...args); }
 
 function getVisibleTabs() {
   return sortTabs(
@@ -4653,39 +1787,7 @@ function canvasItemPassesIndexFilter(item) {
   return true;
 }
 
-function getCanvasSearchContext() {
-  const queryActive = Boolean(String(query || '').trim());
-  const directItems = getVisibleTabs().filter(canvasItemPassesIndexFilter);
-  const directIds = new Set(directItems.map((item) => item.id));
-  const relatedIds = new Set();
-  if (queryActive && directIds.size) {
-    const layout = canvasStoreSnapshot().layout || canvasLayout;
-    for (const connection of layout.connections || []) {
-      if (directIds.has(connection.sourceId)) relatedIds.add(connection.targetId);
-      if (directIds.has(connection.targetId)) relatedIds.add(connection.sourceId);
-    }
-  }
-  relatedIds.forEach((id) => {
-    if (directIds.has(id)) relatedIds.delete(id);
-  });
-  const relatedItems = queryActive
-    ? sortTabs(
-        allTabs.filter((item) => (
-          (!pinnedOnly || item.pinned === true)
-          && canvasItemPassesIndexFilter(item)
-          && relatedIds.has(item.id)
-          && !directIds.has(item.id)
-        )),
-        normalizeSortBy(settings.sortBy)
-      )
-    : [];
-  return {
-    items: [...directItems, ...relatedItems],
-    directIds,
-    relatedIds: new Set(relatedItems.map((item) => item.id)),
-    queryActive,
-  };
-}
+function getCanvasSearchContext(...args) { return AppHelpers.getCanvasSearchContext(...args); }
 
 function getCanvasVisibleTabs() {
   return getCanvasSearchContext().items;
@@ -4710,95 +1812,13 @@ function canvasSearchPreviewKey(searchContext) {
   });
 }
 
-function canvasSearchLayoutFor(searchContext = getCanvasSearchContext()) {
-  const state = canvasStoreSnapshot();
-  const layout = state.layout || canvasLayout;
-  if (!isCanvasSearchPreviewActive(searchContext)) {
-    canvasSearchPreview = null;
-    return layout;
-  }
+function canvasSearchLayoutFor(...args) { return AppHelpers.canvasSearchLayoutFor(...args); }
 
-  const key = canvasSearchPreviewKey(searchContext);
-  if (
-    !canvasSearchPreview
-    || canvasSearchPreview.key !== key
-    || canvasSearchPreview.revision !== state.revision
-  ) {
-    canvasSearchPreview = {
-      key,
-      revision: state.revision,
-      positions: arrangeCanvasGrid(searchContext.items, layout),
-      mode: 'grid',
-    };
-  }
+function syncCanvasIndexUi(...args) { return AppHelpers.syncCanvasIndexUi(...args); }
 
-  return {
-    ...layout,
-    positions: {
-      ...(layout.positions || {}),
-      ...canvasSearchPreview.positions,
-    },
-  };
-}
+function renderCanvasStackIndex(...args) { return AppHelpers.renderCanvasStackIndex(...args); }
 
-function syncCanvasIndexUi() {
-  const allButton = document.getElementById('canvasAllBtn');
-  const unsortedButton = document.getElementById('canvasUnsortedBtn');
-  const pinnedButton = document.getElementById('canvasPinnedBtn');
-  const buttons = [allButton, unsortedButton, pinnedButton, ...document.querySelectorAll('[data-canvas-stack-filter]')].filter(Boolean);
-  buttons.forEach((button) => button.classList.remove('active'));
-  const active = canvasIndexFilter === 'unsorted'
-    ? unsortedButton
-    : canvasIndexFilter === 'pinned'
-      ? pinnedButton
-      : canvasIndexFilter.startsWith('stack:')
-        ? document.querySelector(`[data-canvas-stack-filter="${CSS.escape(canvasIndexFilter.slice(6))}"]`)
-        : allButton;
-  active?.classList.add('active');
-  const count = document.querySelector('[data-canvas-count]');
-  if (count) count.textContent = String(getCanvasVisibleTabs().length);
-}
-
-function renderCanvasStackIndex() {
-  const root = document.getElementById('canvasStackIndex');
-  if (!root) return;
-  const groups = allTabs.filter((item) => item.kind === 'group');
-  if (canvasIndexFilter.startsWith('stack:') && !groups.some((group) => group.id === canvasIndexFilter.slice(6))) {
-    canvasIndexFilter = 'all';
-  }
-  root.innerHTML = groups
-    .map((group) => `<button type="button" data-canvas-stack-filter="${escapeAttr(group.id)}" title="${escapeAttr(itemTitle(group))}">${escapeHtml(itemTitle(group))}</button>`)
-    .join('');
-  root.querySelectorAll('[data-canvas-stack-filter]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const id = button.dataset.canvasStackFilter || '';
-      setCanvasIndexFilter(`stack:${id}`, id);
-    });
-  });
-  syncCanvasIndexUi();
-}
-
-function focusCanvasItem(id) {
-  if (!canvasViewportEl || !id) return;
-  const item = allTabs.find((candidate) => candidate.id === id);
-  if (!item) return;
-  const rect = canvasViewportEl.getBoundingClientRect?.();
-  const width = canvasViewportEl.clientWidth || rect?.width || 0;
-  const height = canvasViewportEl.clientHeight || rect?.height || 0;
-  if (!width || !height) return;
-  const state = canvasStoreSnapshot();
-  const position = canvasDisplayPosition(
-    state.layout.positions?.[id] || canvasDefaultPosition(allTabs.indexOf(item)),
-  );
-  const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
-  const itemWidth = Math.max(1, Number(position.w) || 1);
-  const itemHeight = Math.max(1, Number(position.h) || 1);
-  ensureCanvasStore()?.commitViewport({
-    x: Number(position.x) + itemWidth / 2 - width / (2 * zoom),
-    y: Number(position.y) + itemHeight / 2 - height / (2 * zoom),
-    zoom,
-  });
-}
+function focusCanvasItem(...args) { return AppHelpers.focusCanvasItem(...args); }
 
 function setCanvasIndexFilter(filter, focusId = '') {
   canvasIndexFilter = String(filter || 'all');
@@ -4817,741 +1837,40 @@ function commitCanvasRailState(width, collapsed) {
   saveSettings(next).catch(() => {});
 }
 
-function canvasRailResizeDraft(event, state) {
-  const rawWidth = state.startWidth + event.clientX - state.startX;
-  const collapsed = rawWidth < CANVAS_RAIL_COLLAPSE_THRESHOLD;
-  return {
-    // Keep the last valid expanded width while the preview is collapsed so
-    // the toggle can restore the user's previous working width.
-    canvasRailWidth: collapsed ? normalizeCanvasRailWidth(state.startWidth) : normalizeCanvasRailWidth(rawWidth),
-    canvasRailCollapsed: collapsed,
-  };
-}
+function canvasRailResizeDraft(...args) { return CanvasChrome.canvasRailResizeDraft(...args); }
 
-function scheduleCanvasRailResizePreview() {
-  if (canvasRailResizeFrame) return;
-  const schedule = typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame
-    : (callback) => setTimeout(callback, 16);
-  canvasRailResizeFrame = schedule(() => {
-    canvasRailResizeFrame = 0;
-    const state = canvasRailResizeState;
-    if (!state) return;
-    applyCanvasRailUi({
-      width: state.width,
-      collapsed: state.collapsed,
-    });
-  });
-}
+function scheduleCanvasRailResizePreview(...args) { return CanvasChrome.scheduleCanvasRailResizePreview(...args); }
 
-function flushCanvasRailResizePreview() {
-  if (canvasRailResizeFrame) {
-    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(canvasRailResizeFrame);
-    else clearTimeout(canvasRailResizeFrame);
-    canvasRailResizeFrame = 0;
-  }
-  const state = canvasRailResizeState;
-  if (state) {
-    applyCanvasRailUi({
-      width: state.width,
-      collapsed: state.collapsed,
-    });
-  }
-}
+function flushCanvasRailResizePreview(...args) { return CanvasChrome.flushCanvasRailResizePreview(...args); }
 
-function updateCanvasRailResize(event) {
-  const state = canvasRailResizeState;
-  if (!state || state.pointerId !== event.pointerId) return;
-  event.preventDefault();
-  const next = canvasRailResizeDraft(event, state);
-  state.width = next.canvasRailWidth;
-  state.collapsed = next.canvasRailCollapsed;
-  scheduleCanvasRailResizePreview();
-}
+function updateCanvasRailResize(...args) { return CanvasChrome.updateCanvasRailResize(...args); }
 
-function endCanvasRailResize({ commit = true } = {}) {
-  const state = canvasRailResizeState;
-  if (!state) return;
-  flushCanvasRailResizePreview();
-  canvasRailResizeState = null;
-  canvasView?.classList.remove('is-rail-resizing');
-  try {
-    if (state.pointerId != null) canvasRailResize?.releasePointerCapture?.(state.pointerId);
-  } catch {
-    // ignore
-  }
-  if (!commit) {
-    applyCanvasRailUi();
-    return;
-  }
-  commitCanvasRailState(state.width, state.collapsed);
-}
+function endCanvasRailResize(...args) { return CanvasChrome.endCanvasRailResize(...args); }
 
-function handleCanvasRailKeydown(event) {
-  if (!canvasRailResize) return;
-  const collapsed = settings.canvasRailCollapsed === true;
-  const width = normalizeCanvasRailWidth(settings.canvasRailWidth);
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    commitCanvasRailState(width, !collapsed);
-    return;
-  }
-  if (event.key === 'Home') {
-    event.preventDefault();
-    commitCanvasRailState(width, true);
-    return;
-  }
-  if (event.key === 'End') {
-    event.preventDefault();
-    commitCanvasRailState(CANVAS_RAIL_MAX_WIDTH, false);
-    return;
-  }
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-  event.preventDefault();
-  if (collapsed) {
-    if (event.key === 'ArrowRight') commitCanvasRailState(width, false);
-    return;
-  }
-  const delta = event.key === 'ArrowRight' ? CANVAS_RAIL_KEYBOARD_STEP : -CANVAS_RAIL_KEYBOARD_STEP;
-  const nextWidth = width + delta;
-  if (nextWidth < CANVAS_RAIL_COLLAPSE_THRESHOLD) {
-    commitCanvasRailState(width, true);
-  } else {
-    commitCanvasRailState(nextWidth, false);
-  }
-}
+function handleCanvasRailKeydown(...args) { return CanvasChrome.handleCanvasRailKeydown(...args); }
 
-function cancelCanvasRailResize() {
-  endCanvasRailResize({ commit: false });
-}
+function cancelCanvasRailResize(...args) { return CanvasChrome.cancelCanvasRailResize(...args); }
 
-function initCanvasRailResize() {
-  if (!canvasRailResize || !canvasRailToggle) return;
-  canvasRailResize.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || !event.isPrimary || settings.canvasRailCollapsed || canvasRailResizeState) return;
-    event.preventDefault();
-    canvasRailResizeState = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth: normalizeCanvasRailWidth(settings.canvasRailWidth),
-      width: normalizeCanvasRailWidth(settings.canvasRailWidth),
-      collapsed: false,
-    };
-    canvasView?.classList.add('is-rail-resizing');
-    try {
-      canvasRailResize.setPointerCapture?.(event.pointerId);
-    } catch {
-      // ignore
-    }
-  });
-  window.addEventListener('pointermove', updateCanvasRailResize, true);
-  window.addEventListener('pointerup', (event) => {
-    if (canvasRailResizeState?.pointerId === event.pointerId) endCanvasRailResize();
-  }, true);
-  window.addEventListener('pointercancel', (event) => {
-    if (canvasRailResizeState?.pointerId === event.pointerId) cancelCanvasRailResize();
-  }, true);
-  canvasRailResize.addEventListener('lostpointercapture', cancelCanvasRailResize);
-  canvasRailResize.addEventListener('keydown', handleCanvasRailKeydown);
-  canvasRailToggle.addEventListener('click', () => {
-    commitCanvasRailState(settings.canvasRailWidth, settings.canvasRailCollapsed !== true);
-  });
-  window.addEventListener('blur', cancelCanvasRailResize);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') cancelCanvasRailResize();
-  });
-}
-
-function itemHaystack(item, scope = searchScope) {
-  if (scope === 'domain') {
-    // Hostname only: standalone tabs + group member tabs (not notes).
-    if (item.kind === 'note') return '';
-    if (item.kind === 'group') {
-      return (item.tabs || []).map((m) => domainOf(m.url)).filter(Boolean).join(' ');
-    }
-    return domainOf(item.url);
-  }
-  if (scope === 'group') {
-    // Only group cards; name + member tabs (title/url/domain)
-    if (item.kind !== 'group') return '';
-    const parts = [item.title || ''];
-    for (const m of item.tabs || []) {
-      parts.push(m.title || '', m.url || '', domainOf(m.url));
-    }
-    for (const note of item.notes || []) {
-      parts.push(note.title || '', note.markdown || '', ...(note.tags || []));
-    }
-    return parts.join(' ');
-  }
-  if (scope === 'tag') {
-    if (item.kind === 'group') {
-      const parts = [...(Array.isArray(item.tags) ? item.tags : [])];
-      for (const m of item.tabs || []) {
-        if (Array.isArray(m.tags)) parts.push(...m.tags);
-      }
-      for (const note of item.notes || []) {
-        if (Array.isArray(note.tags)) parts.push(...note.tags);
-      }
-      return parts.join(' ');
-    }
-    return (Array.isArray(item.tags) ? item.tags : []).join(' ');
-  }
-  if (scope === 'note') {
-    if (item.kind === 'group') {
-      const parts = [item.note || ''];
-      for (const m of item.tabs || []) parts.push(m.note || '');
-      for (const note of item.notes || []) parts.push(note.title || '', note.markdown || '');
-      return parts.join(' ');
-    }
-    if (item.kind === 'note') return [item.title || '', item.markdown || ''].join(' ');
-    return item.note || '';
-  }
-  if (item.kind === 'group') {
-    const parts = [
-      item.title || '',
-      item.note || '',
-      ...(Array.isArray(item.tags) ? item.tags : []),
-    ];
-    for (const m of item.tabs || []) {
-      parts.push(
-        m.title || '',
-        m.url || '',
-        domainOf(m.url),
-        m.note || '',
-        ...(Array.isArray(m.tags) ? m.tags : [])
-      );
-    }
-    for (const note of item.notes || []) {
-      parts.push(note.title || '', note.markdown || '', ...(Array.isArray(note.tags) ? note.tags : []));
-      for (const attachment of note.attachments || []) parts.push(attachment.name || '', attachment.alt || '');
-    }
-    return parts.join(' ');
-  }
-  if (item.kind === 'note') {
-    if (scope === 'tag') return (item.tags || []).join(' ');
-    if (scope === 'note') return [item.title || '', item.markdown || ''].join(' ');
-    return [
-      item.title || '',
-      item.markdown || '',
-      ...(Array.isArray(item.tags) ? item.tags : []),
-      ...(item.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']),
-    ].join(' ');
-  }
-  return [
-    item.title || '',
-    item.url || '',
-    domainOf(item.url),
-    item.note || '',
-    ...(Array.isArray(item.tags) ? item.tags : []),
-  ].join(' ');
-}
-
-/** Tag-mode search is active only when scoped to 'tag' and regex mode is off
- * (regex's `|` would otherwise collide with the `||` operator). */
-function isTagExpressionMode() {
-  return searchScope === 'tag' && !settings.searchRegex;
-}
-
-/** @type {{ raw: string, or: string[][] }} */
-let compiledTagQuery = { raw: '', or: [] };
-
-/**
- * Tag-mode query grammar — deliberately different from matchesPlainQuery:
- * only `&&`/`||` are operators, whitespace stays part of a tag name (tag
- * names may contain spaces, e.g. "個人 專案").
- * `query := orGroup ("||" orGroup)*`, `orGroup := token ("&&" token)*`.
- */
-function parseTagQuery(raw) {
-  const trimmed = String(raw || '').trim();
-  if (!trimmed) return { raw: trimmed, or: [] };
-  const or = trimmed
-    .split(/\s*\|\|\s*/)
-    .map((group) =>
-      group
-        .split(/\s*&&\s*/)
-        .map((token) => token.trim().toLowerCase())
-        .filter(Boolean)
-    )
-    .filter((group) => group.length);
-  return { raw: trimmed, or };
-}
-
-function compileTagQuery(raw) {
-  if (compiledTagQuery.raw !== raw) compiledTagQuery = parseTagQuery(raw);
-  return compiledTagQuery;
-}
-
-/** Case-insensitive substring match of each token against the item's tag names. */
-function tagsMatchQuery(tagNames, q) {
-  const { or } = compileTagQuery(q);
-  if (!or.length) return true;
-  const lowered = (tagNames || []).map((name) => String(name || '').toLowerCase());
-  return or.some((group) => group.every((token) => lowered.some((name) => name.includes(token))));
-}
-
-/** Array-returning mirror of itemHaystack's scope==='tag' branch. */
-function itemTagNames(item) {
-  if (!item) return [];
-  if (item.kind === 'group') {
-    const names = [...(Array.isArray(item.tags) ? item.tags : [])];
-    for (const m of item.tabs || []) {
-      if (Array.isArray(m.tags)) names.push(...m.tags);
-    }
-    for (const note of item.notes || []) {
-      if (Array.isArray(note.tags)) names.push(...note.tags);
-    }
-    return names;
-  }
-  return Array.isArray(item.tags) ? item.tags : [];
-}
-
-/** Array-returning mirror of memberHaystack's scope==='tag' branch. */
-function memberTagNames(member) {
-  return Array.isArray(member?.tags) ? member.tags : [];
-}
-
-/** Array-returning mirror of groupMetaHaystack's scope==='tag' branch. */
-function groupMetaTagNames(group) {
-  return [
-    ...(Array.isArray(group?.tags) ? group.tags : []),
-    ...(group?.notes || []).flatMap((note) => note.tags || []),
-  ];
-}
-
-/**
- * Plain search: case-insensitive.
- * - `||`  OR between groups
- * - `&&` or whitespace  AND within a group
- * Examples: `grafana||zabbix`  |  `grafana zabbix`  |  `grafana&&zabbix`
- */
-function matchesPlainQuery(hay, q) {
-  const hayLower = String(hay).toLowerCase();
-  const raw = String(q || '').trim();
-  if (!raw) return true;
-
-  const orGroups = raw
-    .split(/\s*\|\|\s*/)
-    .map((g) => g.trim())
-    .filter(Boolean);
-  if (!orGroups.length) return true;
-
-  return orGroups.some((group) => {
-    const terms = group
-      .split(/\s*&&\s*|\s+/)
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
-    if (!terms.length) return true;
-    return terms.every((term) => hayLower.includes(term));
-  });
-}
-
-function textMatchesQuery(text, q) {
-  if (!q) return true;
-  if (settings.searchRegex) {
-    const compiled =
-      compiledSearch.raw === q ? compiledSearch : compileSearchQuery(q);
-    if (!compiled.re) return false;
-    compiled.re.lastIndex = 0;
-    return compiled.re.test(String(text || ''));
-  }
-  return matchesPlainQuery(text, q);
-}
-
-function memberHaystack(member, scope = searchScope) {
-  if (!member) return '';
-  if (scope === 'domain') {
-    if (member.kind === 'note') return '';
-    return domainOf(member.url);
-  }
-  if (scope === 'group') {
-    if (member.kind === 'note') return [member.title || '', member.markdown || ''].join(' ');
-    return [member.title || '', member.url || '', domainOf(member.url)].join(' ');
-  }
-  if (scope === 'tag') {
-    return (Array.isArray(member.tags) ? member.tags : []).join(' ');
-  }
-  if (scope === 'note') {
-    return member.kind === 'note' ? [member.title || '', member.markdown || ''].join(' ') : member.note || '';
-  }
-  return [
-    member.title || '',
-    member.url || '',
-    domainOf(member.url),
-    member.note || '',
-    ...(Array.isArray(member.tags) ? member.tags : []),
-    ...(member.kind === 'note' ? (member.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']) : []),
-  ].join(' ');
-}
-
-function groupMetaHaystack(group, scope = searchScope) {
-  if (scope === 'domain') {
-    // Group title is not a domain; hits come only from member tabs.
-    return '';
-  }
-  if (scope === 'group') {
-    return group.title || '';
-  }
-  if (scope === 'tag') {
-    return [
-      ...(Array.isArray(group.tags) ? group.tags : []),
-      ...(group.notes || []).flatMap((note) => note.tags || []),
-    ].join(' ');
-  }
-  if (scope === 'note') {
-    return [group.note || '', ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || ''])].join(' ');
-  }
-  return [
-    group.title || '',
-    group.note || '',
-    ...(Array.isArray(group.tags) ? group.tags : []),
-    ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || '', ...(note.tags || [])]),
-  ].join(' ');
-}
-
-function getMatchingMembers(group, q = query) {
-  if (!q || !group || group.kind !== 'group') return [];
-  const members = [...(group.tabs || []), ...(group.notes || [])];
-  if (isTagExpressionMode()) return members.filter((m) => tagsMatchQuery(memberTagNames(m), q));
-  return members.filter((m) => textMatchesQuery(memberHaystack(m), q));
-}
-
-function groupMetaMatches(group, q = query) {
-  if (!q || !group || group.kind !== 'group') return false;
-  if (isTagExpressionMode()) return tagsMatchQuery(groupMetaTagNames(group), q);
-  return textMatchesQuery(groupMetaHaystack(group), q);
-}
-
-/** Per-render cache: avoid double getMatchingMembers for filter + hit rows. */
-/** @type {Map<string, { hits: any[], metaHit: boolean }> | null} */
-let searchMatchCache = null;
-
-function getGroupSearchMatch(group, q = query) {
-  if (!group || group.kind !== 'group') return { hits: [], metaHit: false };
-  if (searchMatchCache && searchMatchCache.has(group.id)) {
-    return searchMatchCache.get(group.id);
-  }
-  const metaHit = !q ? false : groupMetaMatches(group, q);
-  const hits = !q ? [] : getMatchingMembers(group, q);
-  const result = { hits, metaHit };
-  if (searchMatchCache) searchMatchCache.set(group.id, result);
-  return result;
-}
-
-function matchesQuery(item, q) {
-  if (!q) {
-    // Empty query: scoped modes still restrict card kinds
-    if (searchScope === 'group') return item?.kind === 'group';
-    if (searchScope === 'domain') return item?.kind === 'tab' || item?.kind === 'group';
-    return true;
-  }
-  if (searchScope === 'group') {
-    if (item?.kind !== 'group') return false;
-    const { hits, metaHit } = getGroupSearchMatch(item, q);
-    return metaHit || hits.length > 0;
-  }
-  if (searchScope === 'domain') {
-    if (item?.kind === 'note') return false;
-    if (item?.kind === 'group') {
-      const { hits, metaHit } = getGroupSearchMatch(item, q);
-      return metaHit || hits.length > 0;
-    }
-  }
-  if (isTagExpressionMode()) return tagsMatchQuery(itemTagNames(item), q);
-  const hay = itemHaystack(item);
-  return textMatchesQuery(hay, q);
-}
+function initCanvasRailResize(...args) { return CanvasChrome.initCanvasRailResize(...args); }
 
 const SEARCH_HIT_LIMIT = 8;
 
 /** Append matching member rows under a group card/row when searching. */
-function appendGroupSearchHits(parentEl, group) {
-  if (!query || !parentEl || group?.kind !== 'group') return;
+function appendGroupSearchHits(...args) { return ListUi.appendGroupSearchHits(...args); }
 
-  const { hits, metaHit } = getGroupSearchMatch(group, query);
-  if (!hits.length && !metaHit) return;
+function itemTitle(...args) { return ListUi.itemTitle(...args); }
 
-  const box = document.createElement('div');
-  box.className = 'search-hits';
-  box.addEventListener('click', (e) => e.stopPropagation());
-  box.addEventListener('pointerdown', (e) => e.stopPropagation());
+function buildLightboxNavList(...args) { return WorkspaceUi.buildLightboxNavList(...args); }
 
-  if (hits.length) {
-    const head = document.createElement('div');
-    head.className = 'search-hits-head';
-    head.textContent = t('searchHitsCount', { n: hits.length });
-    box.appendChild(head);
+async function showLightboxEntry(...args) { return await WorkspaceUi.showLightboxEntry(...args); }
 
-    const show = hits.slice(0, SEARCH_HIT_LIMIT);
-    for (const m of show) {
-      const row = document.createElement('div');
-      row.className = 'search-hit';
+function openLightbox(...args) { return WorkspaceUi.openLightbox(...args); }
 
-      const main = document.createElement('button');
-      main.type = 'button';
-      main.className = 'search-hit-main';
-      main.title = m.kind === 'note' ? t('edit') : t('memberRestore');
-      main.innerHTML = `
-        <div class="search-hit-title">${escapeHtml(m.title || m.url || '—')}</div>
-        <div class="search-hit-url">${escapeHtml(m.kind === 'note' ? (m.markdown || '').slice(0, 160) : (m.url || ''))}</div>
-      `;
-      main.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (selectMode) return;
-        if (m.kind === 'note') openStickerNoteEditor(m, { groupId: group.id });
-        else restoreMember(group.id, m.id);
-      });
+function openCanvasGroupLightbox(...args) { return WorkspaceUi.openCanvasGroupLightbox(...args); }
 
-      const actions = document.createElement('div');
-      actions.className = 'search-hit-actions';
+function navigateLightbox(...args) { return WorkspaceUi.navigateLightbox(...args); }
 
-      const prevBtn = document.createElement('button');
-      prevBtn.type = 'button';
-      prevBtn.className = 'icon-btn sm';
-      prevBtn.title = m.kind === 'note' ? t('edit') : t('expand');
-      prevBtn.innerHTML = iconSvg('expand');
-      prevBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (m.kind === 'note') openStickerNoteEditor(m, { groupId: group.id });
-        else openLightbox(m, { groupId: group.id });
-      });
-
-      const restBtn = document.createElement('button');
-      restBtn.type = 'button';
-      restBtn.className = 'icon-btn sm';
-      restBtn.title = m.kind === 'note' ? t('delete') : t('memberRestore');
-      restBtn.innerHTML = iconSvg(m.kind === 'note' ? 'delete' : 'restore');
-      restBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (m.kind === 'note') deleteGroupNote(group.id, m.id);
-        else restoreMember(group.id, m.id);
-      });
-
-      actions.append(prevBtn, restBtn);
-      row.append(main, actions);
-      box.appendChild(row);
-    }
-
-    if (hits.length > SEARCH_HIT_LIMIT) {
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'search-hits-more';
-      more.textContent = t('searchHitsMore', { n: hits.length - SEARCH_HIT_LIMIT });
-      more.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openMembersBox(group);
-      });
-      box.appendChild(more);
-    }
-  } else if (metaHit) {
-    const head = document.createElement('div');
-    head.className = 'search-hits-head meta-only';
-    head.textContent = t('searchHitGroupMeta');
-    box.appendChild(head);
-  }
-
-  parentEl.appendChild(box);
-}
-
-function itemTitle(item) {
-  if (item.kind === 'group') return item.title || t('unnamedGroup');
-  if (item.kind === 'note') return item.title || t('noteUntitled');
-  return item.title || item.url || 'Untitled';
-}
-
-// ─── Expand ────────────────────────────────────────────────────────
-
-function buildLightboxNavList() {
-  const list = [];
-  for (const item of getVisibleTabs()) {
-    if (item.kind === 'group') {
-      for (const m of item.tabs || []) {
-        list.push({
-          key: `m:${item.id}:${m.id}`,
-          mediaKey: mediaKeyForMember(item.id, m.id),
-          title: m.title || m.url || 'Untitled',
-          url: m.url || '',
-          hasSnap: Boolean(m.hasSnap || m.snapshot),
-          hasThumb: Boolean(m.hasThumb || m.thumbnail),
-          restore: { type: 'member', groupId: item.id, memberId: m.id },
-        });
-      }
-    } else {
-      list.push({
-        key: `t:${item.id}`,
-        mediaKey: mediaKeyForItem(item),
-        title: item.title || item.url || 'Untitled',
-        url: item.url || '',
-        hasSnap: Boolean(item.hasSnap || item.snapshot),
-        hasThumb: Boolean(item.hasThumb || item.thumbnail),
-        restore: { type: 'tab', id: item.id },
-      });
-    }
-  }
-  return list;
-}
-
-async function showLightboxEntry(entry, index, list) {
-  expandedId = entry.restore.type === 'member' ? entry.restore.memberId : entry.restore.id;
-  expandedMeta =
-    entry.restore.type === 'member' ? { type: 'member', groupId: entry.restore.groupId } : null;
-  lightboxNav = { list, index };
-  lbTitle.textContent = entry.title;
-  lbUrl.textContent = entry.url;
-  lbImage.hidden = false;
-  if (lbGroupMosaic) {
-    lbGroupMosaic.hidden = true;
-    lbGroupMosaic.replaceChildren();
-  }
-  if (lbPrev) lbPrev.hidden = false;
-  if (lbNext) lbNext.hidden = false;
-  if (lbRestore) {
-    lbRestore.dataset.i18n = 'restore';
-    lbRestore.textContent = t('restore');
-  }
-  if (lbCounter) {
-    lbCounter.textContent = list.length ? `${index + 1} / ${list.length}` : '—';
-  }
-  lightbox.classList.add('open');
-  lightbox.setAttribute('aria-hidden', 'false');
-
-  // placeholder thumb then full snap
-  const prevSrc = lbImage.src;
-  if (prevSrc && prevSrc.startsWith('blob:') && ![...snapCache.values()].includes(prevSrc)) {
-    // keep snap cache; don't revoke mid-nav of cached
-  }
-
-  let shownSnap = false;
-  if (entry.mediaKey && snapCache.has(entry.mediaKey)) {
-    lbImage.src = snapCache.get(entry.mediaKey);
-    lbSnapHint.hidden = true;
-    shownSnap = true;
-  } else {
-    // show thumb first
-    if (entry.mediaKey && entry.hasThumb) {
-      const thumbUrl = await fetchMediaUrl(entry.mediaKey, 'thumb');
-      if (thumbUrl && lightboxNav?.index === index) lbImage.src = thumbUrl;
-    } else {
-      lbImage.removeAttribute('src');
-    }
-    lbSnapHint.hidden = !entry.hasSnap;
-    if (entry.mediaKey && entry.hasSnap) {
-      const snapUrl = await fetchMediaUrl(entry.mediaKey, 'snap');
-      if (snapUrl && lightboxNav?.index === index) {
-        cacheSnap(entry.mediaKey, snapUrl);
-        lbImage.src = snapUrl;
-        lbSnapHint.hidden = true;
-        shownSnap = true;
-      }
-    }
-  }
-
-  if (!shownSnap && !lbImage.getAttribute('src')) {
-    lbSnapHint.hidden = false;
-  }
-
-  // prefetch neighbors
-  const n = list.length;
-  if (n > 1) {
-    for (const d of [-1, 1]) {
-      const ni = (index + d + n) % n;
-      const ne = list[ni];
-      if (ne?.mediaKey && ne.hasSnap && !snapCache.has(ne.mediaKey)) {
-        fetchMediaUrl(ne.mediaKey, 'snap').then((url) => {
-          if (url) cacheSnap(ne.mediaKey, url);
-        });
-      }
-    }
-  }
-}
-
-function openLightbox(item, meta = null) {
-  const list = buildLightboxNavList();
-  let index = 0;
-  if (meta?.groupId) {
-    index = list.findIndex(
-      (e) =>
-        e.restore.type === 'member' &&
-        e.restore.groupId === meta.groupId &&
-        e.restore.memberId === item.id
-    );
-  } else {
-    index = list.findIndex((e) => e.restore.type === 'tab' && e.restore.id === item.id);
-  }
-  if (index < 0) {
-    const entry = {
-      key: 'solo',
-      mediaKey: meta?.groupId
-        ? mediaKeyForMember(meta.groupId, item.id)
-        : mediaKeyForItem(item),
-      title: item.title || item.url || 'Untitled',
-      url: item.url || '',
-      hasSnap: Boolean(item.hasSnap || item.snapshot),
-      hasThumb: Boolean(item.hasThumb || item.thumbnail),
-      restore: meta?.groupId
-        ? { type: 'member', groupId: meta.groupId, memberId: item.id }
-        : { type: 'tab', id: item.id },
-    };
-    showLightboxEntry(entry, 0, [entry]);
-    return;
-  }
-  showLightboxEntry(list[index], index, list);
-}
-
-function openCanvasGroupLightbox(group) {
-  if (!group || group.kind !== 'group' || !lbGroupMosaic) return;
-  expandedId = group.id;
-  expandedMeta = { type: 'group' };
-  lightboxNav = null;
-  lbTitle.textContent = itemTitle(group);
-  lbUrl.textContent = t('groupTabs', { n: (group.tabs || []).length + (group.notes || []).length });
-  if (lbCounter) lbCounter.textContent = '—';
-  if (lbPrev) lbPrev.hidden = true;
-  if (lbNext) lbNext.hidden = true;
-  if (lbRestore) {
-    lbRestore.dataset.i18n = 'restoreGroup';
-    lbRestore.textContent = t('restoreGroup');
-  }
-  lbImage.removeAttribute('src');
-  lbImage.hidden = true;
-  lbGroupMosaic.innerHTML = groupCoverHtml(group);
-  lbGroupMosaic.hidden = false;
-  lbGroupMosaic.querySelectorAll('img.lazy-thumb').forEach((img) => observeThumb(img));
-  lbSnapHint.hidden = true;
-  lightbox.classList.add('open');
-  lightbox.setAttribute('aria-hidden', 'false');
-}
-
-function navigateLightbox(delta) {
-  if (!lightboxNav || !lightboxNav.list.length) return;
-  const n = lightboxNav.list.length;
-  const next = (lightboxNav.index + delta + n) % n;
-  showLightboxEntry(lightboxNav.list[next], next, lightboxNav.list);
-}
-
-function closeLightbox() {
-  expandedId = null;
-  expandedMeta = null;
-  lightboxNav = null;
-  lightbox.classList.remove('open');
-  lightbox.setAttribute('aria-hidden', 'true');
-  lbImage.hidden = false;
-  lbImage.removeAttribute('src');
-  if (lbGroupMosaic) {
-    lbGroupMosaic.hidden = true;
-    lbGroupMosaic.replaceChildren();
-  }
-  if (lbPrev) lbPrev.hidden = false;
-  if (lbNext) lbNext.hidden = false;
-  if (lbRestore) {
-    lbRestore.dataset.i18n = 'restore';
-    lbRestore.textContent = t('restore');
-  }
-  if (lbCounter) lbCounter.textContent = '—';
-}
+function closeLightbox(...args) { return WorkspaceUi.closeLightbox(...args); }
 
 lbClose.addEventListener('click', closeLightbox);
 if (lbPrev) lbPrev.addEventListener('click', () => navigateLightbox(-1));
@@ -5583,118 +1902,20 @@ lbRestore.addEventListener('click', async () => {
   }
 });
 
-// ─── Tag chips ─────────────────────────────────────────────────────
+function renderEditChips(...args) { return WorkspaceUi.renderEditChips(...args); }
 
-function renderEditChips() {
-  editChips.innerHTML = '';
-  editTagList.forEach((tag) => {
-    const chip = document.createElement('span');
-    chip.className = 'tag-chip';
-    chip.innerHTML = `${escapeHtml(tag)} <button type="button" aria-label="remove">${iconSvg('close')}</button>`;
-    chip.querySelector('button').addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const currentIndex = editTagList.indexOf(tag);
-      if (currentIndex === -1) return;
-      editTagList.splice(currentIndex, 1);
-      renderEditChips();
-    });
-    editChips.appendChild(chip);
-  });
-}
+function commitTagDraft(...args) { return WorkspaceUi.commitTagDraft(...args); }
 
-function commitTagDraft() {
-  const raw = editTagDraft.value.trim();
-  if (!raw) return false;
-  if (!editTagList.includes(raw)) editTagList.push(raw);
-  editTagDraft.value = '';
-  renderEditChips();
-  // ensure catalog knows this tag
-  sendMessage({ type: 'ADD_TAG', name: raw }).then(() => {
-    if (tagsBox.classList.contains('open')) refreshTagManager();
-  });
-  return true;
-}
+async function refreshTagManager(...args) { return await WorkspaceUi.refreshTagManager(...args); }
 
-// ─── Tag manager ───────────────────────────────────────────────────
-
-async function refreshTagManager() {
-  const res = await sendMessage({ type: 'GET_TAGS' });
-  tagStats = res.ok && Array.isArray(res.tags) ? res.tags : [];
-  tagSuggestIndexDirty = true;
-  renderTagManager();
-}
-
-function renderTagManager() {
-  const q = tagFilter.trim().toLowerCase();
-  const list = tagStats.filter((t) => !q || t.name.toLowerCase().includes(q));
-  tagManageList.innerHTML = '';
-
-  if (list.length === 0) {
-    tagManageList.innerHTML = `<div class="tag-manage-empty">${escapeHtml(t('tagEmpty'))}</div>`;
-    return;
-  }
-
-  list.forEach((item) => {
-    const row = document.createElement('div');
-    row.className = 'tag-chip-card';
-    row.innerHTML = `
-      <button type="button" class="name tag-filter-btn" title="${escapeAttr(t('tagApplyFilter'))}" aria-label="${escapeAttr(t('tagApplyFilter'))}">${escapeHtml(item.name)}</button>
-      <span class="count">${escapeHtml(String(item.count))}</span>
-      <button type="button" class="chip-btn rename-btn" title="${escapeAttr(t('rename'))}">${iconSvg('edit')}</button>
-      <button type="button" class="chip-btn delete-btn" title="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
-    `;
-
-    row.querySelector('.tag-filter-btn').addEventListener('click', () => {
-      searchScope = 'tag';
-      searchEl.value = item.name;
-      setSearchQueryFromInput({ immediate: true });
-      syncSearchScopeUi();
-      closeTagsBox();
-    });
-
-    row.querySelector('.rename-btn').addEventListener('click', async () => {
-      const next = window.prompt(t('tagRenamePrompt'), item.name);
-      if (next == null) return;
-      const name = next.trim();
-      if (!name || name === item.name) return;
-      const res = await sendMessage({ type: 'RENAME_TAG', from: item.name, to: name });
-      if (res.ok) {
-        tagStats = res.tags || [];
-        renderTagManager();
-        await loadList();
-      }
-    });
-
-    row.querySelector('.delete-btn').addEventListener('click', async () => {
-      if (!window.confirm(t('tagDeleteConfirm', { name: item.name }))) return;
-      const res = await sendMessage({ type: 'DELETE_TAG', name: item.name });
-      if (res.ok) {
-        tagStats = res.tags || [];
-        renderTagManager();
-        await loadList();
-      }
-    });
-
-    tagManageList.appendChild(row);
-  });
-}
+function renderTagManager(...args) { return WorkspaceUi.renderTagManager(...args); }
 
 tagSearch.addEventListener('input', () => {
   tagFilter = tagSearch.value;
   renderTagManager();
 });
 
-async function addTagFromManager() {
-  const name = tagAddInput.value.trim();
-  if (!name) return;
-  const res = await sendMessage({ type: 'ADD_TAG', name });
-  if (res.ok) {
-    tagAddInput.value = '';
-    tagStats = res.tags || [];
-    renderTagManager();
-  }
-}
+async function addTagFromManager(...args) { return await WorkspaceUi.addTagFromManager(...args); }
 
 tagAddBtn.addEventListener('click', () => addTagFromManager());
 tagAddInput.addEventListener('keydown', (e) => {
@@ -5704,224 +1925,23 @@ tagAddInput.addEventListener('keydown', (e) => {
   }
 });
 
-// ─── Backup / restore (lite JSON or full ZIP store) ────────────────
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+function downloadBlob(...args) { return ImportExport.downloadBlob(...args); }
 
 let autoBackupLocalRunning = false;
 
 /** Immediate / catch-up auto backup via background downloads. */
-async function runLocalAutoBackup({ force = false } = {}) {
-  if (autoBackupLocalRunning) return { ok: false, error: 'busy' };
-  const ab = normalizeAutoBackup(settings.autoBackup);
-  if (!force && !ab.enabled) return { ok: false, error: 'disabled' };
+async function runLocalAutoBackup(...args) { return await ImportExport.runLocalAutoBackup(...args); }
 
-  autoBackupLocalRunning = true;
-  if (autoBackupStatusEl) autoBackupStatusEl.textContent = t('autoBackupRunning');
-  try {
-    const res = await sendMessage({
-      type: 'AUTO_BACKUP_RUN',
-      force: true,
-      reason: force ? 'manual' : 'local',
-    });
-    settings = await loadSettings();
-    syncAutoBackupUi();
-    if (res?.ok) {
-      if (autoBackupStatusEl) {
-        autoBackupStatusEl.textContent = t('autoBackupOk', {
-          file: res.filename || res.absoluteFile || ab.subfolder,
-        });
-      }
-      return res;
-    }
-    const err = res?.error || 'write_failed';
-    if (autoBackupStatusEl) {
-      autoBackupStatusEl.textContent = autoBackupErrorText(err, res?.detail);
-    }
-    return { ok: false, error: err };
-  } finally {
-    autoBackupLocalRunning = false;
-  }
-}
-
-async function maybeCatchUpAutoBackup() {
-  const ab = normalizeAutoBackup(settings.autoBackup);
-  if (!ab.enabled) return;
-  const dueDirty = ab.onChange && ab.dirtyAt > 0;
-  const intervalMs = Math.max(10, autoBackupIntervalMinutes(ab)) * 60 * 1000;
-  const dueSchedule = !ab.lastSuccessAt || Date.now() - ab.lastSuccessAt >= intervalMs;
-  if (!dueDirty && !dueSchedule) return;
-  await runLocalAutoBackup({ force: false });
-}
+async function maybeCatchUpAutoBackup(...args) { return await ImportExport.maybeCatchUpAutoBackup(...args); }
 
 /** Hydrate thumb/snap from local IDB for full ZIP (avoids huge SW messages). */
-async function mapWithConcurrencyLocal(values, limit, mapper) {
-  const list = Array.isArray(values) ? values : [];
-  const result = new Array(list.length);
-  let nextIndex = 0;
-  const worker = async () => {
-    while (true) {
-      const index = nextIndex++;
-      if (index >= list.length) return;
-      result[index] = await mapper(list[index], index);
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(Math.max(1, limit), list.length || 1) }, worker)
-  );
-  return result;
-}
+async function mapWithConcurrencyLocal(...args) { return await ImportExport.mapWithConcurrencyLocal(...args); }
 
-async function hydrateItemMediaLocal(item) {
-  if (!item) return item;
-  if (item.kind === 'group') {
-    const tabs = await mapWithConcurrencyLocal(item.tabs || [], 4, async (m) => {
-      const key = mediaKeyForMember(item.id, m.id);
-      let thumb = '';
-      let snap = '';
-      try {
-        if (Media) {
-          const row = await Media.get(key);
-          if (row?.thumb) thumb = await Media.blobToDataUrl(row.thumb);
-          if (row?.snap) snap = await Media.blobToDataUrl(row.snap);
-        }
-      } catch (err) {
-        uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
-      }
-      return { ...m, thumbnail: thumb, snapshot: snap };
-    });
-    const notes = await mapWithConcurrencyLocal(item.notes || [], 4, async (note) => ({
-      ...note,
-      attachments: await mapWithConcurrencyLocal(note.attachments || [], 4, async (attachment) => {
-        let data = '';
-        try {
-          const blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
-          if (blob) data = await Media.blobToDataUrl(blob);
-        } catch (err) {
-          uiLog('warn', 'export', 'attachment get failed', `${note.id}/${attachment.id} ${err?.message || err}`);
-        }
-        return { ...attachment, data, hasData: Boolean(data) || attachment.hasData === true };
-      }),
-    }));
-    return { ...item, tabs, notes };
-  }
-  if (item.kind === 'note') {
-    const attachments = await mapWithConcurrencyLocal(item.attachments || [], 4, async (attachment) => {
-      let data = '';
-      try {
-        const blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(item.id, attachment.id));
-        if (blob) data = await Media.blobToDataUrl(blob);
-      } catch (err) {
-        uiLog('warn', 'export', 'attachment get failed', `${item.id}/${attachment.id} ${err?.message || err}`);
-      }
-      return { ...attachment, data, hasData: Boolean(data) || attachment.hasData === true };
-    });
-    return { ...item, attachments };
-  }
-  const key = mediaKeyForItem(item);
-  let thumbnail = '';
-  let snapshot = '';
-  try {
-    if (Media && key) {
-      const row = await Media.get(key);
-      if (row?.thumb) thumbnail = await Media.blobToDataUrl(row.thumb);
-      if (row?.snap) snapshot = await Media.blobToDataUrl(row.snap);
-    }
-  } catch (err) {
-    uiLog('warn', 'export', 'media get failed', `${key} ${err?.message || err}`);
-  }
-  return { ...item, thumbnail, snapshot };
-}
+async function hydrateItemMediaLocal(...args) { return await ImportExport.hydrateItemMediaLocal(...args); }
 
-async function estimateFullBackupMediaBytes(items) {
-  const sizeOf = (blob, fallback = 0) => {
-    const size = Number(blob?.size);
-    return Number.isFinite(size) && size >= 0 ? size : fallback;
-  };
-  const estimateItem = async (item) => {
-    if (item.kind === 'group') {
-      const tabBytes = await mapWithConcurrencyLocal(item.tabs || [], 4, async (member) => {
-        let row = null;
-        try {
-          row = await Media?.get?.(mediaKeyForMember(item.id, member.id));
-        } catch {
-          row = null;
-        }
-        return sizeOf(row?.thumb) + sizeOf(row?.snap);
-      });
-      const noteBytes = await mapWithConcurrencyLocal(item.notes || [], 4, async (note) => {
-        const values = await mapWithConcurrencyLocal(note.attachments || [], 4, async (attachment) => {
-          let blob = null;
-          try {
-            blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(note.id, attachment.id));
-          } catch {
-            blob = null;
-          }
-          return sizeOf(blob, attachment.hasData ? Number(attachment.size) || 0 : 0);
-        });
-        return values.reduce((total, size) => total + size, 0);
-      });
-      return tabBytes.reduce((total, size) => total + size, 0)
-        + noteBytes.reduce((total, size) => total + size, 0);
-    }
-    if (item.kind === 'note') {
-      const values = await mapWithConcurrencyLocal(item.attachments || [], 4, async (attachment) => {
-        let blob = null;
-        try {
-          blob = await Media?.getAttachment?.(Media.mediaKeyNoteAttachment(item.id, attachment.id));
-        } catch {
-          blob = null;
-        }
-        return sizeOf(blob, attachment.hasData ? Number(attachment.size) || 0 : 0);
-      });
-      return values.reduce((total, size) => total + size, 0);
-    }
-    let row = null;
-    try {
-      row = await Media?.get?.(mediaKeyForItem(item));
-    } catch {
-      row = null;
-    }
-    return sizeOf(row?.thumb) + sizeOf(row?.snap);
-  };
-  const values = await mapWithConcurrencyLocal(items, 4, estimateItem);
-  return values.reduce((total, size) => total + size, 0);
-}
+async function estimateFullBackupMediaBytes(...args) { return await ImportExport.estimateFullBackupMediaBytes(...args); }
 
-async function exportLiteBackup({ toast = false } = {}) {
-  if (backupStatus) backupStatus.textContent = t('backupExporting');
-  uiLog('info', 'export', 'lite start');
-  try {
-    const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
-    if (!res.ok || !res.backup) {
-      const err = res?.error || 'export_failed';
-      uiLog('error', 'export', 'lite failed', err);
-      if (backupStatus) backupStatus.textContent = `${t('backupError')}: ${err}`;
-      if (toast) showCopyToast(`${t('backupError')}: ${err}`);
-      return { ok: false, error: err };
-    }
-    const { blob, filename } = Build.buildLiteBlob(res.backup, { auto: false });
-    downloadBlob(blob, filename);
-    uiLog('info', 'export', 'lite ok', `file=${filename} bytes=${blob.size}`);
-    if (backupStatus) backupStatus.textContent = t('backupExported');
-    if (toast) showCopyToast(t('backupExported'));
-    return { ok: true, filename };
-  } catch (err) {
-    uiLog('error', 'export', 'lite exception', err?.message || err);
-    if (backupStatus) backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
-    if (toast) showCopyToast(`${t('backupError')}: ${err?.message || err}`);
-    return { ok: false, error: err?.message || err };
-  }
-}
+async function exportLiteBackup(...args) { return await ImportExport.exportLiteBackup(...args); }
 
 exportLiteBtn.addEventListener('click', () => {
   exportLiteBackup();
@@ -5987,388 +2007,29 @@ importAppendBtn?.addEventListener('click', () => {
   importBackupFile.click();
 });
 
-function closeImportPickBox(sync = true) {
-  if (!importPickBox) return;
-  closeImportPreview();
-  importPickBox.classList.remove('open');
-  importPickBox.setAttribute('aria-hidden', 'true');
-  pendingImportPick = null;
-  if (importPickList) importPickList.innerHTML = '';
-  if (importPickStatus) importPickStatus.textContent = '';
-  if (sync) syncFloatBackdrop();
-}
+function closeImportPickBox(...args) { return ImportExport.closeImportPickBox(...args); }
 
-function updateImportPickCount() {
-  if (!pendingImportPick || !importPickCount) return;
-  const total = (pendingImportPick.backup.parkedItems || []).length;
-  const n = pendingImportPick.selected.size;
-  importPickCount.textContent = t('importPickCount', { n, total });
-}
+function updateImportPickCount(...args) { return ImportExport.updateImportPickCount(...args); }
 
 /** Prefer full snapshot, then thumbnail (data-URL only after ZIP rehydrate). */
-function pickImportImageDataUrl(item) {
-  if (!item || typeof item !== 'object') return '';
-  for (const key of ['snapshot', 'thumbnail']) {
-    const v = item[key];
-    if (typeof v === 'string' && v.startsWith('data:')) return v;
-  }
-  const attachment = item?.kind === 'note' ? item.attachments?.find((value) => typeof value?.data === 'string' && value.data.startsWith('data:')) : null;
-  if (attachment?.data) return attachment.data;
-  return '';
-}
+function pickImportImageDataUrl(...args) { return ImportExport.pickImportImageDataUrl(...args); }
 
-function newImportStageId() {
-  try {
-    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
-  } catch {
-    // fall through to a local opaque id
-  }
-  return `stage-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+function newImportStageId(...args) { return ImportExport.newImportStageId(...args); }
 
 /** Convert preview data URLs into shared IndexedDB blobs before messaging SW. */
-async function stageImportMedia(stageId, items) {
-  if (!Media?.dataUrlToBlob || !Media?.putImportStage) {
-    throw new Error('import_stage_unavailable');
-  }
-  const rows = [];
-  const normalizeImportedAttachment = async (rawAttachment) => {
-    const attachment = { ...rawAttachment };
-    if (!attachment.data) {
-      if (attachment.hasData === true) throw new Error('import_missing_media');
-      attachment.hasData = false;
-      attachment.data = '';
-      return { attachment, blob: null };
-    }
-    const sourceBlob = Media.dataUrlToBlob(attachment.data);
-    if (!sourceBlob) throw new Error('invalid_image');
-    if (!NoteMedia?.normalizeBlob) throw new Error('note_media_unavailable');
-    const normalized = await NoteMedia.normalizeBlob(sourceBlob);
-    Object.assign(attachment, {
-      mime: normalized.mime,
-      size: normalized.size,
-      width: normalized.width,
-      height: normalized.height,
-      hasData: true,
-      data: '',
-    });
-    return { attachment, blob: normalized.blob };
-  };
-  const stagedItems = [];
-  for (const raw of (Array.isArray(items) ? items : [])) {
-    const item = { ...raw };
-    const stageOwner = (owner, mediaKey) => {
-      const thumb = owner.thumbnail ? Media.dataUrlToBlob(owner.thumbnail) : null;
-      const snap = owner.snapshot ? Media.dataUrlToBlob(owner.snapshot) : null;
-      if ((owner.thumbnail && !thumb) || (owner.snapshot && !snap)) {
-        throw new Error('invalid_image');
-      }
-      if (thumb || snap) rows.push({ mediaKey, thumb, snap });
-      owner.hasThumb = Boolean(thumb);
-      owner.hasSnap = Boolean(snap);
-      owner.thumbnail = '';
-      owner.snapshot = '';
-    };
+async function stageImportMedia(...args) { return await ImportExport.stageImportMedia(...args); }
 
-    if (item.kind === 'group' || Array.isArray(item.tabs)) {
-      // Group-level media is not a persisted format; never carry it into the
-      // transport payload even if an old backup contains unexpected fields.
-      item.hasThumb = false;
-      item.hasSnap = false;
-      item.thumbnail = '';
-      item.snapshot = '';
-      item.tabs = (item.tabs || []).map((rawMember) => {
-        const member = { ...rawMember };
-        stageOwner(member, Media.mediaKeyMember(item.id, member.id));
-        return member;
-      });
-      const sourceNotes = Array.isArray(item.notes) ? item.notes : [];
-      item.notes = [];
-      for (const rawNote of sourceNotes) {
-        const note = { ...rawNote };
-        note.attachments = [];
-        for (const rawAttachment of rawNote.attachments || []) {
-          const normalized = await normalizeImportedAttachment(rawAttachment);
-          note.attachments.push(normalized.attachment);
-          if (normalized.blob) rows.push({
-            mediaKey: Media.mediaKeyNoteAttachment(note.id, normalized.attachment.id),
-            attachment: normalized.blob,
-          });
-        }
-        item.notes.push(note);
-      }
-    } else if (item.kind === 'note') {
-      item.attachments = [];
-      for (const rawAttachment of raw.attachments || []) {
-        const normalized = await normalizeImportedAttachment(rawAttachment);
-        item.attachments.push(normalized.attachment);
-        if (normalized.blob) rows.push({
-          mediaKey: Media.mediaKeyNoteAttachment(item.id, normalized.attachment.id),
-          attachment: normalized.blob,
-        });
-      }
-    } else {
-      stageOwner(item, Media.mediaKeyTab(item.id));
-    }
-    stagedItems.push(item);
-  }
-  await Media.putImportStage(stageId, rows);
-  return { items: stagedItems, mediaOwners: rows.length };
-}
+function closeImportPreview(...args) { return ImportExport.closeImportPreview(...args); }
 
-function closeImportPreview() {
-  if (!importPreviewOverlay) return;
-  importPreviewOverlay.classList.remove('open');
-  importPreviewOverlay.setAttribute('aria-hidden', 'true');
-  if (importPreviewBody) importPreviewBody.innerHTML = '';
-  if (importPreviewTitle) importPreviewTitle.textContent = '—';
-  if (importPreviewUrl) importPreviewUrl.textContent = '';
-}
+function openImportTabPreview(...args) { return ImportExport.openImportTabPreview(...args); }
 
-function openImportTabPreview(item) {
-  if (!importPreviewOverlay || !importPreviewBody) return;
-  const title = item?.title || item?.url || '—';
-  const url = item?.kind === 'note' ? t('noteKind') : item?.url || '';
-  if (importPreviewTitle) importPreviewTitle.textContent = title;
-  if (importPreviewUrl) {
-    importPreviewUrl.textContent = isStoredOnlyUrl(url) ? `${url} · ${t('storedOnly')}` : url;
-  }
-  importPreviewBody.innerHTML = '';
-  const src = pickImportImageDataUrl(item);
-  if (src) {
-    const img = document.createElement('img');
-    img.src = src;
-    img.alt = title;
-    importPreviewBody.appendChild(img);
-  } else {
-    const empty = document.createElement('div');
-    empty.className = 'import-preview-empty';
-    empty.textContent = t('importPreviewNoImage');
-    importPreviewBody.appendChild(empty);
-  }
-  importPreviewOverlay.classList.add('open');
-  importPreviewOverlay.setAttribute('aria-hidden', 'false');
-}
+function openImportGroupPreview(...args) { return ImportExport.openImportGroupPreview(...args); }
 
-function openImportGroupPreview(item) {
-  if (!importPreviewOverlay || !importPreviewBody) return;
-  const title = item?.title || t('stackTitle');
-  const members = Array.isArray(item?.tabs) ? item.tabs : [];
-  const notes = Array.isArray(item?.notes) ? item.notes : [];
-  if (importPreviewTitle) importPreviewTitle.textContent = title;
-  if (importPreviewUrl) {
-    importPreviewUrl.textContent = t('groupTabs', { n: members.length + notes.length });
-  }
-  importPreviewBody.innerHTML = '';
-  if (!members.length && !notes.length) {
-    const empty = document.createElement('div');
-    empty.className = 'import-preview-empty';
-    empty.textContent = t('importPreviewGroupEmpty');
-    importPreviewBody.appendChild(empty);
-  } else {
-    const list = document.createElement('div');
-    list.className = 'import-preview-members';
-    [...members, ...notes].forEach((m) => {
-      if (m.kind === 'note') {
-        const row = document.createElement('div');
-        row.className = 'import-preview-member';
-        row.innerHTML = `<div class="m-main"><div class="m-title">${escapeHtml(m.title || t('noteUntitled'))}</div><div class="m-url">${escapeHtml((m.markdown || '').slice(0, 180))}</div></div><button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>`;
-        row.querySelector('button')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          openImportTabPreview(m);
-        });
-        list.appendChild(row);
-        return;
-      }
-      const row = document.createElement('div');
-      const storedOnly = isStoredOnlyUrl(m?.url);
-      row.className = `import-preview-member${storedOnly ? ' stored-only' : ''}`;
-      const mTitle = m?.title || m?.url || '—';
-      const mUrl = m?.url || '';
-      const thumb = pickImportImageDataUrl(m);
-      row.innerHTML = `
-        ${
-          thumb
-            ? `<img src="${escapeAttr(thumb)}" alt="" style="width:48px;height:30px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--input-bg)" />`
-            : ''
-        }
-        <div class="m-main">
-          <div class="m-title">
-            ${escapeHtml(mTitle)}
-            ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
-          </div>
-          <div class="m-url">${escapeHtml(mUrl)}</div>
-        </div>
-        <button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>
-      `;
-      row.querySelector('button')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openImportTabPreview(m);
-      });
-      list.appendChild(row);
-    });
-    importPreviewBody.appendChild(list);
-  }
-  importPreviewOverlay.classList.add('open');
-  importPreviewOverlay.setAttribute('aria-hidden', 'false');
-}
+function openImportPickBox(...args) { return ImportExport.openImportPickBox(...args); }
 
-function openImportPickBox(mode, backup, warnings = {}) {
-  if (!importPickBox || !importPickList) return;
-  const items = Array.isArray(backup.parkedItems) ? backup.parkedItems : [];
-  const selected = new Set(items.map((it, i) => String(it.id || `idx-${i}`)));
-  // Ensure each item has a stable pick key
-  items.forEach((it, i) => {
-    if (!it.id) it.id = `idx-${i}-${Date.now()}`;
-    selected.add(String(it.id));
-  });
-  pendingImportPick = { mode, backup, selected, warnings };
+async function confirmImportPick(...args) { return await ImportExport.confirmImportPick(...args); }
 
-  closeAllFloatsExcept('importPick');
-  importPickBox.classList.add('open');
-  importPickBox.setAttribute('aria-hidden', 'false');
-  if (importPickHintEl) {
-    const modeLabel =
-      mode === 'append' ? t('importPickModeAppend') : t('importPickModeReplace');
-    importPickHintEl.textContent = `${t('importPickHint')} ${modeLabel}`;
-  }
-  if (importPickStatus) importPickStatus.textContent = formatImportWarnings(warnings);
-
-  importPickList.innerHTML = '';
-  items.forEach((item) => {
-    const id = String(item.id);
-    const isGroup = item.kind === 'group' || Array.isArray(item.tabs);
-    const isNote = item.kind === 'note';
-    const storedOnlyCount = countStoredOnlyUrls(item);
-    const title = isGroup
-      ? item.title || t('stackTitle')
-      : item.title || item.url || '—';
-    const sub = isGroup
-      ? `${t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })}${storedOnlyCount ? ` · ${t('backupStoredOnly', { n: storedOnlyCount })}` : ''}`
-      : isNote
-        ? `${t('noteKind')} · ${t('noteCount', { n: (item.attachments || []).length })}`
-      : isStoredOnlyUrl(item.url)
-        ? `${item.url || ''} · ${t('storedOnly')}`
-        : item.url || '';
-    const kindLabel = isGroup ? 'group' : isNote ? 'note' : storedOnlyCount ? t('storedOnlyShort') : 'tab';
-
-    const row = document.createElement('div');
-    row.className = `import-pick-row${storedOnlyCount ? ' stored-only' : ''}`;
-    row.innerHTML = `
-      <label class="import-pick-label">
-        <input type="checkbox" data-pick-id="${escapeAttr(id)}" ${selected.has(id) ? 'checked' : ''} />
-        <span class="import-pick-kind ${isGroup ? 'group' : storedOnlyCount ? 'stored-only' : ''}">${escapeHtml(kindLabel)}</span>
-        <span class="import-pick-main">
-          <div class="import-pick-title">${escapeHtml(title)}</div>
-          <div class="import-pick-sub">${escapeHtml(sub)}</div>
-        </span>
-      </label>
-      <button type="button" class="btn import-pick-preview">${escapeHtml(t('importPickPreview'))}</button>
-    `;
-    const cb = row.querySelector('input');
-    cb.addEventListener('change', () => {
-      if (cb.checked) pendingImportPick.selected.add(id);
-      else pendingImportPick.selected.delete(id);
-      updateImportPickCount();
-    });
-    row.querySelector('.import-pick-preview')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isGroup) openImportGroupPreview(item);
-      else openImportTabPreview(item);
-    });
-    importPickList.appendChild(row);
-  });
-  updateImportPickCount();
-  placeFloatBox(importPickBox);
-  syncFloatBackdrop();
-}
-
-async function confirmImportPick() {
-  return withUiActionLock('import', confirmImportPickUnlocked);
-}
-
-async function confirmImportPickUnlocked() {
-  if (!pendingImportPick) return;
-  const { mode, backup, selected } = pendingImportPick;
-  if (!selected.size) {
-    if (importPickStatus) importPickStatus.textContent = t('importPickEmpty');
-    return;
-  }
-  const confirmMsg =
-    mode === 'append'
-      ? t('backupAppendConfirm')
-      : t('backupConfirm');
-  if (!window.confirm(confirmMsg)) return;
-
-  const all = Array.isArray(backup.parkedItems) ? backup.parkedItems : [];
-  const filtered = all.filter((it) => selected.has(String(it.id)));
-  const payload = {
-    ...backup,
-    parkedItems: filtered,
-    parkedTabs: filtered
-      .filter((i) => i.kind === 'tab')
-      .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
-  };
-
-  if (importPickStatus) importPickStatus.textContent = t('backupImporting');
-  uiLog('info', 'import', `confirm mode=${mode}`, `selected=${filtered.length}/${all.length}`);
-  let importId = '';
-  let messageSent = false;
-  try {
-    importId = newImportStageId();
-    const staged = await stageImportMedia(importId, filtered);
-    const transportItems = staged.items;
-    const transportBackup = {
-      ...payload,
-      media: 'idb',
-      parkedItems: transportItems,
-      parkedTabs: transportItems
-        .filter((i) => i.kind === 'tab')
-        .map(({ kind, hasThumb, hasSnap, ...rest }) => rest),
-    };
-    const res = await sendMessage({
-      type: 'IMPORT_BACKUP',
-      backup: transportBackup,
-      mode,
-      importId,
-    });
-    messageSent = true;
-    if (!res.ok) {
-      const errorText = formatBackupError(res);
-      if (importPickStatus) importPickStatus.textContent = errorText;
-      backupStatus.textContent = errorText;
-      uiLog('error', 'import', 'failed', `${res.error || 'invalid_backup'}${res.detail ? ` ${res.detail}` : ''}`);
-      return;
-    }
-    closeImportPickBox();
-    settings = await loadSettings();
-    syncSettingsUi();
-    await loadList();
-    if (tagsBox.classList.contains('open')) await refreshTagManager();
-    const warningText = formatImportWarnings(res.warnings);
-    if (mode === 'append') {
-      backupStatus.textContent = `${t('backupAppended', { n: res.added != null ? res.added : filtered.length })}${warningText ? ` ${warningText}` : ''}`;
-    } else {
-      backupStatus.textContent = `${t('backupImported')}${warningText ? ` ${warningText}` : ''}`;
-    }
-  } catch (err) {
-    if (!messageSent && importId) {
-      try {
-        await Media.removeImportStage?.(importId);
-      } catch {
-        // best effort cleanup; the service worker also removes stale stages
-      }
-    }
-    console.warn(err);
-    uiLog('error', 'import', 'exception', err?.message || err);
-    const errorText = formatBackupError(err?.message || err);
-    if (importPickStatus) importPickStatus.textContent = errorText;
-    backupStatus.textContent = errorText;
-  }
-}
+async function confirmImportPickUnlocked(...args) { return await ImportExport.confirmImportPickUnlocked(...args); }
 
 importBackupFile.addEventListener('change', async () => {
   const file = importBackupFile.files && importBackupFile.files[0];
@@ -6484,197 +2145,19 @@ manualAddBtn?.addEventListener('click', async () => {
   }
 });
 
-// ─── Multi-select ──────────────────────────────────────────────────
+function updateBatchBar(...args) { return WorkspaceUi.updateBatchBar(...args); }
 
-function updateBatchBar() {
-  const isCanvasUi = settings.viewMode === 'canvas' && !canvasSessionFallback;
-  const selection = isCanvasUi ? activeCanvasSelection() : selectedIds;
-  const n = selection.size;
-  const connectionSelected = isCanvasUi && Boolean(selectedCanvasConnectionId);
-  batchCount.textContent = t('batchCount', { n });
-  if (isCanvasUi) {
-    if (canvasContextBar) {
-      const hasCanvasAction = connectionSelected || n > 0;
-      canvasContextBar.classList.toggle('open', hasCanvasAction);
-      canvasContextBar.setAttribute('aria-hidden', hasCanvasAction ? 'false' : 'true');
-      const itemsLabel = canvasContextBar.querySelector('[data-canvas-selection-items]');
-      const connectionLabel = canvasContextBar.querySelector('[data-canvas-selection-connection]');
-      if (itemsLabel) itemsLabel.hidden = connectionSelected;
-      if (connectionLabel) connectionLabel.hidden = !connectionSelected;
-      const count = canvasContextBar.querySelector('[data-canvas-selection-count]');
-      if (count && !connectionSelected) count.textContent = t('batchCount', { n });
-      const selectedItem = !connectionSelected && n === 1 ? canvasItemById([...selection][0]) : null;
-      const snapshotButton = canvasContextBar.querySelector('[data-canvas-action="snapshot"]');
-      const membersButton = canvasContextBar.querySelector('[data-canvas-action="members"]');
-      const editButton = canvasContextBar.querySelector('[data-canvas-action="edit"]');
-      const restoreButton = canvasContextBar.querySelector('[data-canvas-action="restore"]');
-      const pinButton = canvasContextBar.querySelector('[data-canvas-action="pin"]');
-      const stackButton = canvasContextBar.querySelector('[data-canvas-action="stack"]');
-      const deleteButton = canvasContextBar.querySelector('[data-canvas-action="delete"]');
-      const deleteConnectionButton = canvasContextBar.querySelector('[data-canvas-action="delete-connection"]');
-      if (snapshotButton) snapshotButton.hidden = connectionSelected || selectedItem?.kind !== 'tab';
-      if (membersButton) membersButton.hidden = connectionSelected || selectedItem?.kind !== 'group';
-      if (editButton) editButton.hidden = connectionSelected || n !== 1;
-      if (restoreButton) {
-        restoreButton.hidden = connectionSelected || (n === 1 && (
-          selectedItem?.kind === 'note'
-          || (selectedItem?.kind === 'group' && !(selectedItem.tabs || []).length)
-        ));
-      }
-      if (pinButton) pinButton.hidden = connectionSelected;
-      if (stackButton) stackButton.hidden = connectionSelected;
-      if (deleteButton) deleteButton.hidden = connectionSelected;
-      if (deleteConnectionButton) deleteConnectionButton.hidden = !connectionSelected;
-    }
-    if (canvasDropZone) canvasDropZone.hidden = connectionSelected || n < 2;
-    batchBar.classList.remove('open');
-    batchBar.setAttribute('aria-hidden', 'true');
-    return;
-  }
-  if (selectMode && n > 0) {
-    batchBar.classList.add('open');
-    batchBar.setAttribute('aria-hidden', 'false');
-  } else {
-    batchBar.classList.remove('open');
-    batchBar.setAttribute('aria-hidden', 'true');
-  }
-  if (batchRestore) {
-    const selectedItems = [...selection].map((id) => allTabs.find((item) => item.id === id)).filter(Boolean);
-    const restorable = selectedItems.some((item) => item.kind === 'tab' || (item.kind === 'group' && (item.tabs || []).length));
-    batchRestore.hidden = !restorable;
-  }
-}
+function setSelectMode(...args) { return WorkspaceUi.setSelectMode(...args); }
 
-function setSelectMode(on) {
-  selectMode = on;
-  document.body.classList.toggle('select-mode', on);
-  selectModeBtn.classList.toggle('active', on);
-  selectModeBtn.textContent = on ? t('selectModeOn') : t('selectMode');
-  if (!on) {
-    if (settings.viewMode === 'canvas') ensureCanvasStore()?.setSelection([]);
-    else selectedIds.clear();
-    lastAnchorId = null;
-  }
-  updateBatchBar();
-  renderGrid();
-}
-
-function toggleSelect(id) {
-  if (settings.viewMode === 'canvas') {
-    ensureCanvasStore()?.toggleSelection(id, true);
-    lastAnchorId = id;
-    return;
-  }
-  if (selectedIds.has(id)) selectedIds.delete(id);
-  else selectedIds.add(id);
-  lastAnchorId = id;
-  updateBatchBar();
-  const root = settings.viewMode === 'canvas' ? canvasNodesEl : gridEl;
-  const card = root?.querySelector(`[data-id="${id.replace(/"/g, '')}"]`);
-  if (card) {
-    card.classList.toggle('selected', selectedIds.has(id));
-    const check = card.querySelector('.card-check');
-    if (check) check.checked = selectedIds.has(id);
-  }
-}
+function toggleSelect(...args) { return WorkspaceUi.toggleSelect(...args); }
 
 selectModeBtn.addEventListener('click', () => setSelectMode(!selectMode));
 
 batchClear.addEventListener('click', () => setSelectMode(false));
 
-async function buildPartialBackupPayload(items, { withMedia = false } = {}) {
-  const parkedItems = [];
-  for (const it of items) {
-    parkedItems.push(withMedia ? await hydrateItemMediaLocal(it) : { ...it });
-  }
-  // Strip any accidental inline emptiness for lite
-  if (!withMedia) {
-    for (const it of parkedItems) {
-      if (it.kind === 'group') {
-        for (const m of it.tabs || []) {
-          m.thumbnail = '';
-          m.snapshot = '';
-        }
-        for (const note of it.notes || []) {
-          for (const attachment of note.attachments || []) attachment.data = '';
-        }
-      } else if (it.kind === 'note') {
-        for (const attachment of it.attachments || []) attachment.data = '';
-      } else {
-        it.thumbnail = '';
-        it.snapshot = '';
-      }
-    }
-  }
-  const parkedTabs = parkedItems
-    .filter((i) => i.kind === 'tab')
-    .map(({ kind, hasThumb, hasSnap, thumbnail, snapshot, ...rest }) => rest);
-  const selectedIds = new Set(items.map((item) => item.id));
-  const partialLayout = normalizeCanvasLayoutLocal(canvasLayout, items);
-  partialLayout.positions = Object.fromEntries(
-    Object.entries(partialLayout.positions).filter(([id]) => selectedIds.has(id))
-  );
-  partialLayout.connections = (partialLayout.connections || []).filter(
-    (connection) => selectedIds.has(connection.sourceId) && selectedIds.has(connection.targetId)
-  );
-  return {
-    format: 'tabwall-backup',
-    version: Build.FORMAT_VERSION || 4,
-    media: withMedia ? 'inline' : 'none',
-    partial: true,
-    appVersion: (() => {
-      try {
-        return chrome.runtime.getManifest().version;
-      } catch {
-        return '';
-      }
-    })(),
-    exportedAt: new Date().toISOString(),
-    parkedItems,
-    parkedTabs,
-    settings: { ...settings },
-    tagCatalog: [], // filled async if needed
-    canvasLayout: partialLayout,
-  };
-}
+async function buildPartialBackupPayload(...args) { return await ImportExport.buildPartialBackupPayload(...args); }
 
-async function exportSelected(mode) {
-  const ids = [...selectedIds];
-  if (!ids.length) {
-    uiLog('warn', 'export', 'partial empty selection');
-    window.alert(t('batchExportEmpty'));
-    return;
-  }
-  const idSet = new Set(ids);
-  // Preserve wall order
-  const items = allTabs.filter((it) => idSet.has(it.id));
-  if (!items.length) {
-    window.alert(t('batchExportEmpty'));
-    return;
-  }
-  uiLog('info', 'export', `partial ${mode} start`, `n=${items.length}`);
-  try {
-    const backup = await buildPartialBackupPayload(items, { withMedia: mode === 'full' });
-    // Best-effort tag catalog from SW via lite export settings not needed
-    const tagRes = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
-    if (tagRes?.ok && tagRes.backup?.tagCatalog) {
-      backup.tagCatalog = tagRes.backup.tagCatalog;
-    }
-    if (tagRes?.ok && tagRes.backup?.settings) {
-      backup.settings = tagRes.backup.settings;
-    }
-    const built =
-      mode === 'full'
-        ? Build.buildFullZipBlob(backup, { auto: false, partial: true })
-        : Build.buildLiteBlob(backup, { auto: false, partial: true });
-    downloadBlob(built.blob, built.filename);
-    uiLog('info', 'export', `partial ${mode} ok`, `file=${built.filename} n=${items.length}`);
-  } catch (err) {
-    console.warn(err);
-    uiLog('error', 'export', `partial ${mode} failed`, err?.message || err);
-    window.alert(`${t('backupError')}: ${err?.message || err}`);
-  }
-}
+async function exportSelected(...args) { return await ImportExport.exportSelected(...args); }
 
 batchExportLite?.addEventListener('click', () => {
   exportSelected('lite');
@@ -6744,60 +2227,13 @@ editTagDraft.addEventListener('keydown', (e) => {
   }
 });
 
-// ─── Edit box ──────────────────────────────────────────────────────
+function placeEditBoxCentered(...args) { return WorkspaceUi.placeEditBoxCentered(...args); }
 
-function placeEditBoxCentered() {
-  const w = editBox.offsetWidth || 400;
-  const h = editBox.offsetHeight || 320;
-  editBox.style.left = `${Math.max(16, Math.round((window.innerWidth - w) / 2))}px`;
-  editBox.style.top = `${Math.max(16, Math.round((window.innerHeight - h) / 2))}px`;
-}
+function openEditBox(...args) { return WorkspaceUi.openEditBox(...args); }
 
-function openEditBox(item) {
-  editingId = item.id;
-  editContext = { type: 'item' };
-  editHeading.textContent = t('editHeading');
-  editItemTitle.textContent = itemTitle(item);
-  editSub.textContent =
-    item.kind === 'group'
-      ? t('groupTabs', { n: (item.tabs || []).length })
-      : item.url || '';
-  editNote.value = item.note || '';
-  editTagList = Array.isArray(item.tags) ? [...item.tags] : [];
-  editTagDraft.value = '';
-  renderEditChips();
-  editBox.classList.add('open');
-  editBox.setAttribute('aria-hidden', 'false');
-  placeEditBoxCentered();
-  syncFloatBackdrop();
-  setTimeout(() => editNote.focus(), 0);
-}
+function openMemberEditBox(...args) { return WorkspaceUi.openMemberEditBox(...args); }
 
-function openMemberEditBox(groupId, member) {
-  editingId = member.id;
-  editContext = { type: 'member', groupId, memberId: member.id };
-  editHeading.textContent = t('editMemberHeading');
-  editItemTitle.textContent = member.title || member.url || 'Untitled';
-  editSub.textContent = member.url || '';
-  editNote.value = member.note || '';
-  editTagList = Array.isArray(member.tags) ? [...member.tags] : [];
-  editTagDraft.value = '';
-  renderEditChips();
-  editBox.classList.add('open');
-  editBox.setAttribute('aria-hidden', 'false');
-  placeEditBoxCentered();
-  syncFloatBackdrop();
-  setTimeout(() => editNote.focus(), 0);
-}
-
-function closeEditBox() {
-  editingId = null;
-  editContext = null;
-  editTagList = [];
-  editBox.classList.remove('open');
-  editBox.setAttribute('aria-hidden', 'true');
-  syncFloatBackdrop();
-}
+function closeEditBox(...args) { return WorkspaceUi.closeEditBox(...args); }
 
 editCancel.addEventListener('click', closeEditBox);
 editCloseX.addEventListener('click', closeEditBox);
@@ -6861,324 +2297,37 @@ editSave.addEventListener('click', async () => {
   }
 });
 
-// ─── Canvas Sticker Note editor ───────────────────────────────────
+function stickerNoteUuid(...args) { return StickerUi.stickerNoteUuid(...args); }
 
-function stickerNoteUuid() {
-  try {
-    if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
-  } catch {
-    // fall through
-  }
-  return `note-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+function stickerNoteDraftMeta(...args) { return StickerUi.stickerNoteDraftMeta(...args); }
 
-function stickerNoteDraftMeta() {
-  return stickerNoteDraftAttachments.map(({
-    blob,
-    previewUrl,
-    sourceBytes,
-    sourceWidth,
-    sourceHeight,
-    ...attachment
-  }) => ({ ...attachment }));
-}
+function stickerNoteDraftRecord(...args) { return StickerUi.stickerNoteDraftRecord(...args); }
 
-function stickerNoteDraftRecord() {
-  return {
-    kind: 'note',
-    id: stickerNoteContext?.id || stickerNoteUuid(),
-    title: stickerNoteTitle?.value?.trim() || t('noteUntitled'),
-    markdown: stickerNoteMarkdown?.value || '',
-    tags: [...stickerNoteTagList],
-    pinned: Boolean(stickerNoteContext?.pinned),
-    savedAt: stickerNoteContext?.savedAt || Date.now(),
-    attachments: stickerNoteDraftMeta(),
-  };
-}
+function renderStickerNoteTags(...args) { return StickerUi.renderStickerNoteTags(...args); }
 
-function renderStickerNoteTags() {
-  if (!stickerNoteChips) return;
-  stickerNoteChips.innerHTML = '';
-  for (const tag of stickerNoteTagList) {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.textContent = `#${tag}`;
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.setAttribute('aria-label', t('delete'));
-    remove.innerHTML = iconSvg('close');
-    remove.addEventListener('click', () => {
-      stickerNoteTagList = stickerNoteTagList.filter((value) => value !== tag);
-      renderStickerNoteTags();
-    });
-    chip.appendChild(remove);
-    stickerNoteChips.appendChild(chip);
-  }
-}
+function setStickerNoteMediaStatus(...args) { return StickerUi.setStickerNoteMediaStatus(...args); }
 
-function setStickerNoteMediaStatus(message = '', isError = false) {
-  if (!stickerNoteMediaStatus) return;
-  stickerNoteMediaStatus.textContent = message;
-  stickerNoteMediaStatus.classList.toggle('error', Boolean(isError));
-}
+function setStickerNoteMediaBusy(...args) { return StickerUi.setStickerNoteMediaBusy(...args); }
 
-function setStickerNoteMediaBusy(busy) {
-  stickerNoteMediaBusy = Boolean(busy);
-  if (stickerNoteSave) stickerNoteSave.disabled = stickerNoteMediaBusy;
-  if (stickerNoteDrop) stickerNoteDrop.toggleAttribute('aria-busy', stickerNoteMediaBusy);
-}
+async function refreshStickerNoteUsage(...args) { return await StickerUi.refreshStickerNoteUsage(...args); }
 
-async function refreshStickerNoteUsage() {
-  const requestId = ++stickerNoteUsageRequest;
-  if (!stickerNoteContext) return;
-  try {
-    const usage = await sendMessage({
-      type: 'GET_ATTACHMENT_USAGE',
-      noteId: stickerNoteContext.id,
-      groupId: stickerNoteContext.groupId || '',
-    });
-    if (requestId !== stickerNoteUsageRequest || !usage?.ok) return;
-    const draftBytes = stickerNoteDraftAttachments.reduce(
-      (total, attachment) => total + (attachment.hasData ? Number(attachment.size) || 0 : 0),
-      0
-    );
-    const previousNoteBytes = stickerNoteContext.mode === 'edit' ? Number(usage.noteBytes) || 0 : 0;
-    const noteBytes = draftBytes;
-    const globalBytes = Math.max(0, (Number(usage.usedBytes) || 0) - previousNoteBytes + noteBytes);
-    setStickerNoteMediaStatus(t('noteImageUsage', {
-      used: formatNoteBytes(noteBytes),
-      noteLimit: formatNoteBytes(usage.noteMaxBytes),
-      globalUsed: formatNoteBytes(globalBytes),
-      globalLimit: formatNoteBytes(usage.maxBytes),
-    }));
-  } catch {
-    // Usage is advisory; background validation remains authoritative.
-  }
-}
+function commitStickerNoteTagDraft(...args) { return StickerUi.commitStickerNoteTagDraft(...args); }
 
-function commitStickerNoteTagDraft() {
-  const value = stickerNoteTagDraft?.value?.trim();
-  if (!value) return;
-  if (!stickerNoteTagList.includes(value)) stickerNoteTagList.push(value);
-  stickerNoteTagDraft.value = '';
-  renderStickerNoteTags();
-}
+function renderStickerNotePreview(...args) { return StickerUi.renderStickerNotePreview(...args); }
 
-function renderStickerNotePreview() {
-  if (!stickerNotePreview) return;
-  const note = stickerNoteDraftRecord();
-  stickerNotePreview.innerHTML = Build?.renderSafeMarkdown
-    ? Build.renderSafeMarkdown(note.markdown, note.attachments)
-    : escapeHtml(note.markdown);
-  const attachmentMap = new Map(stickerNoteDraftAttachments.map((attachment) => [attachment.id, attachment]));
-  stickerNotePreview.querySelectorAll('[data-attachment-id]').forEach((img) => {
-    const attachment = attachmentMap.get(img.dataset.attachmentId);
-    if (!attachment) return;
-    if (attachment.previewUrl) img.src = attachment.previewUrl;
-    else {
-      fetchMediaUrl(Media.mediaKeyNoteAttachment(note.id, attachment.id), 'attachment').then((url) => {
-        if (url && img.isConnected) img.src = url;
-      });
-    }
-  });
-}
+function renderStickerNoteAttachments(...args) { return StickerUi.renderStickerNoteAttachments(...args); }
 
-function renderStickerNoteAttachments() {
-  if (!stickerNoteAttachments) return;
-  stickerNoteAttachments.innerHTML = '';
-  stickerNoteDraftAttachments.forEach((attachment) => {
-    const row = document.createElement('div');
-    row.className = 'sticker-note-attachment';
-    const image = document.createElement('img');
-    image.alt = attachment.alt || attachment.name || '';
-    image.loading = 'lazy';
-    if (attachment.previewUrl) image.src = attachment.previewUrl;
-    else fetchMediaUrl(Media.mediaKeyNoteAttachment(stickerNoteContext.id, attachment.id), 'attachment').then((url) => {
-      if (url && image.isConnected) image.src = url;
-    });
-    const name = document.createElement('span');
-    name.textContent = attachment.name || 'image';
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'icon-btn danger';
-    remove.title = t('noteAttachmentDelete');
-    remove.setAttribute('aria-label', t('noteAttachmentDelete'));
-    remove.innerHTML = iconSvg('delete');
-    remove.addEventListener('click', () => removeStickerNoteAttachment(attachment.id));
-    row.append(image, name, remove);
-    stickerNoteAttachments.appendChild(row);
-  });
-}
+function refreshStickerNoteEditor(...args) { return StickerUi.refreshStickerNoteEditor(...args); }
 
-function refreshStickerNoteEditor() {
-  renderStickerNoteTags();
-  renderStickerNoteAttachments();
-  renderStickerNotePreview();
-}
+function removeStickerNoteAttachment(...args) { return StickerUi.removeStickerNoteAttachment(...args); }
 
-function removeStickerNoteAttachment(id) {
-  const target = stickerNoteDraftAttachments.find((attachment) => attachment.id === id);
-  if (target?.previewUrl && target.blob) URL.revokeObjectURL(target.previewUrl);
-  stickerNoteDraftAttachments = stickerNoteDraftAttachments.filter((attachment) => attachment.id !== id);
-  if (stickerNoteMarkdown) {
-    const pattern = new RegExp(`!\\[[^\\]\\n]*\\]\\(attachment://${String(id).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\)\\n?`, 'g');
-    stickerNoteMarkdown.value = stickerNoteMarkdown.value.replace(pattern, '');
-  }
-  refreshStickerNoteEditor();
-  refreshStickerNoteUsage();
-}
+async function addStickerNoteFiles(...args) { return await StickerUi.addStickerNoteFiles(...args); }
 
-async function addStickerNoteFiles(files) {
-  const list = [...(files || [])].filter((file) => String(file?.type || '').toLowerCase().startsWith('image/'));
-  if (!list.length || stickerNoteMediaBusy) return;
-  const maxAttachments = Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12;
-  if (stickerNoteDraftAttachments.length + list.length > maxAttachments) {
-    setStickerNoteMediaStatus(t('noteImageTooMany'), true);
-    return;
-  }
-  setStickerNoteMediaBusy(true);
-  setStickerNoteMediaStatus(t('noteImageNormalizing'));
-  const normalizedAttachments = [];
-  try {
-    if (!NoteMedia?.normalizeBlob) throw new Error('note_media_unavailable');
-    for (const file of list) {
-      const normalized = await NoteMedia.normalizeBlob(file);
-      const id = stickerNoteUuid();
-      const name = String(file.name || 'image').slice(0, 512);
-      normalizedAttachments.push({
-        id,
-        name,
-        alt: name.slice(0, 2048),
-        mime: normalized.mime,
-        size: normalized.size,
-        width: normalized.width,
-        height: normalized.height,
-        hasData: true,
-        sourceBytes: Number(file.size) || 0,
-        sourceWidth: normalized.sourceWidth,
-        sourceHeight: normalized.sourceHeight,
-        blob: normalized.blob,
-        previewUrl: URL.createObjectURL(normalized.blob),
-      });
-    }
-  } catch (err) {
-    normalizedAttachments.forEach((attachment) => {
-      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
-    });
-    setStickerNoteMediaStatus(formatNoteMediaError(err), true);
-    setStickerNoteMediaBusy(false);
-    return;
-  }
-  normalizedAttachments.forEach((attachment) => {
-    stickerNoteDraftAttachments.push(attachment);
-    const token = `![${String(attachment.alt || attachment.name).replace(/[\]\n]/g, '')}](attachment://${attachment.id})`;
-    const textarea = stickerNoteMarkdown;
-    const start = textarea?.selectionStart ?? textarea?.value?.length ?? 0;
-    const end = textarea?.selectionEnd ?? start;
-    if (textarea) {
-      textarea.value = `${textarea.value.slice(0, start)}${token}\n${textarea.value.slice(end)}`;
-      textarea.setSelectionRange(start + token.length + 1, start + token.length + 1);
-    }
-  });
-  setStickerNoteMediaBusy(false);
-  setStickerNoteMediaStatus('');
-  refreshStickerNoteEditor();
-  refreshStickerNoteUsage();
-}
+function openStickerNoteEditor(...args) { return StickerUi.openStickerNoteEditor(...args); }
 
-function openStickerNoteEditor(note = null, { groupId = '', position = null } = {}) {
-  if (!stickerNoteBox) return;
-  closeAllFloatsExcept('stickerNote');
-  const source = note ? normalizeNoteProjection(note) : {
-    kind: 'note',
-    id: stickerNoteUuid(),
-    title: t('noteUntitled'),
-    markdown: '',
-    tags: [],
-    pinned: false,
-    savedAt: Date.now(),
-    attachments: [],
-  };
-  stickerNoteContext = {
-    mode: note ? 'edit' : 'create',
-    id: source.id,
-    groupId,
-    position,
-    pinned: Boolean(source.pinned),
-    savedAt: source.savedAt,
-  };
-  stickerNoteTagList = [...(source.tags || [])];
-  stickerNoteDraftAttachments = (source.attachments || []).map((attachment) => ({
-    ...attachment,
-    blob: null,
-    previewUrl: '',
-  }));
-  stickerNoteTitle.value = source.title || t('noteUntitled');
-  stickerNoteMarkdown.value = source.markdown || '';
-  stickerNoteTagDraft.value = '';
-  setStickerNoteMediaBusy(false);
-  setStickerNoteMediaStatus('');
-  refreshStickerNoteEditor();
-  stickerNoteBox.classList.add('open');
-  stickerNoteBox.setAttribute('aria-hidden', 'false');
-  stickerNoteBox.style.left = `${Math.max(16, Math.round((window.innerWidth - (stickerNoteBox.offsetWidth || 860)) / 2))}px`;
-  stickerNoteBox.style.top = `${Math.max(16, Math.round((window.innerHeight - (stickerNoteBox.offsetHeight || 600)) / 2))}px`;
-  syncFloatBackdrop();
-  refreshStickerNoteUsage();
-  setTimeout(() => stickerNoteTitle?.focus(), 0);
-}
+function closeStickerNoteEditor(...args) { return StickerUi.closeStickerNoteEditor(...args); }
 
-function closeStickerNoteEditor() {
-  if (!stickerNoteBox) return;
-  const wasPlacement = stickerNoteContext?.mode === 'create';
-  stickerNoteDraftAttachments.forEach((attachment) => {
-    if (attachment.blob && attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
-  });
-  stickerNoteDraftAttachments = [];
-  stickerNoteTagList = [];
-  stickerNoteContext = null;
-  stickerNoteUsageRequest++;
-  setStickerNoteMediaBusy(false);
-  setStickerNoteMediaStatus('');
-  stickerNoteBox.classList.remove('open');
-  stickerNoteBox.setAttribute('aria-hidden', 'true');
-  if (wasPlacement) resetCanvasNotePlacement();
-  syncFloatBackdrop();
-}
-
-async function saveStickerNote() {
-  if (!stickerNoteContext || stickerNoteMediaBusy) return;
-  commitStickerNoteTagDraft();
-  const note = stickerNoteDraftRecord();
-  const writtenKeys = [];
-  try {
-    for (const attachment of stickerNoteDraftAttachments) {
-      if (!attachment.blob) continue;
-      const key = Media.mediaKeyNoteAttachment(note.id, attachment.id);
-      await Media.putAttachment(key, attachment.blob);
-      writtenKeys.push(key);
-    }
-    const res = stickerNoteContext.mode === 'create'
-      ? await sendMessage({ type: 'CREATE_NOTE', note, position: stickerNoteContext.position })
-      : await sendMessage({
-          type: 'UPDATE_NOTE',
-          noteId: note.id,
-          groupId: stickerNoteContext.groupId,
-          patch: note,
-        });
-    if (!res?.ok) throw new Error(res?.error || 'note_save_failed');
-    closeStickerNoteEditor();
-    await loadList();
-  } catch (err) {
-    if (writtenKeys.length) await Media.removeMany(writtenKeys).catch(() => {});
-    console.warn('[TabWall] sticker note save failed:', err);
-    const message = err?.message === 'attachment_quota_exceeded'
-      ? t('noteImageQuotaExceeded')
-      : t('editFailed');
-    setStickerNoteMediaStatus(message, true);
-    showCopyToast(message);
-  }
-}
+async function saveStickerNote(...args) { return await StickerUi.saveStickerNote(...args); }
 
 function deleteGroupNote(groupId, noteId) {
   return withUiActionLock(`delete-note:${groupId}:${noteId}`, async () => {
@@ -7263,8 +2412,6 @@ stickerNoteCloseX?.addEventListener('click', closeStickerNoteEditor);
   stickerNoteDrag.addEventListener('pointercancel', end);
 })();
 
-// ─── Members floating box ──────────────────────────────────────────
-
 function placeMembersBoxCentered() {
   const w = membersBox.offsetWidth || 520;
   const h = membersBox.offsetHeight || 400;
@@ -7272,108 +2419,11 @@ function placeMembersBoxCentered() {
   membersBox.style.top = `${Math.max(16, Math.round((window.innerHeight - h) / 2))}px`;
 }
 
-function renderMembersList(group) {
-  const members = [
-    ...(group.tabs || []).map((member) => ({ ...member, kind: 'tab' })),
-    ...(group.notes || []).map((note) => ({ ...note, kind: 'note' })),
-  ].sort(
-    (a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0)
-  );
-  membersList.innerHTML = '';
-  if (members.length === 0) {
-    membersList.innerHTML = `<div class="tag-manage-empty">—</div>`;
-    return;
-  }
-  members.forEach((m) => {
-    const row = document.createElement('div');
-    row.className = 'member-row';
-    row.dataset.memberId = m.id;
-    const isNote = m.kind === 'note';
-    const storedOnly = !isNote && isStoredOnlyUrl(m.url);
-    const note = isNote ? m.markdown || '' : m.note || '';
-    const tags = Array.isArray(m.tags) ? m.tags : [];
-    const mKey = isNote && m.attachments?.[0]
-      ? Media.mediaKeyNoteAttachment(m.id, m.attachments[0].id)
-      : mediaKeyForMember(group.id, m.id);
-    row.innerHTML = `
-      ${isNote ? `<div class="member-thumb note-member-thumb">${iconSvg('note')}</div>` : `<img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />`}
-      <div class="member-body">
-        <div class="member-title" title="${escapeAttr(m.title || '')}">
-          ${escapeHtml(m.title || m.url || '')}
-          ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
-        </div>
-        <div class="member-url" title="${escapeAttr(isNote ? t('noteKind') : m.url || '')}">${escapeHtml(isNote ? t('noteKind') : m.url || '')}</div>
-        ${storedOnly ? `<div class="note-preview">${escapeHtml(t('storedOnly'))}</div>` : ''}
-        ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
-        ${
-          tags.length
-            ? `<div class="tags">${tags.map((tg) => `<span class="tag">${escapeHtml(tg)}</span>`).join('')}</div>`
-            : ''
-        }
-        <div class="member-actions">
-          <button type="button" class="btn snap-btn">${escapeHtml(t('memberSnapshot'))}</button>
-          <button type="button" class="btn edit-m-btn">${escapeHtml(isNote ? t('edit') : t('memberEdit'))}</button>
-          ${isNote
-            ? `<button type="button" class="btn danger delete-note-m-btn">${escapeHtml(t('delete'))}</button>`
-            : `<button type="button" class="btn primary restore-m-btn" ${storedOnly ? `disabled title="${escapeAttr(t('storedOnly'))}"` : ''}>${escapeHtml(t('memberRestore'))}</button>`}
-        </div>
-      </div>
-    `;
-    observeThumb(row.querySelector('img.lazy-thumb'));
-    const openMemberSnap = () => {
-      if (isNote) {
-        openStickerNoteEditor(m, { groupId: group.id });
-        return;
-      }
-      openLightbox(
-        {
-          id: m.id,
-          title: m.title,
-          url: m.url,
-          hasSnap: m.hasSnap,
-          hasThumb: m.hasThumb,
-        },
-        { groupId: group.id }
-      );
-    };
-    row.querySelector('.snap-btn').addEventListener('click', openMemberSnap);
-    row.querySelector('.member-thumb').addEventListener('click', openMemberSnap);
-    row.querySelector('.edit-m-btn').addEventListener('click', () => {
-      if (isNote) openStickerNoteEditor(m, { groupId: group.id });
-      else openMemberEditBox(group.id, m);
-    });
-    row.querySelector('.restore-m-btn')?.addEventListener('click', async () => {
-      await restoreMember(group.id, m.id);
-      const g = allTabs.find((x) => x.id === group.id);
-      if (!g) closeMembersBox();
-      else renderMembersList(g);
-    });
-    row.querySelector('.delete-note-m-btn')?.addEventListener('click', async () => {
-      await deleteGroupNote(group.id, m.id);
-    });
-    membersList.appendChild(row);
-  });
-}
+function renderMembersList(...args) { return WorkspaceUi.renderMembersList(...args); }
 
-function openMembersBox(group) {
-  closeAllFloatsExcept('members');
-  membersGroupId = group.id;
-  const color = GROUP_COLORS[group.color] || GROUP_COLORS.grey;
-  membersTitle.innerHTML = `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>${escapeHtml(itemTitle(group))} · ${escapeHtml(t('groupTabs', { n: (group.tabs || []).length + (group.notes || []).length }))}`;
-  renderMembersList(group);
-  membersBox.classList.add('open');
-  membersBox.setAttribute('aria-hidden', 'false');
-  placeMembersBoxCentered();
-  syncFloatBackdrop();
-}
+function openMembersBox(...args) { return WorkspaceUi.openMembersBox(...args); }
 
-function closeMembersBox() {
-  membersGroupId = null;
-  membersBox.classList.remove('open');
-  membersBox.setAttribute('aria-hidden', 'true');
-  membersList.innerHTML = '';
-  syncFloatBackdrop();
-}
+function closeMembersBox(...args) { return WorkspaceUi.closeMembersBox(...args); }
 
 membersCloseX.addEventListener('click', closeMembersBox);
 
@@ -7466,102 +2516,15 @@ membersDelete.addEventListener('click', async () => {
   editDrag.addEventListener('pointercancel', end);
 })();
 
-// ─── Actions ───────────────────────────────────────────────────────
+async function restoreItem(...args) { return await WorkspaceUi.restoreItem(...args); }
 
-async function restoreItem(id) {
-  return withUiActionLock(`restore:${id}`, async () => {
-    const item = allTabs.find((t) => t.id === id);
-    if (item?.kind === 'note') {
-      openStickerNoteEditor(item);
-      return { ok: false, error: 'note_not_restorable' };
-    }
-    if (item?.kind !== 'group' && isStoredOnlyUrl(item?.url)) {
-      showCopyToast(t('restoreRestricted'));
-      return { ok: false, error: 'restricted_url' };
-    }
-    if (item?.kind === 'group') {
-      const n = (item.tabs || []).length;
-      const title = itemTitle(item);
-      if (!window.confirm(t('restoreGroupConfirm', { title, n }))) return { ok: false, error: 'cancelled' };
-    }
-    const type = item?.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
-    const res = await sendMessage({ type, id });
-    if (res.ok) {
-      allTabs = allTabs.filter((t) => t.id !== id);
-      if (expandedId === id) closeLightbox();
-      if (editingId === id) closeEditBox();
-      if (membersGroupId === id) closeMembersBox();
-      renderGrid();
-      if (res.skipped) showCopyToast(t('restoreSkipped', { n: res.skipped }));
-    } else if (res.error === 'restricted_url' || res.error === 'no_restorable_urls') {
-      showCopyToast(t('restoreRestricted'));
-    }
-    return res;
-  });
-}
+async function restoreMember(...args) { return await AppHelpers.restoreMember(...args); }
 
-async function restoreMember(groupId, memberId) {
-  return withUiActionLock(`restore-member:${groupId}:${memberId}`, async () => {
-    const group = allTabs.find((item) => item.id === groupId && item.kind === 'group');
-    const member = group?.tabs?.find((item) => item.id === memberId);
-    if (isStoredOnlyUrl(member?.url)) {
-      showCopyToast(t('restoreRestricted'));
-      return { ok: false, error: 'restricted_url' };
-    }
-    const res = await sendMessage({
-      type: 'RESTORE_GROUP_MEMBER',
-      groupId,
-      memberId,
-    });
-    if (res.ok) await loadList();
-    else if (res.error === 'restricted_url') showCopyToast(t('restoreRestricted'));
-    return res;
-  });
-}
+async function deleteItem(...args) { return await WorkspaceUi.deleteItem(...args); }
 
-async function deleteItem(id) {
-  return withUiActionLock(`delete:${id}`, async () => {
-    const res = await sendMessage({ type: 'DELETE_ITEM', id });
-    if (res.ok) {
-      allTabs = allTabs.filter((t) => t.id !== id);
-      if (expandedId === id) closeLightbox();
-      if (editingId === id) closeEditBox();
-      renderGrid();
-    }
-    return res;
-  });
-}
+function wireFavicon(...args) { return ListUi.wireFavicon(...args); }
 
-function wireFavicon(root) {
-  const favImg = root.querySelector('img.favicon');
-  if (!favImg) return;
-  favImg.addEventListener('error', () => {
-    const fallback = document.createElement('span');
-    fallback.className = 'favicon-fallback';
-    fallback.setAttribute('aria-hidden', 'true');
-    favImg.replaceWith(fallback);
-  });
-}
-
-// ─── Card drag with push ───────────────────────────────────────────
-
-function flipCards(beforeMap) {
-  const cards = [...gridEl.querySelectorAll('.card:not(.dragging)')];
-  cards.forEach((card) => {
-    const prev = beforeMap.get(card);
-    if (!prev) return;
-    const next = card.getBoundingClientRect();
-    const dx = prev.left - next.left;
-    const dy = prev.top - next.top;
-    if (!dx && !dy) return;
-    card.style.transition = 'none';
-    card.style.transform = `translate(${dx}px, ${dy}px)`;
-    requestAnimationFrame(() => {
-      card.style.transition = '';
-      card.style.transform = '';
-    });
-  });
-}
+function flipCards(...args) { return AppHelpers.flipCards(...args); }
 
 function snapshotCardRects() {
   const map = new Map();
@@ -7571,37 +2534,7 @@ function snapshotCardRects() {
   return map;
 }
 
-function beginCardDrag(state, e) {
-  const { card } = state;
-  const rect = card.getBoundingClientRect();
-  state.active = true;
-  state.offsetX = e.clientX - rect.left;
-  state.offsetY = e.clientY - rect.top;
-
-  const placeholder = document.createElement('div');
-  placeholder.className = 'card-placeholder';
-  placeholder.style.height = `${rect.height}px`;
-  // Match card width so grid reflow is stable
-  placeholder.style.width = `${rect.width}px`;
-  card.parentElement.insertBefore(placeholder, card);
-  state.placeholder = placeholder;
-
-  gridEl.classList.add('is-dragging');
-  card.classList.add('dragging');
-  card.style.position = 'fixed';
-  card.style.left = `${rect.left}px`;
-  card.style.top = `${rect.top}px`;
-  card.style.width = `${rect.width}px`;
-  card.style.height = `${rect.height}px`;
-  card.style.zIndex = '80';
-  card.style.margin = '0';
-  // Ensure capture survives after leaving the card bounds
-  try {
-    if (state.pointerId != null) card.setPointerCapture(state.pointerId);
-  } catch {
-    // ignore
-  }
-}
+function beginCardDrag(...args) { return ListUi.beginCardDrag(...args); }
 
 /** Dwell before a drop is treated as stack (ms). Short so stacking is easy; still avoids drive-by merges. */
 const STACK_DWELL_MS = 150;
@@ -7614,69 +2547,9 @@ function clearStackHover() {
  * Stack hot-zone: only the card title/meta strip (not thumb center).
  * Avoids green + while dragging over the bulk of the card.
  */
-function findStackTargetAt(clientX, clientY, excludeCard) {
-  const cards = [...gridEl.querySelectorAll('.card')].filter(
-    (el) => el !== excludeCard && !el.classList.contains('dragging') && !el.classList.contains('card-placeholder')
-  );
-  // Prefer topmost card under point (last in paint order among hits)
-  let hit = null;
-  for (const el of cards) {
-    const meta = el.querySelector('.meta');
-    if (!meta) continue;
-    const rect = meta.getBoundingClientRect();
-    if (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    ) {
-      hit = el;
-    }
-  }
-  return hit;
-}
+function findStackTargetAt(...args) { return AppHelpers.findStackTargetAt(...args); }
 
-function updateStackHoverState(state, clientX, clientY) {
-  const stackEl = findStackTargetAt(clientX, clientY, state.card);
-  const candId = stackEl?.dataset?.id || null;
-  const now = performance.now();
-
-  if (candId !== state.stackCandidateId) {
-    state.stackCandidateId = candId;
-    state.stackCandidateSince = candId ? now : 0;
-    // Not armed until dwell completes
-    if (state.stackTargetId) {
-      clearStackHover();
-      state.stackTargetId = null;
-    }
-    return false;
-  }
-
-  if (!candId) {
-    if (state.stackTargetId) {
-      clearStackHover();
-      state.stackTargetId = null;
-    }
-    return false;
-  }
-
-  const armed = now - (state.stackCandidateSince || 0) >= STACK_DWELL_MS;
-  if (armed) {
-    if (state.stackTargetId !== candId) {
-      clearStackHover();
-      state.stackTargetId = candId;
-      if (stackEl) stackEl.classList.add('stack-hover');
-    }
-    return true;
-  }
-
-  // Hovering but not armed — still reorder
-  if (state.stackTargetId) {
-    clearStackHover();
-    state.stackTargetId = null;
-  }
-  return false;
-}
+function updateStackHoverState(...args) { return ListUi.updateStackHoverState(...args); }
 
 function queueCardPointerMove(e) {
   cardQueuedPointerEvent = e;
@@ -7701,363 +2574,25 @@ function flushCardPointerFrame(e) {
   if (next) onCardPointerMove(next);
 }
 
-function onCardPointerMove(e) {
-  if (!dragState) return;
-  // Ignore multi-touch / wrong pointer
-  if (dragState.pointerId != null && e.pointerId !== dragState.pointerId) return;
+function onCardPointerMove(...args) { return ListUi.onCardPointerMove(...args); }
 
-  const dx = e.clientX - dragState.startX;
-  const dy = e.clientY - dragState.startY;
+function cleanupCardDragVisual(...args) { return AppHelpers.cleanupCardDragVisual(...args); }
 
-  if (!dragState.active) {
-    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-    beginCardDrag(dragState, e);
-  }
+function normalizeParkedList(...args) { return AppHelpers.normalizeParkedList(...args); }
 
-  const { card, offsetX, offsetY, placeholder } = dragState;
-  if (!card) return;
+function normalizeNoteProjection(...args) { return AppHelpers.normalizeNoteProjection(...args); }
 
-  card.style.left = `${e.clientX - offsetX}px`;
-  card.style.top = `${e.clientY - offsetY}px`;
+async function endCardDrag(...args) { return await ListUi.endCardDrag(...args); }
 
-  // Stack only after a short dwell on the title/meta hot-zone; otherwise keep reordering
-  const stacking = updateStackHoverState(dragState, e.clientX, e.clientY);
-  if (stacking) return;
-
-  if (!placeholder || !placeholder.parentElement) return;
-
-  const before = snapshotCardRects();
-  const siblings = [...gridEl.children].filter((el) => el !== card);
-  let insertBefore = null;
-  for (const el of siblings) {
-    if (el === placeholder) continue;
-    const rect = el.getBoundingClientRect();
-    const cy = rect.top + rect.height / 2;
-    const cx = rect.left + rect.width / 2;
-    if (e.clientY < cy || (Math.abs(e.clientY - cy) < rect.height / 2 && e.clientX < cx)) {
-      insertBefore = el;
-      break;
-    }
-  }
-
-  const currentNext = placeholder.nextElementSibling;
-  const target = insertBefore;
-  if (target === placeholder) return;
-  // Avoid no-op moves
-  if (target == null) {
-    if (placeholder.parentElement && placeholder !== gridEl.lastElementChild) {
-      gridEl.appendChild(placeholder);
-      flipCards(before);
-    }
-  } else if (currentNext !== target) {
-    gridEl.insertBefore(placeholder, target);
-    flipCards(before);
-  }
-}
-
-function cleanupCardDragVisual(state) {
-  const { card, placeholder } = state;
-  clearStackHover();
-  card.classList.remove('dragging');
-  gridEl.classList.remove('is-dragging');
-  card.style.position = '';
-  card.style.left = '';
-  card.style.top = '';
-  card.style.width = '';
-  card.style.height = '';
-  card.style.zIndex = '';
-  card.style.margin = '';
-  card.style.transform = '';
-  if (placeholder?.parentElement) {
-    placeholder.parentElement.insertBefore(card, placeholder);
-    placeholder.remove();
-  }
-}
-
-function normalizeParkedList(raw) {
-  return (Array.isArray(raw) ? raw : []).map((item) => {
-    if (item.kind === 'group' || Array.isArray(item.tabs)) {
-      return {
-        ...item,
-        kind: 'group',
-        pinned: Boolean(item.pinned),
-        note: typeof item.note === 'string' ? item.note : '',
-        tags: Array.isArray(item.tags) ? item.tags : [],
-        tabs: Array.isArray(item.tabs) ? item.tabs : [],
-        notes: Array.isArray(item.notes) ? item.notes.map(normalizeNoteProjection) : [],
-      };
-    }
-    if (item.kind === 'note') return normalizeNoteProjection(item);
-    return {
-      ...item,
-      kind: 'tab',
-      pinned: Boolean(item.pinned),
-      note: typeof item.note === 'string' ? item.note : '',
-      tags: Array.isArray(item.tags) ? item.tags : [],
-    };
-  });
-}
-
-function normalizeNoteProjection(item) {
-  return {
-    ...item,
-    kind: 'note',
-    title: typeof item?.title === 'string' && item.title ? item.title : t('noteUntitled'),
-    markdown: typeof item?.markdown === 'string' ? item.markdown : '',
-    pinned: Boolean(item?.pinned),
-    savedAt: Number(item?.savedAt) || Date.now(),
-    tags: Array.isArray(item?.tags) ? item.tags : [],
-    attachments: Array.isArray(item?.attachments)
-      ? item.attachments.map((attachment) => ({
-          ...attachment,
-          id: String(attachment?.id || ''),
-          name: typeof attachment?.name === 'string' ? attachment.name : 'image',
-          alt: typeof attachment?.alt === 'string' ? attachment.alt : '',
-          hasData: attachment?.hasData === true,
-        }))
-      : [],
-  };
-}
-
-async function endCardDrag(e) {
-  if (!dragState) return;
-  const state = dragState;
-  // Flush while dragState is still set — onCardPointerMove early-returns
-  // once dragState is null, so this must run before clearing it.
-  flushCardPointerFrame(e);
-  dragState = null;
-  detachCardDragListeners(state);
-
-  const clientX = e?.clientX;
-  const clientY = e?.clientY;
-
-  try {
-    if (e?.pointerId != null) state.card.releasePointerCapture(e.pointerId);
-    else if (state.pointerId != null) state.card.releasePointerCapture(state.pointerId);
-  } catch {
-    // ignore
-  }
-
-  if (!state.active) {
-    if (selectMode) return;
-    // setPointerCapture suppresses click — handle short-press here
-    if (state.allowClickCopy && state.item) {
-      copySavedLink(state.item);
-      return;
-    }
-    if (state.allowClickRestore) {
-      restoreItem(state.id);
-    }
-    return;
-  }
-
-  // Re-check stack target at drop point (dwell optional if still in hotzone)
-  let stackTargetId = state.stackTargetId || null;
-  if (
-    !stackTargetId &&
-    typeof clientX === 'number' &&
-    typeof clientY === 'number'
-  ) {
-    const el = findStackTargetAt(clientX, clientY, state.card);
-    if (el?.dataset?.id && el.dataset.id !== state.id) {
-      stackTargetId = el.dataset.id;
-    }
-  }
-
-  cleanupCardDragVisual(state);
-
-  // Drop onto another card → stack / merge into group
-  if (stackTargetId && stackTargetId !== state.id) {
-    const res = await sendMessage({
-      type: 'STACK_ITEMS',
-      sourceId: state.id,
-      targetId: stackTargetId,
-    });
-    if (res.ok && Array.isArray(res.items)) {
-      allTabs = normalizeParkedList(res.items);
-      renderGrid();
-      showCopyToast(t('stackMerged'));
-      return;
-    }
-    console.warn('[TabWall] STACK_ITEMS failed', res);
-    showCopyToast(t('stackFailed'));
-    // fall through to reorder if stack failed
-  }
-
-  const ids = [...gridEl.querySelectorAll('.card')].map((el) => el.dataset.id).filter(Boolean);
-
-  let newAll;
-  if (query) {
-    const idSet = new Set(ids);
-    const rest = allTabs.filter((t) => !idSet.has(t.id));
-    const ordered = ids.map((i) => allTabs.find((t) => t.id === i)).filter(Boolean);
-    newAll = [...ordered, ...rest];
-  } else {
-    newAll = ids.map((i) => allTabs.find((t) => t.id === i)).filter(Boolean);
-    const have = new Set(newAll.map((t) => t.id));
-    for (const t of allTabs) {
-      if (!have.has(t.id)) newAll.push(t);
-    }
-  }
-
-  allTabs = newAll;
-
-  const res = await sendMessage({
-    type: 'REORDER_ITEMS',
-    ids: allTabs.map((t) => t.id),
-  });
-  if (res.ok && Array.isArray(res.items)) allTabs = res.items;
-  renderGrid();
-}
-
-function detachCardDragListeners(state) {
-  if (!state?.onMove) return;
-  window.removeEventListener('pointermove', state.onMove, true);
-  window.removeEventListener('pointerup', state.onUp, true);
-  window.removeEventListener('pointercancel', state.onUp, true);
-  state.onMove = null;
-  state.onUp = null;
-  if (cardPointerRaf) {
-    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(cardPointerRaf);
-    else clearTimeout(cardPointerRaf);
-    cardPointerRaf = 0;
-  }
-  cardQueuedPointerEvent = null;
-}
+function detachCardDragListeners(...args) { return AppHelpers.detachCardDragListeners(...args); }
 
 /**
  * Bind title/meta copy. Meta does not enter card drag (setPointerCapture kills click).
  * pointerup + small movement = copy (more reliable than click alone).
  */
-function bindMetaCopy(metaEl, item) {
-  if (!metaEl) return;
-  let downX = 0;
-  let downY = 0;
-  let downId = null;
-  let copiedOnUp = false;
+function bindMetaCopy(...args) { return ListUi.bindMetaCopy(...args); }
 
-  metaEl.addEventListener('pointerdown', (e) => {
-    if (e.button != null && e.button !== 0) return;
-    if (e.target.closest('.search-hits, button, input')) return;
-    downX = e.clientX;
-    downY = e.clientY;
-    downId = e.pointerId;
-    copiedOnUp = false;
-  });
-
-  metaEl.addEventListener('pointerup', (e) => {
-    if (downId != null && e.pointerId !== downId) return;
-    const pid = downId;
-    downId = null;
-    if (pid == null) return;
-    if (e.button != null && e.button !== 0) return;
-    if (e.target.closest('.search-hits, button, input')) return;
-    if (dragState?.active) return;
-    if (Math.hypot(e.clientX - downX, e.clientY - downY) >= DRAG_THRESHOLD) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    copiedOnUp = true;
-    copySavedLink(item);
-  });
-
-  metaEl.addEventListener('click', (e) => {
-    if (copiedOnUp) {
-      copiedOnUp = false;
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    if (e.target.closest('.search-hits, button, input')) return;
-    if (dragState?.active) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    copySavedLink(item);
-  });
-}
-
-function attachCardDrag(card, item) {
-  // Capture phase: thumb / card body can start drag; meta is excluded (copy only)
-  card.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (selectMode) return;
-      if (isMultiSelectModifier(e)) return;
-      if (settings.viewMode === 'list') return;
-      if (e.button != null && e.button !== 0) return;
-      // Meta / copy-hit: do not capture — copy handled by bindMetaCopy
-      if (e.target.closest('.meta, .copy-hit')) return;
-      if (
-        e.target.closest(
-          'button, input, a, .icon-btn, .card-check, .delete-btn, .search-hits, .search-hit'
-        )
-      ) {
-        return;
-      }
-
-      // End any prior gesture
-      if (dragState) {
-        detachCardDragListeners(dragState);
-        dragState = null;
-      }
-
-      const pointerId = e.pointerId;
-      e.preventDefault();
-
-      const state = {
-        card,
-        item,
-        id: item.id,
-        pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-        offsetX: 0,
-        offsetY: 0,
-        placeholder: null,
-        active: false,
-        stackTargetId: null,
-        stackCandidateId: null,
-        stackCandidateSince: 0,
-        allowClickRestore: Boolean(
-          e.target.closest('.thumb-wrap, .thumb, .group-cover, .group-mosaic, .group-badge')
-        ),
-        allowClickCopy: false,
-        onMove: null,
-        onUp: null,
-      };
-
-      state.onMove = (ev) => {
-        if (ev.pointerId !== pointerId) return;
-        queueCardPointerMove(ev);
-      };
-      state.onUp = (ev) => {
-        if (ev.pointerId !== pointerId) return;
-        // endCardDrag flushes the pending queued move (see queueCardPointerMove)
-        // and detaches listeners itself, synchronously, before its first await.
-        endCardDrag(ev).catch(() => {});
-      };
-
-      dragState = state;
-      window.addEventListener('pointermove', state.onMove, true);
-      window.addEventListener('pointerup', state.onUp, true);
-      window.addEventListener('pointercancel', state.onUp, true);
-
-      try {
-        card.setPointerCapture(pointerId);
-      } catch {
-        // ignore
-      }
-    },
-    true
-  );
-}
+function attachCardDrag(...args) { return ListUi.attachCardDrag(...args); }
 
 // Block native HTML5 drag (img/link → green + cursor under pointer)
 document.addEventListener(
@@ -8076,467 +2611,21 @@ document.addEventListener(
   true
 );
 
-// ─── Cards / List ──────────────────────────────────────────────────
+function iconSvg(...args) { return ListUi.iconSvg(...args); }
 
-function iconSvg(name) {
-  const paths = {
-    edit: '<path d="m4 16.5-.7 3.2 3.2-.7L18.1 7.4a2 2 0 0 0-2.8-2.8L3.7 16.5z"></path><path d="m13.8 6.2 4 4"></path>',
-    expand: '<path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"></path>',
-    members: '<rect x="4" y="5" width="12" height="14" rx="2"></rect><path d="M8 3h10a2 2 0 0 1 2 2v12M8 9h4M8 13h5"></path>',
-    pin: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"></path>',
-    delete: '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path>',
-    restore: '<path d="M5 8h9a5 5 0 1 1-3.5 8.5L8 14"></path><path d="M5 8V4M5 8l4-2"></path>',
-    copy: '<rect x="8" y="8" width="11" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"></path>',
-    snapshot: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle><path d="M8 5 9.2 3h5.6L16 5"></path>',
-    close: '<path d="m6 6 12 12M18 6 6 18"></path>',
-    note: '<path d="M5 4h14v16H5z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>',
-  };
-  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${paths[name] || ''}</svg>`;
-}
+async function togglePinned(...args) { return await AppHelpers.togglePinned(...args); }
 
-async function togglePinned(item) {
-  const next = !Boolean(item?.pinned);
-  const res = await withUiActionLock(`pin:${item?.id || ''}`, () =>
-    item?.kind === 'note'
-      ? sendMessage({ type: 'UPDATE_NOTE', noteId: item.id, patch: { pinned: next } })
-      : sendMessage({ type: 'UPDATE_ITEM', id: item.id, pinned: next })
-  );
-  if (!res?.ok) {
-    showCopyToast(t('pinFailed'));
-    return;
-  }
-  const stored = allTabs.find((candidate) => candidate.id === item.id);
-  if (stored) stored.pinned = next;
-  showCopyToast(t(next ? 'pinnedOn' : 'pinnedOff'));
-  renderGrid();
-}
+function groupCoverHtml(...args) { return ListUi.groupCoverHtml(...args); }
 
-function groupCoverHtml(item, { canvas = false } = {}) {
-  const mediaClass = canvas ? ' canvas-thumb' : '';
-  const mediaAttribute = canvas ? ' data-canvas-media="true"' : '';
-  const mediaAvailability = (member) => canvas
-    ? ` data-canvas-has-thumb="${member.hasThumb || member.thumbnail ? 'true' : 'false'}" data-canvas-has-snap="${member.hasSnap || member.snapshot ? 'true' : 'false'}"`
-    : '';
-  const imageHtml = (member, className = '') =>
-    `<img class="${className}${className ? ' ' : ''}lazy-thumb${mediaClass}" alt="" draggable="false" data-media-key="${escapeAttr(mediaKeyForMember(item.id, member.id))}"${mediaAttribute}${mediaAvailability(member)} />`;
-  const members = (item.tabs || []).filter((m) => m.hasThumb || m.thumbnail).slice(0, 4);
-  if (members.length === 0) {
-    // still try first few for keys even without hasThumb flag (migration)
-    const any = (item.tabs || []).slice(0, 4);
-    if (!any.length) {
-      if (item.notes?.length) {
-        return `<div class="canvas-note-cover">${iconSvg('note')}<span>${escapeHtml(t('noteKind'))}</span></div>`;
-      }
-      return `<div class="group-cover empty-cover"></div>`;
-    }
-    if (any.length === 1) {
-      return imageHtml(any[0], 'thumb');
-    }
-    return `<div class="group-mosaic mosaic-${Math.min(any.length, 4)}">${any
-      .map((m) => imageHtml(m))
-      .join('')}</div>`;
-  }
-  if (members.length === 1) {
-    return imageHtml(members[0], 'thumb');
-  }
-  return `<div class="group-mosaic mosaic-${Math.min(members.length, 4)}">${members
-    .map((m) => imageHtml(m))
-    .join('')}</div>`;
-}
+function createGroupCard(...args) { return ListUi.createGroupCard(...args); }
 
-function createGroupCard(item) {
-  const card = document.createElement('article');
-  card.className = 'card group-card';
-  card.draggable = false;
-  card.dataset.id = item.id;
-  card.dataset.kind = 'group';
-  card.setAttribute('role', 'listitem');
+function createCard(...args) { return ListUi.createCard(...args); }
 
-  const title = itemTitle(item);
-  const n = (item.tabs || []).length + (item.notes || []).length;
-  const storedOnlyCount = countStoredOnlyUrls(item);
-  const color = GROUP_COLORS[item.color] || GROUP_COLORS.grey;
-  const note = item.note || '';
-  const tags = Array.isArray(item.tags) ? item.tags : [];
-  const savedAt = formatSavedAt(item.savedAt);
+function createRow(...args) { return ListUi.createRow(...args); }
 
-  const selected = selectedIds.has(item.id);
-  if (selected) card.classList.add('selected');
+function normalizeCanvasLayoutLocal(...args) { return AppHelpers.normalizeCanvasLayoutLocal(...args); }
 
-  card.innerHTML = `
-    <input type="checkbox" class="card-check" ${selected ? 'checked' : ''} aria-label="select" />
-    <div class="group-color-bar" style="background:${color}"></div>
-    <div class="thumb-wrap">
-      ${groupCoverHtml(item)}
-      <div class="card-actions">
-        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
-        <button type="button" class="icon-btn lg members-btn" title="${escapeAttr(t('expandGroup'))}">${iconSvg('members')}<span>${escapeHtml(t('expandGroup'))}</span></button>
-      </div>
-      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
-      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
-      <span class="group-badge">${escapeHtml(t('groupTabs', { n }))}</span>
-    </div>
-    <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
-      <div class="title-row">
-        <span class="color-dot" style="background:${color}"></span>
-        <div class="title" title="${escapeAttr(title)}">
-          ${escapeHtml(title)}
-          ${storedOnlyCount ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))} ×${storedOnlyCount}</span>` : ''}
-        </div>
-      </div>
-      <div class="url">${escapeHtml(t('groupTabs', { n }))}</div>
-      <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
-      ${note ? `<div class="note-preview">${escapeHtml(note)}</div>` : ''}
-      ${
-        tags.length
-          ? `<div class="tags">${tags.map((tg) => `<span class="tag">${escapeHtml(tg)}</span>`).join('')}</div>`
-          : ''
-      }
-    </div>
-  `;
-
-  card.querySelectorAll('img.lazy-thumb').forEach((img) => observeThumb(img));
-  appendGroupSearchHits(card, item);
-
-  card.querySelector('.card-check').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!selectMode) setSelectMode(true);
-    handleCardSelectClick(item.id, e);
-  });
-
-  bindMetaCopy(card.querySelector('.meta'), item);
-
-  card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-    if (e.target.closest('.card-actions, .delete-btn, .members-btn, .pin-btn, .card-check')) return;
-    if (dragState?.active) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-    }
-    // pure thumb click restore is handled by endCardDrag
-  });
-
-  card.querySelector('.members-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    openMembersBox(item);
-  });
-
-  card.querySelector('.edit-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    openEditBox(item);
-  });
-  card.querySelector('.pin-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    togglePinned(item);
-  });
-  card.querySelector('.delete-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    deleteItem(item.id);
-  });
-  attachCardDrag(card, item);
-  return card;
-}
-
-function createCard(item) {
-  if (item.kind === 'group') return createGroupCard(item);
-  if (item.kind === 'note') return createRow(item);
-
-  const card = document.createElement('article');
-  card.className = 'card';
-  card.draggable = false;
-  card.dataset.id = item.id;
-  card.dataset.kind = item.kind;
-  card.setAttribute('role', 'listitem');
-
-  const title = item.title || item.url || 'Untitled';
-  const url = item.url || '';
-  const mediaKey = mediaKeyForItem(item);
-  const fav = item.favIconUrl || '';
-  const storedOnly = isStoredOnlyUrl(url);
-  const note = item.note || '';
-  const tags = Array.isArray(item.tags) ? item.tags : [];
-  const savedAt = formatSavedAt(item.savedAt);
-
-  if (selectedIds.has(item.id)) card.classList.add('selected');
-
-  card.innerHTML = `
-    <input type="checkbox" class="card-check" ${selectedIds.has(item.id) ? 'checked' : ''} aria-label="select" />
-    <div class="thumb-wrap">
-      <img class="thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
-      <div class="card-actions">
-        <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
-        <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}<span>${escapeHtml(t('expand'))}</span></button>
-      </div>
-      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
-      <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
-    </div>
-    <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
-      <div class="title-row">
-        ${
-          fav
-            ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(fav)}" />`
-            : `<span class="favicon-fallback" aria-hidden="true"></span>`
-        }
-        <div class="title" title="${escapeAttr(title)}">
-          ${escapeHtml(title)}
-          ${storedOnly ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}</span>` : ''}
-        </div>
-      </div>
-      <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
-      <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
-      ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${escapeHtml(note)}</div>` : ''}
-      ${
-        tags.length
-          ? `<div class="tags">${tags.map((tg) => `<span class="tag">${escapeHtml(tg)}</span>`).join('')}</div>`
-          : ''
-      }
-    </div>
-  `;
-
-  wireFavicon(card);
-  observeThumb(card.querySelector('img.lazy-thumb'));
-  card.querySelector('.card-check').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!selectMode) setSelectMode(true);
-    handleCardSelectClick(item.id, e);
-  });
-  card.querySelector('.expand-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (selectMode) return;
-    openLightbox(item);
-  });
-  card.querySelector('.edit-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (selectMode) return;
-    openEditBox(item);
-  });
-  card.querySelector('.pin-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (selectMode) return;
-    togglePinned(item);
-  });
-  card.querySelector('.delete-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (selectMode) return;
-    deleteItem(item.id);
-  });
-  bindMetaCopy(card.querySelector('.meta'), item);
-  card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-    if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .card-check')) return;
-    if (dragState?.active) return;
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-    }
-    // pure thumb click restore is handled by endCardDrag
-  });
-  attachCardDrag(card, item);
-  return card;
-}
-
-function createRow(item) {
-  const row = document.createElement('article');
-  row.className = `row${item.kind === 'group' ? ' group-row' : ''}${item.kind === 'note' ? ' note-row' : ''}`;
-  row.dataset.id = item.id;
-  row.setAttribute('role', 'listitem');
-
-  const isGroup = item.kind === 'group';
-  const isNote = item.kind === 'note';
-  const title = itemTitle(item);
-  const url = isGroup
-    ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
-    : isNote ? t('noteKind') : item.url || '';
-  const mediaKey = isGroup
-    ? (() => {
-        const m = (item.tabs || []).find((x) => x.hasThumb || x.id) || (item.tabs || [])[0];
-        return m ? mediaKeyForMember(item.id, m.id) : '';
-      })()
-    : isNote ? '' : mediaKeyForItem(item);
-  const note = isNote ? (item.markdown || '') : item.note || '';
-  const tags = Array.isArray(item.tags) ? item.tags : [];
-  const color = isGroup ? GROUP_COLORS[item.color] || GROUP_COLORS.grey : null;
-  const storedOnlyCount = countStoredOnlyUrls(item);
-
-  row.innerHTML = `
-    ${isNote
-      ? `<button type="button" class="row-thumb note-row-thumb" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('note')}</button>`
-      : `<img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />`}
-    <div class="row-main">
-      <div class="title copy-hit" title="${escapeAttr(title)}">
-        ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
-        ${escapeHtml(title)}
-        ${storedOnlyCount ? `<span class="stored-only-badge">${escapeHtml(t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
-      </div>
-      <div class="url copy-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
-      <div class="saved-at">${escapeHtml(t('savedAt', { time: formatSavedAt(item.savedAt) }))}</div>
-    </div>
-    <div class="row-note" title="${escapeAttr(note)}">${note ? escapeHtml(note) : '—'}</div>
-    <div class="row-tags">
-      ${
-        tags.length
-          ? tags.map((tg) => `<span class="tag">${escapeHtml(tg)}</span>`).join('')
-          : '<span class="note-preview">—</span>'
-      }
-    </div>
-    <div class="row-actions">
-      <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
-      <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
-      ${
-        isGroup || isNote
-          ? ''
-          : `<button type="button" class="icon-btn expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}</button>`
-      }
-      <button type="button" class="icon-btn danger delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
-    </div>
-  `;
-
-  observeThumb(row.querySelector('img.lazy-thumb'));
-  if (isGroup) appendGroupSearchHits(row, item);
-  row.querySelector('.row-thumb').addEventListener('click', (e) => {
-    if (selectMode || isMultiSelectModifier(e)) {
-      handleCardSelectClick(item.id, e);
-      return;
-    }
-    if (isNote) openStickerNoteEditor(item);
-    else restoreItem(item.id);
-  });
-  row.querySelectorAll('.copy-hit').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('.search-hits')) return;
-      if (selectMode || isMultiSelectModifier(e)) {
-        handleCardSelectClick(item.id, e);
-        return;
-      }
-      if (!isNote) copySavedLink(item);
-    });
-  });
-  if (selectedIds.has(item.id)) row.classList.add('selected');
-  const expandBtn = row.querySelector('.expand-btn');
-  if (expandBtn) {
-    expandBtn.addEventListener('click', () => openLightbox(item));
-  }
-  row.querySelector('.edit-btn').addEventListener('click', () => {
-    if (isNote) openStickerNoteEditor(item);
-    else openEditBox(item);
-  });
-  row.querySelector('.pin-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (selectMode) return;
-    togglePinned(item);
-  });
-  row.querySelector('.delete-btn').addEventListener('click', () => deleteItem(item.id));
-  return row;
-}
-
-// ─── Spatial Canvas ────────────────────────────────────────────────
-
-function canvasDefaultPosition(index) {
-  const i = Math.max(0, Number(index) || 0);
-  const stepX = Math.round(CANVAS_NODE_DEFAULT_WIDTH * CANVAS_NODE_DISPLAY_SCALE) + CANVAS_DEFAULT_CARD_GAP;
-  const stepY = Math.round(CANVAS_NODE_DEFAULT_HEIGHT * CANVAS_NODE_DISPLAY_SCALE) + CANVAS_DEFAULT_CARD_GAP;
-  return {
-    x: 96 + (i % 4) * stepX,
-    y: 96 + Math.floor(i / 4) * stepY,
-    w: CANVAS_NODE_DEFAULT_WIDTH,
-    h: CANVAS_NODE_DEFAULT_HEIGHT,
-    z: i,
-  };
-}
-
-function canvasDisplayPosition(position, fallback = canvasDefaultPosition()) {
-  const value = position && typeof position === 'object' ? position : fallback;
-  const numeric = (candidate, fallbackValue) => Number.isFinite(Number(candidate)) ? Number(candidate) : fallbackValue;
-  return {
-    x: numeric(value.x, fallback.x),
-    y: numeric(value.y, fallback.y),
-    w: Math.max(1, numeric(value.w, fallback.w)) * CANVAS_NODE_DISPLAY_SCALE,
-    h: Math.max(1, numeric(value.h, fallback.h)) * CANVAS_NODE_DISPLAY_SCALE,
-    z: numeric(value.z, fallback.z),
-  };
-}
-
-function normalizeCanvasLayoutLocal(raw, items = allTabs) {
-  const value = raw && typeof raw === 'object' ? raw : {};
-  const itemList = Array.isArray(items) ? items : [];
-  const source = value.positions && typeof value.positions === 'object' ? value.positions : {};
-  const positions = {};
-  let index = 0;
-  const finite = (v, min, max, fallback) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-  };
-  for (const item of itemList) {
-    const id = String(item.id);
-    const rawPosition = source[id];
-    const fallback = canvasDefaultPosition(index++);
-    const p = rawPosition && typeof rawPosition === 'object' ? rawPosition : {};
-    positions[id] = {
-      x: finite(p.x, -100000, 100000, fallback.x),
-      y: finite(p.y, -100000, 100000, fallback.y),
-      w: finite(p.w, 160, 640, fallback.w),
-      h: finite(p.h, 120, 560, fallback.h),
-      z: finite(p.z, 0, 1000000, fallback.z),
-    };
-  }
-  if (!itemList.length) {
-    for (const [id, rawPosition] of Object.entries(source)) {
-      const fallback = canvasDefaultPosition(index++);
-      const p = rawPosition && typeof rawPosition === 'object' ? rawPosition : {};
-      positions[id] = {
-        x: finite(p.x, -100000, 100000, fallback.x),
-        y: finite(p.y, -100000, 100000, fallback.y),
-        w: finite(p.w, 160, 640, fallback.w),
-        h: finite(p.h, 120, 560, fallback.h),
-        z: finite(p.z, 0, 1000000, fallback.z),
-      };
-    }
-  }
-  const validIds = Object.keys(positions);
-  const connections = CanvasStoreApi?.normalizeConnections
-    ? CanvasStoreApi.normalizeConnections(value.connections, validIds)
-    : normalizeCanvasConnectionsLocal(value.connections, validIds);
-  return {
-    version: CANVAS_LAYOUT_VERSION,
-    viewport: {
-      x: finite(value.viewport?.x, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.x),
-      y: finite(value.viewport?.y, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.y),
-      zoom: finite(value.viewport?.zoom, 0.25, 2, DEFAULT_CANVAS_VIEWPORT.zoom),
-    },
-    positions,
-    connections,
-  };
-}
-
-function normalizeCanvasConnectionsLocal(rawConnections, validIds = []) {
-  const ids = new Set(validIds.map(String));
-  const seen = new Set();
-  const result = [];
-  const normalizeCurveOffset = (raw) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const x = Number.isFinite(Number(raw.x))
-      ? Math.min(CANVAS_CONNECTION_MAX_CURVE_OFFSET, Math.max(-CANVAS_CONNECTION_MAX_CURVE_OFFSET, Number(raw.x)))
-      : 0;
-    const y = Number.isFinite(Number(raw.y))
-      ? Math.min(CANVAS_CONNECTION_MAX_CURVE_OFFSET, Math.max(-CANVAS_CONNECTION_MAX_CURVE_OFFSET, Number(raw.y)))
-      : 0;
-    return x || y ? { x, y } : null;
-  };
-  for (const connection of Array.isArray(rawConnections) ? rawConnections : []) {
-    let sourceId = String(connection?.sourceId || '');
-    let targetId = String(connection?.targetId || '');
-    if (!sourceId || !targetId || sourceId === targetId) continue;
-    if (ids.size && (!ids.has(sourceId) || !ids.has(targetId))) continue;
-    if (sourceId > targetId) [sourceId, targetId] = [targetId, sourceId];
-    const key = `${sourceId}\u0000${targetId}`;
-    const curveOffset = normalizeCurveOffset(connection?.curveOffset);
-    if (seen.has(key)) {
-      const existing = result.find((entry) => entry.sourceId === sourceId && entry.targetId === targetId);
-      if (existing && !existing.curveOffset && curveOffset) existing.curveOffset = curveOffset;
-      continue;
-    }
-    seen.add(key);
-    result.push({ sourceId, targetId, ...(curveOffset ? { curveOffset } : {}) });
-  }
-  return result.sort((a, b) => a.sourceId.localeCompare(b.sourceId) || a.targetId.localeCompare(b.targetId));
-}
+function normalizeCanvasConnectionsLocal(...args) { return AppHelpers.normalizeCanvasConnectionsLocal(...args); }
 
 function canvasPositionFor(id, index = 0) {
   return canvasLayout.positions[id] || canvasDefaultPosition(index);
@@ -8560,1340 +2649,126 @@ function scheduleCanvasLayoutSave() {
   canvasStore?.flush?.().catch((err) => uiLog('warn', 'canvas', 'layout save failed', err));
 }
 
-function canvasPointFromEvent(event) {
-  const rect = canvasViewportEl?.getBoundingClientRect();
-  if (!rect) return { x: 0, y: 0 };
-  const { viewport } = canvasLayout;
-  const zoom = viewport.zoom || DEFAULT_CANVAS_VIEWPORT.zoom;
-  return {
-    x: (event.clientX - rect.left) / zoom + viewport.x,
-    y: (event.clientY - rect.top) / zoom + viewport.y,
-  };
-}
+function canvasPointFromEvent(...args) { return CanvasChrome.canvasPointFromEvent(...args); }
 
-function updateCanvasTransform() {
-  const { x, y, zoom } = canvasLayout.viewport;
-  if (canvasWorldEl && canvasWorldScaleEl) {
-    canvasWorldScaleEl.style.zoom = String(zoom);
-    canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px)`;
-  }
-  if (canvasZoomValue) canvasZoomValue.textContent = `${Math.round(zoom * 100)}%`;
-  if (canvasZoomSlider) canvasZoomSlider.value = String(zoom);
-  if (canvasMinimap) canvasMinimap.dataset.zoom = String(zoom);
-}
+function updateCanvasTransform(...args) { return CanvasChrome.updateCanvasTransform(...args); }
 
-function setCanvasZoom(next, clientX = null, clientY = null) {
-  const state = canvasStoreSnapshot();
-  const oldZoom = state.layout.viewport.zoom;
-  const zoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, Number(next) || oldZoom));
-  if (zoom === oldZoom) return;
-  const rect = canvasViewportEl?.getBoundingClientRect();
-  let anchor = null;
-  if (rect) {
-    const offset = clientX != null && clientY != null
-      ? { x: clientX - rect.left, y: clientY - rect.top }
-      : { x: rect.width / 2, y: rect.height / 2 };
-    anchor = {
-      world: {
-        x: offset.x / oldZoom + state.layout.viewport.x,
-        y: offset.y / oldZoom + state.layout.viewport.y,
-      },
-      offset,
-    };
-  }
-  canvasStore?.commitZoom(zoom, anchor);
-}
+function setCanvasZoom(...args) { return CanvasChrome.setCanvasZoom(...args); }
 
-function canvasViewportSize() {
-  const rect = canvasViewportEl?.getBoundingClientRect?.();
-  return {
-    width: Math.max(0, canvasViewportEl?.clientWidth || rect?.width || 0),
-    height: Math.max(0, canvasViewportEl?.clientHeight || rect?.height || 0),
-  };
-}
+function canvasViewportSize(...args) { return CanvasChrome.canvasViewportSize(...args); }
 
-function canvasBoundsForItems(items, layout) {
-  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-  (Array.isArray(items) ? items : []).forEach((item, index) => {
-    const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
-    const x = Number(position.x) || 0;
-    const y = Number(position.y) || 0;
-    const w = Math.max(1, Number(position.w) || 1);
-    const h = Math.max(1, Number(position.h) || 1);
-    bounds.minX = Math.min(bounds.minX, x);
-    bounds.minY = Math.min(bounds.minY, y);
-    bounds.maxX = Math.max(bounds.maxX, x + w);
-    bounds.maxY = Math.max(bounds.maxY, y + h);
-  });
-  return Number.isFinite(bounds.minX) ? bounds : null;
-}
+function canvasFitViewport(...args) { return CanvasChrome.canvasFitViewport(...args); }
 
-function canvasFitViewport(mode) {
-  if (mode !== 'width' && mode !== 'screen') return false;
-  const { width, height } = canvasViewportSize();
-  const items = getCanvasVisibleTabs();
-  const searchContext = getCanvasSearchContext();
-  if (!width || !height || !items.length) return false;
-  const layout = canvasSearchLayoutFor(searchContext);
-  const bounds = canvasBoundsForItems(items, layout);
-  if (!bounds) return false;
-  const contentWidth = Math.max(1, bounds.maxX - bounds.minX);
-  const contentHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const availableWidth = Math.max(1, width - CANVAS_FIT_PADDING * 2);
-  const availableHeight = Math.max(1, height - CANVAS_FIT_PADDING * 2);
-  const widthZoom = availableWidth / contentWidth;
-  const heightZoom = availableHeight / contentHeight;
-  const requestedZoom = mode === 'width' ? widthZoom : Math.min(widthZoom, heightZoom);
-  const zoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, requestedZoom));
-  const centerX = (bounds.minX + bounds.maxX) / 2;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
-  ensureCanvasStore()?.commitViewport({
-    x: centerX - width / (2 * zoom),
-    y: centerY - height / (2 * zoom),
-    zoom,
-  });
-  return true;
-}
+function closeCanvasZoomMenu(...args) { return CanvasChrome.closeCanvasZoomMenu(...args); }
 
-function closeCanvasZoomMenu({ restoreFocus = false } = {}) {
-  if (!canvasZoomMenu || !canvasZoomValueWrap || !canvasZoomValue) return;
-  canvasZoomMenu.hidden = true;
-  canvasZoomValueWrap.dataset.menuOpen = 'false';
-  canvasZoomValue.setAttribute('aria-expanded', 'false');
-  if (restoreFocus) canvasZoomValue.focus({ preventScroll: true });
-}
+function toggleCanvasZoomMenu(...args) { return CanvasChrome.toggleCanvasZoomMenu(...args); }
 
-function toggleCanvasZoomMenu() {
-  if (!canvasZoomMenu || !canvasZoomValueWrap || !canvasZoomValue) return;
-  const open = canvasZoomMenu.hidden;
-  canvasZoomMenu.hidden = !open;
-  canvasZoomValueWrap.dataset.menuOpen = open ? 'true' : 'false';
-  canvasZoomValue.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
+function applyCanvasZoomAction(...args) { return CanvasChrome.applyCanvasZoomAction(...args); }
 
-function applyCanvasZoomAction(action) {
-  if (action === 'reset') resetCanvasView();
-  else canvasFitViewport(action);
-  closeCanvasZoomMenu({ restoreFocus: true });
-}
+function centerCanvasInitialView(...args) { return CanvasChrome.centerCanvasInitialView(...args); }
 
-function centerCanvasInitialView() {
-  if (!canvasNeedsInitialCenter || settings.viewMode !== 'canvas' || canvasSessionFallback || !canvasViewportEl) return;
-  const width = canvasViewportEl.clientWidth || canvasViewportEl.getBoundingClientRect?.().width || 0;
-  const height = canvasViewportEl.clientHeight || canvasViewportEl.getBoundingClientRect?.().height || 0;
-  if (!width || !height) return;
-  const state = canvasStoreSnapshot();
-  if (state.pendingOperations?.length || state.interaction) {
-    canvasNeedsInitialCenter = false;
-    return;
-  }
-  if (!allTabs.length) {
-    canvasNeedsInitialCenter = false;
-    return;
-  }
-  const bounds = canvasBoundsForItems(allTabs, state.layout);
-  if (!bounds) {
-    canvasNeedsInitialCenter = false;
-    return;
-  }
-  const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
-  canvasNeedsInitialCenter = false;
-  canvasStore?.commitViewport({
-    x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
-    y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
-    zoom,
-  });
-}
+function scheduleInitialCanvasCenter(...args) { return CanvasChrome.scheduleInitialCanvasCenter(...args); }
 
-function scheduleInitialCanvasCenter() {
-  if (!canvasNeedsInitialCenter || canvasInitialCenterRaf) return;
-  const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
-  canvasInitialCenterRaf = schedule(() => {
-    canvasInitialCenterRaf = 0;
-    centerCanvasInitialView();
-  });
-}
+function canvasThumbHtml(...args) { return CanvasRender.canvasThumbHtml(...args); }
 
-function canvasThumbHtml(item) {
-  if (item.kind === 'group') return groupCoverHtml(item, { canvas: true });
-  if (item.kind === 'note') {
-    const attachment = item.attachments?.[0];
-    if (!attachment) return `<div class="canvas-note-cover">${iconSvg('note')}<span>${escapeHtml(t('noteKind'))}</span></div>`;
-    const key = Media.mediaKeyNoteAttachment(item.id, attachment.id);
-    return `<img class="canvas-note-cover-image" alt="${escapeAttr(attachment.alt || attachment.name || '')}" data-note-attachment-key="${escapeAttr(key)}" data-note-attachment-id="${escapeAttr(attachment.id)}" />`;
-  }
-  return `<img class="canvas-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKeyForItem(item))}" data-canvas-media="true" data-canvas-has-thumb="${item.hasThumb || item.thumbnail ? 'true' : 'false'}" data-canvas-has-snap="${item.hasSnap || item.snapshot ? 'true' : 'false'}" />`;
-}
+function safeNotePreviewHtml(...args) { return CanvasRender.safeNotePreviewHtml(...args); }
 
-function safeNotePreviewHtml(note, className = 'canvas-note-preview') {
-  const rendered = Build?.renderSafeMarkdown
-    ? Build.renderSafeMarkdown(note?.markdown || '', note?.attachments || [])
-    : escapeHtml(note?.markdown || '');
-  return `<div class="${className}">${rendered || `<span class="note-preview">—</span>`}</div>`;
-}
-
-function wireStickerAttachmentImages(root, note) {
-  if (!root || !note) return;
-  const attachments = new Map((note.attachments || []).map((attachment) => [attachment.id, attachment]));
-  root.querySelectorAll('[data-note-attachment-key], [data-attachment-id]').forEach((img) => {
-    const id = img.dataset.noteAttachmentId || img.dataset.attachmentId;
-    const attachment = attachments.get(id);
-    const key = img.dataset.noteAttachmentKey || (attachment ? Media.mediaKeyNoteAttachment(note.id, attachment.id) : '');
-    if (!key) return;
-    img.dataset.noteAttachmentKey = key;
-    observeStickerAttachment(img);
-  });
-}
+function wireStickerAttachmentImages(...args) { return AppHelpers.wireStickerAttachmentImages(...args); }
 
 /** Single-card toolbar + context-menu actions (tab / group / note). */
-function canvasNodeActionEntries(item) {
-  if (!item) return [];
-  if (item.kind === 'group') {
-    return [
-      { action: 'restore', label: t('restoreGroup'), icon: 'restore' },
-      { action: 'members', label: t('expandGroup'), icon: 'members' },
-      { action: 'edit', label: t('edit'), icon: 'edit' },
-      { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
-      { action: 'delete', label: t('delete'), icon: 'delete' },
-    ];
-  }
-  if (item.kind === 'note') {
-    return [
-      { action: 'edit', label: t('edit'), icon: 'edit' },
-      { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
-      { action: 'delete', label: t('delete'), icon: 'delete' },
-    ];
-  }
-  return [
-    { action: 'restore', label: t('restore'), icon: 'restore' },
-    { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
-    { action: 'edit', label: t('edit'), icon: 'edit' },
-    { action: 'copy', label: t('copyLink'), icon: 'copy' },
-    { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
-    { action: 'delete', label: t('delete'), icon: 'delete' },
-  ];
-}
+function canvasNodeActionEntries(...args) { return CanvasRender.canvasNodeActionEntries(...args); }
 
-async function runCanvasNodeAction(id, action) {
-  const item = canvasItemById(id);
-  if (!item || !action) return;
-  if (action === 'restore') await restoreItem(item.id);
-  else if (action === 'snapshot') openLightbox(item);
-  else if (action === 'copy') await copySavedLink(item);
-  else if (action === 'members') openMembersBox(item);
-  else if (action === 'edit') {
-    if (item.kind === 'note') openStickerNoteEditor(item);
-    else openEditBox(item);
-  }
-  else if (action === 'pin') await togglePinned(item);
-  else if (action === 'delete') await deleteItem(item.id);
-}
+async function runCanvasNodeAction(...args) { return await CanvasIx.runCanvasNodeAction(...args); }
 
-function canvasNodeHtml(item) {
-  const title = itemTitle(item);
-  const selected = activeCanvasSelection().has(item.id);
-  const position = canvasDisplayPosition(canvasPositionFor(item.id));
-  const pin = item.pinned ? `<span class="canvas-pin" title="${escapeAttr(t('pinnedOnly'))}" aria-label="${escapeAttr(t('pinnedOnly'))}">${iconSvg('pin')}</span>` : '';
-  const isNote = item.kind === 'note';
-  const meta = item.kind === 'group'
-    ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
-    : isNote
-      ? `${t('noteKind')} · ${formatSavedAt(item.savedAt)} · ${t('noteCount', { n: (item.attachments || []).length })}`
-      : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
-  const actionHtml = canvasNodeActionEntries(item)
-    .map(({ action, label, icon }) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
-    .join('');
-  const linkHandles = [
-    ['top', 'canvasLinkHandleTop'],
-    ['right', 'canvasLinkHandleRight'],
-    ['bottom', 'canvasLinkHandleBottom'],
-    ['left', 'canvasLinkHandleLeft'],
-  ].map(([side, labelKey]) => `<button type="button" class="canvas-link-handle canvas-link-handle-${side}" data-canvas-link-handle="${side}" tabindex="-1" title="${escapeAttr(t(labelKey))}" aria-label="${escapeAttr(t(labelKey))}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>`).join('');
-  return `
-    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${selected ? ' selected' : ''}"
-      data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
-      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}">
-      <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
-      <div class="canvas-node-copy">
-        <div class="canvas-node-title">
-          ${item.kind === 'tab' && item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : ''}
-          <span>${escapeHtml(title)}</span>${pin}
-        </div>
-        <div class="canvas-node-meta">${escapeHtml(meta)}</div>
-        ${isNote ? safeNotePreviewHtml(item) : item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
-        ${item.tags?.length ? `<div class="canvas-node-tags">${item.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ')}</div>` : ''}
-      </div>
-      <div class="canvas-node-actions" aria-label="${escapeAttr(title)}">${actionHtml}</div>
-      <div class="canvas-link-handles" aria-label="${escapeAttr(t('canvasLink'))}">${linkHandles}</div>
-    </article>`;
-}
+function canvasNodeHtml(...args) { return CanvasRender.canvasNodeHtml(...args); }
 
 function canvasItemById(id) {
   return allTabs.find((item) => item.id === id) || null;
 }
 
-function cancelCanvasNodeClick(id) {
-  const timer = canvasNodeClickTimers.get(id);
-  if (timer) clearTimeout(timer);
-  canvasNodeClickTimers.delete(id);
-}
+function cancelCanvasNodeClick(...args) { return CanvasIx.cancelCanvasNodeClick(...args); }
 
-function scheduleCanvasNodePreview(item) {
-  if (!item?.id) return;
-  cancelCanvasNodeClick(item.id);
-  const timer = setTimeout(() => {
-    canvasNodeClickTimers.delete(item.id);
-    const current = canvasItemById(item.id);
-    if (!current) return;
-    if (current.kind === 'group') openCanvasGroupLightbox(current);
-    else if (current.kind === 'note') openStickerNoteEditor(current);
-    else openLightbox(current);
-  }, CANVAS_NODE_CLICK_DELAY);
-  canvasNodeClickTimers.set(item.id, timer);
-}
+function scheduleCanvasNodePreview(...args) { return CanvasIx.scheduleCanvasNodePreview(...args); }
 
-function suppressCanvasNodeClick(id) {
-  if (!id) return;
-  canvasNodeClickSuppressUntil.set(id, Date.now() + CANVAS_NODE_CLICK_DELAY);
-}
+function suppressCanvasNodeClick(...args) { return CanvasIx.suppressCanvasNodeClick(...args); }
 
-function wireCanvasLinkHandles(node) {
-  node?.querySelectorAll('[data-canvas-link-handle]').forEach((handle) => {
-    handle.tabIndex = 0;
-    handle.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || event.isPrimary === false) return;
-      event.preventDefault();
-      event.stopPropagation();
-      beginCanvasConnectionDrag({
-        event,
-        kind: 'handle',
-        sourceId: node.dataset.id,
-        side: handle.dataset.canvasLinkHandle || 'right',
-      });
-    });
-    handle.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-  });
-}
+function wireCanvasLinkHandles(...args) { return CanvasIx.wireCanvasLinkHandles(...args); }
 
-function wireCanvasNodeActions(node) {
-  if (!node || node.dataset.canvasWired === '1') return;
-  const item = canvasItemById(node.dataset.id);
-  if (!item) return;
-  node.dataset.canvasWired = '1';
-  wireCanvasLinkHandles(node);
-  node.addEventListener('click', (event) => {
-    if (event.defaultPrevented || event.detail === 0 || isCanvasControlTarget(event.target)) return;
-    if (isMultiSelectModifier(event)) {
-      cancelCanvasNodeClick(item.id);
-      return;
-    }
-    if (canvasActiveTool !== 'select') return;
-    const suppressedUntil = canvasNodeClickSuppressUntil.get(item.id) || 0;
-    if (suppressedUntil) {
-      canvasNodeClickSuppressUntil.delete(item.id);
-      if (Date.now() <= suppressedUntil) return;
-    }
-    if (event.detail > 1) {
-      cancelCanvasNodeClick(item.id);
-      return;
-    }
-    scheduleCanvasNodePreview(item);
-  });
-  node.querySelectorAll('[data-canvas-node-action]').forEach((button) => {
-    button.addEventListener('pointerdown', (event) => event.stopPropagation());
-    button.addEventListener('click', async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await runCanvasNodeAction(item.id, button.dataset.canvasNodeAction || '');
-    });
-  });
-}
+function wireCanvasNodeActions(...args) { return CanvasIx.wireCanvasNodeActions(...args); }
 
-function updateCanvasNodeSelection() {
-  const selection = activeCanvasSelection();
-  for (const [id, node] of canvasNodeElements) {
-    const active = selection.has(id);
-    node.classList.toggle('selected', active);
-    node.classList.toggle('connection-source', canvasConnectionSourceId === id);
-    node.classList.toggle('connection-target', Boolean(canvasConnectionDragState?.targetId === id && canvasConnectionDragState?.sourceId !== id));
-    node.setAttribute('aria-selected', active ? 'true' : 'false');
-  }
-}
-
-function canvasConnectionId(sourceId, targetId) {
-  const [source, target] = String(sourceId) < String(targetId)
-    ? [String(sourceId), String(targetId)]
-    : [String(targetId), String(sourceId)];
-  return `${source}::${target}`;
-}
-
-function canvasConnectionSideForVector(dx, dy) {
-  if (!dx && !dy) return '';
-  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';
-  return dy >= 0 ? 'bottom' : 'top';
-}
-
-function canvasConnectionSideForPoint(rect, point) {
-  if (!rect || !point) return '';
-  return canvasConnectionSideForVector(
-    point.x - (rect.x + rect.w / 2),
-    point.y - (rect.y + rect.h / 2),
-  );
-}
+function updateCanvasNodeSelection(...args) { return CanvasIx.updateCanvasNodeSelection(...args); }
 
 function normalizeCanvasCurveOffset(raw) {
   if (CanvasStoreApi?.normalizeCurveOffset) return CanvasStoreApi.normalizeCurveOffset(raw) || { x: 0, y: 0 };
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { x: 0, y: 0 };
-  const x = Number.isFinite(Number(raw.x))
-    ? Math.min(CANVAS_CONNECTION_MAX_CURVE_OFFSET, Math.max(-CANVAS_CONNECTION_MAX_CURVE_OFFSET, Number(raw.x)))
-    : 0;
-  const y = Number.isFinite(Number(raw.y))
-    ? Math.min(CANVAS_CONNECTION_MAX_CURVE_OFFSET, Math.max(-CANVAS_CONNECTION_MAX_CURVE_OFFSET, Number(raw.y)))
-    : 0;
-  return { x, y };
+  return CanvasGeom.normalizeCanvasCurveOffset(raw);
 }
 
-function canvasConnectionCurveGeometry(sourcePoint, targetPoint, curveOffset = null) {
-  if (!sourcePoint || !targetPoint) return null;
-  const dx = targetPoint.x - sourcePoint.x;
-  const dy = targetPoint.y - sourcePoint.y;
-  const bend = Math.min(120, Math.max(24, Math.hypot(dx, dy) * 0.18));
-  const horizontal = Math.abs(dx) >= Math.abs(dy);
-  const baseControl1 = horizontal
-    ? { x: sourcePoint.x + Math.sign(dx) * bend, y: sourcePoint.y }
-    : { x: sourcePoint.x, y: sourcePoint.y + Math.sign(dy) * bend };
-  const baseControl2 = horizontal
-    ? { x: targetPoint.x - Math.sign(dx) * bend, y: targetPoint.y }
-    : { x: targetPoint.x, y: targetPoint.y - Math.sign(dy) * bend };
-  const offset = normalizeCanvasCurveOffset(curveOffset);
-  const controlOffset = { x: offset.x * 4 / 3, y: offset.y * 4 / 3 };
-  const control1 = { x: baseControl1.x + controlOffset.x, y: baseControl1.y + controlOffset.y };
-  const control2 = { x: baseControl2.x + controlOffset.x, y: baseControl2.y + controlOffset.y };
-  const points = { p0: sourcePoint, p1: control1, p2: control2, p3: targetPoint };
-  return {
-    ...points,
-    offset,
-    midpoint: canvasCubicBezierPoint(points, 0.5),
-    pathD: `M ${sourcePoint.x} ${sourcePoint.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${targetPoint.x} ${targetPoint.y}`,
-  };
-}
+function canvasConnectionDomHandlePoint(...args) { return CanvasRender.canvasConnectionDomHandlePoint(...args); }
 
-function canvasCubicBezierPoint(points, t) {
-  const inverse = 1 - t;
-  return {
-    x: inverse ** 3 * points.p0.x
-      + 3 * inverse ** 2 * t * points.p1.x
-      + 3 * inverse * t ** 2 * points.p2.x
-      + t ** 3 * points.p3.x,
-    y: inverse ** 3 * points.p0.y
-      + 3 * inverse ** 2 * t * points.p1.y
-      + 3 * inverse * t ** 2 * points.p2.y
-      + t ** 3 * points.p3.y,
-  };
-}
+function canvasConnectionHandlePointForId(...args) { return CanvasRender.canvasConnectionHandlePointForId(...args); }
 
-function canvasCubicBezierLength(points, endT = 1, steps = 48) {
-  const limit = Math.max(0, Math.min(1, endT));
-  const count = Math.max(4, Math.ceil(steps * limit));
-  let length = 0;
-  let previous = points.p0;
-  for (let index = 1; index <= count; index += 1) {
-    const point = canvasCubicBezierPoint(points, limit * index / count);
-    length += Math.hypot(point.x - previous.x, point.y - previous.y);
-    previous = point;
-  }
-  return length;
-}
+function canvasConnectionHandlePointForCursor(...args) { return CanvasRender.canvasConnectionHandlePointForCursor(...args); }
 
-function canvasCubicBezierTAtLength(points, fraction) {
-  const total = canvasCubicBezierLength(points);
-  if (!total) return fraction;
-  const target = total * fraction;
-  let low = 0;
-  let high = 1;
-  for (let index = 0; index < 18; index += 1) {
-    const middle = (low + high) / 2;
-    if (canvasCubicBezierLength(points, middle) < target) low = middle;
-    else high = middle;
-  }
-  return (low + high) / 2;
-}
+function canvasConnectionPosition(...args) { return CanvasRender.canvasConnectionPosition(...args); }
 
-function canvasCubicBezierSplit(points, t) {
-  const lerp = (left, right) => ({
-    x: left.x + (right.x - left.x) * t,
-    y: left.y + (right.y - left.y) * t,
-  });
-  const p01 = lerp(points.p0, points.p1);
-  const p12 = lerp(points.p1, points.p2);
-  const p23 = lerp(points.p2, points.p3);
-  const p012 = lerp(p01, p12);
-  const p123 = lerp(p12, p23);
-  const middle = lerp(p012, p123);
-  return {
-    left: { p0: points.p0, p1: p01, p2: p012, p3: middle },
-    right: { p0: middle, p1: p123, p2: p23, p3: points.p3 },
-  };
-}
+function canvasConnectionHandlePoints(...args) { return CanvasRender.canvasConnectionHandlePoints(...args); }
 
-function canvasConnectionCurveSegments(geometry) {
-  if (!geometry) return [];
-  const firstT = canvasCubicBezierTAtLength(geometry, 1 / 3);
-  const secondT = canvasCubicBezierTAtLength(geometry, 2 / 3);
-  const firstSplit = canvasCubicBezierSplit(geometry, firstT);
-  const secondRatio = firstT < 1 ? (secondT - firstT) / (1 - firstT) : 0;
-  const secondSplit = canvasCubicBezierSplit(firstSplit.right, Math.max(0, Math.min(1, secondRatio)));
-  return [firstSplit.left, secondSplit.left, secondSplit.right].map((segment) => ({
-    ...segment,
-    pathD: `M ${segment.p0.x} ${segment.p0.y} C ${segment.p1.x} ${segment.p1.y}, ${segment.p2.x} ${segment.p2.y}, ${segment.p3.x} ${segment.p3.y}`,
-  }));
-}
+function canvasConnectionDragTarget(...args) { return CanvasIx.canvasConnectionDragTarget(...args); }
 
-function canvasConnectionPathD(sourcePoint, targetPoint, curveOffset = null) {
-  return canvasConnectionCurveGeometry(sourcePoint, targetPoint, curveOffset)?.pathD || '';
-}
+function beginCanvasConnectionDrag(...args) { return CanvasIx.beginCanvasConnectionDrag(...args); }
 
-function canvasConnectionHandlePoint(position, side) {
-  const centerX = position.x + position.w / 2;
-  const centerY = position.y + position.h / 2;
-  if (side === 'top') return { x: centerX, y: position.y };
-  if (side === 'bottom') return { x: centerX, y: position.y + position.h };
-  if (side === 'left') return { x: position.x, y: centerY };
-  return { x: position.x + position.w, y: centerY };
-}
+function updateCanvasConnectionDrag(...args) { return CanvasIx.updateCanvasConnectionDrag(...args); }
 
-function canvasConnectionDomHandlePoint(id, side) {
-  const handle = canvasNodeElements.get(id)?.querySelector(`[data-canvas-link-handle="${side}"]`);
-  const viewportRect = canvasViewportEl?.getBoundingClientRect();
-  const handleRect = handle?.getBoundingClientRect();
-  if (!viewportRect || !handleRect) return null;
-  const viewport = canvasStoreSnapshot().layout?.viewport || canvasLayout.viewport;
-  const zoom = viewport.zoom || 1;
-  return {
-    x: (handleRect.left + handleRect.width / 2 - viewportRect.left) / zoom + viewport.x,
-    y: (handleRect.top + handleRect.height / 2 - viewportRect.top) / zoom + viewport.y,
-  };
-}
+function renderCanvasConnectionDraft(...args) { return CanvasRender.renderCanvasConnectionDraft(...args); }
 
-function canvasConnectionHandlePointForId(id, position, side) {
-  return canvasConnectionDomHandlePoint(id, side) || canvasConnectionHandlePoint(position, side);
-}
+function commitCanvasConnectionDrag(...args) { return CanvasIx.commitCanvasConnectionDrag(...args); }
 
-function canvasConnectionHandlePointForCursor(rect, point, id = '') {
-  const side = canvasConnectionSideForPoint(rect, point);
-  return side ? canvasConnectionHandlePointForId(id, rect, side) : null;
-}
+function endCanvasConnectionDrag(...args) { return CanvasIx.endCanvasConnectionDrag(...args); }
 
-function canvasConnectionPosition(id) {
-  const node = canvasNodeElements.get(id);
-  const measured = node?.isConnected ? canvasNodeWorldRect(node) : null;
-  if (measured && measured.w > 0 && measured.h > 0) return measured;
-  const position = canvasStoreSnapshot().layout?.positions?.[id];
-  return position ? canvasDisplayPosition(position) : null;
-}
+function cancelCanvasConnectionDrag(...args) { return CanvasIx.cancelCanvasConnectionDrag(...args); }
 
-function canvasConnectionHandlePoints(source, target, sourceId = '', targetId = '') {
-  if (!source || !target) return null;
-  const sourceSide = canvasConnectionSideForVector(
-    target.x + target.w / 2 - (source.x + source.w / 2),
-    target.y + target.h / 2 - (source.y + source.h / 2),
-  );
-  if (!sourceSide) return null;
-  const targetSide = sourceSide === 'right'
-    ? 'left'
-    : sourceSide === 'left'
-      ? 'right'
-      : sourceSide === 'bottom'
-        ? 'top'
-        : 'bottom';
-  return {
-    source: canvasConnectionHandlePointForId(sourceId, source, sourceSide),
-    target: canvasConnectionHandlePointForId(targetId, target, targetSide),
-  };
-}
+function resetCanvasConnectionCurve(...args) { return CanvasIx.resetCanvasConnectionCurve(...args); }
 
-function canvasConnectionDragTarget(event, excludeId, fixedId = '') {
-  const targetId = canvasTargetAt(canvasPointFromEvent(event), excludeId);
-  return targetId && targetId !== fixedId ? targetId : '';
-}
+function selectCanvasConnection(...args) { return CanvasIx.selectCanvasConnection(...args); }
 
-function beginCanvasConnectionDrag({
-  event,
-  kind,
-  zone = '',
-  movingEndpoint = '',
-  sourceId = '',
-  side = '',
-  connection = null,
-  connectionId = '',
-}) {
-  if (!canvasViewportEl || canvasConnectionDragState || event?.button !== 0) return;
-  const point = canvasPointFromEvent(event);
-  let state;
-  if (kind === 'handle') {
-    const source = canvasConnectionPosition(sourceId);
-    if (!source) return;
-    state = {
-      kind,
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      sourceId,
-      movingId: sourceId,
-      side,
-      startPoint: canvasConnectionHandlePointForId(sourceId, source, side),
-      currentPoint: point,
-      targetId: '',
-      moved: false,
-    };
-  } else if (kind === 'curve') {
-    const source = canvasConnectionPosition(connection?.sourceId);
-    const target = canvasConnectionPosition(connection?.targetId);
-    if (!connection || !source || !target) return;
-    state = {
-      kind,
-      zone,
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      connectionId,
-      connection: { ...connection },
-      sourceId: connection.sourceId,
-      targetId: '',
-      fixedId: connection.targetId,
-      startPoint: point,
-      currentPoint: point,
-      initialCurveOffset: normalizeCanvasCurveOffset(connection.curveOffset),
-      curveOffset: normalizeCanvasCurveOffset(connection.curveOffset),
-      moved: false,
-    };
-  } else {
-    const source = canvasConnectionPosition(connection?.sourceId);
-    const target = canvasConnectionPosition(connection?.targetId);
-    if (!connection || !source || !target) return;
-    const sourceCenter = { x: source.x + source.w / 2, y: source.y + source.h / 2 };
-    const targetCenter = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
-    const sourceDistance = Math.hypot(point.x - sourceCenter.x, point.y - sourceCenter.y);
-    const targetDistance = Math.hypot(point.x - targetCenter.x, point.y - targetCenter.y);
-    const resolvedMovingEndpoint = movingEndpoint === 'sourceId' || movingEndpoint === 'targetId'
-      ? movingEndpoint
-      : sourceDistance <= targetDistance ? 'sourceId' : 'targetId';
-    const movingId = connection[resolvedMovingEndpoint];
-    const fixedId = connection[resolvedMovingEndpoint === 'sourceId' ? 'targetId' : 'sourceId'];
-    state = {
-      kind,
-      zone,
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      connectionId,
-      connection: { ...connection },
-      movingEndpoint: resolvedMovingEndpoint,
-      movingId,
-      fixedId,
-      startPoint: point,
-      currentPoint: point,
-      targetId: '',
-      moved: false,
-    };
-  }
-  canvasConnectionDragState = state;
-  try {
-    canvasViewportEl.setPointerCapture?.(event.pointerId);
-  } catch {
-    // Synthetic or cancelled pointer events may not have an active capture target.
-  }
-  canvasViewportEl.classList.add('is-connection-dragging');
-  updateCanvasNodeSelection();
-  renderCanvasConnections();
-  event.preventDefault();
-}
+function clearCanvasConnectionSelection(...args) { return CanvasIx.clearCanvasConnectionSelection(...args); }
 
-function updateCanvasConnectionDrag(event) {
-  const state = canvasConnectionDragState;
-  if (!state || state.pointerId !== event.pointerId) return;
-  const point = canvasPointFromEvent(event);
-  state.currentPoint = point;
-  if (Math.hypot(event.clientX - (state.startClientX ?? event.clientX), event.clientY - (state.startClientY ?? event.clientY)) >= DRAG_THRESHOLD) {
-    state.moved = true;
-  }
-  if (!state.moved && Math.hypot(point.x - state.startPoint.x, point.y - state.startPoint.y) * (canvasLayout.viewport.zoom || 1) >= DRAG_THRESHOLD) {
-    state.moved = true;
-  }
-  if (state.kind === 'curve') {
-    const zoom = canvasStoreSnapshot().layout?.viewport?.zoom || 1;
-    const dx = point.x - state.startPoint.x;
-    const dy = point.y - state.startPoint.y;
-    state.curveOffset = normalizeCanvasCurveOffset({
-      x: state.initialCurveOffset.x + dx,
-      y: state.initialCurveOffset.y + dy,
-    });
-    state.targetId = '';
-    if (Math.hypot(dx, dy) * zoom < DRAG_THRESHOLD) state.curveOffset = state.initialCurveOffset;
-  } else {
-    state.targetId = state.moved
-      ? canvasConnectionDragTarget(event, state.movingId || state.sourceId, state.fixedId || '')
-      : '';
-  }
-  updateCanvasNodeSelection();
-  renderCanvasConnections();
-  event.preventDefault();
-}
+function deleteCanvasConnection(...args) { return CanvasIx.deleteCanvasConnection(...args); }
 
-function renderCanvasConnectionDraft() {
-  const state = canvasConnectionDragState;
-  if (!canvasConnectionsEl || !state || state.kind === 'curve') {
-    if (canvasConnectionDraftEl) {
-      canvasConnectionDraftEl.remove();
-      canvasConnectionDraftEl = null;
-    }
-    return;
-  }
-  let sourcePoint;
-  let targetPoint;
-  if (state.targetId) {
-    const sourceId = state.kind === 'handle'
-      ? state.sourceId
-      : state.movingEndpoint === 'sourceId' ? state.targetId : state.fixedId;
-    const targetId = state.kind === 'handle'
-      ? state.targetId
-      : state.movingEndpoint === 'targetId' ? state.targetId : state.fixedId;
-    const source = canvasConnectionPosition(sourceId);
-    const target = canvasConnectionPosition(targetId);
-    const points = source && target
-      ? canvasConnectionHandlePoints(source, target, sourceId, targetId)
-      : null;
-    sourcePoint = points?.source;
-    targetPoint = points?.target;
-  } else if (state.kind === 'handle') {
-    sourcePoint = state.startPoint;
-    targetPoint = state.currentPoint;
-  } else {
-    const fixed = canvasConnectionPosition(state.fixedId);
-    if (!fixed) {
-      if (canvasConnectionDraftEl) {
-        canvasConnectionDraftEl.remove();
-        canvasConnectionDraftEl = null;
-      }
-      return;
-    }
-    sourcePoint = state.movingEndpoint === 'sourceId'
-      ? state.currentPoint
-      : canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId);
-    targetPoint = state.movingEndpoint === 'sourceId'
-      ? canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId)
-      : state.currentPoint;
-  }
-  const d = canvasConnectionPathD(sourcePoint, targetPoint);
-  if (!d) {
-    if (canvasConnectionDraftEl) {
-      canvasConnectionDraftEl.remove();
-      canvasConnectionDraftEl = null;
-    }
-    return;
-  }
-  if (canvasConnectionDraftEl) {
-    canvasConnectionDraftEl.setAttribute('d', d);
-  } else {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('class', 'canvas-connection-draft');
-    path.setAttribute('d', d);
-    canvasConnectionsEl.appendChild(path);
-    canvasConnectionDraftEl = path;
-  }
-}
+function handleCanvasConnectionNodeClick(...args) { return CanvasIx.handleCanvasConnectionNodeClick(...args); }
 
-function commitCanvasConnectionDrag() {
-  const state = canvasConnectionDragState;
-  if (!state?.moved) return false;
-  const current = canvasStoreSnapshot().layout?.connections || [];
-  if (state.kind === 'curve') {
-    const next = current.map((connection) => {
-      if (canvasConnectionId(connection.sourceId, connection.targetId) !== state.connectionId) return connection;
-      const curveOffset = normalizeCanvasCurveOffset(state.curveOffset);
-      return {
-        sourceId: connection.sourceId,
-        targetId: connection.targetId,
-        ...(curveOffset.x || curveOffset.y ? { curveOffset } : {}),
-      };
-    });
-    if (!next.some((connection) => canvasConnectionId(connection.sourceId, connection.targetId) === state.connectionId)) return false;
-    canvasStore?.commitConnections(next);
-    return true;
-  }
-  if (!state.targetId) return false;
-  if (state.kind === 'handle') {
-    if (state.targetId === state.sourceId) return false;
-    canvasStore?.commitConnections([...current, { sourceId: state.sourceId, targetId: state.targetId }]);
-    return true;
-  }
-  if (state.targetId === state.fixedId || state.targetId === state.movingId) return false;
-  const next = current.map((connection) => {
-    if (canvasConnectionId(connection.sourceId, connection.targetId) !== state.connectionId) return connection;
-    return {
-      sourceId: state.movingEndpoint === 'sourceId' ? state.targetId : state.fixedId,
-      targetId: state.movingEndpoint === 'targetId' ? state.targetId : state.fixedId,
-    };
-  });
-  canvasStore?.commitConnections(next);
-  return true;
-}
+function canvasConnectionRenderOffset(...args) { return CanvasRender.canvasConnectionRenderOffset(...args); }
 
-function endCanvasConnectionDrag(event = null, commit = true) {
-  const state = canvasConnectionDragState;
-  if (!state || (event && state.pointerId !== event.pointerId)) return;
-  if (event) updateCanvasConnectionDrag(event);
-  const moved = state.moved;
-  const connectionId = state.connectionId;
-  const shouldSelect = commit && !moved && Boolean(connectionId);
-  if (commit) commitCanvasConnectionDrag();
-  if (moved && connectionId) canvasConnectionClickSuppressUntil.set(connectionId, Date.now() + 300);
-  try {
-    canvasViewportEl?.releasePointerCapture?.(state.pointerId);
-  } catch {
-    // ignore
-  }
-  canvasConnectionDragState = null;
-  canvasViewportEl?.classList.remove('is-connection-dragging');
-  if (shouldSelect) {
-    selectCanvasConnection(connectionId);
-    return;
-  }
-  updateCanvasNodeSelection();
-  renderCanvasConnections();
-}
+function handleCanvasConnectionClick(...args) { return CanvasIx.handleCanvasConnectionClick(...args); }
 
-function cancelCanvasConnectionDrag() {
-  endCanvasConnectionDrag(null, false);
-}
+function handleCanvasConnectionDoubleClick(...args) { return CanvasIx.handleCanvasConnectionDoubleClick(...args); }
 
-function resetCanvasConnectionCurve(connectionId) {
-  if (!connectionId) return;
-  cancelCanvasConnectionDrag();
-  const current = canvasStoreSnapshot().layout?.connections || [];
-  let changed = false;
-  const next = current.map((connection) => {
-    if (canvasConnectionId(connection.sourceId, connection.targetId) !== connectionId) return connection;
-    if (!connection.curveOffset) return connection;
-    changed = true;
-    return { sourceId: connection.sourceId, targetId: connection.targetId };
-  });
-  selectedCanvasConnectionId = '';
-  canvasConnectionSourceId = '';
-  if (changed) canvasStore?.commitConnections(next);
-  else renderCanvasConnections();
-  updateCanvasNodeSelection();
-  updateBatchBar();
-}
+function setCanvasConnectionZoneHover(...args) { return CanvasIx.setCanvasConnectionZoneHover(...args); }
 
-function selectCanvasConnection(connectionId) {
-  selectedCanvasConnectionId = connectionId || '';
-  canvasConnectionSourceId = '';
-  if (selectedCanvasConnectionId) ensureCanvasStore()?.setSelection([]);
-  updateCanvasNodeSelection();
-  renderCanvasConnections();
-  canvasViewportEl?.focus?.({ preventScroll: true });
-  updateBatchBar();
-}
+function detectCanvasConnectionDoublePointerDown(...args) { return CanvasIx.detectCanvasConnectionDoublePointerDown(...args); }
 
-function clearCanvasConnectionSelection() {
-  selectedCanvasConnectionId = '';
-  canvasConnectionSourceId = '';
-  updateCanvasNodeSelection();
-  renderCanvasConnections();
-  updateBatchBar();
-}
+function wireCanvasConnectionPath(...args) { return CanvasIx.wireCanvasConnectionPath(...args); }
 
-function deleteCanvasConnection(connectionId = selectedCanvasConnectionId) {
-  if (!connectionId) return;
-  const state = canvasStoreSnapshot();
-  const connections = (state.layout.connections || []).filter(
-    (connection) => canvasConnectionId(connection.sourceId, connection.targetId) !== connectionId
-  );
-  selectedCanvasConnectionId = '';
-  const store = ensureCanvasStore();
-  if (store) store.commitConnections(connections);
-  else renderCanvasConnections();
-  updateCanvasNodeSelection();
-  updateBatchBar();
-}
+function renderCanvasConnections(...args) { return CanvasRender.renderCanvasConnections(...args); }
 
-function handleCanvasConnectionNodeClick(id) {
-  if (!id) {
-    canvasConnectionSourceId = '';
-    updateCanvasNodeSelection();
-    return;
-  }
-  if (canvasConnectionSourceId === id) {
-    canvasConnectionSourceId = '';
-    updateCanvasNodeSelection();
-    return;
-  }
-  if (!canvasConnectionSourceId) {
-    canvasConnectionSourceId = id;
-    selectedCanvasConnectionId = '';
-    updateCanvasNodeSelection();
-    renderCanvasConnections();
-    updateBatchBar();
-    return;
-  }
-  const sourceId = canvasConnectionSourceId;
-  const targetId = id;
-  const state = canvasStoreSnapshot();
-  const next = [...(state.layout.connections || []), { sourceId, targetId }];
-  canvasConnectionSourceId = '';
-  selectedCanvasConnectionId = '';
-  canvasStore?.commitConnections(next);
-}
+function updateCanvasNodePositions(...args) { return CanvasRender.updateCanvasNodePositions(...args); }
 
-function canvasConnectionRenderOffset(connection, connectionId) {
-  const state = canvasConnectionDragState;
-  if (state?.kind === 'curve' && state.connectionId === connectionId) return state.curveOffset;
-  return connection?.curveOffset;
-}
+function renderCanvasMinimap(...args) { return CanvasRender.renderCanvasMinimap(...args); }
 
-function handleCanvasConnectionClick(event, connectionId) {
-  event.preventDefault();
-  event.stopPropagation();
-  const suppressedUntil = canvasConnectionClickSuppressUntil.get(connectionId) || 0;
-  if (suppressedUntil) {
-    canvasConnectionClickSuppressUntil.delete(connectionId);
-    if (Date.now() <= suppressedUntil) return;
-  }
-  selectCanvasConnection(connectionId);
-}
+function canvasNodeRenderKey(...args) { return CanvasRender.canvasNodeRenderKey(...args); }
 
-function handleCanvasConnectionDoubleClick(event, connectionId) {
-  event.preventDefault();
-  event.stopPropagation();
-  resetCanvasConnectionCurve(connectionId);
-}
+function createCanvasNodeElement(...args) { return CanvasRender.createCanvasNodeElement(...args); }
 
-function setCanvasConnectionZoneHover(connectionId, zone, active) {
-  const paths = canvasConnectionsEl?.querySelectorAll('.canvas-connection-zone-highlight, .canvas-connection');
-  paths?.forEach((path) => {
-    if (path.dataset.connectionId !== connectionId) return;
-    if (path.classList.contains('canvas-connection-zone-highlight')) {
-      path.classList.toggle('is-visible', active && path.dataset.connectionZone === zone);
-    } else {
-      path.classList.toggle(`zone-hover-${zone}`, active);
-    }
-  });
-}
+function removeCanvasNode(...args) { return CanvasRender.removeCanvasNode(...args); }
 
-function detectCanvasConnectionDoublePointerDown(connectionId, event) {
-  const now = Date.now();
-  const previous = canvasConnectionPointerDownAt.get(connectionId) || 0;
-  if (previous && now - previous <= CANVAS_NODE_CLICK_DELAY) {
-    canvasConnectionPointerDownAt.delete(connectionId);
-    event.preventDefault();
-    event.stopPropagation();
-    canvasConnectionClickSuppressUntil.set(connectionId, now + CANVAS_NODE_CLICK_DELAY);
-    resetCanvasConnectionCurve(connectionId);
-    return true;
-  }
-  canvasConnectionPointerDownAt.set(connectionId, now);
-  setTimeout(() => {
-    if ((canvasConnectionPointerDownAt.get(connectionId) || 0) === now) {
-      canvasConnectionPointerDownAt.delete(connectionId);
-    }
-  }, CANVAS_NODE_CLICK_DELAY + 40);
-  return false;
-}
-
-function wireCanvasConnectionPath(path, connection, connectionId, zone = '') {
-  if (zone) {
-    path.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || event.isPrimary === false) return;
-      if (detectCanvasConnectionDoublePointerDown(connectionId, event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      // Path elements are now created once and reused across renders (see
-      // renderCanvasConnections), so the closed-over `connection` can be
-      // stale if curveOffset changed since creation — look up the live one.
-      const live = (canvasStoreSnapshot().layout?.connections || []).find(
-        (c) => canvasConnectionId(c.sourceId, c.targetId) === connectionId
-      ) || connection;
-      beginCanvasConnectionDrag({
-        event,
-        kind: zone === 'curve' ? 'curve' : 'edge',
-        zone,
-        movingEndpoint: zone === 'source' ? 'sourceId' : zone === 'target' ? 'targetId' : '',
-        connection: live,
-        connectionId,
-      });
-    });
-    path.addEventListener('pointerenter', () => setCanvasConnectionZoneHover(connectionId, zone, true));
-    path.addEventListener('pointerleave', () => setCanvasConnectionZoneHover(connectionId, zone, false));
-  }
-  path.addEventListener('click', (event) => handleCanvasConnectionClick(event, connectionId));
-  path.addEventListener('dblclick', (event) => handleCanvasConnectionDoubleClick(event, connectionId));
-  path.addEventListener('keydown', (event) => {
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-      event.preventDefault();
-      deleteCanvasConnection(connectionId);
-    }
-  });
-}
-
-function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
-  if (!canvasConnectionsEl) return;
-  const zones = ['source', 'curve', 'target'];
-  const visibleIds = new Set(searchContext.items.map((item) => item.id));
-  const layout = canvasStoreSnapshot().layout || canvasLayout;
-  const connections = layout.connections || [];
-  const connectionIds = new Set(connections.map((connection) => canvasConnectionId(connection.sourceId, connection.targetId)));
-  if (selectedCanvasConnectionId && !connectionIds.has(selectedCanvasConnectionId)) selectedCanvasConnectionId = '';
-  const seenIds = new Set();
-  for (const connection of connections) {
-    if (!visibleIds.has(connection.sourceId) || !visibleIds.has(connection.targetId)) continue;
-    const source = canvasConnectionPosition(connection.sourceId);
-    const target = canvasConnectionPosition(connection.targetId);
-    if (!source || !target) continue;
-    const points = canvasConnectionHandlePoints(source, target, connection.sourceId, connection.targetId);
-    if (!points) continue;
-    const id = canvasConnectionId(connection.sourceId, connection.targetId);
-    const geometry = canvasConnectionCurveGeometry(
-      points.source,
-      points.target,
-      canvasConnectionRenderOffset(connection, id),
-    );
-    if (!geometry) continue;
-    const segments = canvasConnectionCurveSegments(geometry);
-    const related = searchContext.queryActive
-      && (searchContext.relatedIds.has(connection.sourceId) || searchContext.relatedIds.has(connection.targetId));
-    const classes = `canvas-connection${selectedCanvasConnectionId === id ? ' selected' : ''}${related ? ' search-related' : ''}${canvasConnectionSourceId && (canvasConnectionSourceId === connection.sourceId || canvasConnectionSourceId === connection.targetId) ? ' source' : ''}${geometry.offset.x || geometry.offset.y ? ' curved' : ''}${canvasConnectionDragState?.kind === 'curve' && canvasConnectionDragState.connectionId === id ? ' dragging' : ''}`;
-    const ariaLabel = `${canvasItemById(connection.sourceId)?.title || connection.sourceId} ↔ ${canvasItemById(connection.targetId)?.title || connection.targetId}`;
-    seenIds.add(id);
-
-    let group = canvasConnectionElements.get(id);
-    if (!group) {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.dataset.connectionId = id;
-      path.setAttribute('role', 'button');
-      path.setAttribute('tabindex', '0');
-      wireCanvasConnectionPath(path, connection, id);
-      canvasConnectionsEl.appendChild(path);
-
-      const highlights = [];
-      const hits = [];
-      for (const zone of zones) {
-        const highlight = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        highlight.setAttribute('class', `canvas-connection-zone-highlight ${zone}`);
-        highlight.setAttribute('aria-hidden', 'true');
-        highlight.dataset.connectionId = id;
-        highlight.dataset.connectionZone = zone;
-        canvasConnectionsEl.appendChild(highlight);
-        highlights.push(highlight);
-
-        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        hit.setAttribute('class', `canvas-connection-hit ${zone}`);
-        hit.setAttribute('stroke-width', String(CANVAS_CONNECTION_HIT_WIDTH));
-        hit.setAttribute('aria-hidden', 'true');
-        hit.dataset.connectionId = id;
-        hit.dataset.connectionZone = zone;
-        wireCanvasConnectionPath(hit, connection, id, zone);
-        canvasConnectionsEl.appendChild(hit);
-        hits.push(hit);
-      }
-      group = { path, highlights, hits };
-      canvasConnectionElements.set(id, group);
-    }
-
-    // Existing elements are only patched here — listeners stay attached from
-    // creation (see wireCanvasConnectionPath's live-connection lookup for why
-    // that's still correct when curveOffset changes without id changing).
-    group.path.setAttribute('d', geometry.pathD);
-    group.path.setAttribute('class', classes);
-    group.path.setAttribute('aria-label', ariaLabel);
-    zones.forEach((zone, index) => {
-      group.highlights[index].setAttribute('d', segments[index].pathD);
-      group.hits[index].setAttribute('d', segments[index].pathD);
-    });
-  }
-
-  for (const [id, group] of canvasConnectionElements) {
-    if (seenIds.has(id)) continue;
-    group.path.remove();
-    group.highlights.forEach((el) => el.remove());
-    group.hits.forEach((el) => el.remove());
-    canvasConnectionElements.delete(id);
-  }
-
-  renderCanvasConnectionDraft();
-}
-
-function updateCanvasNodePositions(snapshot = canvasStoreSnapshot(), searchContext = getCanvasSearchContext()) {
-  const layout = isCanvasSearchPreviewActive(searchContext)
-    ? canvasSearchLayoutFor(searchContext)
-    : (snapshot.layout || canvasLayout);
-  const positions = layout.positions || {};
-  for (const [id, node] of canvasNodeElements) {
-    const position = positions[id] ? canvasDisplayPosition(positions[id]) : null;
-    if (!position) continue;
-    node.style.left = `${position.x}px`;
-    node.style.top = `${position.y}px`;
-    node.style.width = `${position.w}px`;
-    node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
-  }
-}
-
-function canvasMinimapProjectionFor(nodeRects, viewportRect, mapWidth, mapHeight) {
-  const allRects = [...nodeRects, viewportRect];
-  if (!mapWidth || !mapHeight || !allRects.length) return null;
-  const minX = Math.min(...allRects.map((rect) => rect.x));
-  const minY = Math.min(...allRects.map((rect) => rect.y));
-  const maxX = Math.max(...allRects.map((rect) => rect.x + rect.w));
-  const maxY = Math.max(...allRects.map((rect) => rect.y + rect.h));
-  const padding = Math.max(24, Math.max(maxX - minX, maxY - minY) * 0.06);
-  const worldX = minX - padding;
-  const worldY = minY - padding;
-  const worldWidth = Math.max(1, maxX - minX + padding * 2);
-  const worldHeight = Math.max(1, maxY - minY + padding * 2);
-  const scale = Math.min((mapWidth - 2) / worldWidth, (mapHeight - 2) / worldHeight);
-  return {
-    mapWidth,
-    mapHeight,
-    worldX,
-    worldY,
-    worldWidth,
-    worldHeight,
-    scale,
-    offsetX: (mapWidth - worldWidth * scale) / 2 - worldX * scale,
-    offsetY: (mapHeight - worldHeight * scale) / 2 - worldY * scale,
-  };
-}
-
-function renderCanvasMinimap(items, renderLayout = null) {
-  if (!canvasMinimap) return;
-  const map = canvasMinimap.querySelector('.canvas-minimap-world');
-  if (!map) return;
-  const frame = canvasMinimapViewport || map.querySelector('.canvas-minimap-viewport');
-  const mapRect = map.getBoundingClientRect?.();
-  const mapWidth = map.clientWidth || mapRect?.width || 0;
-  const mapHeight = map.clientHeight || mapRect?.height || 0;
-  const layout = renderLayout || canvasSearchLayoutFor();
-  const zoom = Math.max(0.25, Number(layout.viewport?.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
-  const viewportWidth = Math.max(1, canvasViewportEl?.clientWidth || canvasViewportEl?.getBoundingClientRect?.().width || mapWidth);
-  const viewportHeight = Math.max(1, canvasViewportEl?.clientHeight || canvasViewportEl?.getBoundingClientRect?.().height || mapHeight);
-  const nodeRects = (Array.isArray(items) ? items : []).map((item, index) => {
-    const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
-    return {
-      id: String(item.id),
-      kind: item.kind,
-      x: Number(position.x) || 0,
-      y: Number(position.y) || 0,
-      w: Math.max(1, Number(position.w) || 1),
-      h: Math.max(1, Number(position.h) || 1),
-    };
-  });
-  const viewportRect = {
-    x: Number(layout.viewport?.x) || 0,
-    y: Number(layout.viewport?.y) || 0,
-    w: viewportWidth / zoom,
-    h: viewportHeight / zoom,
-  };
-  if (!canvasMinimapDragState) {
-    canvasMinimapProjection = canvasMinimapProjectionFor(nodeRects, viewportRect, mapWidth, mapHeight);
-  }
-  const projection = canvasMinimapDragState?.projection || canvasMinimapProjection;
-  if (!projection) {
-    for (const [id, element] of canvasMinimapElements) {
-      element.remove();
-      canvasMinimapElements.delete(id);
-    }
-    if (frame) frame.hidden = true;
-    return;
-  }
-  const toMinimapRect = (rect) => ({
-    left: rect.x * projection.scale + projection.offsetX,
-    top: rect.y * projection.scale + projection.offsetY,
-    width: Math.max(2, rect.w * projection.scale),
-    height: Math.max(2, rect.h * projection.scale),
-  });
-  const selection = activeCanvasSelection();
-  const visibleIds = new Set(nodeRects.map((rect) => rect.id));
-  for (const [id, element] of canvasMinimapElements) {
-    if (visibleIds.has(id)) continue;
-    element.remove();
-    canvasMinimapElements.delete(id);
-  }
-  for (const rect of nodeRects) {
-    let element = canvasMinimapElements.get(rect.id);
-    if (!element) {
-      element = document.createElement('span');
-      element.className = 'minimap-node';
-      element.dataset.minimapId = rect.id;
-      canvasMinimapElements.set(rect.id, element);
-      map.appendChild(element);
-    }
-    element.className = `minimap-node${rect.kind === 'group' ? ' group' : ''}${selection.has(rect.id) ? ' selected' : ''}`;
-    const mapped = toMinimapRect(rect);
-    element.style.left = `${mapped.left}px`;
-    element.style.top = `${mapped.top}px`;
-    element.style.width = `${mapped.width}px`;
-    element.style.height = `${mapped.height}px`;
-  }
-  if (frame) {
-    const mapped = toMinimapRect(viewportRect);
-    frame.hidden = false;
-    frame.style.left = `${Math.max(0, mapped.left)}px`;
-    frame.style.top = `${Math.max(0, mapped.top)}px`;
-    frame.style.width = `${Math.min(projection.mapWidth, mapped.width)}px`;
-    frame.style.height = `${Math.min(projection.mapHeight, mapped.height)}px`;
-  }
-}
-
-function canvasNodeRenderKey(item) {
-  return JSON.stringify({
-    id: item.id,
-    kind: item.kind,
-    title: item.title,
-    url: item.url,
-    note: item.note,
-    tags: item.tags,
-    pinned: item.pinned,
-    savedAt: item.savedAt,
-    favIconUrl: item.favIconUrl,
-    markdown: item.kind === 'note' ? item.markdown : undefined,
-    attachments: item.kind === 'note'
-      ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
-      : undefined,
-    tabs: item.kind === 'group'
-      ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
-      : undefined,
-    notes: item.kind === 'group'
-      ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
-      : undefined,
-    query,
-    locale: settings.locale,
-  });
-}
-
-function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item)) {
-  const wrapper = document.createElement('div');
-  wrapper.innerHTML = canvasNodeHtml(item);
-  const node = wrapper.firstElementChild;
-  if (item.kind === 'group') appendGroupSearchHits(node, item);
-  node.dataset.canvasRenderKey = renderKey;
-  wireCanvasNodeActions(node);
-  node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-  node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
-  return node;
-}
-
-function removeCanvasNode(id, node) {
-  cancelCanvasNodeClick(id);
-  canvasNodeClickSuppressUntil.delete(id);
-  node?.querySelectorAll('img[data-canvas-media="true"]').forEach((img) => {
-    thumbObserver?.unobserve?.(img);
-    canvasMediaObserver?.unobserve?.(img);
-  });
-  node?.querySelectorAll('[data-note-attachment-key], [data-attachment-id]').forEach((img) => {
-    canvasMediaObserver?.unobserve?.(img);
-  });
-  node?.remove();
-  canvasNodeElements.delete(id);
-}
-
-function renderCanvas() {
-  if (!canvasNodesEl) return;
-  ensureCanvasStore();
-  const searchContext = getCanvasSearchContext();
-  const renderLayout = canvasSearchLayoutFor(searchContext);
-  const filtered = searchContext.items;
-  const visibleIds = new Set(filtered.map((item) => item.id));
-  updateSavedBadge();
-  syncCanvasIndexUi();
-  if (canvasDropZone) canvasDropZone.hidden = activeCanvasSelection().size < 2;
-
-  for (const [id, node] of canvasNodeElements) {
-    if (!visibleIds.has(id)) removeCanvasNode(id, node);
-  }
-
-  const empty = canvasNodesEl.querySelector('.canvas-empty');
-  if (!allTabs.length || !filtered.length) {
-    for (const [id, node] of canvasNodeElements) removeCanvasNode(id, node);
-    if (!empty) {
-      const message = document.createElement('div');
-      message.className = 'canvas-empty';
-      message.innerHTML = `<strong>${escapeHtml(t(allTabs.length ? 'noResultsTitle' : 'emptyTitle'))}</strong><span>${escapeHtml(t(allTabs.length ? 'noResultsBody' : 'emptyBody'))}</span>`;
-      canvasNodesEl.appendChild(message);
-    } else {
-      empty.querySelector('strong').textContent = t(allTabs.length ? 'noResultsTitle' : 'emptyTitle');
-      empty.querySelector('span').textContent = t(allTabs.length ? 'noResultsBody' : 'emptyBody');
-    }
-    updateCanvasTransform();
-    renderCanvasConnections(searchContext);
-    renderCanvasMinimap(filtered);
-    updateBatchBar();
-    return;
-  }
-  empty?.remove();
-
-  const fragment = document.createDocumentFragment();
-  filtered.forEach((item, index) => {
-    let node = canvasNodeElements.get(item.id);
-    const renderKey = canvasNodeRenderKey(item);
-    if (!node || node.dataset.canvasRenderKey !== renderKey) {
-      const replacement = createCanvasNodeElement(item, renderKey);
-      if (node) node.replaceWith(replacement);
-      node = replacement;
-      canvasNodeElements.set(item.id, node);
-    }
-    const position = canvasDisplayPosition(renderLayout.positions[item.id] || canvasDefaultPosition(index));
-    node.dataset.id = item.id;
-    node.dataset.kind = item.kind;
-    node.classList.toggle('canvas-group', item.kind === 'group');
-    node.classList.toggle('canvas-note', item.kind === 'note');
-    node.classList.toggle('search-direct', searchContext.queryActive && searchContext.directIds.has(item.id));
-    node.classList.toggle('search-related', searchContext.queryActive && searchContext.relatedIds.has(item.id));
-    node.style.left = `${position.x}px`;
-    node.style.top = `${position.y}px`;
-    node.style.width = `${position.w}px`;
-    node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
-    // Moving an existing node through the fragment keeps DOM order without
-    // recreating its listeners, focus target, or media loader state.
-    fragment.appendChild(node);
-  });
-  canvasNodesEl.appendChild(fragment);
-  filtered.forEach((item) => {
-    if (item.kind !== 'note') return;
-    const node = canvasNodeElements.get(item.id);
-    if (node) wireStickerAttachmentImages(node, item);
-  });
-  updateCanvasTransform();
-  updateCanvasNodePositions(canvasStoreSnapshot(), searchContext);
-  updateCanvasNodeSelection();
-  renderCanvasConnections(searchContext);
-  canvasNodesEl.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-  renderCanvasMinimap(filtered, renderLayout);
-  updateBatchBar();
-}
+function renderCanvas(...args) { return CanvasRender.renderCanvas(...args); }
 
 function setCanvasSelection(ids, additive = false) {
   ensureCanvasStore()?.setSelection(ids || [], additive);
   selectMode = activeCanvasSelection().size > 0;
 }
 
-function canvasSelectNode(id, event) {
-  if (selectedCanvasConnectionId) {
-    selectedCanvasConnectionId = '';
-    renderCanvasConnections();
-    updateBatchBar();
-  }
-  const additive = Boolean(event?.metaKey || event?.ctrlKey || event?.shiftKey);
-  const selection = activeCanvasSelection();
-  if (additive) ensureCanvasStore()?.toggleSelection(id, true);
-  else if (!selection.has(id) || selection.size > 1) ensureCanvasStore()?.setSelection([id]);
-  selectMode = activeCanvasSelection().size > 0;
-  lastAnchorId = id;
-}
+function canvasSelectNode(...args) { return AppHelpers.canvasSelectNode(...args); }
 
 function refreshCanvasSearchPreview(items = getCanvasVisibleTabs()) {
   updateCanvasNodePositions();
@@ -9908,80 +2783,13 @@ function canvasSearchPreviewSelectedIds(searchContext = getCanvasSearchContext()
   return [...activeCanvasSelection()].filter((id) => visibleIds.has(id));
 }
 
-function moveCanvasSearchPreview(ids, dx, dy, { snap = false } = {}) {
-  const searchContext = getCanvasSearchContext();
-  if (!isCanvasSearchPreviewActive(searchContext)) return false;
-  canvasSearchLayoutFor(searchContext);
-  if (!canvasSearchPreview) return false;
-  let changed = false;
-  for (const id of ids || []) {
-    const current = canvasSearchPreview.positions[id];
-    if (!current) continue;
-    const next = {
-      ...current,
-      x: current.x + (Number(dx) || 0),
-      y: current.y + (Number(dy) || 0),
-    };
-    if (snap) snapCanvasPosition(next);
-    canvasSearchPreview.positions[id] = next;
-    changed = true;
-  }
-  if (changed) refreshCanvasSearchPreview(searchContext.items);
-  return changed;
-}
+function moveCanvasSearchPreview(...args) { return AppHelpers.moveCanvasSearchPreview(...args); }
 
-function applyCanvasSearchPointerPreview(state, dx, dy) {
-  if (!state?.searchPreview) return false;
-  const searchContext = getCanvasSearchContext();
-  if (!isCanvasSearchPreviewActive(searchContext)) return false;
-  canvasSearchLayoutFor(searchContext);
-  if (!canvasSearchPreview) return false;
-  let changed = false;
-  for (const id of state.searchIds || []) {
-    const start = state.searchStartPositions?.[id];
-    if (!start) continue;
-    canvasSearchPreview.positions[id] = {
-      ...start,
-      x: start.x + (Number(dx) || 0),
-      y: start.y + (Number(dy) || 0),
-    };
-    changed = true;
-  }
-  if (changed) refreshCanvasSearchPreview(searchContext.items);
-  return changed;
-}
+function applyCanvasSearchPointerPreview(...args) { return AppHelpers.applyCanvasSearchPointerPreview(...args); }
 
-function finishCanvasSearchPointer(state, commit = true) {
-  if (!state?.searchPreview || !canvasSearchPreview) return;
-  const searchContext = getCanvasSearchContext();
-  if (!isCanvasSearchPreviewActive(searchContext)) return;
-  if (!commit) {
-    for (const id of state.searchIds || []) {
-      const start = state.searchStartPositions?.[id];
-      if (start) canvasSearchPreview.positions[id] = { ...start };
-    }
-  } else if (canvasSnapToGrid) {
-    for (const id of state.searchIds || []) {
-      const position = canvasSearchPreview.positions[id];
-      if (position) snapCanvasPosition(position);
-    }
-  }
-  refreshCanvasSearchPreview(searchContext.items);
-}
+function finishCanvasSearchPointer(...args) { return AppHelpers.finishCanvasSearchPointer(...args); }
 
-function canvasMoveSelected(dx, dy) {
-  const searchContext = getCanvasSearchContext();
-  if (isCanvasSearchPreviewActive(searchContext)) {
-    moveCanvasSearchPreview(
-      canvasSearchPreviewSelectedIds(searchContext),
-      dx,
-      dy,
-      { snap: canvasSnapToGrid },
-    );
-    return;
-  }
-  ensureCanvasStore()?.commitMove([...activeCanvasSelection()], dx, dy, canvasSnapToGrid);
-}
+function canvasMoveSelected(...args) { return AppHelpers.canvasMoveSelected(...args); }
 
 function snapCanvasPosition(position) {
   if (!canvasSnapToGrid) return position;
@@ -9991,203 +2799,25 @@ function snapCanvasPosition(position) {
   return position;
 }
 
-function canvasWorldViewportCenter() {
-  const state = canvasStoreSnapshot();
-  const viewport = state.layout?.viewport || DEFAULT_CANVAS_VIEWPORT;
-  const rect = canvasViewportEl?.getBoundingClientRect?.();
-  const width = Math.max(1, canvasViewportEl?.clientWidth || rect?.width || 1000);
-  const height = Math.max(1, canvasViewportEl?.clientHeight || rect?.height || 700);
-  const zoom = Math.max(0.25, Number(viewport.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
-  return {
-    x: (Number(viewport.x) || 0) + width / (2 * zoom),
-    y: (Number(viewport.y) || 0) + height / (2 * zoom),
-  };
-}
+function canvasWorldViewportCenter(...args) { return CanvasRender.canvasWorldViewportCenter(...args); }
 
-function canvasArrangementEntries(items, layout = canvasStoreSnapshot().layout) {
-  return items.map((item, index) => {
-    const position = {
-      ...(layout.positions?.[item.id] || canvasDefaultPosition(index)),
-    };
-    return { item, position, display: canvasDisplayPosition(position) };
-  });
-}
+function canvasArrangementEntries(...args) { return CanvasRender.canvasArrangementEntries(...args); }
 
-function arrangeCanvasGrid(items, layout) {
-  const entries = canvasArrangementEntries(items, layout);
-  if (!entries.length) return {};
-  const columns = Math.max(1, Math.ceil(Math.sqrt(entries.length)));
-  const rows = Math.ceil(entries.length / columns);
-  const gapX = CANVAS_DEFAULT_CARD_GAP;
-  const gapY = CANVAS_DEFAULT_CARD_GAP;
-  const defaultWidth = CANVAS_NODE_DEFAULT_WIDTH * CANVAS_NODE_DISPLAY_SCALE;
-  const defaultHeight = CANVAS_NODE_DEFAULT_HEIGHT * CANVAS_NODE_DISPLAY_SCALE;
-  const slotWidth = Math.max(...entries.map(({ display }) => display.w), defaultWidth) + gapX;
-  const slotHeight = Math.max(...entries.map(({ display }) => display.h), defaultHeight) + gapY;
-  const boardWidth = columns * slotWidth - gapX;
-  const boardHeight = rows * slotHeight - gapY;
-  const center = canvasWorldViewportCenter();
-  const positions = {};
+function arrangeCanvasGrid(...args) { return CanvasRender.arrangeCanvasGrid(...args); }
 
-  entries.forEach(({ item, position, display }, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    position.x = center.x - boardWidth / 2 + column * slotWidth + (slotWidth - gapX - display.w) / 2;
-    position.y = center.y - boardHeight / 2 + row * slotHeight + (slotHeight - gapY - display.h) / 2;
-    position.z = index;
-    snapCanvasPosition(position);
-    positions[item.id] = position;
-  });
-  return positions;
-}
+function arrangeCanvasAlign(...args) { return CanvasRender.arrangeCanvasAlign(...args); }
 
-function arrangeCanvasAlign(items, layout) {
-  const entries = canvasArrangementEntries(items, layout);
-  if (!entries.length) return {};
-  const columns = Math.max(1, Math.ceil(Math.sqrt(entries.length)));
-  const rows = Math.ceil(entries.length / columns);
-  const gapX = CANVAS_DEFAULT_CARD_GAP;
-  const gapY = CANVAS_DEFAULT_CARD_GAP;
-  const columnWidths = Array.from({ length: columns }, () => 0);
-  const rowHeights = Array.from({ length: rows }, () => 0);
-  entries.forEach(({ display }, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    columnWidths[column] = Math.max(columnWidths[column], display.w);
-    rowHeights[row] = Math.max(rowHeights[row], display.h);
-  });
-  const boardWidth = columnWidths.reduce((sum, width) => sum + width, 0) + gapX * (columns - 1);
-  const boardHeight = rowHeights.reduce((sum, height) => sum + height, 0) + gapY * (rows - 1);
-  const center = canvasWorldViewportCenter();
-  const positions = {};
-  entries.forEach(({ item, position }, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const xOffset = columnWidths.slice(0, column).reduce((sum, width) => sum + width + gapX, 0);
-    const yOffset = rowHeights.slice(0, row).reduce((sum, height) => sum + height + gapY, 0);
-    position.x = center.x - boardWidth / 2 + xOffset;
-    position.y = center.y - boardHeight / 2 + yOffset;
-    position.z = index;
-    snapCanvasPosition(position);
-    positions[item.id] = position;
-  });
-  return positions;
-}
+function arrangeCanvas(...args) { return AppHelpers.arrangeCanvas(...args); }
 
-function arrangeCanvas(mode = '') {
-  if (mode !== 'grid' && mode !== 'align') return;
-  const searchContext = getCanvasSearchContext();
-  if (isCanvasSearchPreviewActive(searchContext)) {
-    const layout = canvasSearchLayoutFor(searchContext);
-    canvasSearchPreview.positions = mode === 'grid'
-      ? arrangeCanvasGrid(searchContext.items, layout)
-      : arrangeCanvasAlign(searchContext.items, layout);
-    canvasSearchPreview.mode = mode;
-    refreshCanvasSearchPreview(searchContext.items);
-    return;
-  }
-  const items = sortTabs(allTabs, normalizeSortBy(settings.sortBy));
-  const layout = canvasStoreSnapshot().layout || canvasLayout;
-  const positions = mode === 'grid'
-    ? arrangeCanvasGrid(items, layout)
-    : arrangeCanvasAlign(items, layout);
-  ensureCanvasStore()?.commitPositions(positions);
-}
+function openCanvasStackDialog(...args) { return CanvasChrome.openCanvasStackDialog(...args); }
 
-function openCanvasStackDialog() {
-  if (activeCanvasSelection().size < 2) {
-    showCopyToast(t('canvasNeedTwo'));
-    return;
-  }
-  if (!canvasStackDialog) return;
-  closeAllFloatsExcept('canvasStack');
-  canvasStackDialog.classList.add('open');
-  canvasStackDialog.setAttribute('aria-hidden', 'false');
-  if (canvasStackTitle) {
-    canvasStackTitle.value = '';
-    setTimeout(() => canvasStackTitle.focus(), 0);
-  }
-  syncFloatBackdrop();
-}
+function closeCanvasStackDialog(...args) { return CanvasChrome.closeCanvasStackDialog(...args); }
 
-function closeCanvasStackDialog() {
-  canvasStackDialog?.classList.remove('open');
-  canvasStackDialog?.setAttribute('aria-hidden', 'true');
-  syncFloatBackdrop();
-}
+async function createCanvasStackFromSelection(...args) { return await CanvasChrome.createCanvasStackFromSelection(...args); }
 
-async function createCanvasStackFromSelection() {
-  const ids = [...activeCanvasSelection()];
-  const title = canvasStackTitle?.value?.trim() || t('canvasNewStack');
-  closeCanvasStackDialog();
-  const res = await sendMessage({ type: 'CREATE_STACK', ids, title });
-  if (!res?.ok) {
-    showCopyToast(t('stackFailed'));
-    return;
-  }
-  ensureCanvasStore()?.setSelection([]);
-  await loadList();
-  showCopyToast(t('stackMerged'));
-}
+async function canvasAction(...args) { return await CanvasChrome.canvasAction(...args); }
 
-async function canvasAction(action) {
-  if (action === 'delete-connection') {
-    deleteCanvasConnection();
-    return;
-  }
-  const ids = [...activeCanvasSelection()];
-  if (!ids.length) return;
-  if (action === 'restore') {
-    if (ids.length === 1) await restoreItem(ids[0]);
-    else batchRestore?.click();
-    return;
-  }
-  if (action === 'snapshot' && ids.length === 1) {
-    const item = allTabs.find((candidate) => candidate.id === ids[0]);
-    if (item?.kind === 'tab') openLightbox(item);
-    return;
-  }
-  if (action === 'edit' && ids.length === 1) {
-    const item = allTabs.find((candidate) => candidate.id === ids[0]);
-    if (item?.kind === 'note') openStickerNoteEditor(item);
-    else if (item) openEditBox(item);
-    return;
-  }
-  if (action === 'members' && ids.length === 1) {
-    const item = allTabs.find((candidate) => candidate.id === ids[0]);
-    if (item?.kind === 'group') openMembersBox(item);
-    return;
-  }
-  if (action === 'pin') {
-    for (const id of ids) {
-      const item = allTabs.find((candidate) => candidate.id === id);
-      if (item) await togglePinned(item);
-    }
-    return;
-  }
-  if (action === 'stack') {
-    openCanvasStackDialog();
-    return;
-  }
-  if (action === 'delete') {
-    batchDelete?.click();
-  }
-}
-
-function canvasNodeWorldRect(node) {
-  const viewportRect = canvasViewportEl?.getBoundingClientRect();
-  const nodeRect = node?.getBoundingClientRect();
-  if (!viewportRect || !nodeRect) return null;
-  const viewport = canvasStoreSnapshot().layout?.viewport || canvasLayout.viewport;
-  const zoom = viewport.zoom || 1;
-  return {
-    x: (nodeRect.left - viewportRect.left) / zoom + viewport.x,
-    y: (nodeRect.top - viewportRect.top) / zoom + viewport.y,
-    w: nodeRect.width / zoom,
-    h: nodeRect.height / zoom,
-    z: Number(node.style.zIndex) || 0,
-  };
-}
+function canvasNodeWorldRect(...args) { return AppHelpers.canvasNodeWorldRect(...args); }
 
 // Position-based lookup for hit-testing: uses the layout state directly
 // instead of getBoundingClientRect(), so it never forces a reflow. Matches
@@ -10200,34 +2830,9 @@ function canvasNodeWorldRectFromState(id) {
   return { x: position.x, y: position.y, w: position.w, h: position.h, z: position.z || 0 };
 }
 
-function canvasTargetAt(point, excludeId = '') {
-  const nodes = [...canvasNodeElements.keys()]
-    .map((id) => ({ id, rect: canvasNodeWorldRectFromState(id) }))
-    .filter(({ id, rect }) => id && id !== excludeId && rect)
-    .sort((a, b) => b.rect.z - a.rect.z);
-  for (const { id, rect } of nodes) {
-    if (point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h) {
-      return id;
-    }
-  }
-  return '';
-}
+function canvasTargetAt(...args) { return AppHelpers.canvasTargetAt(...args); }
 
-function resetCanvasView() {
-  const { width, height } = canvasViewportSize();
-  const state = canvasStoreSnapshot();
-  const bounds = canvasBoundsForItems(allTabs, state.layout || canvasLayout);
-  if (!width || !height || !bounds) {
-    ensureCanvasStore()?.commitViewport({ ...DEFAULT_CANVAS_VIEWPORT });
-    return;
-  }
-  const zoom = DEFAULT_CANVAS_VIEWPORT.zoom;
-  ensureCanvasStore()?.commitViewport({
-    x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
-    y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
-    zoom,
-  });
-}
+function resetCanvasView(...args) { return AppHelpers.resetCanvasView(...args); }
 
 function clearCanvasMiddleClickSequence() {
   if (canvasMiddleClickTimer) clearTimeout(canvasMiddleClickTimer);
@@ -10235,311 +2840,37 @@ function clearCanvasMiddleClickSequence() {
   canvasLastMiddleClickAt = 0;
 }
 
-function handleCanvasMiddleClick(event) {
-  if (event.button !== 1) return;
-  if (isCanvasControlTarget(event.target)) {
-    clearCanvasMiddleClickSequence();
-    return;
-  }
-  event.preventDefault();
-  const now = Date.now();
-  if (canvasLastMiddleClickAt && now - canvasLastMiddleClickAt <= CANVAS_MIDDLE_CLICK_DELAY) {
-    clearCanvasMiddleClickSequence();
-    resetCanvasView();
-    return;
-  }
-  clearCanvasMiddleClickSequence();
-  canvasLastMiddleClickAt = now;
-  canvasMiddleClickTimer = setTimeout(clearCanvasMiddleClickSequence, CANVAS_MIDDLE_CLICK_DELAY);
-}
+function handleCanvasMiddleClick(...args) { return CanvasIx.handleCanvasMiddleClick(...args); }
 
-function isCanvasControlTarget(target) {
-  return Boolean(
-    target?.closest?.(
-      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
-    )
-  );
-}
+function isCanvasControlTarget(...args) { return CanvasIx.isCanvasControlTarget(...args); }
 
 function isCanvasContextMenuOpen() {
   return Boolean(canvasContextMenu && !canvasContextMenu.hidden);
 }
 
-function closeCanvasContextMenu() {
-  if (!canvasContextMenu) return;
-  canvasContextMenu.hidden = true;
-  canvasContextMenu.setAttribute('aria-hidden', 'true');
-  canvasContextMenu.innerHTML = '';
-  canvasContextMenuState = { mode: 'blank', itemId: '', worldPoint: null };
-}
+function closeCanvasContextMenu(...args) { return CanvasChrome.closeCanvasContextMenu(...args); }
 
-function canvasBlankContextMenuEntries() {
-  return [
-    { action: 'sort-date', label: t('canvasCtxSortDate') },
-    { action: 'arrange-align', label: t('canvasCtxArrangeAlign') },
-    { action: 'backup-lite', label: t('canvasCtxBackup') },
-    { action: 'add-note', label: t('canvasCtxAddNote') },
-  ];
-}
+function canvasBlankContextMenuEntries(...args) { return CanvasChrome.canvasBlankContextMenuEntries(...args); }
 
-function renderCanvasContextMenuItems(mode, item) {
-  if (!canvasContextMenu) return;
-  canvasContextMenu.innerHTML = '';
-  const entries = mode === 'node'
-    ? canvasNodeActionEntries(item).map(({ action, label }) => ({
-      action,
-      label,
-      danger: action === 'delete',
-    }))
-    : canvasBlankContextMenuEntries();
-  for (const entry of entries) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.setAttribute('role', 'menuitem');
-    button.dataset.canvasCtx = entry.action;
-    button.textContent = entry.label;
-    if (entry.danger) button.classList.add('danger');
-    canvasContextMenu.appendChild(button);
-  }
-}
+function renderCanvasContextMenuItems(...args) { return CanvasChrome.renderCanvasContextMenuItems(...args); }
 
-function openCanvasContextMenu(clientX, clientY, options = {}) {
-  if (!canvasContextMenu) return;
-  const mode = options.mode === 'node' ? 'node' : 'blank';
-  const itemId = mode === 'node' ? String(options.itemId || '') : '';
-  const item = itemId ? canvasItemById(itemId) : null;
-  if (mode === 'node' && !item) return;
-  canvasContextMenuState = {
-    mode,
-    itemId,
-    worldPoint: options.worldPoint
-      ? { x: options.worldPoint.x, y: options.worldPoint.y }
-      : null,
-  };
-  renderCanvasContextMenuItems(mode, item);
-  canvasContextMenu.hidden = false;
-  canvasContextMenu.setAttribute('aria-hidden', 'false');
-  // Measure after unhide so we can clamp within the window.
-  const rect = canvasContextMenu.getBoundingClientRect();
-  const pad = 8;
-  const left = Math.max(pad, Math.min(clientX, window.innerWidth - rect.width - pad));
-  const top = Math.max(pad, Math.min(clientY, window.innerHeight - rect.height - pad));
-  canvasContextMenu.style.left = `${Math.round(left)}px`;
-  canvasContextMenu.style.top = `${Math.round(top)}px`;
-  canvasContextMenu.querySelector('button[role="menuitem"]')?.focus?.({ preventScroll: true });
-}
+function openCanvasContextMenu(...args) { return CanvasChrome.openCanvasContextMenu(...args); }
 
-async function handleCanvasContextMenuAction(action) {
-  const state = {
-    mode: canvasContextMenuState.mode,
-    itemId: canvasContextMenuState.itemId,
-    worldPoint: canvasContextMenuState.worldPoint
-      ? { ...canvasContextMenuState.worldPoint }
-      : null,
-  };
-  closeCanvasContextMenu();
-  if (state.mode === 'node') {
-    await runCanvasNodeAction(state.itemId, action);
-    return;
-  }
-  switch (action) {
-    case 'sort-date': {
-      const sortBy = normalizeSortBy('newest');
-      if (sortByEl) sortByEl.value = sortBy;
-      settings.sortBy = sortBy;
-      await saveSettings({ sortBy });
-      renderGrid();
-      showCopyToast(t('canvasCtxSortedDate'));
-      break;
-    }
-    case 'arrange-align':
-      arrangeCanvas('align');
-      break;
-    case 'backup-lite':
-      await exportLiteBackup({ toast: true });
-      break;
-    case 'add-note':
-      placeStickerNoteAt(state.worldPoint || canvasWorldViewportCenter());
-      break;
-    default:
-      break;
-  }
-}
+async function handleCanvasContextMenuAction(...args) { return await CanvasChrome.handleCanvasContextMenuAction(...args); }
 
-function isCanvasWheelControlTarget(target) {
-  return Boolean(
-    target?.closest?.(
-      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
-    )
-  );
-}
+function isCanvasWheelControlTarget(...args) { return CanvasIx.isCanvasWheelControlTarget(...args); }
 
-function normalizeCanvasWheelDelta(event) {
-  const mode = Number(event?.deltaMode) || 0;
-  const unit = mode === 1
-    ? 16
-    : mode === 2
-      ? Math.max(1, canvasViewportEl?.clientHeight || 800)
-      : 1;
-  const limit = 480;
-  const clampDelta = (value) => Math.max(-limit, Math.min(limit, (Number(value) || 0) * unit));
-  return { dx: clampDelta(event?.deltaX), dy: clampDelta(event?.deltaY) };
-}
+function normalizeCanvasWheelDelta(...args) { return CanvasIx.normalizeCanvasWheelDelta(...args); }
 
-function canvasWheelZoomFactor(deltaY, sensitivity = CANVAS_WHEEL_ZOOM_SENSITIVITY) {
-  const bounded = Math.max(-CANVAS_WHEEL_ZOOM_FRAME_LIMIT, Math.min(CANVAS_WHEEL_ZOOM_FRAME_LIMIT, Number(deltaY) || 0));
-  return Math.exp(-bounded * sensitivity);
-}
+function flushCanvasWheelZoom(...args) { return CanvasIx.flushCanvasWheelZoom(...args); }
 
-function canvasWheelZoomSensitivity(event) {
-  return event?.ctrlKey && (Number(event?.deltaMode) || 0) === 0
-    ? CANVAS_TRACKPAD_ZOOM_SENSITIVITY
-    : CANVAS_WHEEL_ZOOM_SENSITIVITY;
-}
+function scheduleCanvasWheelZoom(...args) { return CanvasIx.scheduleCanvasWheelZoom(...args); }
 
-function flushCanvasWheelZoom() {
-  if (canvasZoomWheelFrame) {
-    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(canvasZoomWheelFrame);
-    else clearTimeout(canvasZoomWheelFrame);
-    canvasZoomWheelFrame = 0;
-  }
-  const state = canvasZoomWheelState;
-  canvasZoomWheelState = null;
-  if (!state?.deltaY) return;
-  const currentZoom = canvasStoreSnapshot().layout.viewport.zoom || DEFAULT_CANVAS_VIEWPORT.zoom;
-  setCanvasZoom(
-    currentZoom * canvasWheelZoomFactor(state.deltaY),
-    state.clientX,
-    state.clientY
-  );
-}
+function beginCanvasPointer(...args) { return CanvasIx.beginCanvasPointer(...args); }
 
-function scheduleCanvasWheelZoom(event, deltaY) {
-  const sensitivity = canvasWheelZoomSensitivity(event);
-  const normalizedDelta = deltaY * (sensitivity / CANVAS_WHEEL_ZOOM_SENSITIVITY);
-  const state = canvasZoomWheelState || { deltaY: 0, clientX: null, clientY: null };
-  state.deltaY = Math.max(
-    -CANVAS_WHEEL_ZOOM_FRAME_LIMIT,
-    Math.min(CANVAS_WHEEL_ZOOM_FRAME_LIMIT, state.deltaY + normalizedDelta)
-  );
-  state.clientX = event.clientX;
-  state.clientY = event.clientY;
-  canvasZoomWheelState = state;
-  if (canvasZoomWheelFrame) return;
-  const schedule = typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame
-    : (callback) => setTimeout(callback, 16);
-  canvasZoomWheelFrame = schedule(() => {
-    canvasZoomWheelFrame = 0;
-    flushCanvasWheelZoom();
-  });
-}
+function applyCanvasPointer(...args) { return CanvasIx.applyCanvasPointer(...args); }
 
-function beginCanvasPointer(event, kind, id = '') {
-  if (event.button != null && event.button !== 0 && !(kind === 'pan' && event.button === 1)) return;
-  const point = canvasPointFromEvent(event);
-  if (kind === 'node') {
-    cancelCanvasNodeClick(id);
-    canvasNodeClickSuppressUntil.delete(id);
-    canvasSelectNode(id, event);
-  }
-  const ids = kind === 'node' ? [...activeCanvasSelection()] : [];
-  const searchPreview = kind === 'node' && isCanvasSearchPreviewActive();
-  let searchIds = [];
-  let searchStartPositions = {};
-  if (searchPreview) {
-    const searchContext = getCanvasSearchContext();
-    const renderLayout = canvasSearchLayoutFor(searchContext);
-    const visibleIds = new Set(searchContext.items.map((item) => item.id));
-    searchIds = ids.filter((selectedId) => visibleIds.has(selectedId) && renderLayout.positions?.[selectedId]);
-    searchStartPositions = Object.fromEntries(
-      searchIds.map((selectedId) => [selectedId, { ...renderLayout.positions[selectedId] }])
-    );
-  } else {
-    ensureCanvasStore()?.beginPointer(kind, {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      ids,
-    });
-  }
-  canvasPointerState = {
-    kind,
-    id,
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    startPoint: point,
-    moved: false,
-    selectionAdditive: Boolean(event.metaKey || event.ctrlKey || event.shiftKey),
-    initialSelection: [...activeCanvasSelection()],
-    searchPreview,
-    searchIds,
-    searchStartPositions,
-  };
-  canvasInteractionGeneration += 1;
-  canvasViewportEl?.setPointerCapture?.(event.pointerId);
-  canvasViewportEl?.classList.toggle('is-panning', kind === 'pan');
-  if (kind !== 'node') event.preventDefault();
-}
-
-function applyCanvasPointer(event) {
-  const state = canvasPointerState;
-  if (!state || state.pointerId !== event.pointerId) return;
-  const dx = event.clientX - state.startX;
-  const dy = event.clientY - state.startY;
-  if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) state.moved = true;
-  if (state.kind === 'node') {
-    const zoom = canvasStoreSnapshot().layout.viewport.zoom || 1;
-    if (state.searchPreview) {
-      applyCanvasSearchPointerPreview(state, dx / zoom, dy / zoom);
-      return;
-    }
-    ensureCanvasStore()?.previewPointer({ dx: dx / zoom, dy: dy / zoom, moved: state.moved });
-    return;
-  }
-  if (state.kind === 'pan') {
-    const zoom = canvasStoreSnapshot().layout.viewport.zoom || 1;
-    ensureCanvasStore()?.previewPointer({ dx: -dx / zoom, dy: -dy / zoom, moved: state.moved });
-    return;
-  }
-  if (state.kind === 'lasso') {
-    const current = canvasPointFromEvent(event);
-    const x = Math.min(state.startPoint.x, current.x);
-    const y = Math.min(state.startPoint.y, current.y);
-    const w = Math.abs(current.x - state.startPoint.x);
-    const h = Math.abs(current.y - state.startPoint.y);
-    if (canvasSelectionEl) {
-      canvasSelectionEl.hidden = false;
-      canvasSelectionEl.style.left = `${x}px`;
-      canvasSelectionEl.style.top = `${y}px`;
-      canvasSelectionEl.style.width = `${w}px`;
-      canvasSelectionEl.style.height = `${h}px`;
-    }
-    const ids = [...canvasNodeElements.keys()]
-      .map((id) => ({ id, rect: canvasNodeWorldRectFromState(id) }))
-      .filter(({ rect }) => rect && rect.x < x + w && rect.x + rect.w > x && rect.y < y + h && rect.y + rect.h > y)
-      .map(({ id }) => id)
-      .filter(Boolean);
-    const nextSelection = state.selectionAdditive
-      ? [...new Set([...state.initialSelection, ...ids])]
-      : ids;
-    setCanvasSelection(nextSelection);
-  }
-}
-
-function updateCanvasPointer(event) {
-  canvasLastPointerEvent = event;
-  canvasQueuedPointerEvent = event;
-  if (canvasPointerRaf) return;
-  const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 16);
-  canvasPointerRaf = schedule(() => {
-    canvasPointerRaf = 0;
-    const next = canvasQueuedPointerEvent;
-    canvasQueuedPointerEvent = null;
-    if (next) applyCanvasPointer(next);
-  });
-}
+function updateCanvasPointer(...args) { return CanvasIx.updateCanvasPointer(...args); }
 
 function flushCanvasPointerFrame(event = canvasLastPointerEvent) {
   if (canvasPointerRaf) {
@@ -10563,123 +2894,15 @@ function clearCanvasPointerUi(pointerId = null) {
   canvasViewportEl?.classList.remove('is-panning');
 }
 
-function cancelCanvasPointer() {
-  const state = canvasPointerState;
-  if (!state) return;
-  flushCanvasPointerFrame();
-  if (state.kind === 'node' && state.moved) {
-    cancelCanvasNodeClick(state.id);
-    suppressCanvasNodeClick(state.id);
-  }
-  if (state.searchPreview) finishCanvasSearchPointer(state, false);
-  else ensureCanvasStore()?.cancelPointer();
-  clearCanvasPointerUi(state.pointerId);
-}
+function cancelCanvasPointer(...args) { return AppHelpers.cancelCanvasPointer(...args); }
 
-async function endCanvasPointer(event) {
-  const state = canvasPointerState;
-  if (!state || state.pointerId !== event.pointerId) return;
-  flushCanvasPointerFrame(event);
-  if (!state.moved && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) >= DRAG_THRESHOLD) state.moved = true;
-  const pointerGeneration = canvasInteractionGeneration;
-  const finalPoint = canvasPointFromEvent(event);
-  const operation = state.searchPreview
-    ? null
-    : ensureCanvasStore()?.finishPointer({
-        commit: state.moved,
-        snap: state.kind === 'node' && canvasSnapToGrid,
-      });
-  if (state.searchPreview) finishCanvasSearchPointer(state, state.moved);
-  clearCanvasPointerUi(event.pointerId);
-  if (state.kind === 'node') {
-    if (state.moved) {
-      cancelCanvasNodeClick(state.id);
-      suppressCanvasNodeClick(state.id);
-    }
-    if (!state.moved) {
-      const item = canvasItemById(state.id);
-      if (item && canvasActiveTool === 'select' && !state.selectionAdditive) scheduleCanvasNodePreview(item);
-      updateCanvasNodeSelection();
-      updateBatchBar();
-      return;
-    }
-    if (state.searchPreview) {
-      updateCanvasNodeSelection();
-      updateBatchBar();
-      return;
-    }
-    let stacked = false;
-    if (activeCanvasSelection().size === 1) {
-      const targetId = canvasTargetAt(finalPoint, state.id);
-      if (targetId) {
-        await ensureCanvasStore()?.flush?.();
-        if (pointerGeneration !== canvasInteractionGeneration) return;
-        const result = await sendMessage({ type: 'STACK_ITEMS', sourceId: state.id, targetId });
-        if (result?.ok) {
-          stacked = true;
-          ensureCanvasStore()?.setSelection([]);
-          selectMode = false;
-          await loadList();
-        }
-      }
-    }
-    if (!stacked) ensureCanvasStore()?.flush?.();
-    updateCanvasNodeSelection();
-    updateBatchBar();
-  } else if (state.kind === 'pan' && state.moved) {
-    ensureCanvasStore()?.flush?.();
-  }
-}
+async function endCanvasPointer(...args) { return await CanvasIx.endCanvasPointer(...args); }
 
-function beginCanvasMinimapDrag(event) {
-  if (!canvasMinimapViewport || event.button !== 0 || !event.isPrimary || canvasMinimapDragState) return;
-  renderCanvasMinimap(getCanvasVisibleTabs());
-  const projection = canvasMinimapProjection;
-  if (!projection) return;
-  const viewport = canvasStoreSnapshot().layout.viewport;
-  canvasMinimapDragState = {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    startViewport: { ...viewport },
-    projection,
-  };
-  canvasMinimap.classList.add('is-dragging');
-  canvasMinimapViewport.setPointerCapture?.(event.pointerId);
-  ensureCanvasStore()?.beginPointer('pan', {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-  });
-  event.preventDefault();
-  event.stopPropagation();
-}
+function beginCanvasMinimapDrag(...args) { return CanvasIx.beginCanvasMinimapDrag(...args); }
 
-function updateCanvasMinimapDrag(event) {
-  const state = canvasMinimapDragState;
-  if (!state || state.pointerId !== event.pointerId) return;
-  const dx = (event.clientX - state.startX) / Math.max(0.0001, state.projection.scale);
-  const dy = (event.clientY - state.startY) / Math.max(0.0001, state.projection.scale);
-  ensureCanvasStore()?.previewPointer({ dx, dy, moved: Math.hypot(dx, dy) >= 1 });
-  event.preventDefault();
-}
+function updateCanvasMinimapDrag(...args) { return CanvasIx.updateCanvasMinimapDrag(...args); }
 
-function endCanvasMinimapDrag({ event = null, commit = true } = {}) {
-  const state = canvasMinimapDragState;
-  if (!state) return;
-  if (event && event.pointerId !== state.pointerId) return;
-  ensureCanvasStore()?.finishPointer({ commit });
-  try {
-    canvasMinimapViewport?.releasePointerCapture?.(state.pointerId);
-  } catch {
-    // ignore
-  }
-  canvasMinimapDragState = null;
-  canvasMinimapProjection = null;
-  canvasMinimap?.classList.remove('is-dragging');
-  renderCanvasMinimap(getCanvasVisibleTabs());
-  if (commit) ensureCanvasStore()?.flush?.();
-}
+function endCanvasMinimapDrag(...args) { return CanvasIx.endCanvasMinimapDrag(...args); }
 
 function resetCanvasNotePlacement() {
   setCanvasActiveTool(canvasActiveTool === 'note' ? 'select' : canvasActiveTool);
@@ -10690,335 +2913,15 @@ function armCanvasNotePlacement() {
   canvasViewportEl?.focus?.({ preventScroll: true });
 }
 
-function setCanvasActiveTool(nextTool) {
-  canvasActiveTool = nextTool === 'area' || nextTool === 'link' || nextTool === 'note'
-    ? nextTool
-    : 'select';
-  canvasNotePlacementArmed = canvasActiveTool === 'note';
-  canvasView?.classList.toggle('is-note-placement', canvasNotePlacementArmed);
-  document.querySelectorAll('[data-canvas-tool]').forEach((tool) => {
-    const active = tool.dataset.canvasTool === canvasActiveTool;
-    tool.classList.toggle('active', active);
-    tool.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
-  canvasViewportEl?.classList.toggle('is-link-tool', canvasActiveTool === 'link');
-  updateCanvasNodeSelection();
-  if (canvasActiveTool !== 'link') {
-    cancelCanvasConnectionDrag();
-    canvasConnectionSourceId = '';
-    updateCanvasNodeSelection();
-    renderCanvasConnections();
-  }
-}
+function setCanvasActiveTool(...args) { return AppHelpers.setCanvasActiveTool(...args); }
 
-function placeStickerNoteAt(point) {
-  resetCanvasNotePlacement();
-  openStickerNoteEditor(null, { position: point });
-}
+function placeStickerNoteAt(...args) { return StickerUi.placeStickerNoteAt(...args); }
 
-function initCanvasInteractions() {
-  if (!canvasViewportEl) return;
-  canvasViewportEl.addEventListener('contextmenu', (event) => {
-    const node = event.target.closest?.('.canvas-node');
-    if (node) {
-      event.preventDefault();
-      const id = node.dataset.id || '';
-      if (!id) return;
-      ensureCanvasStore()?.setSelection([id]);
-      updateCanvasNodeSelection();
-      updateBatchBar();
-      openCanvasContextMenu(event.clientX, event.clientY, { mode: 'node', itemId: id });
-      return;
-    }
-    if (isCanvasControlTarget(event.target)) return;
-    event.preventDefault();
-    openCanvasContextMenu(event.clientX, event.clientY, {
-      mode: 'blank',
-      worldPoint: canvasPointFromEvent(event),
-    });
-  });
-  canvasContextMenu?.addEventListener('click', (event) => {
-    const btn = event.target.closest?.('[data-canvas-ctx]');
-    if (!btn || !canvasContextMenu.contains(btn)) return;
-    event.preventDefault();
-    handleCanvasContextMenuAction(btn.dataset.canvasCtx || '');
-  });
-  document.addEventListener('pointerdown', (event) => {
-    if (!isCanvasContextMenuOpen()) return;
-    if (event.target.closest?.('#canvasContextMenu')) return;
-    closeCanvasContextMenu();
-  }, true);
-  canvasViewportEl.addEventListener('pointerdown', (event) => {
-    if (isCanvasContextMenuOpen() && !event.target.closest?.('#canvasContextMenu')) {
-      closeCanvasContextMenu();
-    }
-    if (event.button === 1) {
-      handleCanvasMiddleClick(event);
-      if (!isCanvasControlTarget(event.target)) beginCanvasPointer(event, 'pan');
-      return;
-    }
-    clearCanvasMiddleClickSequence();
-    if (isCanvasControlTarget(event.target)) return;
-    const node = event.target.closest?.('.canvas-node');
-    if (event.button === 0 && !node && (selectedCanvasConnectionId || canvasConnectionSourceId)) {
-      clearCanvasConnectionSelection();
-    }
-    if (canvasNotePlacementArmed && event.button === 0) {
-      if (node) return;
-      event.preventDefault();
-      placeStickerNoteAt(canvasPointFromEvent(event));
-      return;
-    }
-    if (canvasActiveTool === 'link') {
-      if (event.button !== 0) return;
-      handleCanvasConnectionNodeClick(node?.dataset.id || '');
-      event.preventDefault();
-      return;
-    }
-    if (node && canvasActiveTool === 'select' && !canvasSpacePressed) {
-      beginCanvasPointer(event, 'node', node.dataset.id);
-      node.focus({ preventScroll: true });
-      return;
-    }
-    if (canvasActiveTool === 'area') {
-      beginCanvasPointer(event, 'lasso');
-      return;
-    }
-    if (canvasActiveTool === 'select' || canvasSpacePressed) {
-      beginCanvasPointer(event, 'pan');
-    }
-  });
-  canvasViewportEl.addEventListener('pointermove', updateCanvasPointer);
-  canvasViewportEl.addEventListener('pointerup', endCanvasPointer);
-  canvasViewportEl.addEventListener('pointercancel', cancelCanvasPointer);
-  canvasViewportEl.addEventListener('lostpointercapture', () => {
-    if (canvasPointerState) cancelCanvasPointer();
-    if (canvasConnectionDragState) cancelCanvasConnectionDrag();
-  });
-  window.addEventListener('blur', () => {
-    cancelCanvasPointer();
-    cancelCanvasConnectionDrag();
-  });
-  canvasMinimapViewport?.addEventListener('pointerdown', beginCanvasMinimapDrag);
-  window.addEventListener('pointermove', updateCanvasMinimapDrag, true);
-  window.addEventListener('pointermove', updateCanvasConnectionDrag, true);
-  window.addEventListener('pointerup', (event) => endCanvasMinimapDrag({ event }), true);
-  window.addEventListener('pointerup', (event) => endCanvasConnectionDrag(event), true);
-  window.addEventListener('pointercancel', (event) => endCanvasMinimapDrag({ event, commit: false }), true);
-  window.addEventListener('pointercancel', (event) => endCanvasConnectionDrag(event, false), true);
-  canvasMinimapViewport?.addEventListener('lostpointercapture', () => {
-    if (canvasMinimapDragState) endCanvasMinimapDrag({ commit: false });
-  });
-  window.addEventListener('blur', () => endCanvasMinimapDrag({ commit: false }));
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') cancelCanvasPointer();
-    if (document.visibilityState !== 'visible') cancelCanvasConnectionDrag();
-    if (document.visibilityState !== 'visible') endCanvasMinimapDrag({ commit: false });
-  });
-  canvasViewportEl.addEventListener('wheel', (event) => {
-    if (isCanvasWheelControlTarget(event.target)) return;
-    const { dx, dy } = normalizeCanvasWheelDelta(event);
-    if (!dx && !dy) return;
-    closeCanvasContextMenu();
-    const modifierZoom = Boolean(event.ctrlKey || event.metaKey) && dy !== 0;
-    event.preventDefault();
-    if (modifierZoom) {
-      scheduleCanvasWheelZoom(event, dy);
-      return;
-    }
-    flushCanvasWheelZoom();
-    const zoom = canvasStoreSnapshot().layout.viewport.zoom || DEFAULT_CANVAS_VIEWPORT.zoom;
-    ensureCanvasStore()?.commitPan(dx / zoom, dy / zoom);
-  }, { passive: false });
-  const refreshCanvasGeometry = () => {
-    if (settings.viewMode !== 'canvas' || canvasSessionFallback) return;
-    renderCanvasMinimap(getCanvasVisibleTabs());
-    scheduleInitialCanvasCenter();
-  };
-  window.addEventListener('resize', refreshCanvasGeometry);
-  if (typeof ResizeObserver === 'function') {
-    canvasGeometryObserver = new ResizeObserver(refreshCanvasGeometry);
-    canvasGeometryObserver.observe(canvasViewportEl);
-    if (canvasMinimap) canvasGeometryObserver.observe(canvasMinimap);
-  }
-  canvasViewportEl.addEventListener('dblclick', (event) => {
-    if (event.button !== 0 || isCanvasControlTarget(event.target)) return;
-    const node = event.target.closest?.('.canvas-node');
-    const id = node?.dataset.id || canvasTargetAt(canvasPointFromEvent(event));
-    if (id) {
-      cancelCanvasNodeClick(id);
-      restoreItem(id);
-    } else {
-      setCanvasActiveTool(canvasActiveTool === 'area' ? 'select' : 'area');
-      canvasViewportEl.focus({ preventScroll: true });
-    }
-  });
-  canvasViewportEl.addEventListener('keydown', (event) => {
-    const focusedConnection = event.target.closest?.('.canvas-connection');
-    if (focusedConnection && (event.key === 'Delete' || event.key === 'Backspace')) {
-      event.preventDefault();
-      deleteCanvasConnection(focusedConnection.dataset.connectionId || '');
-      return;
-    }
-    const focusedNode = event.target.closest?.('.canvas-node');
-    if (focusedNode && event.target === focusedNode) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        restoreItem(focusedNode.dataset.id);
-        return;
-      }
-      if (event.key === ' ' || event.code === 'Space') {
-        event.preventDefault();
-        canvasSelectNode(focusedNode.dataset.id, event);
-        return;
-      }
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        deleteItem(focusedNode.dataset.id);
-        return;
-      }
-    }
-    if (event.key === 'Escape') {
-      if (isCanvasContextMenuOpen()) {
-        event.preventDefault();
-        closeCanvasContextMenu();
-        return;
-      }
-      if (canvasNotePlacementArmed) {
-        event.preventDefault();
-        resetCanvasNotePlacement();
-        return;
-      }
-      if (canvasZoomMenu && !canvasZoomMenu.hidden) {
-        event.preventDefault();
-        event.stopPropagation();
-        closeCanvasZoomMenu();
-        return;
-      }
-      cancelCanvasConnectionDrag();
-      clearCanvasConnectionSelection();
-      ensureCanvasStore()?.setSelection([]);
-      updateCanvasNodeSelection();
-      updateBatchBar();
-      return;
-    }
-    if (event.key === 'Enter' && activeCanvasSelection().size === 1) {
-      event.preventDefault();
-      restoreItem([...activeCanvasSelection()][0]);
-      return;
-    }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedCanvasConnectionId) {
-      event.preventDefault();
-      deleteCanvasConnection();
-      return;
-    }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && activeCanvasSelection().size) {
-      event.preventDefault();
-      batchDelete?.click();
-      return;
-    }
-    if (event.key.startsWith('Arrow') && activeCanvasSelection().size) {
-      event.preventDefault();
-      const amount = event.shiftKey ? 24 : 8;
-      const dx = event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;
-      const dy = event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0;
-      canvasMoveSelected(dx, dy);
-    }
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.code !== 'Space' || isTypingTarget(event.target)) return;
-    canvasSpacePressed = true;
-    if (document.activeElement === canvasViewportEl) event.preventDefault();
-  });
-  document.addEventListener('keyup', (event) => {
-    if (event.code === 'Space') canvasSpacePressed = false;
-  });
-  document.querySelectorAll('[data-canvas-tool]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setCanvasActiveTool(button.dataset.canvasTool || 'select');
-    });
-  });
-  canvasAddNoteBtn?.addEventListener('click', armCanvasNotePlacement);
-  canvasViewportEl.classList.toggle('is-link-tool', canvasActiveTool === 'link');
-  updateCanvasNodeSelection();
-  document.getElementById('canvasZoomOut')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom - 0.1));
-  document.getElementById('canvasZoomIn')?.addEventListener('click', () => setCanvasZoom(canvasStoreSnapshot().layout.viewport.zoom + 0.1));
-  document.getElementById('canvasResetView')?.addEventListener('click', resetCanvasView);
-  if (canvasZoomSlider) {
-    canvasZoomSlider.min = String(CANVAS_ZOOM_MIN);
-    canvasZoomSlider.max = String(CANVAS_ZOOM_MAX);
-    canvasZoomSlider.step = String(CANVAS_ZOOM_STEP);
-    canvasZoomSlider.addEventListener('input', (event) => setCanvasZoom(event.currentTarget.value));
-  }
-  canvasZoomValueWrap?.addEventListener('pointerenter', () => {
-    canvasZoomValueWrap.dataset.pointerOutside = 'false';
-  });
-  canvasZoomValueWrap?.addEventListener('pointerleave', () => {
-    canvasZoomValueWrap.dataset.pointerOutside = 'true';
-  });
-  canvasZoomValue?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    toggleCanvasZoomMenu();
-  });
-  canvasZoomMenu?.querySelectorAll('[data-canvas-zoom-action]').forEach((button) => {
-    button.addEventListener('click', () => applyCanvasZoomAction(button.dataset.canvasZoomAction || ''));
-  });
-  document.addEventListener('pointerdown', (event) => {
-    if (!event.target.closest?.('#canvasZoomValueWrap')) {
-      closeCanvasZoomMenu();
-      if (canvasZoomValueWrap) canvasZoomValueWrap.dataset.pointerOutside = 'true';
-    }
-  });
-  document.getElementById('canvasAllBtn')?.addEventListener('click', () => setCanvasIndexFilter('all'));
-  document.getElementById('canvasUnsortedBtn')?.addEventListener('click', () => setCanvasIndexFilter('unsorted'));
-  document.getElementById('canvasPinnedBtn')?.addEventListener('click', () => setCanvasIndexFilter('pinned'));
-  document.querySelectorAll('[data-canvas-action]').forEach((button) => {
-    button.addEventListener('click', () => canvasAction(button.dataset.canvasAction));
-  });
-  canvasStackConfirm?.addEventListener('click', createCanvasStackFromSelection);
-  canvasStackCancel?.addEventListener('click', closeCanvasStackDialog);
-  canvasStackTitle?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') createCanvasStackFromSelection();
-  });
-  canvasDropZone?.addEventListener('click', openCanvasStackDialog);
-}
+function initCanvasInteractions(...args) { return CanvasIx.initCanvasInteractions(...args); }
 
-function renderEmpty(message) {
-  gridNodeElements.clear();
-  gridEl.innerHTML = `
-    <div class="empty" style="grid-column: 1 / -1">
-      <strong>${escapeHtml(message.title)}</strong>
-      ${message.body}
-    </div>
-  `;
-}
+function renderEmpty(...args) { return ListUi.renderEmpty(...args); }
 
-function gridNodeRenderKey(item, isList) {
-  return JSON.stringify({
-    isList,
-    id: item.id,
-    kind: item.kind,
-    title: item.title,
-    url: item.url,
-    note: item.note,
-    tags: item.tags,
-    pinned: item.pinned,
-    savedAt: item.savedAt,
-    favIconUrl: item.favIconUrl,
-    markdown: item.kind === 'note' ? item.markdown : undefined,
-    attachments: item.kind === 'note'
-      ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
-      : undefined,
-    tabs: item.kind === 'group'
-      ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
-      : undefined,
-    notes: item.kind === 'group'
-      ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
-      : undefined,
-    query,
-    locale: settings.locale,
-  });
-}
+function gridNodeRenderKey(...args) { return AppHelpers.gridNodeRenderKey(...args); }
 
 function removeGridNode(id, node) {
   node?.querySelectorAll('img.lazy-thumb').forEach((img) => {
@@ -11037,141 +2940,13 @@ function updateGridSelectionUi() {
   });
 }
 
-function renderGrid() {
-  if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
-    renderCanvas();
-    return;
-  }
-  disconnectCanvasMediaObserver();
-  // Fresh match cache for this paint (shared by filter + group hit rows)
-  searchMatchCache = new Map();
-  const filtered = getVisibleTabs();
-  updateSavedBadge();
-
-  if (allTabs.length === 0) {
-    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-    searchMatchCache = null;
-    renderEmpty({ title: t('emptyTitle'), body: t('emptyBody') });
-    return;
-  }
-  if (filtered.length === 0) {
-    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-    searchMatchCache = null;
-    renderEmpty({ title: t('noResultsTitle'), body: t('noResultsBody') });
-    return;
-  }
-
-  const isList = settings.viewMode === 'list' || canvasSessionFallback;
-  if (gridNodeIsList !== isList) {
-    // Rare full mode switch — cheap fallback, matches the old always-full-rebuild behavior.
-    if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-    gridEl.innerHTML = '';
-    gridNodeElements.clear();
-    gridNodeIsList = isList;
-  }
-  applyCardCols(settings.cardCols);
-
-  const visibleIds = new Set(filtered.map((item) => item.id));
-  for (const [id, node] of gridNodeElements) {
-    if (!visibleIds.has(id)) removeGridNode(id, node);
-  }
-  gridEl.querySelector('.empty')?.remove();
-
-  const frag = document.createDocumentFragment();
-  filtered.forEach((item) => {
-    const renderKey = gridNodeRenderKey(item, isList);
-    let node = gridNodeElements.get(item.id);
-    if (!node || node.dataset.gridRenderKey !== renderKey) {
-      const fresh = isList ? createRow(item) : createCard(item);
-      fresh.dataset.gridRenderKey = renderKey;
-      if (node) node.replaceWith(fresh);
-      node = fresh;
-      gridNodeElements.set(item.id, node);
-    }
-    // Moving an existing node through the fragment preserves DOM order
-    // without recreating it (same pattern as renderCanvas).
-    frag.appendChild(node);
-  });
-  gridEl.appendChild(frag);
-  updateGridSelectionUi();
-  searchMatchCache = null;
-}
+function renderGrid(...args) { return ListUi.renderGrid(...args); }
 
 let loadListTimer = null;
 
-async function loadList() {
-  const generation = ++canvasLoadGeneration;
-  const [res, layoutRes] = await Promise.all([
-    sendMessage({ type: 'GET_PARKED_ITEMS' }),
-    sendMessage({ type: 'GET_CANVAS_LAYOUT' }),
-  ]);
-  if (generation !== canvasLoadGeneration) return false;
-  if (!res?.ok || (!Array.isArray(res.items) && !Array.isArray(res.tabs))) {
-    if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
-    uiLog('error', 'load', 'parked items unavailable', res?.error || 'invalid_response');
-    if (settings.viewMode === 'canvas') {
-      canvasSessionFallback = true;
-      applyViewMode('list');
-      renderGrid();
-    }
-    return false;
-  }
-  if (loadStatusEl) loadStatusEl.textContent = '';
-  const raw =
-    Array.isArray(res.items)
-      ? res.items
-      : Array.isArray(res.tabs)
-        ? res.tabs
-        : [];
-  allTabs = normalizeParkedList(raw);
-  tagSuggestIndexDirty = true;
-  pruneAttachmentUrlCache(allTabs);
-  if (!layoutRes?.ok && settings.viewMode === 'canvas') {
-    ensureCanvasStore()?.setItems(allTabs);
-    canvasNeedsInitialCenter = false;
-    canvasSessionFallback = true;
-    applyViewMode('list');
-    renderGrid();
-    uiLog('error', 'canvas', 'layout unavailable', layoutRes?.error || 'invalid_response');
-    return false;
-  }
-  const store = ensureCanvasStore();
-  const current = store?.getState?.();
-  if (current?.pendingOperations?.length || current?.interaction) {
-    canvasNeedsInitialCenter = false;
-    store.setItems(allTabs);
-    if (layoutRes?.ok) store.applyRemote(layoutRes.layout, layoutRes.revision);
-  } else {
-    store.hydrate(
-      allTabs,
-      layoutRes?.ok ? layoutRes.layout : canvasLayout,
-      layoutRes?.ok ? layoutRes.revision : current?.revision || 0,
-    );
-    canvasNeedsInitialCenter = Boolean(layoutRes?.ok && layoutRes.needsInitialCenter);
-  }
-  canvasSessionFallback = false;
-  applyViewMode(settings.viewMode);
-  renderCanvasStackIndex();
-  renderGrid();
-  scheduleInitialCanvasCenter();
-  return true;
-}
+async function loadList(...args) { return await WorkspaceUi.loadList(...args); }
 
-function scheduleLoadList() {
-  if (loadListTimer) clearTimeout(loadListTimer);
-  loadListTimer = setTimeout(() => {
-    loadListTimer = null;
-    loadList().catch((err) => {
-      if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
-      uiLog('error', 'load', 'exception', err?.message || err);
-      if (settings.viewMode === 'canvas') {
-        canvasSessionFallback = true;
-        applyViewMode('list');
-        renderGrid();
-      }
-    });
-  }, 150);
-}
+function scheduleLoadList(...args) { return AppHelpers.scheduleLoadList(...args); }
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;

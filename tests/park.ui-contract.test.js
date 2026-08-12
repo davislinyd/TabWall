@@ -3,9 +3,75 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const PARK_SOURCE = fs.readFileSync(new URL('../park.js', import.meta.url), 'utf8');
-const HTML_SOURCE = fs.readFileSync(new URL('../park.html', import.meta.url), 'utf8');
+const SEARCH_QUERY_SOURCE = fs.readFileSync(new URL('../parkSearchQuery.js', import.meta.url), 'utf8');
+const SEARCH_UI_SOURCE = fs.readFileSync(new URL('../parkSearchUi.js', import.meta.url), 'utf8');
+const MEDIA_UI_SOURCE = fs.readFileSync(new URL('../parkMediaUi.js', import.meta.url), 'utf8');
+const CANVAS_GEOM_SOURCE = fs.readFileSync(new URL('../parkCanvasGeometry.js', import.meta.url), 'utf8');
+const CANVAS_RENDER_SOURCE = fs.readFileSync(new URL('../parkCanvasRender.js', import.meta.url), 'utf8');
+const CANVAS_IX_SOURCE = fs.readFileSync(new URL('../parkCanvasInteraction.js', import.meta.url), 'utf8');
+const CANVAS_CHROME_SOURCE = fs.readFileSync(new URL('../parkCanvasChrome.js', import.meta.url), 'utf8');
+const LIST_UI_SOURCE = fs.readFileSync(new URL('../parkListUi.js', import.meta.url), 'utf8');
+const WORKSPACE_UI_SOURCE = fs.readFileSync(new URL('../parkWorkspaceUi.js', import.meta.url), 'utf8');
+const APP_HELPERS_SOURCE = fs.readFileSync(new URL('../parkAppHelpers.js', import.meta.url), 'utf8');
+const I18N_SOURCE = fs.readFileSync(new URL('../parkI18n.js', import.meta.url), 'utf8');
+const SETTINGS_UI_SOURCE = fs.readFileSync(new URL('../parkSettingsUi.js', import.meta.url), 'utf8');
+const IMPORT_EXPORT_SOURCE = fs.readFileSync(new URL('../parkImportExport.js', import.meta.url), 'utf8');
+const STICKER_UI_SOURCE = fs.readFileSync(new URL('../parkStickerUi.js', import.meta.url), 'utf8');
+const HTML_MARKUP = fs.readFileSync(new URL('../park.html', import.meta.url), 'utf8');
+const CSS_SOURCE = fs.readFileSync(new URL('../park.css', import.meta.url), 'utf8');
+// Markup + external CSS (styles moved out of park.html in v2.29.1).
+const HTML_SOURCE = `${HTML_MARKUP}\n${CSS_SOURCE}`;
 const STORE_SOURCE = fs.readFileSync(new URL('../canvasStore.js', import.meta.url), 'utf8');
-const WORKBENCH_CSS = HTML_SOURCE.split('/* ─── TabWall 2.17.0 Editorial Workbench')[1] || '';
+// Combined park runtime surface for contract tests (core + extracted domains).
+const PARK_BEHAVIOR_SOURCE = [
+  PARK_SOURCE,
+  typeof CANVAS_IX_SOURCE !== 'undefined' ? CANVAS_IX_SOURCE : '',
+  typeof CANVAS_CHROME_SOURCE !== 'undefined' ? CANVAS_CHROME_SOURCE : '',
+  typeof LIST_UI_SOURCE !== 'undefined' ? LIST_UI_SOURCE : '',
+  typeof WORKSPACE_UI_SOURCE !== 'undefined' ? WORKSPACE_UI_SOURCE : '',
+  typeof APP_HELPERS_SOURCE !== 'undefined' ? APP_HELPERS_SOURCE : '',
+  typeof CANVAS_RENDER_SOURCE !== 'undefined' ? CANVAS_RENDER_SOURCE : '',
+  typeof CANVAS_GEOM_SOURCE !== 'undefined' ? CANVAS_GEOM_SOURCE : '',
+  typeof I18N_SOURCE !== 'undefined' ? I18N_SOURCE : '',
+  typeof SETTINGS_UI_SOURCE !== 'undefined' ? SETTINGS_UI_SOURCE : '',
+  typeof IMPORT_EXPORT_SOURCE !== 'undefined' ? IMPORT_EXPORT_SOURCE : '',
+  typeof STICKER_UI_SOURCE !== 'undefined' ? STICKER_UI_SOURCE : '',
+].join('\n');
+// Flat copy: strip env. so contracts written for pre-extract free names still match module bodies.
+const PARK_BEHAVIOR_FLAT = PARK_BEHAVIOR_SOURCE.replace(/\benv\./g, '');
+
+/** Prefer full implementation body over one-line `...args` thin aliases. */
+function extractFnSource(src, name) {
+  const re = new RegExp(`(?:async )?function ${name}\\s*\\(`, 'g');
+  let best = '';
+  let m;
+  while ((m = re.exec(src))) {
+    const from = m.index;
+    // brace-match from first { after this match
+    let i = src.indexOf('{', from);
+    if (i < 0) continue;
+    let depth = 0;
+    let end = -1;
+    for (let j = i; j < src.length; j++) {
+      const ch = src[j];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          end = j;
+          break;
+        }
+      }
+    }
+    if (end < 0) continue;
+    const chunk = src.slice(from, end + 1);
+    if (chunk.includes('...args') && chunk.length < 160) continue;
+    if (chunk.length > best.length) best = chunk;
+  }
+  return best;
+}
+
+const WORKBENCH_CSS = CSS_SOURCE.split('/* ─── TabWall 2.17.0 Editorial Workbench')[1] || CSS_SOURCE;
 
 test('Spatial Canvas exposes isolated controls and complete node actions', () => {
   assert.match(HTML_SOURCE, /id="canvasViewport"[^>]*class="canvas-viewport"/);
@@ -24,41 +90,45 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /id="canvasLinkBtn"[^>]*data-canvas-tool="link"/);
   assert.match(HTML_SOURCE, /id="lbGroupMosaic" class="lb-group-mosaic"/);
   for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
-    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
+    assert.match(CANVAS_RENDER_SOURCE, new RegExp(`action: '${action}'`));
   }
-  assert.match(PARK_SOURCE, /function canvasNodeActionEntries\(/);
-  assert.match(PARK_SOURCE, /async function runCanvasNodeAction\(/);
-  assert.match(PARK_SOURCE, /function isCanvasControlTarget\(target\)/);
-  assert.match(PARK_SOURCE, /function isCanvasWheelControlTarget\(target\)/);
-  assert.match(PARK_SOURCE, /if \(isCanvasControlTarget\(event\.target\)\) return;/);
-  assert.match(PARK_SOURCE, /node\.focus\(\{ preventScroll: true \}\)/);
-  assert.match(PARK_SOURCE, /getBoundingClientRect\(\)/);
-  assert.match(PARK_SOURCE, /canvasActiveTool === 'area'[\s\S]*?beginCanvasPointer\(event, 'lasso'\)/);
-  assert.match(PARK_SOURCE, /canvasActiveTool === 'select' \|\| canvasSpacePressed[\s\S]*?beginCanvasPointer\(event, 'pan'\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_SOURCE, /TabWallCanvasRender/);
+  assert.match(PARK_BEHAVIOR_FLAT, /async function runCanvasNodeAction\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasControlTarget\(target\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasWheelControlTarget\(target\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(isCanvasControlTarget\(event\.target\)\) return;/);
+  assert.match(PARK_BEHAVIOR_FLAT, /node\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /getBoundingClientRect\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasActiveTool === 'area'[\s\S]*?beginCanvasPointer\(event, 'lasso'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasActiveTool === 'select' \|\| canvasSpacePressed[\s\S]*?beginCanvasPointer\(event, 'pan'\)/);
   assert.doesNotMatch(PARK_SOURCE, /canvasActiveTool === 'pan'/);
   assert.doesNotMatch(HTML_SOURCE, /data-canvas-tool="pan"/);
-  assert.match(PARK_SOURCE, /classList\.toggle\('is-panning', kind === 'pan'\)/);
-  assert.match(PARK_SOURCE, /normalizeCanvasWheelDelta\(event\)/);
-  assert.match(PARK_SOURCE, /event\.ctrlKey \|\| event\.metaKey/);
-  assert.match(PARK_SOURCE, /commitPan\(dx \/ zoom, dy \/ zoom\)/);
-  assert.match(PARK_SOURCE, /scheduleCanvasWheelZoom\(event, dy\)/);
-  assert.match(PARK_SOURCE, /CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0\.006/);
-  assert.match(PARK_SOURCE, /flushCanvasWheelZoom\(\)/);
-  assert.match(PARK_SOURCE, /const CANVAS_NODE_CLICK_DELAY = 300/);
-  assert.match(PARK_SOURCE, /scheduleCanvasNodePreview\(item\)/);
-  assert.match(PARK_SOURCE, /event\.detail > 1/);
-  assert.match(PARK_SOURCE, /openCanvasGroupLightbox\(current\)/);
-  assert.match(PARK_SOURCE, /suppressCanvasNodeClick\(state\.id\)/);
-  const pointerControlSource = PARK_SOURCE.match(/function isCanvasControlTarget\(target\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(PARK_BEHAVIOR_FLAT, /classList\.toggle\('is-panning', kind === 'pan'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /normalizeCanvasWheelDelta\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.ctrlKey \|\| event\.metaKey/);
+  assert.match(PARK_BEHAVIOR_FLAT, /commitPan\(dx \/ zoom, dy \/ zoom\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /scheduleCanvasWheelZoom\(event, dy\)/);
+  assert.match(CANVAS_GEOM_SOURCE, /CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0\.006/);
+  assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_TRACKPAD_ZOOM_SENSITIVITY/);
+  assert.match(PARK_BEHAVIOR_FLAT, /flushCanvasWheelZoom\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_NODE_CLICK_DELAY = 300/);
+  assert.match(PARK_BEHAVIOR_FLAT, /scheduleCanvasNodePreview\(item\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.detail > 1/);
+  assert.match(PARK_BEHAVIOR_FLAT, /openCanvasGroupLightbox\(current\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /suppressCanvasNodeClick\(state\.id\)/);
+  const pointerControlSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'isCanvasControlTarget');
   assert.doesNotMatch(pointerControlSource, /\.canvas-node-thumb/);
   assert.match(HTML_SOURCE, /\.canvas-viewport\s*\{[\s\S]*?cursor: grab;/);
   assert.doesNotMatch(WORKBENCH_CSS, /\.canvas-viewport:focus-visible\s*\{[\s\S]*?box-shadow/);
   assert.match(HTML_SOURCE, /class="canvas-minimap-viewport"/);
   assert.doesNotMatch(HTML_SOURCE, /id="canvasMinimap"[^>]*aria-hidden="true"/);
-  assert.match(PARK_SOURCE, /function renderCanvasConnections()/);
-  assert.match(PARK_SOURCE, /function handleCanvasConnectionNodeClick\(id\)/);
-  assert.match(PARK_SOURCE, /if \(event\.button === 0 && !node && \(selectedCanvasConnectionId \|\| canvasConnectionSourceId\)\) \{[\s\S]*?clearCanvasConnectionSelection\(\)/);
-  assert.match(PARK_SOURCE, /canvasActiveTool === 'link'/);
+  assert.match(CANVAS_RENDER_SOURCE, /function renderCanvasConnections\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvasConnections\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function handleCanvasConnectionNodeClick\(id\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(event\.button === 0 && !node && \(selectedCanvasConnectionId \|\| canvasConnectionSourceId\)\) \{[\s\S]*?clearCanvasConnectionSelection\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasActiveTool === 'link'/);
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
 
@@ -77,60 +147,102 @@ test('Top bar exposes Canvas organization and manual add popovers', () => {
   const settingsSource = HTML_SOURCE.slice(settingsStart, lightboxStart);
   assert.doesNotMatch(settingsSource, /id="sortBy"|data-canvas-arrange|manualAddBlock|id="manualAddText"/);
   assert.doesNotMatch(HTML_SOURCE, /data-settings-arrange/);
-  assert.match(PARK_SOURCE, /function openCanvasOrganizePanel\(\)/);
-  assert.match(PARK_SOURCE, /function openManualAddPanel\(\)/);
-  assert.match(PARK_SOURCE, /function closeHeaderPopovers\(/);
-  assert.match(PARK_SOURCE, /function syncCanvasOrganizeUi\(/);
-  assert.match(PARK_SOURCE, /if \(kind === 'url'\) \{[\s\S]*?openManualAddPanel\(\)/);
-  assert.match(PARK_SOURCE, /canvasOrganizePanel\?\.querySelectorAll\('\[data-canvas-arrange\]'\)/);
-  assert.match(PARK_SOURCE, /#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function openCanvasOrganizePanel\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function openManualAddPanel\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function closeHeaderPopovers\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function syncCanvasOrganizeUi\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(kind === 'url'\) \{[\s\S]*?openManualAddPanel\(\)/);
+  assert.match(SETTINGS_UI_SOURCE, /canvasOrganizePanel\?\.querySelectorAll\('\[data-canvas-arrange\]'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap/);
 });
 
 test('Search field scopes include domain mode via d/domain + Tab', () => {
-  assert.match(PARK_SOURCE, /d:\s*'domain'/);
-  assert.match(PARK_SOURCE, /domain:\s*'domain'/);
-  assert.match(PARK_SOURCE, /token === 'tag' \|\| token === 'note' \|\| token === 'group' \|\| token === 'domain' \|\| token === 'all'/);
-  assert.match(PARK_SOURCE, /searchScope === 'domain'/);
-  assert.match(PARK_SOURCE, /searchPhDomain/);
-  assert.match(PARK_SOURCE, /searchPhDomainRegex/);
-  assert.match(PARK_SOURCE, /scope === 'domain'/);
-  assert.match(PARK_SOURCE, /d\/domain/);
-  assert.match(PARK_SOURCE, /item\?\.kind === 'tab' \|\| item\?\.kind === 'group'/);
+  // Search UI (tokens / Tab scope) lives in parkSearchUi.js (v2.29.3+)
+  assert.match(SEARCH_UI_SOURCE, /d:\s*'domain'/);
+  assert.match(SEARCH_UI_SOURCE, /domain:\s*'domain'/);
+  assert.match(SEARCH_UI_SOURCE, /token === 'tag' \|\| token === 'note' \|\| token === 'group' \|\| token === 'domain' \|\| token === 'all'/);
+  assert.match(SEARCH_UI_SOURCE, /scope === 'domain'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /searchPhDomain/);
+  assert.match(PARK_BEHAVIOR_FLAT, /searchPhDomainRegex/);
+  assert.match(PARK_BEHAVIOR_FLAT, /d\/domain/);
+  // Match/compile lives in parkSearchQuery.js (v2.29.2+)
+  assert.match(SEARCH_QUERY_SOURCE, /scope === 'domain'/);
+  assert.match(SEARCH_QUERY_SOURCE, /item\?\.kind === 'tab' \|\| item\?\.kind === 'group'/);
+  assert.match(HTML_MARKUP, /parkSearchQuery\.js/);
+  assert.match(HTML_MARKUP, /parkSearchUi\.js/);
+  assert.match(HTML_MARKUP, /parkMediaUi\.js/);
+  assert.match(HTML_MARKUP, /parkCanvasGeometry\.js/);
+  assert.match(HTML_MARKUP, /parkCanvasRender\.js/);
+  assert.match(PARK_SOURCE, /TabWallSearchQuery/);
+  assert.match(PARK_SOURCE, /TabWallSearchUi/);
+  assert.match(PARK_SOURCE, /TabWallMediaUi/);
+  assert.match(PARK_SOURCE, /TabWallCanvasGeometry/);
+  assert.match(PARK_SOURCE, /TabWallCanvasRender/);
+  // Media thumb/snap lazy-load lives in parkMediaUi.js (v2.29.4+)
+  assert.match(MEDIA_UI_SOURCE, /function observeThumb\(/);
+  assert.match(MEDIA_UI_SOURCE, /function wireCanvasMedia\(/);
+  assert.match(MEDIA_UI_SOURCE, /function fetchMediaUrl\(/);
+  assert.match(MEDIA_UI_SOURCE, /TabWallMediaUi/);
+  // Canvas pure geometry lives in parkCanvasGeometry.js (v2.29.5+)
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasConnectionCurveGeometry\(/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasBoundsForItems\(/);
+  assert.match(CANVAS_GEOM_SOURCE, /TabWallCanvasGeometry/);
+  // Canvas render surface lives in parkCanvasRender.js (v2.29.6+)
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasNodeHtml\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /function renderCanvas\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /function arrangeCanvasGrid\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /function renderCanvasMinimap\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /TabWallCanvasRender/);
+  // Panel domains live in parkSettingsUi / parkImportExport / parkStickerUi (v2.29.7+)
+  assert.match(HTML_MARKUP, /parkSettingsUi\.js/);
+  assert.match(HTML_MARKUP, /parkImportExport\.js/);
+  assert.match(HTML_MARKUP, /parkStickerUi\.js/);
+  assert.match(PARK_SOURCE, /TabWallSettingsUi/);
+  assert.match(PARK_SOURCE, /TabWallImportExport/);
+  assert.match(PARK_SOURCE, /TabWallStickerUi/);
+  assert.match(SETTINGS_UI_SOURCE, /function initSettingsUi\(/);
+  assert.match(IMPORT_EXPORT_SOURCE, /function exportLiteBackup\(/);
+  assert.match(STICKER_UI_SOURCE, /function openStickerNoteEditor\(/);
+  assert.match(SETTINGS_UI_SOURCE, /TabWallSettingsUi/);
+  assert.match(IMPORT_EXPORT_SOURCE, /TabWallImportExport/);
+  assert.match(STICKER_UI_SOURCE, /TabWallStickerUi/);
 });
 
 test('Canvas context menu covers blank canvas and single-card node actions', () => {
   assert.match(HTML_SOURCE, /id="canvasContextMenu"[^>]*role="menu"[^>]*hidden/);
   assert.match(HTML_SOURCE, /\.canvas-context-menu\s*\{[\s\S]*?position:\s*fixed;/);
   assert.match(HTML_SOURCE, /\.canvas-context-menu button\.danger\s*\{/);
-  assert.match(PARK_SOURCE, /function canvasNodeActionEntries\(/);
-  assert.match(PARK_SOURCE, /async function runCanvasNodeAction\(/);
-  assert.match(PARK_SOURCE, /function canvasBlankContextMenuEntries\(/);
-  assert.match(PARK_SOURCE, /function renderCanvasContextMenuItems\(/);
-  assert.match(PARK_SOURCE, /function openCanvasContextMenu\(/);
-  assert.match(PARK_SOURCE, /function closeCanvasContextMenu\(/);
-  assert.match(PARK_SOURCE, /function handleCanvasContextMenuAction\(/);
-  assert.match(PARK_SOURCE, /async function exportLiteBackup\(/);
-  assert.match(PARK_SOURCE, /addEventListener\('contextmenu'/);
-  assert.match(PARK_SOURCE, /const node = event\.target\.closest\?\.\('\.canvas-node'\)/);
-  assert.match(PARK_SOURCE, /mode: 'node'/);
-  assert.match(PARK_SOURCE, /mode: 'blank'/);
-  assert.match(PARK_SOURCE, /setSelection\(\[id\]\)/);
-  assert.match(PARK_SOURCE, /await runCanvasNodeAction\(state\.itemId, action\)/);
-  assert.match(PARK_SOURCE, /await runCanvasNodeAction\(item\.id, button\.dataset\.canvasNodeAction/);
-  assert.match(PARK_SOURCE, /canvasNodeActionEntries\(item\)/);
-  assert.match(PARK_SOURCE, /#canvasContextMenu/);
-  assert.match(PARK_SOURCE, /placeStickerNoteAt\(state\.worldPoint \|\| canvasWorldViewportCenter\(\)\)/);
-  assert.match(PARK_SOURCE, /arrangeCanvas\('align'\)/);
-  assert.match(PARK_SOURCE, /exportLiteBackup\(\{ toast: true \}\)/);
-  assert.match(PARK_SOURCE, /normalizeSortBy\('newest'\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /async function runCanvasNodeAction\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasBlankContextMenuEntries\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvasContextMenuItems\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function openCanvasContextMenu\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function closeCanvasContextMenu\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function handleCanvasContextMenuAction\(/);
+  assert.match(IMPORT_EXPORT_SOURCE, /async function exportLiteBackup\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /async function exportLiteBackup\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /addEventListener\('contextmenu'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const node = event\.target\.closest\?\.\('\.canvas-node'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /mode: 'node'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /mode: 'blank'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /setSelection\(\[id\]\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /await runCanvasNodeAction\(state\.itemId, action\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /await runCanvasNodeAction\(item\.id, button\.dataset\.canvasNodeAction/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasNodeActionEntries\(item\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /#canvasContextMenu/);
+  assert.match(PARK_BEHAVIOR_FLAT, /placeStickerNoteAt\(state\.worldPoint \|\| canvasWorldViewportCenter\(\)\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /arrangeCanvas\('align'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /exportLiteBackup\(\{ toast: true \}\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /normalizeSortBy\('newest'\)/);
   for (const key of ['canvasCtxSortDate', 'canvasCtxArrangeAlign', 'canvasCtxBackup', 'canvasCtxAddNote']) {
-    assert.match(PARK_SOURCE, new RegExp(`'${key}'`));
+    assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`'${key}'`));
   }
   for (const action of ['sort-date', 'arrange-align', 'backup-lite', 'add-note']) {
-    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
+    assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`action: '${action}'`));
   }
   for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
-    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
+    assert.match(CANVAS_RENDER_SOURCE, new RegExp(`action: '${action}'`));
   }
 });
 
@@ -154,24 +266,28 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(HTML_SOURCE, /class="sticker-note-body"/);
   assert.match(HTML_SOURCE, /type="file" accept="image\/\*" multiple hidden/);
   assert.match(HTML_SOURCE, /\.sticker-note-body\s*\{[\s\S]*?grid-template-columns:\s*minmax\(320px, 1fr\) minmax\(280px, 1fr\)/);
-  assert.match(PARK_SOURCE, /function armCanvasNotePlacement\(\)/);
-  assert.match(PARK_SOURCE, /function placeStickerNoteAt\(point\)/);
-  assert.match(PARK_SOURCE, /type: 'CREATE_NOTE'/);
-  assert.match(PARK_SOURCE, /type: 'UPDATE_NOTE'/);
-  assert.match(PARK_SOURCE, /type: 'DELETE_NOTE'/);
-  assert.match(PARK_SOURCE, /Build\.renderSafeMarkdown/);
-  assert.match(PARK_SOURCE, /attachment:\/\//);
-  assert.match(PARK_SOURCE, /stickerNoteFile\.files/);
-  assert.match(PARK_SOURCE, /event\.clipboardData\?\.items/);
-  assert.match(PARK_SOURCE, /stickerNoteDrop\?\.addEventListener\('drop'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function armCanvasNotePlacement\(\)/);
+  assert.match(STICKER_UI_SOURCE, /function placeStickerNoteAt\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function placeStickerNoteAt\(/);
+  assert.match(STICKER_UI_SOURCE, /type: 'CREATE_NOTE'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /type: 'UPDATE_NOTE'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /type: 'DELETE_NOTE'/);
+  assert.match(STICKER_UI_SOURCE, /env\.Build\?\.renderSafeMarkdown/);
+  assert.match(STICKER_UI_SOURCE, /attachment:\/\//);
+  assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteFile\.files/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.clipboardData\?\.items/);
+  assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteDrop\?\.addEventListener\('drop'/);
   assert.match(HTML_SOURCE, /<script src="noteMedia\.js"><\/script>/);
   assert.match(PARK_SOURCE, /const NoteMedia = self\.TabWallNoteMedia/);
-  assert.match(PARK_SOURCE, /await NoteMedia\.normalizeBlob\(file\)/);
-  assert.match(PARK_SOURCE, /type: 'GET_ATTACHMENT_USAGE'/);
-  assert.match(PARK_SOURCE, /const ATTACHMENT_URL_CACHE_MAX = 8/);
-  assert.match(PARK_SOURCE, /function observeStickerAttachment\(img\)/);
-  assert.match(PARK_SOURCE, /function pruneAttachmentUrlCache\(items = allTabs\)/);
-  assert.match(PARK_SOURCE, /stickerNoteMediaBusy/);
+  assert.match(STICKER_UI_SOURCE, /await env\.NoteMedia\.normalizeBlob\(file\)/);
+  assert.match(STICKER_UI_SOURCE, /type: 'GET_ATTACHMENT_USAGE'/);
+  // Attachment URL cache + observe lives in parkMediaUi.js (v2.29.4+)
+  assert.match(MEDIA_UI_SOURCE, /const ATTACHMENT_URL_CACHE_MAX = 8/);
+  assert.match(MEDIA_UI_SOURCE, /function observeStickerAttachment\(img\)/);
+  assert.match(MEDIA_UI_SOURCE, /function pruneAttachmentUrlCache\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const observeStickerAttachment = MediaUi\.observeStickerAttachment/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const pruneAttachmentUrlCache = MediaUi\.pruneAttachmentUrlCache/);
+  assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteMediaBusy/);
 });
 
 test('Top-level actions are consolidated in the header', () => {
@@ -187,25 +303,26 @@ test('Top-level actions are consolidated in the header', () => {
   assert.match(HTML_SOURCE, /class="btn header-text-btn" id="themeBtn"/);
   const moreToolsMenu = HTML_SOURCE.match(/<div class="tools-menu" id="moreToolsMenu">[\s\S]*?<\/div>/)?.[0] || '';
   assert.doesNotMatch(moreToolsMenu, /id="themeBtn"/);
-  assert.match(PARK_SOURCE, /function syncViewModeButton\(mode\)/);
-  assert.match(PARK_SOURCE, /viewModeBtn\?\.addEventListener\('click'/);
-  assert.match(PARK_SOURCE, /applyI18n\(\);\s*syncViewModeButton\(settings\.viewMode\);/);
+  assert.match(SETTINGS_UI_SOURCE, /function syncViewModeButton\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function syncViewModeButton\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /viewModeBtn\?\.addEventListener\('click'/);
+  assert.match(SETTINGS_UI_SOURCE, /applyI18n\(\);[\s\S]{0,40}syncViewModeButton\(env\.settings\.viewMode\)/);
   assert.match(HTML_SOURCE, /class="btn quick-add-main" id="quickAddBtn"/);
   assert.match(HTML_SOURCE, /class="btn quick-add-menu-btn" id="quickAddMenuBtn"/);
   assert.doesNotMatch(HTML_SOURCE, /class="btn primary quick-add-main"/);
   assert.doesNotMatch(HTML_SOURCE, /class="btn primary quick-add-menu-btn"/);
-  assert.match(PARK_SOURCE, /function resetCanvasView\(\)/);
-  assert.match(PARK_SOURCE, /function setCanvasActiveTool\(nextTool\)/);
-  assert.match(PARK_SOURCE, /event\.button !== 0 \|\| isCanvasControlTarget\(event\.target\)/);
-  assert.match(PARK_SOURCE, /if \(id\) \{[\s\S]*?restoreItem\(id\);[\s\S]*?\} else \{[\s\S]*?setCanvasActiveTool\(canvasActiveTool === 'area' \? 'select' : 'area'\)/);
-  assert.match(PARK_SOURCE, /canvasActiveTool = nextTool === 'area' \|\| nextTool === 'link' \|\| nextTool === 'note'/);
-  assert.match(PARK_SOURCE, /function handleCanvasMiddleClick\(event\)/);
-  assert.match(PARK_SOURCE, /const CANVAS_MIDDLE_CLICK_DELAY = 300/);
-  assert.match(PARK_SOURCE, /event\.button === 1[\s\S]*?handleCanvasMiddleClick\(event\)/);
-  assert.match(PARK_SOURCE, /document\.getElementById\('canvasResetView'\)\?\.addEventListener\('click', resetCanvasView\)/);
-  assert.match(PARK_SOURCE, /function focusCanvasItem\(id\)/);
-  assert.match(PARK_SOURCE, /setCanvasIndexFilter\(`stack:\$\{id\}`, id\)/);
-  assert.match(PARK_SOURCE, /focusCanvasItem\(focusId\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function resetCanvasView\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function setCanvasActiveTool\(nextTool\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.button !== 0 \|\| isCanvasControlTarget\(event\.target\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(id\) \{[\s\S]*?restoreItem\(id\);[\s\S]*?\} else \{[\s\S]*?setCanvasActiveTool\(canvasActiveTool === 'area' \? 'select' : 'area'\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasActiveTool = nextTool === 'area' \|\| nextTool === 'link' \|\| nextTool === 'note'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function handleCanvasMiddleClick\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_MIDDLE_CLICK_DELAY = 300/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.button === 1[\s\S]*?handleCanvasMiddleClick\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /document\.getElementById\('canvasResetView'\)\?\.addEventListener\('click', resetCanvasView\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function focusCanvasItem\(id\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /setCanvasIndexFilter\(`stack:\$\{id\}`, id\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /focusCanvasItem\(focusId\)/);
   assert.doesNotMatch(PARK_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle|data-settings-arrange/);
 });
 
@@ -213,8 +330,8 @@ test('Chrome shortcut settings expose the tab-or-group keep command', () => {
   for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
-  assert.match(PARK_SOURCE, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
-  assert.match(PARK_SOURCE, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });
 
 test('Canvas rail is resizable, collapsible, and the header mark is a stacked-panel SVG', () => {
@@ -226,30 +343,30 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
   assert.match(HTML_SOURCE, /id="canvasRailToggle"[^>]*aria-expanded="true"/);
   assert.match(HTML_SOURCE, /--canvas-rail-width:\s*188px/);
   assert.match(HTML_SOURCE, /data-canvas-rail-collapsed='true'/);
-  assert.match(PARK_SOURCE, /const CANVAS_RAIL_DEFAULT_WIDTH = 188/);
-  assert.match(PARK_SOURCE, /const CANVAS_RAIL_MIN_WIDTH = 168/);
-  assert.match(PARK_SOURCE, /const CANVAS_RAIL_MAX_WIDTH = 360/);
-  assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSE_THRESHOLD = 120/);
-  assert.match(PARK_SOURCE, /const CANVAS_RAIL_COLLAPSED_WIDTH = 34/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_DEFAULT_WIDTH = 188/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_MIN_WIDTH = 168/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_MAX_WIDTH = 360/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_COLLAPSE_THRESHOLD = 120/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_COLLAPSED_WIDTH = 34/);
   const canvasRailSource = HTML_SOURCE.match(/<aside id="canvasRail"[\s\S]*?<\/aside>/)?.[0] || '';
   assert.match(canvasRailSource, /class="canvas-rail-content"[\s\S]*?id="versionBadge"/);
   assert.doesNotMatch(PARK_SOURCE, /--canvas-version-left/);
   assert.doesNotMatch(HTML_SOURCE, /body\.canvas-mode #versionBadge/);
   assert.match(WORKBENCH_CSS, /#versionBadge\s*\{[\s\S]*?position:\s*static;[\s\S]*?align-self:\s*stretch;/);
-  assert.match(PARK_SOURCE, /function normalizeCanvasRailSettings\(target\)/);
-  assert.match(PARK_SOURCE, /function applyCanvasRailUi\(/);
-  assert.match(PARK_SOURCE, /function initCanvasRailResize\(\)/);
-  assert.match(PARK_SOURCE, /canvasRailResize\.addEventListener\('pointerdown'/);
-  assert.match(PARK_SOURCE, /canvasRailResize\.addEventListener\('keydown'/);
-  assert.match(PARK_SOURCE, /function scheduleCanvasRailResizePreview\(\)/);
-  assert.match(PARK_SOURCE, /function flushCanvasRailResizePreview\(\)/);
-  assert.match(PARK_SOURCE, /canvasRailWidth: collapsed \? normalizeCanvasRailWidth\(state\.startWidth\)/);
-  assert.match(PARK_SOURCE, /window\.addEventListener\('pointermove', updateCanvasRailResize, true\)/);
-  assert.match(PARK_SOURCE, /event\.isPrimary/);
-  assert.match(PARK_SOURCE, /saveSettings\(next\)/);
-  assert.match(PARK_SOURCE, /event\.key !== 'ArrowLeft' && event\.key !== 'ArrowRight'/);
-  assert.match(PARK_SOURCE, /event\.key === 'Home'/);
-  assert.match(PARK_SOURCE, /event\.key === 'End'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function normalizeCanvasRailSettings\(target\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function applyCanvasRailUi\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function initCanvasRailResize\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasRailResize\.addEventListener\('pointerdown'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasRailResize\.addEventListener\('keydown'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function scheduleCanvasRailResizePreview\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function flushCanvasRailResizePreview\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasRailWidth: collapsed \? normalizeCanvasRailWidth\(state\.startWidth\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /window\.addEventListener\('pointermove', updateCanvasRailResize, true\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.isPrimary/);
+  assert.match(PARK_BEHAVIOR_FLAT, /saveSettings\(next\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.key !== 'ArrowLeft' && event\.key !== 'ArrowRight'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.key === 'Home'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /event\.key === 'End'/);
   assert.match(WORKBENCH_CSS, /flex:\s*0 0 var\(--canvas-rail-width\)/);
   assert.match(WORKBENCH_CSS, /cursor:\s*col-resize/);
   assert.match(WORKBENCH_CSS, /touch-action:\s*none/);
@@ -262,7 +379,7 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
 });
 
 test('Editorial Workbench is desktop-only with low-contrast theme tokens', () => {
-  assert.match(PARK_SOURCE, /theme: 'dark'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /theme: 'dark'/);
   assert.match(HTML_SOURCE, /<html lang="zh-Hant" data-theme="dark">/);
   assert.match(WORKBENCH_CSS, /--bg: #101110;/);
   assert.match(WORKBENCH_CSS, /html\[data-theme='light'\][\s\S]*?--bg: #f5f1ea;/);
@@ -280,36 +397,41 @@ test('Editorial Workbench is desktop-only with low-contrast theme tokens', () =>
 });
 
 test('Spatial Canvas state and settings use shared persistence contracts', () => {
-  assert.match(PARK_SOURCE, /function canvasLayoutSnapshot\(\)/);
-  assert.match(PARK_SOURCE, /type: 'PATCH_CANVAS_LAYOUT',[\s\S]*?baseRevision/);
-  assert.match(PARK_SOURCE, /getCanvasVisibleTabs\(\)\.length/);
-  assert.match(PARK_SOURCE, /saveSettings\(\{ canvasSnap: canvasSnapToGrid \}\)/);
-  assert.match(PARK_SOURCE, /DEFAULT_CANVAS_VIEWPORT = Object\.freeze\(\{ x: 0, y: 0, zoom: 1 \}\)/);
-  assert.match(PARK_SOURCE, /function canvasPreferredMediaKind\(\)/);
-  assert.match(PARK_SOURCE, /return canvasLayout\.viewport\.zoom > 1 \? 'snap' : 'thumb'/);
-  assert.match(PARK_SOURCE, /const mediaFetches = new Map\(\)/);
-  assert.match(PARK_SOURCE, /function getCanvasMediaObserver\(\)/);
-  assert.match(PARK_SOURCE, /root: canvasViewportEl/);
-  assert.match(PARK_SOURCE, /function probeCanvasMediaUrl\(url\)/);
-  assert.match(PARK_SOURCE, /canvasPendingMediaUrls/);
-  assert.match(PARK_SOURCE, /function loadCanvasThumbFallback\(img\)/);
-  assert.match(PARK_SOURCE, /data-canvas-has-snap/);
-  assert.match(PARK_SOURCE, /function refreshCanvasMediaQuality\(\)/);
-  assert.match(PARK_SOURCE, /const canvasMinimapElements = new Map\(\)/);
-  assert.match(PARK_SOURCE, /function arrangeCanvasGrid\(items, layout\)/);
-  assert.match(PARK_SOURCE, /function arrangeCanvasAlign\(items, layout\)/);
-  assert.match(PARK_SOURCE, /mode === 'grid'/);
-  assert.match(PARK_SOURCE, /function arrangeCanvasAlign\(items, layout\)/);
-  assert.match(PARK_SOURCE, /function normalizeSortBy\(value\)/);
-  assert.match(PARK_SOURCE, /sortByEl\?\.addEventListener/);
-  assert.match(PARK_SOURCE, /data-canvas-arrange/);
-  assert.match(PARK_SOURCE, /function beginCanvasMinimapDrag\(event\)/);
-  assert.match(PARK_SOURCE, /function updateCanvasMinimapDrag\(event\)/);
-  assert.match(PARK_SOURCE, /previewPointer\(\{ dx, dy, moved:/);
-  assert.match(PARK_SOURCE, /finishPointer\(\{ commit \}\)/);
-  assert.match(PARK_SOURCE, /canvasMinimapProjection/);
-  assert.doesNotMatch(PARK_SOURCE.match(/function renderCanvasMinimap\(items\)[\s\S]*?\n\}\n\nfunction canvasNodeRenderKey/)?.[0] || '', /innerHTML/);
-  assert.match(PARK_SOURCE, /data-canvas-media="true"/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasLayoutSnapshot\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /type: 'PATCH_CANVAS_LAYOUT',[\s\S]*?baseRevision/);
+  assert.match(PARK_BEHAVIOR_FLAT, /getCanvasVisibleTabs\(\)\.length/);
+  assert.match(SETTINGS_UI_SOURCE, /saveSettings\(\{ canvasSnap: env\.canvasSnapToGrid \}\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasSnapToGrid/);
+  assert.match(PARK_BEHAVIOR_FLAT, /DEFAULT_CANVAS_VIEWPORT = Object\.freeze\(\{ x: 0, y: 0, zoom: 1 \}\)/);
+  // Canvas thumb/snap quality lives in parkMediaUi.js (v2.29.4+)
+  assert.match(MEDIA_UI_SOURCE, /function canvasPreferredMediaKind\(\)/);
+  assert.match(MEDIA_UI_SOURCE, /return canvasZoom\(\) > 1 \? 'snap' : 'thumb'/);
+  assert.match(MEDIA_UI_SOURCE, /const mediaFetches = new Map\(\)/);
+  assert.match(MEDIA_UI_SOURCE, /function getCanvasMediaObserver\(\)/);
+  assert.match(MEDIA_UI_SOURCE, /root: viewport/);
+  assert.match(MEDIA_UI_SOURCE, /function probeCanvasMediaUrl\(url\)/);
+  assert.match(MEDIA_UI_SOURCE, /canvasPendingMediaUrls/);
+  assert.match(MEDIA_UI_SOURCE, /function loadCanvasThumbFallback\(img\)/);
+  assert.match(MEDIA_UI_SOURCE, /function refreshCanvasMediaQuality\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /data-canvas-has-snap/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const refreshCanvasMediaQuality = MediaUi\.refreshCanvasMediaQuality/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const canvasMinimapElements = new Map\(\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function arrangeCanvasGrid\(items, layout\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function arrangeCanvasAlign\(items, layout\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function arrangeCanvasGrid\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function arrangeCanvasAlign\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /mode === 'grid'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function normalizeSortBy\(value\)/);
+  assert.match(SETTINGS_UI_SOURCE, /sortByEl\?\.addEventListener/);
+  assert.match(SETTINGS_UI_SOURCE, /data-canvas-arrange/);
+  assert.match(HTML_SOURCE, /data-canvas-arrange/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function beginCanvasMinimapDrag\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function updateCanvasMinimapDrag\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /previewPointer\(\{ dx, dy, moved:/);
+  assert.match(PARK_BEHAVIOR_FLAT, /finishPointer\(\{ commit \}\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasMinimapProjection/);
+  assert.doesNotMatch(CANVAS_RENDER_SOURCE.match(/function renderCanvasMinimap\([\s\S]*?\n\}/)?.[0] || '', /innerHTML/);
+  assert.match(CANVAS_RENDER_SOURCE, /data-canvas-media="true"/);
   assert.match(HTML_SOURCE, /id="canvasZoomValue"[^>]*aria-expanded="false"[^>]*aria-controls="canvasZoomMenu">100%<\/button>/);
   assert.match(HTML_SOURCE, /#settingsBox\.open[\s\S]*?display: grid/);
   assert.match(HTML_SOURCE, /#settingsBox\.open\s*\{\s*display:\s*grid;\s*transform:\s*translate\(-50%, -50%\) !important;/);
@@ -328,10 +450,10 @@ test('Automatic note and tag save rules expose a localized settings editor', () 
   assert.match(HTML_SOURCE, /id="autoSaveMetadataRules"/);
   assert.match(HTML_SOURCE, /id="autoSaveMetadataAddRuleBtn"/);
   for (const field of ['domain', 'title']) {
-    assert.match(PARK_SOURCE, new RegExp(`['\\"]${field}['\\"]`));
+    assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`['\\"]${field}['\\"]`));
   }
   for (const operator of ['match', 'contains', 'startsWith', 'endsWith', 'regex']) {
-    assert.match(PARK_SOURCE, new RegExp(`['\\"]${operator}['\\"]`));
+    assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`['\\"]${operator}['\\"]`));
   }
   for (const key of [
     'autoSaveMetadataTitle',
@@ -343,12 +465,13 @@ test('Automatic note and tag save rules expose a localized settings editor', () 
     'autoSaveMetadataNote',
     'autoSaveMetadataTags',
   ]) {
-    assert.match(PARK_SOURCE, new RegExp(`${key}:`));
+    assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`${key}:`));
   }
-  assert.match(PARK_SOURCE, /settings\.autoSaveMetadata/);
-  assert.match(PARK_SOURCE, /type: 'PATCH_SETTINGS'/);
-  assert.match(PARK_SOURCE, /data-auto-save-rule-prop/);
-  assert.match(PARK_SOURCE, /data-auto-save-condition-prop/);
+  assert.match(PARK_BEHAVIOR_FLAT, /settings\.autoSaveMetadata/);
+  assert.match(SETTINGS_UI_SOURCE, /type: 'PATCH_SETTINGS'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function saveSettings\(/);
+  assert.match(SETTINGS_UI_SOURCE, /data-auto-save-rule-prop/);
+  assert.match(SETTINGS_UI_SOURCE, /data-auto-save-condition-prop/);
 });
 
 test('Spatial Canvas uses the single store and keyed interaction lifecycle', () => {
@@ -357,70 +480,74 @@ test('Spatial Canvas uses the single store and keyed interaction lifecycle', () 
   assert.match(STORE_SOURCE, /function normalizeConnections\(rawConnections/);
   assert.match(STORE_SOURCE, /op.type === 'setConnections'/);
   assert.match(STORE_SOURCE, /function commitConnections\(connections\)/);
-  assert.match(PARK_SOURCE, /const canvasNodeElements = new Map\(\)/);
-  assert.match(PARK_SOURCE, /canvasNodeElements\.get\(item\.id\)/);
-  assert.doesNotMatch(PARK_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}\n\nfunction updateCanvasArrangeState/)?.[0] || '', /canvasNodesEl\.innerHTML\s*=\s*''/);
-  assert.match(PARK_SOURCE, /requestAnimationFrame/);
-  assert.match(PARK_SOURCE, /lostpointercapture/);
-  assert.match(PARK_SOURCE, /visibilitychange/);
-  assert.match(PARK_SOURCE, /canvasLoadGeneration/);
-  assert.match(PARK_SOURCE, /applyRemote\(layout, revision\)/);
-  assert.match(PARK_SOURCE, /preferred === 'snap'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const canvasNodeElements = new Map\(\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvasNodeElements\.get\(item\.id\)/);
+  assert.doesNotMatch(CANVAS_RENDER_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}/)?.[0] || '', /getCanvasNodesEl\(\)\.innerHTML\s*=\s*''/);
+  assert.match(PARK_BEHAVIOR_FLAT, /requestAnimationFrame/);
+  assert.match(PARK_BEHAVIOR_FLAT, /lostpointercapture/);
+  assert.match(PARK_BEHAVIOR_FLAT, /visibilitychange/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasLoadGeneration/);
+  assert.match(PARK_BEHAVIOR_FLAT, /applyRemote\(layout, revision\)/);
+  assert.match(MEDIA_UI_SOURCE, /preferred === 'snap'/);
 });
 
 test('Canvas search relations and connection gestures have a stable UI contract', () => {
-  assert.match(PARK_SOURCE, /\['top', 'canvasLinkHandleTop'\]/);
-  assert.match(PARK_SOURCE, /\['right', 'canvasLinkHandleRight'\]/);
-  assert.match(PARK_SOURCE, /\['bottom', 'canvasLinkHandleBottom'\]/);
-  assert.match(PARK_SOURCE, /\['left', 'canvasLinkHandleLeft'\]/);
-  assert.match(PARK_SOURCE, /data-canvas-link-handle="\$\{side\}"/);
-  assert.match(PARK_SOURCE, /canvas-link-handle-\$\{side\}/);
-  assert.match(PARK_SOURCE, /function getCanvasSearchContext\(\)/);
-  assert.match(PARK_SOURCE, /const directIds = new Set/);
-  assert.match(PARK_SOURCE, /const relatedIds = new Set/);
-  assert.match(PARK_SOURCE, /classList\.toggle\('search-direct'/);
-  assert.match(PARK_SOURCE, /classList\.toggle\('search-related'/);
+  assert.match(CANVAS_RENDER_SOURCE, /\['top', 'canvasLinkHandleTop'\]/);
+  assert.match(CANVAS_RENDER_SOURCE, /\['right', 'canvasLinkHandleRight'\]/);
+  assert.match(CANVAS_RENDER_SOURCE, /\['bottom', 'canvasLinkHandleBottom'\]/);
+  assert.match(CANVAS_RENDER_SOURCE, /\['left', 'canvasLinkHandleLeft'\]/);
+  assert.match(CANVAS_RENDER_SOURCE, /data-canvas-link-handle="\$\{side\}"/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvas-link-handle-\$\{side\}/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function getCanvasSearchContext\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const directIds = new Set/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const relatedIds = new Set/);
+  assert.match(CANVAS_RENDER_SOURCE, /classList\.toggle\('search-direct'/);
+  assert.match(CANVAS_RENDER_SOURCE, /classList\.toggle\('search-related'/);
   assert.match(WORKBENCH_CSS, /\.canvas-node\.search-related\s*\{[\s\S]*?opacity:\s*0\.58/);
   assert.match(WORKBENCH_CSS, /\.canvas-node\.search-related:hover,[\s\S]*?opacity:\s*1/);
-  assert.match(PARK_SOURCE, /function wireCanvasLinkHandles\(node\)/);
-  assert.match(PARK_SOURCE, /function beginCanvasConnectionDrag\(/);
-  assert.match(PARK_SOURCE, /const CANVAS_CONNECTION_HIT_WIDTH = 16/);
-  assert.match(PARK_SOURCE, /function canvasConnectionCurveGeometry\(/);
-  assert.match(PARK_SOURCE, /function canvasCubicBezierTAtLength\(/);
-  assert.match(PARK_SOURCE, /function canvasConnectionCurveSegments\(/);
-  assert.match(PARK_SOURCE, /const zones = \['source', 'curve', 'target'\]/);
-  assert.match(PARK_SOURCE, /setAttribute\('class', \`canvas-connection-hit \$\{zone\}\`\)/);
-  assert.match(PARK_SOURCE, /stroke-width', String\(CANVAS_CONNECTION_HIT_WIDTH\)/);
-  assert.match(PARK_SOURCE, /setPointerCapture\?\.\(event\.pointerId\)/);
-  assert.match(PARK_SOURCE, /function renderCanvasConnectionDraft\(\)/);
-  assert.match(PARK_SOURCE, /function commitCanvasConnectionDrag\(\)/);
-  assert.match(PARK_SOURCE, /kind === 'curve'/);
-  assert.match(PARK_SOURCE, /initialCurveOffset/);
-  assert.match(PARK_SOURCE, /function resetCanvasConnectionCurve\(connectionId\)/);
-  assert.match(PARK_SOURCE, /state\.curveOffset/);
-  assert.match(PARK_SOURCE, /function setCanvasConnectionZoneHover\(connectionId, zone, active\)/);
-  assert.match(PARK_SOURCE, /canvas-connection-zone-highlight/);
-  assert.match(PARK_SOURCE, /pointerenter/);
-  assert.match(PARK_SOURCE, /pointerleave/);
-  assert.match(PARK_SOURCE, /function detectCanvasConnectionDoublePointerDown\(connectionId, event\)/);
-  assert.match(PARK_SOURCE, /canvasConnectionPointerDownAt/);
-  assert.match(PARK_SOURCE, /movingEndpoint/);
-  assert.match(PARK_SOURCE, /path\.addEventListener\('dblclick'/);
-  assert.match(PARK_SOURCE, /canvasConnectionClickSuppressUntil/);
-  const endConnectionSource = PARK_SOURCE.match(/function endCanvasConnectionDrag\([\s\S]*?\n\}/)?.[0] || '';
+  assert.match(PARK_BEHAVIOR_FLAT, /function wireCanvasLinkHandles\(node\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function beginCanvasConnectionDrag\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_CONNECTION_HIT_WIDTH = 16/);
+  // Curve math lives in parkCanvasGeometry.js (v2.29.5+)
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasConnectionCurveGeometry\(/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasCubicBezierTAtLength\(/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasConnectionCurveSegments\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasConnectionCurveGeometry/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasConnectionCurveSegments/);
+  assert.match(CANVAS_RENDER_SOURCE, /const zones = \['source', 'curve', 'target'\]/);
+  assert.match(CANVAS_RENDER_SOURCE, /setAttribute\('class', \`canvas-connection-hit \$\{zone\}\`\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /stroke-width', String\(getCanvasConnectionHitWidth\(\)\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /setPointerCapture\?\.\(event\.pointerId\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function renderCanvasConnectionDraft\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvasConnectionDraft\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function commitCanvasConnectionDrag\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /kind === 'curve'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /initialCurveOffset/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function resetCanvasConnectionCurve\(connectionId\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /state\.curveOffset/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function setCanvasConnectionZoneHover\(connectionId, zone, active\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvas-connection-zone-highlight/);
+  assert.match(PARK_BEHAVIOR_FLAT, /pointerenter/);
+  assert.match(PARK_BEHAVIOR_FLAT, /pointerleave/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function detectCanvasConnectionDoublePointerDown\(connectionId, event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasConnectionPointerDownAt/);
+  assert.match(PARK_BEHAVIOR_FLAT, /movingEndpoint/);
+  assert.match(PARK_BEHAVIOR_FLAT, /path\.addEventListener\('dblclick'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasConnectionClickSuppressUntil/);
+  const endConnectionSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'endCanvasConnectionDrag');
   assert.match(endConnectionSource, /const shouldSelect = commit && !moved && Boolean\(connectionId\)/);
   assert.match(endConnectionSource, /if \(shouldSelect\) \{[\s\S]*?selectCanvasConnection\(connectionId\)/);
   assert.match(HTML_SOURCE, /data-canvas-selection-connection[^>]*data-i18n="canvasConnectionSelected"/);
   assert.match(HTML_SOURCE, /data-canvas-action="delete-connection"[^>]*data-i18n="canvasDeleteConnection"[^>]*hidden/);
-  assert.match(PARK_SOURCE, /canvasViewportEl\?\.focus\?\.\(\{ preventScroll: true \}\)/);
-  assert.match(PARK_SOURCE, /if \(action === 'delete-connection'\) \{[\s\S]*?deleteCanvasConnection\(\);/);
-  assert.match(PARK_SOURCE, /function deleteCanvasConnection\(connectionId = selectedCanvasConnectionId\)/);
-  assert.match(PARK_SOURCE, /function handleCanvasConnectionNodeClick\(id\)/);
-  assert.match(PARK_SOURCE, /isMultiSelectModifier\(event\)/);
-  assert.match(PARK_SOURCE, /!state\.selectionAdditive/);
-  assert.match(PARK_SOURCE, /window\.addEventListener\('pointermove', updateCanvasConnectionDrag, true\)/);
-  assert.match(PARK_SOURCE, /window\.addEventListener\('pointercancel', \(event\) => endCanvasConnectionDrag\(event, false\), true\)/);
-  assert.match(PARK_SOURCE, /canvasConnectionDragState\) cancelCanvasConnectionDrag\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasViewportEl\?\.focus\?\.\(\{ preventScroll: true \}\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(action === 'delete-connection'\) \{[\s\S]*?deleteCanvasConnection\(\);/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function deleteCanvasConnection\(connectionId = selectedCanvasConnectionId\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function handleCanvasConnectionNodeClick\(id\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /isMultiSelectModifier\(event\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /!state\.selectionAdditive/);
+  assert.match(PARK_BEHAVIOR_FLAT, /window\.addEventListener\('pointermove', updateCanvasConnectionDrag, true\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /window\.addEventListener\('pointercancel', \(event\) => endCanvasConnectionDrag\(event, false\), true\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasConnectionDragState\) cancelCanvasConnectionDrag\(\)/);
   assert.match(WORKBENCH_CSS, /\.canvas-connection-hit\s*\{[\s\S]*?stroke-width:\s*16px/);
   assert.match(WORKBENCH_CSS, /\.canvas-connection-hit\.curve\s*\{[\s\S]*?cursor:\s*grab/);
   assert.match(WORKBENCH_CSS, /\.canvas-connection-zone-highlight\s*\{[\s\S]*?stroke-width:\s*5px/);
@@ -432,24 +559,31 @@ test('Canvas search relations and connection gestures have a stable UI contract'
 });
 
 test('Canvas display geometry and connection endpoints use the four side handles', () => {
-  assert.match(PARK_SOURCE, /const CANVAS_NODE_DISPLAY_SCALE = 1\.1/);
-  assert.match(PARK_SOURCE, /const CANVAS_DEFAULT_CARD_GAP = 96/);
-  assert.match(PARK_SOURCE, /const CANVAS_NODE_DEFAULT_WIDTH = 220/);
-  assert.match(PARK_SOURCE, /const CANVAS_NODE_DEFAULT_HEIGHT = 170/);
-  assert.match(PARK_SOURCE, /function canvasDisplayPosition\(position/);
-  assert.match(PARK_SOURCE, /Math\.round\(CANVAS_NODE_DEFAULT_WIDTH \* CANVAS_NODE_DISPLAY_SCALE\) \+ CANVAS_DEFAULT_CARD_GAP/);
-  assert.match(PARK_SOURCE, /Math\.round\(CANVAS_NODE_DEFAULT_HEIGHT \* CANVAS_NODE_DISPLAY_SCALE\) \+ CANVAS_DEFAULT_CARD_GAP/);
-  assert.match(PARK_SOURCE, /function canvasConnectionSideForVector\(dx, dy\)/);
-  assert.match(PARK_SOURCE, /Math\.abs\(dx\) >= Math\.abs\(dy\)/);
-  assert.match(PARK_SOURCE, /function canvasConnectionHandlePoints\(source, target,/);
-  assert.match(PARK_SOURCE, /function canvasConnectionDomHandlePoint\(id, side\)/);
-  assert.match(PARK_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side\)/);
-  assert.match(PARK_SOURCE, /const measured = node\?\.isConnected \? canvasNodeWorldRect\(node\) : null/);
+  // Display-scale / default position math lives in parkCanvasGeometry.js (v2.29.5+)
+  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DISPLAY_SCALE = 1\.1/);
+  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_DEFAULT_CARD_GAP = 96/);
+  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DEFAULT_WIDTH = 220/);
+  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DEFAULT_HEIGHT = 170/);
+  assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_NODE_DISPLAY_SCALE/);
+  assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_DEFAULT_CARD_GAP/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasDisplayPosition\(position/);
+  assert.match(CANVAS_GEOM_SOURCE, /Math\.round\(CANVAS_NODE_DEFAULT_WIDTH \* CANVAS_NODE_DISPLAY_SCALE\) \+ CANVAS_DEFAULT_CARD_GAP/);
+  assert.match(CANVAS_GEOM_SOURCE, /Math\.round\(CANVAS_NODE_DEFAULT_HEIGHT \* CANVAS_NODE_DISPLAY_SCALE\) \+ CANVAS_DEFAULT_CARD_GAP/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasConnectionSideForVector\(dx, dy\)/);
+  assert.match(CANVAS_GEOM_SOURCE, /Math\.abs\(dx\) >= Math\.abs\(dy\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePoints\(source, target,/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePoints\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionDomHandlePoint\(id, side\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionDomHandlePoint\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForId\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /const measured = node\?\.isConnected \? canvasNodeWorldRect\(node\) : null/);
   assert.doesNotMatch(PARK_SOURCE, /function canvasConnectionEdgePoints\(/);
-  assert.match(PARK_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId\)/);
-  assert.match(PARK_SOURCE, /function canvasConnectionHandlePointForCursor\(rect, point/);
-  assert.match(PARK_SOURCE, /const gapX = CANVAS_DEFAULT_CARD_GAP/);
-  assert.match(PARK_SOURCE, /const gapY = CANVAS_DEFAULT_CARD_GAP/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForCursor\(rect, point/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForCursor\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /const gapX = CanvasGeom\(\)\.CANVAS_DEFAULT_CARD_GAP/);
+  assert.match(CANVAS_RENDER_SOURCE, /const gapY = CanvasGeom\(\)\.CANVAS_DEFAULT_CARD_GAP/);
   assert.match(WORKBENCH_CSS, /\.canvas-link-handles\s*\{[\s\S]*?z-index:\s*5/);
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle\s*\{[\s\S]*?width:\s*24px[\s\S]*?height:\s*24px/);
   assert.match(WORKBENCH_CSS, /\.canvas-link-handle svg\s*\{[\s\S]*?width:\s*14px[\s\S]*?height:\s*14px/);
@@ -458,31 +592,32 @@ test('Canvas display geometry and connection endpoints use the four side handles
 });
 
 test('Canvas search results use a transient grid layout without persisting positions', () => {
-  assert.match(PARK_SOURCE, /let canvasSearchPreview = null/);
-  assert.match(PARK_SOURCE, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
-  assert.match(PARK_SOURCE, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
-  assert.match(PARK_SOURCE, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
-  assert.match(PARK_SOURCE, /if \(!isCanvasSearchPreviewActive\(searchContext\)\) \{[\s\S]*?canvasSearchPreview = null/);
+  assert.match(PARK_BEHAVIOR_FLAT, /let canvasSearchPreview = null/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(!isCanvasSearchPreviewActive\(searchContext\)\) \{[\s\S]*?canvasSearchPreview = null/);
 
-  const renderSource = PARK_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}/)?.[0] || '';
+  const renderSource = CANVAS_RENDER_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}/)?.[0] || '';
   assert.match(renderSource, /const renderLayout = canvasSearchLayoutFor\(searchContext\)/);
   assert.match(renderSource, /renderLayout\.positions\[item\.id\]/);
   assert.match(renderSource, /renderCanvasMinimap\(filtered, renderLayout\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvas\(/);
 
-  const arrangeSource = PARK_SOURCE.match(/function arrangeCanvas\(mode = ''\)[\s\S]*?\n\}/)?.[0] || '';
+  const arrangeSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'arrangeCanvas');
   assert.match(arrangeSource, /if \(isCanvasSearchPreviewActive\(searchContext\)\)/);
   assert.match(arrangeSource, /canvasSearchPreview\.positions =/);
   const transientArrangeBranch = arrangeSource.split('if (isCanvasSearchPreviewActive(searchContext))')[1]?.split('const items =')[0] || '';
   assert.doesNotMatch(transientArrangeBranch, /commitPositions|flush|sendMessage/);
 
-  const moveSource = PARK_SOURCE.match(/function canvasMoveSelected\(dx, dy\)[\s\S]*?\n\}/)?.[0] || '';
+  const moveSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasMoveSelected');
   assert.match(moveSource, /isCanvasSearchPreviewActive\(searchContext\)/);
   assert.match(moveSource, /moveCanvasSearchPreview\(/);
-  const pointerSource = PARK_SOURCE.match(/function beginCanvasPointer\([\s\S]*?\n\}/)?.[0] || '';
+  const pointerSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'beginCanvasPointer');
   assert.match(pointerSource, /const searchPreview = kind === 'node' && isCanvasSearchPreviewActive\(\)/);
   assert.match(pointerSource, /if \(searchPreview\)[\s\S]*?searchStartPositions/);
 
-  const endPointerSource = PARK_SOURCE.match(/async function endCanvasPointer\(event\)[\s\S]*?\n\}/)?.[0] || '';
+  const endPointerSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'endCanvasPointer');
   assert.match(endPointerSource, /const operation = state\.searchPreview\s*\? null/);
   assert.match(endPointerSource, /if \(state\.searchPreview\) finishCanvasSearchPointer\(state, state\.moved\)/);
   const transientEndBranch = endPointerSource.match(/if \(state\.searchPreview\) \{[\s\S]*?return;/)?.[0] || '';
@@ -494,11 +629,11 @@ test('Canvas zoom uses a layout-scaled inner world and translation-only outer tr
   const worldCss = HTML_SOURCE.match(/\.canvas-world\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
   assert.doesNotMatch(worldCss, /will-change:\s*transform/);
   assert.match(HTML_SOURCE, /\.canvas-world-scale\s*\{[\s\S]*?width:\s*10000px[\s\S]*?height:\s*10000px/);
-  const transformSource = PARK_SOURCE.match(/function updateCanvasTransform\(\)[\s\S]*?\n\}/)?.[0] || '';
+  const transformSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'updateCanvasTransform');
   assert.match(transformSource, /canvasWorldScaleEl\.style\.zoom = String\(zoom\)/);
   assert.match(transformSource, /canvasWorldEl\.style\.transform = `translate\(\$\{-x \* zoom\}px, \$\{-y \* zoom\}px\)`/);
   assert.doesNotMatch(transformSource, /scale\(/);
-  const zoomSource = PARK_SOURCE.match(/function setCanvasZoom\([\s\S]*?\n\}/)?.[0] || '';
+  const zoomSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'setCanvasZoom');
   assert.match(zoomSource, /clientX != null && clientY != null/);
   assert.match(zoomSource, /x: rect\.width \/ 2/);
   assert.match(zoomSource, /y: rect\.height \/ 2/);
@@ -527,30 +662,32 @@ test('Canvas zoom controls expose a hover slider and accessible fit menu', () =>
   const sliderCss = HTML_SOURCE.match(/\.canvas-zoom-slider\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
   assert.match(sliderCss, /writing-mode:\s*vertical-lr/);
   assert.match(sliderCss, /direction:\s*rtl/);
-  assert.match(PARK_SOURCE, /canvasZoomSlider\.addEventListener\('input'/);
-  assert.match(PARK_SOURCE, /canvasZoomValueWrap\?\.addEventListener\('pointerenter'/);
-  assert.match(PARK_SOURCE, /canvasZoomValueWrap\?\.addEventListener\('pointerleave'/);
-  assert.match(PARK_SOURCE, /canvasZoomValue\?\.addEventListener\('click'/);
-  assert.match(PARK_SOURCE, /function toggleCanvasZoomMenu\(\)/);
-  assert.match(PARK_SOURCE, /function closeCanvasZoomMenu\(/);
-  assert.match(PARK_SOURCE, /function applyCanvasZoomAction\(action\)/);
-  assert.match(PARK_SOURCE, /document\.addEventListener\('pointerdown', \(event\) => \{[\s\S]*?closeCanvasZoomMenu\(\);/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasZoomSlider\.addEventListener\('input'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasZoomValueWrap\?\.addEventListener\('pointerenter'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasZoomValueWrap\?\.addEventListener\('pointerleave'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasZoomValue\?\.addEventListener\('click'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function toggleCanvasZoomMenu\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function closeCanvasZoomMenu\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function applyCanvasZoomAction\(action\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /document\.addEventListener\('pointerdown', \(event\) => \{[\s\S]*?closeCanvasZoomMenu\(\);/);
 });
 
 test('Canvas fit actions use visible card bounds and preserve the viewport schema', () => {
-  assert.match(PARK_SOURCE, /const CANVAS_FIT_PADDING = 24/);
-  assert.match(PARK_SOURCE, /function canvasFitViewport\(mode\)/);
-  assert.match(PARK_SOURCE, /function canvasBoundsForItems\(items, layout\)/);
-  assert.match(PARK_SOURCE, /const bounds = canvasBoundsForItems\(allTabs, state\.layout \|\| canvasLayout\)/);
-  assert.match(PARK_SOURCE, /x: \(bounds\.minX \+ bounds\.maxX\) \/ 2 - width \/ \(2 \* zoom\)/);
-  assert.match(PARK_SOURCE, /y: \(bounds\.minY \+ bounds\.maxY\) \/ 2 - height \/ \(2 \* zoom\)/);
-  const boundsSource = PARK_SOURCE.match(/function canvasBoundsForItems\(items, layout\)[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_FIT_PADDING = 24/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function canvasFitViewport\(mode\)/);
+  // Bounds math lives in parkCanvasGeometry.js (v2.29.5+)
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasBoundsForItems\(items, layout\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasBoundsForItems/);
+  assert.match(PARK_BEHAVIOR_FLAT, /const bounds = canvasBoundsForItems\(allTabs, state\.layout \|\| canvasLayout\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /x: \(bounds\.minX \+ bounds\.maxX\) \/ 2 - width \/ \(2 \* zoom\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /y: \(bounds\.minY \+ bounds\.maxY\) \/ 2 - height \/ \(2 \* zoom\)/);
+  const boundsSource = CANVAS_GEOM_SOURCE.match(/function canvasBoundsForItems\(items, layout\)[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(boundsSource, /canvasDisplayPosition\(layout\.positions\?\.\[item\.id\] \|\| canvasDefaultPosition\(index\)\)/);
-  const fitSource = PARK_SOURCE.match(/function canvasFitViewport\(mode\)[\s\S]*?\n\}/)?.[0] || '';
+  const fitSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasFitViewport');
   assert.match(fitSource, /const items = getCanvasVisibleTabs\(\)/);
   assert.match(fitSource, /const widthZoom = availableWidth \/ contentWidth/);
   assert.match(fitSource, /const requestedZoom = mode === 'width' \? widthZoom : Math\.min\(widthZoom, heightZoom\)/);
   assert.match(fitSource, /ensureCanvasStore\(\)\?\.commitViewport\(\{/);
-  assert.match(PARK_SOURCE, /if \(action === 'reset'\) resetCanvasView\(\)/);
-  assert.match(PARK_SOURCE, /if \(canvasZoomMenu && !canvasZoomMenu\.hidden\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(action === 'reset'\) resetCanvasView\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /if \(canvasZoomMenu && !canvasZoomMenu\.hidden\)/);
 });

@@ -21,14 +21,33 @@ rm -f "$OUT_ZIP"
 zip -r "$OUT_ZIP" \
   manifest.json \
   background.js \
+  bgNormalize.js \
+  bgLayout.js \
+  bgBackup.js \
+  bgRestore.js \
   content.js \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \
   canvasStore.js \
+  parkCanvasGeometry.js \
+  parkCanvasRender.js \
+  parkStickerUi.js \
+  parkImportExport.js \
+  parkSettingsUi.js \
+  parkSearchQuery.js \
+  parkSearchUi.js \
+  parkMediaUi.js \
   popup.html \
   popup.js \
   park.html \
+  park.css \
+  parkI18n.js \
+  parkCanvasInteraction.js \
+  parkCanvasChrome.js \
+  parkListUi.js \
+  parkWorkspaceUi.js \
+  parkAppHelpers.js \
   park.js \
   icons/icon16.png \
   icons/icon48.png \

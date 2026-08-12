@@ -7,6 +7,12 @@ import vm from 'node:vm';
 const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.url), 'utf8');
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
+const BG_MODULE_SOURCES = Object.fromEntries(
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js'].map((name) => [
+    name,
+    fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
+  ])
+);
 const MANIFEST = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
 const ITEM_ID = '11111111-1111-4111-8111-111111111111';
 const SOURCE_ID = '22222222-2222-4222-8222-222222222222';
@@ -332,7 +338,15 @@ function createRuntime() {
     },
     createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
     __TABWALL_TEST__: true,
-    importScripts() {},
+    importScripts(...names) {
+      for (const name of names) {
+        // mediaDb/backupBuild/noteMedia are pre-injected on the sandbox.
+        if (name === 'mediaDb.js' || name === 'backupBuild.js' || name === 'noteMedia.js') continue;
+        const source = BG_MODULE_SOURCES[name];
+        if (!source) throw new Error(`unexpected importScripts: ${name}`);
+        vm.runInContext(source, sandbox, { filename: name });
+      }
+    },
     TabWallMediaDB: mediaApi,
   };
   sandbox.self = sandbox;
@@ -411,7 +425,12 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.29.0');
+  assert.equal(MANIFEST.version, '2.29.15');
+  assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
+  assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
+  assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
+  assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
