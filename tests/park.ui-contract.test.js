@@ -89,6 +89,10 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.doesNotMatch(HTML_SOURCE, /value="oldest"|value="title-desc"|value="manual"|canvasArrangeCircle/);
   assert.match(HTML_SOURCE, /id="canvasLinkBtn"[^>]*data-canvas-tool="link"/);
   assert.match(HTML_SOURCE, /id="lbGroupMosaic" class="lb-group-mosaic"/);
+  assert.match(HTML_SOURCE, /id="lbBack"[^>]*data-i18n="backToGroup"/);
+  assert.match(HTML_SOURCE, /id="lbManageMembers"[^>]*data-i18n="openMembersManage"/);
+  assert.match(HTML_SOURCE, /\.lb-group-grid\s*\{/);
+  assert.match(HTML_SOURCE, /\.lb-group-cell\s*\{/);
   for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
     assert.match(CANVAS_RENDER_SOURCE, new RegExp(`action: '${action}'`));
   }
@@ -117,6 +121,20 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(PARK_BEHAVIOR_FLAT, /scheduleCanvasNodePreview\(item\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /event\.detail > 1/);
   assert.match(PARK_BEHAVIOR_FLAT, /openCanvasGroupLightbox\(current\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function buildGroupMemberNavList\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function renderGroupOverviewGrid\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function handleLightboxEscape\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function backToGroupOverview\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /lb-group-grid/);
+  assert.match(PARK_BEHAVIOR_FLAT, /fromOverview/);
+  // Group expand must not reuse the 4-tile card cover as the lightbox body.
+  {
+    const groupLb = extractFnSource(PARK_BEHAVIOR_FLAT, 'openCanvasGroupLightbox');
+    assert.doesNotMatch(groupLb, /groupCoverHtml/);
+    assert.match(groupLb, /renderGroupOverviewGrid/);
+  }
+  assert.match(PARK_BEHAVIOR_FLAT, /item\?\.kind === 'group'[\s\S]*?openCanvasGroupLightbox\(item\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /item\.kind === 'group'[\s\S]*?openCanvasGroupLightbox\(item\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /suppressCanvasNodeClick\(state\.id\)/);
   const pointerControlSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'isCanvasControlTarget');
   assert.doesNotMatch(pointerControlSource, /\.canvas-node-thumb/);
@@ -380,7 +398,7 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
 
 test('Editorial Workbench is desktop-only with low-contrast theme tokens', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /theme: 'dark'/);
-  assert.match(HTML_SOURCE, /<html lang="zh-Hant" data-theme="dark">/);
+  assert.match(HTML_SOURCE, /<html lang="zh-Hant" data-theme="dark" data-fx="standard">/);
   assert.match(WORKBENCH_CSS, /--bg: #101110;/);
   assert.match(WORKBENCH_CSS, /html\[data-theme='light'\][\s\S]*?--bg: #f5f1ea;/);
   assert.match(WORKBENCH_CSS, /min-width: 1200px;/);
@@ -394,6 +412,33 @@ test('Editorial Workbench is desktop-only with low-contrast theme tokens', () =>
   assert.match(quickAddCss, /border-color: transparent !important;/);
   assert.doesNotMatch(quickAddCss, /var\(--accent-soft\)/);
   assert.doesNotMatch(quickAddCss, /color:\s*#fff/);
+});
+
+test('Standard visual fx is gated by fxLevel and data-fx', () => {
+  assert.match(PARK_SOURCE, /fxLevel: 'standard'/);
+  assert.match(HTML_MARKUP, /name="fxLevel"[^>]*value="standard"/);
+  assert.match(HTML_MARKUP, /name="fxLevel"[^>]*value="quiet"/);
+  assert.match(HTML_MARKUP, /name="fxLevel"[^>]*value="cinematic"/);
+  assert.match(SETTINGS_UI_SOURCE, /function applyFxLevel\(/);
+  assert.match(SETTINGS_UI_SOURCE, /function normalizeFxLevel\(/);
+  assert.match(SETTINGS_UI_SOURCE, /dataset\.fx/);
+  assert.match(SETTINGS_UI_SOURCE, /value === 'quiet' \|\| value === 'cinematic'/);
+  assert.match(CSS_SOURCE, /:is\(\[data-fx='standard'\], \[data-fx='cinematic'\]\)/);
+  assert.match(CSS_SOURCE, /@keyframes fxDash/);
+  assert.match(CSS_SOURCE, /@keyframes fxSearchFlash/);
+  assert.match(CSS_SOURCE, /@keyframes fxJustSaved/);
+  assert.match(CSS_SOURCE, /@keyframes fxFadeIn/);
+  assert.match(CSS_SOURCE, /@keyframes fxPinSweep/);
+  assert.match(CSS_SOURCE, /@keyframes fxConnFlow/);
+  assert.match(CANVAS_RENDER_SOURCE, /just-saved/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvas-connection-flow/);
+  assert.match(CANVAS_IX_SOURCE, /function syncCanvasNodeDragFx\(/);
+  assert.match(CANVAS_IX_SOURCE, /function updateCanvasNodeTilt\(/);
+  assert.match(CANVAS_CHROME_SOURCE, /--fx-grid-x/);
+  assert.match(I18N_SOURCE, /fxTitle:/);
+  assert.match(I18N_SOURCE, /fxQuiet:/);
+  assert.match(I18N_SOURCE, /fxStandard:/);
+  assert.match(I18N_SOURCE, /fxCinematic:/);
 });
 
 test('Spatial Canvas state and settings use shared persistence contracts', () => {

@@ -213,6 +213,7 @@
     });
     merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
     merged.canvasSnap = merged.canvasSnap !== false;
+    merged.fxLevel = normalizeFxLevel(merged.fxLevel);
     env.normalizeCanvasRailSettings(merged);
     return merged;
       
@@ -263,6 +264,30 @@
     document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
     env.themeBtn.textContent = theme === 'light' ? 'Dark' : 'Light';
       
+  }
+
+  let fxMotionMql = null;
+
+  function normalizeFxLevel(value) {
+    if (value === 'quiet' || value === 'cinematic') return value;
+    return 'standard';
+  }
+
+  function applyFxLevel(level) {
+    ensureBound('applyFxLevel');
+
+    const normalized = normalizeFxLevel(level);
+    let reduced = false;
+    try {
+      if (!fxMotionMql && typeof matchMedia === 'function') {
+        fxMotionMql = matchMedia('(prefers-reduced-motion: reduce)');
+        fxMotionMql.addEventListener?.('change', () => applyFxLevel(env.settings?.fxLevel));
+      }
+      reduced = Boolean(fxMotionMql?.matches);
+    } catch {
+      reduced = false;
+    }
+    document.documentElement.dataset.fx = reduced ? 'quiet' : normalized;
   }
 
   function applyCanvasRailUi({ width = env.settings.canvasRailWidth, collapsed = env.settings.canvasRailCollapsed } = {}) {
@@ -371,6 +396,7 @@
     ensureBound('syncSettingsUi');
 
     applyTheme(env.settings.theme);
+    applyFxLevel(env.settings.fxLevel);
     applyViewMode(env.settings.viewMode);
     applyCardCols(env.settings.cardCols);
     env.canvasSnapToGrid = env.settings.canvasSnap !== false;
@@ -409,6 +435,11 @@
       env.settingsEl.querySelector(`input[name="theme"][value="${env.settings.theme}"]`) ||
       env.settingsEl.querySelector('input[name="theme"][value="dark"]');
     if (themeRadio) themeRadio.checked = true;
+
+    const fxRadio =
+      env.settingsEl.querySelector(`input[name="fxLevel"][value="${normalizeFxLevel(env.settings.fxLevel)}"]`) ||
+      env.settingsEl.querySelector('input[name="fxLevel"][value="standard"]');
+    if (fxRadio) fxRadio.checked = true;
       
     const localeRadio =
       env.settingsEl.querySelector(`input[name="locale"][value="${env.settings.locale}"]`) ||
@@ -883,6 +914,16 @@
         }
       });
     });
+
+    env.settingsEl.querySelectorAll('input[name="fxLevel"]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        if (input.checked) {
+          const fxLevel = normalizeFxLevel(input.value);
+          await saveSettings({ fxLevel });
+          applyFxLevel(fxLevel);
+        }
+      });
+    });
       
     env.settingsEl.querySelectorAll('input[name="locale"]').forEach((input) => {
       input.addEventListener('change', async () => {
@@ -1027,6 +1068,7 @@
     loadSettings,
     saveSettings,
     applyTheme,
+    applyFxLevel,
     applyCanvasRailUi,
     syncViewModeButton,
     applyViewMode,

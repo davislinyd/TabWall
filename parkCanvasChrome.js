@@ -81,6 +81,10 @@
         env.canvasWorldScaleEl.style.zoom = String(zoom);
         env.canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px)`;
       }
+      if (env.canvasViewportEl) {
+        env.canvasViewportEl.style.setProperty('--fx-grid-x', `${(-x * 0.15).toFixed(2)}px`);
+        env.canvasViewportEl.style.setProperty('--fx-grid-y', `${(-y * 0.15).toFixed(2)}px`);
+      }
       if (env.canvasZoomValue) env.canvasZoomValue.textContent = `${Math.round(zoom * 100)}%`;
       if (env.canvasZoomSlider) env.canvasZoomSlider.value = String(zoom);
       if (env.canvasMinimap) env.canvasMinimap.dataset.zoom = String(zoom);

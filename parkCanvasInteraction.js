@@ -599,6 +599,62 @@
 
   }
 
+  function syncCanvasNodeDragFx(state, event) {
+    const nodes = env.canvasNodeElements;
+    if (!nodes) return;
+    const dragging = Boolean(state?.kind === 'node' && state.moved);
+    let dragIds = new Set();
+    if (dragging) {
+      if (state.searchPreview && state.searchIds?.length) dragIds = new Set(state.searchIds);
+      else {
+        const selection = env.activeCanvasSelection?.();
+        if (selection) dragIds = new Set(selection);
+      }
+    }
+    let hoverId = '';
+    if (dragging && dragIds.size === 1 && event) {
+      hoverId = env.canvasTargetAt(env.canvasPointFromEvent(event), state.id) || '';
+    }
+    nodes.forEach((node, id) => {
+      node.classList.toggle('dragging', dragIds.has(id));
+      node.classList.toggle('stack-hover', Boolean(hoverId && id === hoverId));
+    });
+  }
+
+  let tiltedCanvasNode = null;
+
+  function clearCanvasNodeTilt() {
+    if (!tiltedCanvasNode) return;
+    tiltedCanvasNode.style.removeProperty('--tilt-x');
+    tiltedCanvasNode.style.removeProperty('--tilt-y');
+    tiltedCanvasNode.classList.remove('is-tilting');
+    tiltedCanvasNode = null;
+  }
+
+  function updateCanvasNodeTilt(event) {
+    if (document.documentElement.dataset.fx !== 'cinematic') {
+      clearCanvasNodeTilt();
+      return;
+    }
+    if (env.canvasPointerState?.kind === 'node' && env.canvasPointerState.moved) {
+      clearCanvasNodeTilt();
+      return;
+    }
+    const node = event.target.closest?.('.canvas-node');
+    if (!node || node.classList.contains('dragging')) {
+      clearCanvasNodeTilt();
+      return;
+    }
+    if (tiltedCanvasNode && tiltedCanvasNode !== node) clearCanvasNodeTilt();
+    const rect = node.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / Math.max(rect.width, 1) - 0.5;
+    const py = (event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5;
+    node.style.setProperty('--tilt-x', `${(-py * 8).toFixed(2)}deg`);
+    node.style.setProperty('--tilt-y', `${(px * 8).toFixed(2)}deg`);
+    node.classList.add('is-tilting');
+    tiltedCanvasNode = node;
+  }
+
   function applyCanvasPointer(event) {
     ensureBound('applyCanvasPointer');
 
@@ -611,9 +667,11 @@
         const zoom = env.canvasStoreSnapshot().layout.viewport.zoom || 1;
         if (state.searchPreview) {
           env.applyCanvasSearchPointerPreview(state, dx / zoom, dy / zoom);
+          syncCanvasNodeDragFx(state, event);
           return;
         }
         env.ensureCanvasStore()?.previewPointer({ dx: dx / zoom, dy: dy / zoom, moved: state.moved });
+        syncCanvasNodeDragFx(state, event);
         return;
       }
       if (state.kind === 'pan') {
@@ -802,6 +860,8 @@
         }
       });
       env.canvasViewportEl.addEventListener('pointermove', updateCanvasPointer);
+      env.canvasViewportEl.addEventListener('pointermove', updateCanvasNodeTilt);
+      env.canvasViewportEl.addEventListener('pointerleave', clearCanvasNodeTilt);
       env.canvasViewportEl.addEventListener('pointerup', endCanvasPointer);
       env.canvasViewportEl.addEventListener('pointercancel', env.cancelCanvasPointer);
       env.canvasViewportEl.addEventListener('lostpointercapture', () => {
@@ -1104,7 +1164,10 @@
       const item = env.canvasItemById(id);
       if (!item || !action) return;
       if (action === 'restore') await env.restoreItem(item.id);
-      else if (action === 'snapshot') env.openLightbox(item);
+      else if (action === 'snapshot') {
+        if (item.kind === 'group') env.openCanvasGroupLightbox(item);
+        else env.openLightbox(item);
+      }
       else if (action === 'copy') await env.copySavedLink(item);
       else if (action === 'members') env.openMembersBox(item);
       else if (action === 'edit') {

@@ -57,6 +57,7 @@ const DEFAULT_SETTINGS = {
   viewMode: 'canvas',
   sortBy: 'newest',
   theme: 'dark',
+  fxLevel: 'standard',
   cardCols: 4,
   locale: 'zh',
   defaultViewMode: 'canvas',
@@ -376,6 +377,8 @@ const lbPrev = document.getElementById('lbPrev');
 const lbNext = document.getElementById('lbNext');
 const lbCounter = document.getElementById('lbCounter');
 const lbGroupMosaic = document.getElementById('lbGroupMosaic');
+const lbBack = document.getElementById('lbBack');
+const lbManageMembers = document.getElementById('lbManageMembers');
 
 const editBox = document.getElementById('editBox');
 const editDrag = document.getElementById('editDrag');
@@ -742,9 +745,11 @@ function bindPanelModules() {
     "isStoredOnlyUrl": () => isStoredOnlyUrl,
     "isTypingTarget": () => isTypingTarget,
     "itemTitle": () => itemTitle,
+    "lbBack": () => lbBack,
     "lbCounter": () => lbCounter,
     "lbGroupMosaic": () => lbGroupMosaic,
     "lbImage": () => lbImage,
+    "lbManageMembers": () => lbManageMembers,
     "lbNext": () => lbNext,
     "lbPrev": () => lbPrev,
     "lbRestore": () => lbRestore,
@@ -1223,6 +1228,7 @@ function applyI18n() {
     if (key) opt.textContent = t(key);
   });
   applyTheme(settings.theme);
+  applyFxLevel(settings.fxLevel);
   if (typeof applyCanvasRailUi === 'function') applyCanvasRailUi();
   syncQuickCaptureAvailability();
   syncPinnedFilterUi();
@@ -1390,6 +1396,8 @@ let suppressSettingsTimer = null;
 async function saveSettings(...args) { return await SettingsUi.saveSettings(...args); }
 
 function applyTheme(...args) { return SettingsUi.applyTheme(...args); }
+
+function applyFxLevel(...args) { return SettingsUi.applyFxLevel(...args); }
 
 function applyCanvasRailUi(...args) { return SettingsUi.applyCanvasRailUi(...args); }
 
@@ -1675,7 +1683,7 @@ document.addEventListener('keydown', (e) => {
       return;
     }
     if (lightbox.classList.contains('open')) {
-      closeLightbox();
+      handleLightboxEscape();
       return;
     }
     if (membersBox.classList.contains('open')) {
@@ -1872,9 +1880,22 @@ function navigateLightbox(...args) { return WorkspaceUi.navigateLightbox(...args
 
 function closeLightbox(...args) { return WorkspaceUi.closeLightbox(...args); }
 
+function backToGroupOverview(...args) { return WorkspaceUi.backToGroupOverview(...args); }
+
+function handleLightboxEscape(...args) { return WorkspaceUi.handleLightboxEscape(...args); }
+
 lbClose.addEventListener('click', closeLightbox);
 if (lbPrev) lbPrev.addEventListener('click', () => navigateLightbox(-1));
 if (lbNext) lbNext.addEventListener('click', () => navigateLightbox(1));
+lbBack?.addEventListener('click', () => {
+  backToGroupOverview();
+});
+lbManageMembers?.addEventListener('click', () => {
+  if (expandedMeta?.type !== 'group' || !expandedId) return;
+  const group = allTabs.find((x) => x.id === expandedId);
+  closeLightbox();
+  if (group) openMembersBox(group);
+});
 
 lbRestore.addEventListener('click', async () => {
   if (!expandedId) return;
@@ -2892,6 +2913,9 @@ function clearCanvasPointerUi(pointerId = null) {
     // ignore
   }
   canvasViewportEl?.classList.remove('is-panning');
+  canvasNodeElements.forEach((node) => {
+    node.classList.remove('dragging', 'stack-hover');
+  });
 }
 
 function cancelCanvasPointer(...args) { return AppHelpers.cancelCanvasPointer(...args); }

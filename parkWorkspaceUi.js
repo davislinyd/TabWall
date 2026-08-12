@@ -292,12 +292,136 @@
 
   }
 
+  function collectGroupMembers(group) {
+    return [
+      ...(group.tabs || []).map((member) => ({ ...member, kind: 'tab' })),
+      ...(group.notes || []).map((note) => ({ ...note, kind: 'note' })),
+    ].sort((a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0));
+  }
+
+  function buildGroupMemberNavList(group) {
+    ensureBound('buildGroupMemberNavList');
+    return (group.tabs || [])
+      .slice()
+      .sort((a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0))
+      .map((m) => ({
+        key: `m:${group.id}:${m.id}`,
+        mediaKey: env.mediaKeyForMember(group.id, m.id),
+        title: m.title || m.url || 'Untitled',
+        url: m.url || '',
+        hasSnap: Boolean(m.hasSnap || m.snapshot),
+        hasThumb: Boolean(m.hasThumb || m.thumbnail),
+        restore: { type: 'member', groupId: group.id, memberId: m.id },
+        fromOverview: true,
+      }));
+  }
+
+  function setLightboxChrome({
+    showNav = false,
+    showBack = false,
+    showManage = false,
+    restoreKey = 'restore',
+    counterText = '—',
+  } = {}) {
+    if (env.lbPrev) env.lbPrev.hidden = !showNav;
+    if (env.lbNext) env.lbNext.hidden = !showNav;
+    if (env.lbBack) env.lbBack.hidden = !showBack;
+    if (env.lbManageMembers) env.lbManageMembers.hidden = !showManage;
+    if (env.lbRestore) {
+      env.lbRestore.dataset.i18n = restoreKey;
+      env.lbRestore.textContent = env.t(restoreKey);
+    }
+    if (env.lbCounter) env.lbCounter.textContent = counterText;
+  }
+
+  function renderGroupOverviewGrid(group) {
+    ensureBound('renderGroupOverviewGrid');
+    const members = collectGroupMembers(group);
+    if (!members.length) {
+      env.lbGroupMosaic.innerHTML = `<div class="lb-group-empty">—</div>`;
+      return;
+    }
+    const cells = members.map((m) => {
+      const isNote = m.kind === 'note';
+      const titleText = m.title || m.url || (isNote ? t('noteUntitled') : 'Untitled');
+      const subText = isNote ? t('noteKind') : (m.url || '');
+      if (isNote) {
+        return `<button type="button" class="lb-group-cell" data-kind="note" data-member-id="${escapeAttr(m.id)}">
+          <div class="lb-group-cell-media is-note">${env.iconSvg('note')}</div>
+          <div class="lb-group-cell-title" title="${escapeAttr(titleText)}">${escapeHtml(titleText)}</div>
+          <div class="lb-group-cell-sub">${escapeHtml(subText)}</div>
+        </button>`;
+      }
+      const mKey = env.mediaKeyForMember(group.id, m.id);
+      const hasMedia = Boolean(m.hasThumb || m.thumbnail || m.hasSnap || m.snapshot);
+      const media = hasMedia
+        ? `<img class="lb-group-cell-media lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mKey)}" />`
+        : `<div class="lb-group-cell-media is-placeholder" aria-hidden="true"></div>`;
+      return `<button type="button" class="lb-group-cell" data-kind="tab" data-member-id="${escapeAttr(m.id)}">
+        ${media}
+        <div class="lb-group-cell-title" title="${escapeAttr(titleText)}">${escapeHtml(titleText)}</div>
+        <div class="lb-group-cell-sub" title="${escapeAttr(subText)}">${escapeHtml(subText)}</div>
+      </button>`;
+    }).join('');
+    env.lbGroupMosaic.innerHTML = `<div class="lb-group-grid">${cells}</div>`;
+    env.lbGroupMosaic.querySelectorAll('img.lazy-thumb').forEach((img) => env.observeThumb(img));
+  }
+
+  function bindGroupOverviewClicks(groupId) {
+    if (!env.lbGroupMosaic) return;
+    env.lbGroupMosaic.onclick = (e) => {
+      const cell = e.target.closest?.('.lb-group-cell');
+      if (!cell || !env.lbGroupMosaic.contains(cell)) return;
+      const group = env.allTabs.find((x) => x.id === groupId);
+      if (!group || group.kind !== 'group') return;
+      const memberId = cell.dataset.memberId;
+      const kind = cell.dataset.kind;
+      if (kind === 'note') {
+        const note = (group.notes || []).find((n) => n.id === memberId);
+        if (!note) return;
+        closeLightbox();
+        env.openStickerNoteEditor(note, { groupId: group.id });
+        return;
+      }
+      const list = buildGroupMemberNavList(group);
+      const index = list.findIndex((entry) => entry.restore.memberId === memberId);
+      if (index < 0) return;
+      showLightboxEntry(list[index], index, list);
+    };
+  }
+
+  function backToGroupOverview() {
+    ensureBound('backToGroupOverview');
+    const groupId = env.expandedMeta?.groupId;
+    if (!groupId) return false;
+    const group = env.allTabs.find((x) => x.id === groupId);
+    if (!group || group.kind !== 'group') return false;
+    openCanvasGroupLightbox(group);
+    return true;
+  }
+
+  function handleLightboxEscape() {
+    ensureBound('handleLightboxEscape');
+    if (!env.lightbox?.classList.contains('open')) return false;
+    if (env.expandedMeta?.fromOverview && env.expandedMeta?.groupId) {
+      return backToGroupOverview();
+    }
+    closeLightbox();
+    return true;
+  }
+
   async function showLightboxEntry(entry, index, list) {
     ensureBound('showLightboxEntry');
 
       env.expandedId = entry.restore.type === 'member' ? entry.restore.memberId : entry.restore.id;
       env.expandedMeta =
-        entry.restore.type === 'member' ? { type: 'member', groupId: entry.restore.groupId } : null;
+        entry.restore.type === 'member'
+          ? {
+              type: 'member',
+              groupId: entry.restore.groupId,
+              fromOverview: Boolean(entry.fromOverview),
+            }
+          : null;
       env.lightboxNav = { list, index };
       env.lbTitle.textContent = entry.title;
       env.lbUrl.textContent = entry.url;
@@ -305,16 +429,15 @@
       if (env.lbGroupMosaic) {
         env.lbGroupMosaic.hidden = true;
         env.lbGroupMosaic.replaceChildren();
+        env.lbGroupMosaic.onclick = null;
       }
-      if (env.lbPrev) env.lbPrev.hidden = false;
-      if (env.lbNext) env.lbNext.hidden = false;
-      if (env.lbRestore) {
-        env.lbRestore.dataset.i18n = 'restore';
-        env.lbRestore.textContent = env.t('restore');
-      }
-      if (env.lbCounter) {
-        env.lbCounter.textContent = list.length ? `${index + 1} / ${list.length}` : '—';
-      }
+      setLightboxChrome({
+        showNav: list.length > 1,
+        showBack: Boolean(entry.fromOverview && entry.restore?.type === 'member'),
+        showManage: false,
+        restoreKey: 'restore',
+        counterText: list.length ? `${index + 1} / ${list.length}` : '—',
+      });
       env.lightbox.classList.add('open');
       env.lightbox.setAttribute('aria-hidden', 'false');
 
@@ -372,6 +495,27 @@
   function openLightbox(item, meta = null) {
     ensureBound('openLightbox');
 
+      if (item?.kind === 'group') {
+        openCanvasGroupLightbox(item);
+        return;
+      }
+
+      // When opening a group member from members panel, prefer group-scoped nav.
+      if (meta?.groupId) {
+        const group = env.allTabs.find((x) => x.id === meta.groupId);
+        if (group?.kind === 'group') {
+          const list = buildGroupMemberNavList(group).map((entry) => ({
+            ...entry,
+            fromOverview: Boolean(meta.fromOverview),
+          }));
+          const index = list.findIndex((e) => e.restore.memberId === item.id);
+          if (index >= 0) {
+            showLightboxEntry(list[index], index, list);
+            return;
+          }
+        }
+      }
+
       const list = buildLightboxNavList();
       let index = 0;
       if (meta?.groupId) {
@@ -409,24 +553,25 @@
     ensureBound('openCanvasGroupLightbox');
 
       if (!group || group.kind !== 'group' || !env.lbGroupMosaic) return;
+      const memberCount = (group.tabs || []).length + (group.notes || []).length;
       env.expandedId = group.id;
       env.expandedMeta = { type: 'group' };
       env.lightboxNav = null;
       env.lbTitle.textContent = env.itemTitle(group);
-      env.lbUrl.textContent = env.t('groupTabs', { n: (group.tabs || []).length + (group.notes || []).length });
-      if (env.lbCounter) env.lbCounter.textContent = '—';
-      if (env.lbPrev) env.lbPrev.hidden = true;
-      if (env.lbNext) env.lbNext.hidden = true;
-      if (env.lbRestore) {
-        env.lbRestore.dataset.i18n = 'restoreGroup';
-        env.lbRestore.textContent = env.t('restoreGroup');
-      }
+      env.lbUrl.textContent = env.t('groupTabs', { n: memberCount });
+      setLightboxChrome({
+        showNav: false,
+        showBack: false,
+        showManage: true,
+        restoreKey: 'restoreGroup',
+        counterText: memberCount ? String(memberCount) : '—',
+      });
       env.lbImage.removeAttribute('src');
       env.lbImage.hidden = true;
-      env.lbGroupMosaic.innerHTML = env.groupCoverHtml(group);
-      env.lbGroupMosaic.hidden = false;
-      env.lbGroupMosaic.querySelectorAll('img.lazy-thumb').forEach((img) => env.observeThumb(img));
       env.lbSnapHint.hidden = true;
+      renderGroupOverviewGrid(group);
+      bindGroupOverviewClicks(group.id);
+      env.lbGroupMosaic.hidden = false;
       env.lightbox.classList.add('open');
       env.lightbox.setAttribute('aria-hidden', 'false');
 
@@ -455,14 +600,15 @@
       if (env.lbGroupMosaic) {
         env.lbGroupMosaic.hidden = true;
         env.lbGroupMosaic.replaceChildren();
+        env.lbGroupMosaic.onclick = null;
       }
-      if (env.lbPrev) env.lbPrev.hidden = false;
-      if (env.lbNext) env.lbNext.hidden = false;
-      if (env.lbRestore) {
-        env.lbRestore.dataset.i18n = 'restore';
-        env.lbRestore.textContent = env.t('restore');
-      }
-      if (env.lbCounter) env.lbCounter.textContent = '—';
+      setLightboxChrome({
+        showNav: true,
+        showBack: false,
+        showManage: false,
+        restoreKey: 'restore',
+        counterText: '—',
+      });
 
   }
 
@@ -1406,5 +1552,67 @@
 
   }
 
-  global.TabWallWorkspaceUi = { bind, renderMembersList, openMembersBox, closeMembersBox, renderDedupeClusters, openDedupeBox, closeDedupeBox, runDedupeScan, applyDedupeChoices, initDedupeUi, showLightboxEntry, openLightbox, openCanvasGroupLightbox, navigateLightbox, closeLightbox, buildLightboxNavList, renderTagManager, refreshTagManager, addTagFromManager, updateBatchBar, setSelectMode, toggleSelect, restoreItem, deleteItem, loadList, initConflictUi, openConflictModal, closeConflictModal, resolveConflict, openPreSaveModal, closePreSaveModal, confirmPreSave, cancelPreSave, initPreSaveUi, renderPreSaveChips, commitPreSaveTagDraft, appendDedupeThumb, appendDedupePreviewBtn, renderEditChips, commitTagDraft, openEditBox, closeEditBox, openMemberEditBox, placeEditBoxCentered, setupFloatDrag, anyFloatOpen, syncFloatBackdrop, closeAllFloatsExcept, placeFloatBox, openTagsBox, closeTagsBox, openHelpBox, closeHelpBox, positionTagsBoxUnderButton, initQuickCaptureUi, requestQuickCapture, handleQuickCaptureResult, quickCaptureErrorText };
+  global.TabWallWorkspaceUi = {
+    bind,
+    renderMembersList,
+    openMembersBox,
+    closeMembersBox,
+    renderDedupeClusters,
+    openDedupeBox,
+    closeDedupeBox,
+    runDedupeScan,
+    applyDedupeChoices,
+    initDedupeUi,
+    showLightboxEntry,
+    openLightbox,
+    openCanvasGroupLightbox,
+    navigateLightbox,
+    closeLightbox,
+    backToGroupOverview,
+    handleLightboxEscape,
+    buildGroupMemberNavList,
+    buildLightboxNavList,
+    renderTagManager,
+    refreshTagManager,
+    addTagFromManager,
+    updateBatchBar,
+    setSelectMode,
+    toggleSelect,
+    restoreItem,
+    deleteItem,
+    loadList,
+    initConflictUi,
+    openConflictModal,
+    closeConflictModal,
+    resolveConflict,
+    openPreSaveModal,
+    closePreSaveModal,
+    confirmPreSave,
+    cancelPreSave,
+    initPreSaveUi,
+    renderPreSaveChips,
+    commitPreSaveTagDraft,
+    appendDedupeThumb,
+    appendDedupePreviewBtn,
+    renderEditChips,
+    commitTagDraft,
+    openEditBox,
+    closeEditBox,
+    openMemberEditBox,
+    placeEditBoxCentered,
+    setupFloatDrag,
+    anyFloatOpen,
+    syncFloatBackdrop,
+    closeAllFloatsExcept,
+    placeFloatBox,
+    openTagsBox,
+    closeTagsBox,
+    openHelpBox,
+    closeHelpBox,
+    positionTagsBoxUnderButton,
+    initQuickCaptureUi,
+    requestQuickCapture,
+    handleQuickCaptureResult,
+    quickCaptureErrorText,
+  };
 })(typeof self !== 'undefined' ? self : globalThis);

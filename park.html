@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="dark">
+<html lang="zh-Hant" data-theme="dark" data-fx="standard">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -376,6 +376,15 @@
             <label><input type="radio" name="theme" value="light" /> Light</label>
           </div>
         </div>
+        <div class="settings-block" data-settings-section="display">
+          <h2 data-i18n="fxTitle">視覺效果</h2>
+          <p class="hint" style="margin:0 0 12px;font-size:12px;color:var(--muted)" data-i18n="fxHint">選取、拖曳、連線與搜尋時的動態回饋；系統「減少動態效果」會強制安靜。</p>
+          <div class="radios">
+            <label><input type="radio" name="fxLevel" value="standard" /> <span data-i18n="fxStandard">標準</span></label>
+            <label><input type="radio" name="fxLevel" value="cinematic" /> <span data-i18n="fxCinematic">電影感</span></label>
+            <label><input type="radio" name="fxLevel" value="quiet" /> <span data-i18n="fxQuiet">安靜</span></label>
+          </div>
+        </div>
         <div class="settings-block" data-settings-section="canvas">
           <h2 data-i18n="canvasSettingsTitle">畫布設定</h2>
           <p class="hint" style="margin:0 0 12px;font-size:12px;color:var(--muted)" data-i18n="canvasSettingsHint">調整畫布的操作方式；位置與視角會自動儲存。</p>
@@ -592,6 +601,8 @@
           <div class="lb-url" id="lbUrl">—</div>
         </div>
         <div class="row-btns">
+          <button type="button" class="btn" id="lbBack" hidden data-i18n="backToGroup">返回總覽</button>
+          <button type="button" class="btn" id="lbManageMembers" hidden data-i18n="openMembersManage">管理成員</button>
           <button type="button" class="btn lb-nav" id="lbPrev" title="←" aria-label="Previous">‹</button>
           <span class="lb-counter" id="lbCounter">—</span>
           <button type="button" class="btn lb-nav" id="lbNext" title="→" aria-label="Next">›</button>

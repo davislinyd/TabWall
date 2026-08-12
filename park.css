@@ -1908,20 +1908,120 @@ html[data-theme='light'] #lightbox {
 }
 
 .lb-group-mosaic {
-  display: flex;
-  min-width: min(900px, 90vw);
-  min-height: min(560px, 72vh);
-  align-items: center;
-  justify-content: center;
+  display: block;
+  width: min(1100px, 94vw);
+  max-width: 100%;
+  max-height: min(78vh, 820px);
+  margin: 0 auto;
+  overflow: auto;
+  text-align: left;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--edit-shadow);
+  padding: 12px;
+  box-sizing: border-box;
 }
 
+.lb-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.lb-group-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.lb-group-cell:hover,
+.lb-group-cell:focus-visible {
+  border-color: var(--accent, #60a5fa);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #60a5fa) 28%, transparent);
+  outline: none;
+}
+
+.lb-group-cell:active {
+  transform: translateY(1px);
+}
+
+.lb-group-cell-media {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--panel);
+  display: block;
+}
+
+.lb-group-cell-media.is-placeholder {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--bg),
+      var(--bg) 8px,
+      var(--panel) 8px,
+      var(--panel) 16px
+    );
+}
+
+.lb-group-cell-media.is-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d1a51b;
+}
+
+.lb-group-cell-media.is-note svg {
+  width: 28px;
+  height: 28px;
+}
+
+.lb-group-cell-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-group-cell-sub {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-group-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* legacy single-cover fallback if ever reintroduced */
 .lb-group-mosaic > .group-mosaic,
 .lb-group-mosaic > img {
-  width: min(900px, 90vw);
+  width: 100%;
   max-width: 100%;
   aspect-ratio: 16 / 10;
   border-radius: 4px;
-  box-shadow: var(--edit-shadow);
 }
 
 .lb-group-mosaic > .group-mosaic {
@@ -6255,4 +6355,207 @@ html[data-theme='dark'] .canvas-node.canvas-note {
   color: var(--muted);
   font-size: 11px;
 }
-    
+
+/* ─── TabWall 2.31 visual fx (standard) ─────────────────── */
+html:is([data-fx='standard'], [data-fx='cinematic']) {
+  --fx-depth-1: 0 8px 20px rgba(0, 0, 0, 0.28);
+  --fx-depth-2: 0 16px 36px rgba(0, 0, 0, 0.38);
+  --fx-glow: 0 0 0 1px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+html[data-theme='light']:is([data-fx='standard'], [data-fx='cinematic']) {
+  --fx-depth-1: 0 8px 18px rgba(46, 43, 39, 0.12);
+  --fx-depth-2: 0 16px 32px rgba(46, 43, 39, 0.16);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fx-depth-1);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.selected {
+  box-shadow: var(--fx-glow);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.selected:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fx-glow), var(--fx-depth-1);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.dragging,
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.dragging:hover {
+  transform: scale(1.02);
+  box-shadow: var(--fx-depth-2);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.stack-hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent),
+    var(--fx-depth-1);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-connection-draft,
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-connection.source {
+  stroke-dasharray: 6 5;
+  animation: fxDash 0.9s linear infinite;
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.search-direct {
+  border-color: var(--accent);
+  animation: fxSearchFlash 0.4s ease-out 1;
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.just-saved {
+  animation: fxJustSaved 0.45s ease-out 1;
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) #lightbox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #settingsBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #tagsBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #helpBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #dedupeBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #importPickBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #editBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #membersBox.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #conflictModal.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #preSaveModal.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) #importPreviewOverlay.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) .sticker-note-box.open,
+html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-stack-dialog.open {
+  animation: fxFadeIn 0.16s ease-out;
+}
+
+@keyframes fxDash {
+  to { stroke-dashoffset: -22; }
+}
+
+@keyframes fxSearchFlash {
+  0% {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes fxJustSaved {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 20px color-mix(in srgb, var(--accent) 48%, transparent);
+  }
+  100% {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+@keyframes fxFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+html[data-fx='cinematic'] .canvas-viewport {
+  background-position: var(--fx-grid-x, 0) var(--fx-grid-y, 0);
+}
+
+html[data-fx='cinematic'] .canvas-node.is-tilting {
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+}
+
+html[data-fx='cinematic'] .canvas-node.selected.is-tilting {
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+}
+
+html[data-fx='cinematic'] .canvas-node.canvas-note:not(.dragging):not(.is-tilting) {
+  transform: rotate(-1.2deg);
+}
+
+html[data-fx='cinematic'] .canvas-node.canvas-note.is-tilting {
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) rotate(-1.2deg) translateY(-2px);
+}
+
+html[data-fx='cinematic'] .canvas-node.canvas-note::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 22%;
+  z-index: 4;
+  width: 36%;
+  height: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 226, 140, 0.38));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transform: rotate(-2deg);
+  pointer-events: none;
+}
+
+html[data-fx='cinematic'] .canvas-node:is(:hover, .selected) .canvas-pin {
+  position: relative;
+  overflow: hidden;
+}
+
+html[data-fx='cinematic'] .canvas-node:is(:hover, .selected) .canvas-pin::after {
+  content: '';
+  position: absolute;
+  inset: -30% -40%;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.55) 50%, transparent 65%);
+  animation: fxPinSweep 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.canvas-connection-flow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 14 180;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  pointer-events: none;
+}
+
+html[data-fx='cinematic'] .canvas-connection-flow.is-visible {
+  opacity: 0.95;
+  animation: fxConnFlow 1.6s linear infinite;
+}
+
+@keyframes fxPinSweep {
+  from { transform: translateX(-80%); }
+  to { transform: translateX(80%); }
+}
+
+@keyframes fxConnFlow {
+  to { stroke-dashoffset: -194; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node,
+  html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-connection-draft,
+  html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-connection.source,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #lightbox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #settingsBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #tagsBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #helpBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #dedupeBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #importPickBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #editBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #membersBox.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #conflictModal.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #preSaveModal.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) #importPreviewOverlay.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) .sticker-note-box.open,
+  html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-stack-dialog.open,
+  html[data-fx='cinematic'] .canvas-node.is-tilting,
+  html[data-fx='cinematic'] .canvas-node.canvas-note,
+  html[data-fx='cinematic'] .canvas-connection-flow.is-visible,
+  html[data-fx='cinematic'] .canvas-node:is(:hover, .selected) .canvas-pin::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+ 

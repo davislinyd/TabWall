@@ -373,7 +373,7 @@ function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
         getCanvasConnectionsEl().appendChild(hit);
         hits.push(hit);
       }
-      group = { path, highlights, hits };
+      group = { path, highlights, hits, flow: null };
       canvasConnectionElements.set(id, group);
     }
 
@@ -383,6 +383,18 @@ function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
     group.path.setAttribute('d', geometry.pathD);
     group.path.setAttribute('class', classes);
     group.path.setAttribute('aria-label', ariaLabel);
+    if (!group.flow) {
+      const flow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      flow.setAttribute('aria-hidden', 'true');
+      flow.dataset.connectionId = id;
+      getCanvasConnectionsEl().appendChild(flow);
+      group.flow = flow;
+    }
+    group.flow.setAttribute('d', geometry.pathD);
+    group.flow.setAttribute(
+      'class',
+      getSelectedCanvasConnectionId() === id ? 'canvas-connection-flow is-visible' : 'canvas-connection-flow'
+    );
     zones.forEach((zone, index) => {
       group.highlights[index].setAttribute('d', segments[index].pathD);
       group.hits[index].setAttribute('d', segments[index].pathD);
@@ -394,6 +406,7 @@ function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
     group.path.remove();
     group.highlights.forEach((el) => el.remove());
     group.hits.forEach((el) => el.remove());
+    group.flow?.remove();
     canvasConnectionElements.delete(id);
   }
 
@@ -600,6 +613,12 @@ function renderCanvas() {
     node.classList.toggle('canvas-note', item.kind === 'note');
     node.classList.toggle('search-direct', searchContext.queryActive && searchContext.directIds.has(item.id));
     node.classList.toggle('search-related', searchContext.queryActive && searchContext.relatedIds.has(item.id));
+    const savedAt = Number(item.savedAt) || 0;
+    if (savedAt && Date.now() - savedAt < 1800 && node.dataset.justSavedAt !== String(savedAt)) {
+      node.dataset.justSavedAt = String(savedAt);
+      node.classList.add('just-saved');
+      global.setTimeout(() => node.classList.remove('just-saved'), 500);
+    }
     node.style.left = `${position.x}px`;
     node.style.top = `${position.y}px`;
     node.style.width = `${position.w}px`;
