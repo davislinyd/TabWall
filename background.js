@@ -5,6 +5,8 @@
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
 importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js');
+importScripts('parkCanvasGeometry.js');
+importScripts('parkSearchQuery.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
@@ -1615,6 +1617,10 @@ async function handleCommandAction(action) {
     if (!beginAction('toggle-park')) return { ok: false, error: 'debounced' };
     return toggleParkOnActiveTab();
   }
+  if (action === 'quick-search') {
+    if (!beginAction('quick-search')) return { ok: false, error: 'debounced' };
+    return toggleQuickSearchOnActiveTab();
+  }
   return { ok: false, error: 'unknown_action' };
 }
 
@@ -1676,6 +1682,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message?.type) {
       case 'GET_PARKED_ITEMS':
         return { ok: true, items: await getParkedItems() };
+      case 'SEARCH_PARKED':
+        return searchParkedItems(message.query, message.limit);
       case 'GET_PARKED_TABS': {
         const items = await getParkedItems();
         return { ok: true, tabs: items, items };
@@ -1930,6 +1938,8 @@ if (globalThis.__TABWALL_TEST__) {
     restoreGroup,
     restoreGroupMember,
     toggleParkOnActiveTab,
+    toggleQuickSearchOnActiveTab,
+    searchParkedItems,
     openParkOnActiveTab,
     openStandaloneParkTab,
     handleCommandAction,

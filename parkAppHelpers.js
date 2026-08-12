@@ -958,7 +958,7 @@
       const nodes = [...env.canvasNodeElements.keys()]
         .map((id) => ({ id, rect: env.canvasNodeWorldRectFromState(id) }))
         .filter(({ id, rect }) => id && id !== excludeId && rect)
-        .sort((a, b) => b.rect.z - a.rect.z);
+        .sort((a, b) => (b.rect.depth || 0) - (a.rect.depth || 0) || b.rect.z - a.rect.z);
       for (const { id, rect } of nodes) {
         if (point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h) {
           return id;

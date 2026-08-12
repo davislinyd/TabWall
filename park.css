@@ -4279,6 +4279,8 @@ body.canvas-mode #grid {
   outline: none;
   touch-action: none;
   user-select: none;
+  perspective: 1400px;
+  perspective-origin: 50% 42%;
 }
 
 .canvas-viewport.is-panning {
@@ -4292,6 +4294,7 @@ body.canvas-mode #grid {
   width: 10000px;
   height: 10000px;
   transform-origin: 0 0;
+  transform-style: preserve-3d;
 }
 
 .canvas-world-scale {
@@ -4300,6 +4303,7 @@ body.canvas-mode #grid {
   top: 0;
   width: 10000px;
   height: 10000px;
+  transform-style: preserve-3d;
 }
 
 .canvas-nodes {
@@ -6464,19 +6468,19 @@ html[data-fx='cinematic'] .canvas-viewport {
 }
 
 html[data-fx='cinematic'] .canvas-node.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateZ(var(--node-depth, 0px)) translateY(-2px);
 }
 
 html[data-fx='cinematic'] .canvas-node.selected.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateZ(var(--node-depth, 0px)) translateY(-2px);
 }
 
 html[data-fx='cinematic'] .canvas-node.canvas-note:not(.dragging):not(.is-tilting) {
-  transform: rotate(-1.2deg);
+  transform: rotate(-1.2deg) translateZ(var(--node-depth, 0px));
 }
 
 html[data-fx='cinematic'] .canvas-node.canvas-note.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) rotate(-1.2deg) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) rotate(-1.2deg) translateZ(var(--node-depth, 0px)) translateY(-2px);
 }
 
 html[data-fx='cinematic'] .canvas-node.canvas-note::before {
@@ -6557,5 +6561,103 @@ html[data-fx='cinematic'] .canvas-connection-flow.is-visible {
     transition: none !important;
     transform: none !important;
   }
+}
+
+/* ─── TabWall 3.0 Void Press ──────────────────────────────── */
+:root,
+html[data-theme='dark'] {
+  --bg: #07080c;
+  --bg-header: #0b0d12;
+  --panel: #12141a;
+  --paper: #e8e1d2;
+  --paper-ink: #1c1914;
+  --void-star: rgba(232, 225, 210, 0.55);
+}
+
+html[data-theme='light'] {
+  --bg: #d8d3c8;
+  --bg-header: #efeae0;
+  --panel: #f4efe4;
+  --paper: #f3ead8;
+  --paper-ink: #231e18;
+  --void-star: rgba(35, 30, 24, 0.18);
+}
+
+.canvas-void {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.canvas-stars {
+  position: absolute;
+  inset: -20%;
+  background-repeat: repeat;
+}
+
+.canvas-stars-far {
+  background-image: radial-gradient(circle, var(--void-star) 0.7px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: var(--fx-star-far-x, 0) var(--fx-star-far-y, 0);
+  opacity: 0.45;
+}
+
+.canvas-stars-near {
+  background-image: radial-gradient(circle, var(--void-star) 1px, transparent 1.4px);
+  background-size: 118px 86px;
+  background-position: var(--fx-star-near-x, 0) var(--fx-star-near-y, 0);
+  opacity: 0.7;
+}
+
+html[data-fx='quiet'] .canvas-stars {
+  background-position: 0 0;
+}
+
+.canvas-viewport {
+  z-index: 0;
+}
+
+.canvas-world {
+  z-index: 1;
+}
+
+.canvas-node {
+  color: var(--paper-ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 28%),
+    var(--paper);
+  border-color: rgba(40, 32, 22, 0.28);
+}
+
+.canvas-node::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(40, 32, 22, 0.35) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(40, 32, 22, 0.18) 0 1px, transparent 1px 4px);
+  mix-blend-mode: multiply;
+}
+
+html[data-theme='dark'] .canvas-node.canvas-note,
+.canvas-node.canvas-note {
+  color: #3f2d0b;
+  background: linear-gradient(145deg, #f7e7a8, #edd56a);
+}
+
+.canvas-node-title,
+.canvas-node-meta,
+.canvas-node-note,
+.canvas-node-tags {
+  color: inherit;
+}
+
+.canvas-node-meta,
+.canvas-node-tags {
+  opacity: 0.72;
 }
  

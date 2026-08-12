@@ -33,6 +33,7 @@
       w: DEFAULT_CARD_WIDTH,
       h: DEFAULT_CARD_HEIGHT,
       z: i,
+      depth: 0,
     };
   }
 
@@ -44,6 +45,7 @@
       w: finite(value.w, 160, 640, fallback.w),
       h: finite(value.h, 120, 560, fallback.h),
       z: finite(value.z, 0, 1000000, fallback.z),
+      depth: finite(value.depth, -400, 400, fallback.depth || 0),
     };
   }
 
@@ -104,6 +106,11 @@
       positions[id] = clonePosition(source[id], defaultPosition(index));
     });
     const connectionIds = orderedIds.length ? orderedIds : Object.keys(positions);
+    const connections = normalizeConnections(value.connections, connectionIds);
+    const Geom = global.TabWallCanvasGeometry;
+    const nextPositions = typeof Geom?.unifyCanvasIslandDepths === 'function'
+      ? Geom.unifyCanvasIslandDepths(positions, connections)
+      : positions;
     return {
       version: LAYOUT_VERSION,
       viewport: {
@@ -111,8 +118,8 @@
         y: finite(value.viewport?.y, -100000, 100000, DEFAULT_VIEWPORT.y),
         zoom: finite(value.viewport?.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_VIEWPORT.zoom),
       },
-      positions,
-      connections: normalizeConnections(value.connections, connectionIds),
+      positions: nextPositions,
+      connections,
     };
   }
 

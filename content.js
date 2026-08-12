@@ -314,6 +314,148 @@
     else open();
   }
 
+  let quickRoot = null;
+  let quickTimer = 0;
+  let quickHits = [];
+  let quickIndex = 0;
+
+  function closeQuickSearch() {
+    if (quickTimer) clearTimeout(quickTimer);
+    quickTimer = 0;
+    quickHits = [];
+    quickIndex = 0;
+    if (quickRoot) {
+      quickRoot.remove();
+      quickRoot = null;
+    }
+  }
+
+  function restoreQuickHit(hit, openWall) {
+    if (!hit?.id) return;
+    if (openWall) {
+      chrome.runtime.sendMessage({ type: 'OPEN_PARK_ACTIVE', focusId: hit.id }, () => {});
+      closeQuickSearch();
+      return;
+    }
+    const type = hit.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
+    chrome.runtime.sendMessage({ type, id: hit.id }, () => {});
+    closeQuickSearch();
+  }
+
+  function renderQuickHits() {
+    const list = quickRoot?.querySelector('.qs-list');
+    if (!list) return;
+    list.replaceChildren();
+    quickHits.forEach((hit, index) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'qs-row' + (index === quickIndex ? ' active' : '');
+      row.dataset.index = String(index);
+      const title = document.createElement('strong');
+      title.textContent = hit.title || hit.url || hit.id;
+      const meta = document.createElement('span');
+      meta.textContent = hit.kind === 'note' ? (hit.markdown || hit.note || '') : (hit.url || hit.note || '');
+      row.append(title, meta);
+      row.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        restoreQuickHit(hit, event.shiftKey);
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function queryQuickSearch(raw) {
+    if (quickTimer) clearTimeout(quickTimer);
+    quickTimer = setTimeout(() => {
+      chrome.runtime.sendMessage({ type: 'SEARCH_PARKED', query: raw, limit: 8 }, (res) => {
+        quickHits = Array.isArray(res?.hits) ? res.hits : [];
+        quickIndex = 0;
+        renderQuickHits();
+      });
+    }, 80);
+  }
+
+  function openQuickSearch() {
+    if (isOpen) {
+      focusParkSearch();
+      return;
+    }
+    if (quickRoot) {
+      quickRoot.querySelector('input')?.focus();
+      return;
+    }
+    quickRoot = document.createElement('div');
+    quickRoot.id = 'tabwall-quick-search';
+    const shadow = quickRoot.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <style>
+        :host { all: initial; }
+        .qs {
+          position: fixed; inset: 18vh 0 auto; z-index: 2147483647;
+          display: flex; justify-content: center; pointer-events: none;
+          font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .qs-panel {
+          pointer-events: auto; width: min(520px, calc(100vw - 32px));
+          border: 1px solid rgba(232,225,210,.18); border-radius: 10px;
+          background: #12141a; color: #eee8dc;
+          box-shadow: 0 24px 70px rgba(0,0,0,.45);
+        }
+        input {
+          width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid rgba(232,225,210,.12);
+          background: transparent; color: inherit; padding: 14px 16px; font: inherit; outline: none;
+        }
+        .qs-list { display: grid; max-height: 320px; overflow: auto; padding: 6px; }
+        .qs-row {
+          display: grid; gap: 2px; width: 100%; text-align: left; border: 0; border-radius: 7px;
+          background: transparent; color: inherit; padding: 8px 10px; cursor: pointer;
+        }
+        .qs-row.active, .qs-row:hover { background: rgba(232,225,210,.08); }
+        .qs-row span { color: #a39c91; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      </style>
+      <div class="qs"><div class="qs-panel">
+        <input type="search" placeholder="Search parked tabs…" autocomplete="off" spellcheck="false" />
+        <div class="qs-list"></div>
+      </div></div>
+    `;
+    const input = shadow.querySelector('input');
+    input.addEventListener('input', () => queryQuickSearch(input.value));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeQuickSearch();
+        return;
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        quickIndex = Math.min(quickHits.length - 1, quickIndex + 1);
+        renderQuickHits();
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        quickIndex = Math.max(0, quickIndex - 1);
+        renderQuickHits();
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        restoreQuickHit(quickHits[quickIndex], event.shiftKey);
+      }
+    });
+    document.documentElement.appendChild(quickRoot);
+    input.focus();
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (!event.altKey || event.metaKey || event.ctrlKey) return;
+    if (event.key !== '/' && event.code !== 'Slash') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (quickRoot) closeQuickSearch();
+    else openQuickSearch();
+  }, true);
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'PING') {
       sendResponse({ ok: true });
@@ -358,6 +500,16 @@
     if (message?.type === 'CLOSE_PARK') {
       destroy();
       sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === 'TOGGLE_QUICK_SEARCH') {
+      try {
+        if (quickRoot) closeQuickSearch();
+        else openQuickSearch();
+        sendResponse({ ok: true, open: Boolean(quickRoot) });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
       return false;
     }
     return false;

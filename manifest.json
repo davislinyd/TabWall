@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.32.0",
+  "version": "3.0.0",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -92,6 +92,9 @@
         "mac": "Alt+O"
       },
       "description": "Toggle TabWall overlay"
+    },
+    "quick-search": {
+      "description": "Search parked tabs without opening TabWall"
     }
   }
 }

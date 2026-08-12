@@ -156,7 +156,9 @@
       if (!state.targetId) return false;
       if (state.kind === 'handle') {
         if (state.targetId === state.sourceId) return false;
-        env.canvasStore?.commitConnections([...current, { sourceId: state.sourceId, targetId: state.targetId }]);
+        const next = [...current, { sourceId: state.sourceId, targetId: state.targetId }];
+        env.canvasStore?.commitConnections(next);
+        commitIslandDepthForLink(state.sourceId, state.targetId, next);
         return true;
       }
       if (state.targetId === state.fixedId || state.targetId === state.movingId) return false;
@@ -168,8 +170,30 @@
         };
       });
       env.canvasStore?.commitConnections(next);
+      commitIslandDepthForLink(
+        state.movingEndpoint === 'sourceId' ? state.targetId : state.fixedId,
+        state.movingEndpoint === 'targetId' ? state.targetId : state.fixedId,
+        next
+      );
       return true;
 
+  }
+
+  function nudgeCanvasIslandDepth(id, direction) {
+    const layout = env.canvasStoreSnapshot().layout;
+    if (!layout?.positions?.[id]) return;
+    const step = env.CanvasGeom.CANVAS_DEPTH_STEP * (direction >= 0 ? 1 : -1);
+    const island = env.CanvasGeom.canvasIslandIds(id, layout.connections || []);
+    const current = env.CanvasGeom.normalizeCanvasDepth(layout.positions[id].depth);
+    const nextPositions = env.CanvasGeom.applyCanvasIslandDepth(layout.positions, island, current + step);
+    env.canvasStore?.commitPositions(nextPositions);
+  }
+
+  function commitIslandDepthForLink(sourceId, targetId, connections) {
+    const layout = env.canvasStoreSnapshot().layout;
+    if (!layout?.positions || !sourceId || !targetId) return;
+    const nextPositions = env.CanvasGeom.mergeCanvasIslandDepth(layout.positions, connections, sourceId, targetId);
+    env.canvasStore?.commitPositions(nextPositions);
   }
 
   function endCanvasConnectionDrag(event = null, commit = true) {
@@ -297,6 +321,7 @@
       env.canvasConnectionSourceId = '';
       env.selectedCanvasConnectionId = '';
       env.canvasStore?.commitConnections(next);
+      commitIslandDepthForLink(sourceId, targetId, next);
 
   }
 
@@ -649,8 +674,8 @@
     const rect = node.getBoundingClientRect();
     const px = (event.clientX - rect.left) / Math.max(rect.width, 1) - 0.5;
     const py = (event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5;
-    node.style.setProperty('--tilt-x', `${(-py * 8).toFixed(2)}deg`);
-    node.style.setProperty('--tilt-y', `${(px * 8).toFixed(2)}deg`);
+    node.style.setProperty('--tilt-x', `${(-py * 4).toFixed(2)}deg`);
+    node.style.setProperty('--tilt-y', `${(px * 4).toFixed(2)}deg`);
     node.classList.add('is-tilting');
     tiltedCanvasNode = node;
   }
@@ -895,6 +920,14 @@
         env.closeCanvasContextMenu();
         const modifierZoom = Boolean(event.ctrlKey || event.metaKey) && dy !== 0;
         event.preventDefault();
+        if (event.altKey && !event.ctrlKey && !event.metaKey && dy !== 0) {
+          const node = event.target.closest?.('.canvas-node');
+          if (node?.dataset.id) {
+            flushCanvasWheelZoom();
+            nudgeCanvasIslandDepth(node.dataset.id, dy < 0 ? 1 : -1);
+            return;
+          }
+        }
         if (modifierZoom) {
           scheduleCanvasWheelZoom(event, dy);
           return;
@@ -1201,5 +1234,5 @@
 
   }
 
-  global.TabWallCanvasInteraction = { bind, beginCanvasConnectionDrag, updateCanvasConnectionDrag, commitCanvasConnectionDrag, endCanvasConnectionDrag, cancelCanvasConnectionDrag, resetCanvasConnectionCurve, selectCanvasConnection, clearCanvasConnectionSelection, deleteCanvasConnection, handleCanvasConnectionNodeClick, handleCanvasConnectionClick, handleCanvasConnectionDoubleClick, setCanvasConnectionZoneHover, detectCanvasConnectionDoublePointerDown, wireCanvasConnectionPath, wireCanvasLinkHandles, wireCanvasNodeActions, updateCanvasNodeSelection, beginCanvasPointer, updateCanvasPointer, endCanvasPointer, applyCanvasPointer, handleCanvasMiddleClick, beginCanvasMinimapDrag, updateCanvasMinimapDrag, endCanvasMinimapDrag, initCanvasInteractions, normalizeCanvasWheelDelta, scheduleCanvasWheelZoom, flushCanvasWheelZoom, canvasConnectionDragTarget, suppressCanvasNodeClick, scheduleCanvasNodePreview, cancelCanvasNodeClick, runCanvasNodeAction, isCanvasControlTarget, isCanvasWheelControlTarget };
+  global.TabWallCanvasInteraction = { bind, beginCanvasConnectionDrag, updateCanvasConnectionDrag, commitCanvasConnectionDrag, endCanvasConnectionDrag, cancelCanvasConnectionDrag, resetCanvasConnectionCurve, selectCanvasConnection, clearCanvasConnectionSelection, deleteCanvasConnection, handleCanvasConnectionNodeClick, handleCanvasConnectionClick, handleCanvasConnectionDoubleClick, setCanvasConnectionZoneHover, detectCanvasConnectionDoublePointerDown, wireCanvasConnectionPath, wireCanvasLinkHandles, wireCanvasNodeActions, updateCanvasNodeSelection, beginCanvasPointer, updateCanvasPointer, endCanvasPointer, applyCanvasPointer, handleCanvasMiddleClick, beginCanvasMinimapDrag, updateCanvasMinimapDrag, endCanvasMinimapDrag, initCanvasInteractions, normalizeCanvasWheelDelta, scheduleCanvasWheelZoom, flushCanvasWheelZoom, canvasConnectionDragTarget, suppressCanvasNodeClick, scheduleCanvasNodePreview, cancelCanvasNodeClick, runCanvasNodeAction, nudgeCanvasIslandDepth, isCanvasControlTarget, isCanvasWheelControlTarget };
 })(typeof self !== 'undefined' ? self : globalThis);

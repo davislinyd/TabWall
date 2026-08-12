@@ -27,6 +27,7 @@ function defaultCanvasPosition(index, origin = null) {
     w: 220,
     h: 170,
     z: i,
+    depth: 0,
   };
 }
 
@@ -39,6 +40,7 @@ function normalizeCanvasPosition(raw, fallback) {
     w: clampNumber(value.w, 160, 640, base.w),
     h: clampNumber(value.h, 120, 560, base.h),
     z: clampNumber(value.z, 0, 1000000, base.z),
+    depth: clampNumber(value.depth, -400, 400, base.depth || 0),
   };
 }
 
@@ -181,6 +183,11 @@ function normalizeCanvasLayout(raw, itemIds = []) {
     }
   }
   const connectionIds = ids.size ? [...ids] : Object.keys(positions);
+  const connections = normalizeCanvasConnections(value.connections, connectionIds);
+  const Geom = self.TabWallCanvasGeometry;
+  const nextPositions = typeof Geom?.unifyCanvasIslandDepths === 'function'
+    ? Geom.unifyCanvasIslandDepths(positions, connections)
+    : positions;
   return {
     version: CANVAS_LAYOUT_VERSION,
     viewport: {
@@ -188,8 +195,8 @@ function normalizeCanvasLayout(raw, itemIds = []) {
       y: clampNumber(value.viewport?.y, -100000, 100000, DEFAULT_CANVAS_VIEWPORT.y),
       zoom: clampNumber(value.viewport?.zoom, 0.25, 2, DEFAULT_CANVAS_VIEWPORT.zoom),
     },
-    positions,
-    connections: normalizeCanvasConnections(value.connections, connectionIds),
+    positions: nextPositions,
+    connections,
   };
 }
 

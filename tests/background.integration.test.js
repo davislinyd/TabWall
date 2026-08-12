@@ -8,7 +8,7 @@ const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.ur
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js'].map((name) => [
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'parkCanvasGeometry.js', 'parkSearchQuery.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -425,14 +425,16 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.32.0');
+  assert.equal(MANIFEST.version, '3.0.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
   assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
+  assert.equal(Object.keys(MANIFEST.commands || {}).length, 5);
+  assert.ok(MANIFEST.commands?.['quick-search']);
+  assert.equal(MANIFEST.commands?.['quick-search']?.suggested_key, undefined);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
 });
 
@@ -1402,6 +1404,7 @@ test('newly saved tabs stay near the existing canvas cluster without overlap', a
     w: 220,
     h: 170,
     z: 7,
+    depth: 0,
   });
   assert.deepEqual(JSON.parse(JSON.stringify(layout.positions[SOURCE_ID])), {
     x: 2738,
@@ -1409,13 +1412,14 @@ test('newly saved tabs stay near the existing canvas cluster without overlap', a
     w: 220,
     h: 170,
     z: 8,
+    depth: 0,
   });
   assert.deepEqual(
     JSON.parse(JSON.stringify([first.id, second.id, third.id].map((id) => layout.positions[id]))),
     [
-      { x: 3076, y: 1800, w: 220, h: 170, z: 9 },
-      { x: 3414, y: 1800, w: 220, h: 170, z: 10 },
-      { x: 2400, y: 2083, w: 220, h: 170, z: 11 },
+      { x: 3076, y: 1800, w: 220, h: 170, z: 9, depth: 0 },
+      { x: 3414, y: 1800, w: 220, h: 170, z: 10, depth: 0 },
+      { x: 2400, y: 2083, w: 220, h: 170, z: 11, depth: 0 },
     ]
   );
   assert.equal(new Set(rects.map(({ x, y }) => `${x},${y}`)).size, rects.length);

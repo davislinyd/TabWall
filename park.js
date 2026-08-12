@@ -629,6 +629,7 @@ function bindPanelModules() {
     "canvasStackConfirm": () => canvasStackConfirm,
     "canvasStackDialog": () => canvasStackDialog,
     "canvasStackTitle": () => canvasStackTitle,
+    "CanvasGeom": () => CanvasGeom,
     "CanvasStoreApi": () => CanvasStoreApi,
     "canvasStoreSnapshot": () => canvasStoreSnapshot,
     "canvasTargetAt": () => canvasTargetAt,
@@ -833,6 +834,7 @@ function bindPanelModules() {
     "restoreItem": () => restoreItem,
     "restoreMember": () => restoreMember,
     "runCanvasNodeAction": () => runCanvasNodeAction,
+    "nudgeCanvasIslandDepth": () => nudgeCanvasIslandDepth,
     "runLocalAutoBackup": () => runLocalAutoBackup,
     "saveSettings": () => saveSettings,
     "scheduleCanvasMediaQualityRefresh": () => scheduleCanvasMediaQualityRefresh,
@@ -1636,6 +1638,13 @@ document.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (settingsBox.classList.contains('open')) closeSettingsBox();
     else openSettingsBox();
+    return;
+  }
+
+  if ((e.key === '/' || e.code === 'Slash') && e.altKey && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    focusSearch();
     return;
   }
 
@@ -2701,6 +2710,8 @@ function canvasNodeActionEntries(...args) { return CanvasRender.canvasNodeAction
 
 async function runCanvasNodeAction(...args) { return await CanvasIx.runCanvasNodeAction(...args); }
 
+function nudgeCanvasIslandDepth(...args) { return CanvasIx.nudgeCanvasIslandDepth(...args); }
+
 function canvasNodeHtml(...args) { return CanvasRender.canvasNodeHtml(...args); }
 
 function canvasItemById(id) {
@@ -2848,7 +2859,14 @@ function canvasNodeWorldRectFromState(id) {
   const raw = canvasStoreSnapshot().layout?.positions?.[id];
   if (!raw) return null;
   const position = canvasDisplayPosition(raw);
-  return { x: position.x, y: position.y, w: position.w, h: position.h, z: position.z || 0 };
+  return {
+    x: position.x,
+    y: position.y,
+    w: position.w,
+    h: position.h,
+    z: position.z || 0,
+    depth: Number(position.depth) || 0,
+  };
 }
 
 function canvasTargetAt(...args) { return AppHelpers.canvasTargetAt(...args); }

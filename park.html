@@ -195,6 +195,10 @@
           </div>
         </aside>
         <div id="canvasViewport" class="canvas-viewport" tabindex="0" role="application" aria-label="TabWall 無限畫布">
+          <div class="canvas-void" aria-hidden="true">
+            <div class="canvas-stars canvas-stars-far"></div>
+            <div class="canvas-stars canvas-stars-near"></div>
+          </div>
           <div id="canvasWorld" class="canvas-world">
             <div id="canvasWorldScale" class="canvas-world-scale">
               <svg id="canvasConnections" class="canvas-connections" role="group" data-i18n-aria="canvasConnectionsLabel" aria-label="畫布連線" focusable="false"></svg>
@@ -451,6 +455,10 @@
           <div class="shortcut-row" data-action="toggle-park">
             <span class="shortcut-label" data-i18n="helpShortcutWall">開關 TabWall 空間畫布</span>
             <span class="chrome-bind" data-chrome-cmd="toggle-park"></span>
+          </div>
+          <div class="shortcut-row" data-action="quick-search">
+            <span class="shortcut-label" data-i18n="helpShortcutQuickSearch">在任何分頁搜尋已停駐項目</span>
+            <span class="chrome-bind" data-chrome-cmd="quick-search"></span>
           </div>
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
             <button type="button" class="btn" id="openChromeShortcutsBtn" data-i18n="shortcutsOpenChrome">在 Chrome 設定管理快捷鍵</button>

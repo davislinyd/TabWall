@@ -345,7 +345,7 @@ test('Top-level actions are consolidated in the header', () => {
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
-  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park']) {
+  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'quick-search']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
@@ -439,6 +439,10 @@ test('Standard visual fx is gated by fxLevel and data-fx', () => {
   assert.match(I18N_SOURCE, /fxQuiet:/);
   assert.match(I18N_SOURCE, /fxStandard:/);
   assert.match(I18N_SOURCE, /fxCinematic:/);
+  assert.match(HTML_MARKUP, /class="canvas-void"/);
+  assert.match(CANVAS_GEOM_SOURCE, /function mergeCanvasIslandDepth\(/);
+  assert.match(CANVAS_GEOM_SOURCE, /function unprojectCanvasPoint\(/);
+  assert.match(SETTINGS_UI_SOURCE, /function normalizeFxLevel\(/);
 });
 
 test('Spatial Canvas state and settings use shared persistence contracts', () => {
@@ -675,9 +679,8 @@ test('Canvas zoom uses a layout-scaled inner world and translation-only outer tr
   assert.doesNotMatch(worldCss, /will-change:\s*transform/);
   assert.match(HTML_SOURCE, /\.canvas-world-scale\s*\{[\s\S]*?width:\s*10000px[\s\S]*?height:\s*10000px/);
   const transformSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'updateCanvasTransform');
-  assert.match(transformSource, /canvasWorldScaleEl\.style\.zoom = String\(zoom\)/);
-  assert.match(transformSource, /canvasWorldEl\.style\.transform = `translate\(\$\{-x \* zoom\}px, \$\{-y \* zoom\}px\)`/);
-  assert.doesNotMatch(transformSource, /scale\(/);
+  assert.match(transformSource, /canvasWorldScaleEl\.style\.zoom = ''/);
+  assert.match(transformSource, /translate3d\(\$\{-x \* zoom\}px, \$\{-y \* zoom\}px, 0\) rotateX\(\$\{camera\.tiltDeg\}deg\) scale\(\$\{zoom\}\)/);
   const zoomSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'setCanvasZoom');
   assert.match(zoomSource, /clientX != null && clientY != null/);
   assert.match(zoomSource, /x: rect\.width \/ 2/);

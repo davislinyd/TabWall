@@ -1490,6 +1490,39 @@ async function sendToTab(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
 }
 
+async function openStandaloneQuickSearch() {
+  const url = chrome.runtime.getURL('quickSearch.html');
+  if (chrome.windows?.create) {
+    await chrome.windows.create({
+      url,
+      type: 'popup',
+      width: 560,
+      height: 420,
+      focused: true,
+    });
+    return { ok: true, mode: 'popup' };
+  }
+  const tab = await chrome.tabs.create({ url, active: true });
+  return { ok: true, mode: 'tab', tabId: tab?.id ?? null };
+}
+
+async function toggleQuickSearchOnActiveTab() {
+  const tab = await getActiveTab();
+  if (tab?.url && isOwnParkPageUrl(tab.url)) {
+    return { ok: true, mode: 'park-page', tabId: tab.id ?? null };
+  }
+  if (!tab?.id || isRestrictedUrl(tab.url)) {
+    return openStandaloneQuickSearch();
+  }
+  try {
+    await sendToTab(tab.id, { type: 'TOGGLE_QUICK_SEARCH' });
+    return { ok: true, mode: 'overlay', tabId: tab.id };
+  } catch (err) {
+    console.warn('[TabWall] quick search inject failed:', err);
+    return openStandaloneQuickSearch();
+  }
+}
+
 async function toggleParkOnActiveTab() {
   const tab = await getActiveTab();
   if (tab?.url && isOwnParkPageUrl(tab.url)) {

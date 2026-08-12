@@ -59,17 +59,35 @@
 
   }
 
+  function canvasFxIsQuiet() {
+    return document.documentElement.dataset.fx === 'quiet';
+  }
+
+  function canvasCameraFromViewport() {
+    const size = canvasViewportSize();
+    const viewport = env.canvasLayout?.viewport || env.DEFAULT_CANVAS_VIEWPORT;
+    return env.CanvasGeom.canvasCameraState(viewport, size, { quiet: canvasFxIsQuiet() });
+  }
+
+  function canvasPrimaryDepth() {
+    const ids = [...(env.activeCanvasSelection?.() || [])];
+    const positions = env.canvasLayout?.positions || {};
+    const first = ids.map((id) => positions[id]).find(Boolean);
+    return env.CanvasGeom.normalizeCanvasDepth(first?.depth);
+  }
+
   function canvasPointFromEvent(event) {
     ensureBound('canvasPointFromEvent');
 
       const rect = env.canvasViewportEl?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
-      const { viewport } = env.canvasLayout;
-      const zoom = viewport.zoom || env.DEFAULT_CANVAS_VIEWPORT.zoom;
-      return {
-        x: (event.clientX - rect.left) / zoom + viewport.x,
-        y: (event.clientY - rect.top) / zoom + viewport.y,
-      };
+      const camera = canvasCameraFromViewport();
+      const point = env.CanvasGeom.unprojectCanvasPoint(
+        { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        camera,
+        canvasPrimaryDepth()
+      );
+      return point || { x: 0, y: 0 };
 
   }
 
@@ -77,13 +95,23 @@
     ensureBound('updateCanvasTransform');
 
       const { x, y, zoom } = env.canvasLayout.viewport;
+      const size = canvasViewportSize();
+      const camera = env.CanvasGeom.canvasCameraState({ x, y, zoom }, size, { quiet: canvasFxIsQuiet() });
+      const originX = x * zoom + size.width / 2;
+      const originY = y * zoom + size.height / 2;
       if (env.canvasWorldEl && env.canvasWorldScaleEl) {
-        env.canvasWorldScaleEl.style.zoom = String(zoom);
-        env.canvasWorldEl.style.transform = `translate(${-x * zoom}px, ${-y * zoom}px)`;
+        env.canvasWorldScaleEl.style.zoom = '';
+        env.canvasWorldScaleEl.style.transform = '';
+        env.canvasWorldEl.style.transformOrigin = `${originX}px ${originY}px`;
+        env.canvasWorldEl.style.transform = `translate3d(${-x * zoom}px, ${-y * zoom}px, 0) rotateX(${camera.tiltDeg}deg) scale(${zoom})`;
       }
       if (env.canvasViewportEl) {
         env.canvasViewportEl.style.setProperty('--fx-grid-x', `${(-x * 0.15).toFixed(2)}px`);
         env.canvasViewportEl.style.setProperty('--fx-grid-y', `${(-y * 0.15).toFixed(2)}px`);
+        env.canvasViewportEl.style.setProperty('--fx-star-far-x', `${(-x * 0.04).toFixed(2)}px`);
+        env.canvasViewportEl.style.setProperty('--fx-star-far-y', `${(-y * 0.04).toFixed(2)}px`);
+        env.canvasViewportEl.style.setProperty('--fx-star-near-x', `${(-x * 0.12).toFixed(2)}px`);
+        env.canvasViewportEl.style.setProperty('--fx-star-near-y', `${(-y * 0.12).toFixed(2)}px`);
       }
       if (env.canvasZoomValue) env.canvasZoomValue.textContent = `${Math.round(zoom * 100)}%`;
       if (env.canvasZoomSlider) env.canvasZoomSlider.value = String(zoom);
@@ -455,11 +483,15 @@
       if (!env.canvasContextMenu) return;
       env.canvasContextMenu.innerHTML = '';
       const entries = mode === 'node'
-        ? env.canvasNodeActionEntries(item).map(({ action, label }) => ({
-          action,
-          label,
-          danger: action === 'delete',
-        }))
+        ? [
+          ...env.canvasNodeActionEntries(item).map(({ action, label }) => ({
+            action,
+            label,
+            danger: action === 'delete',
+          })),
+          { action: 'raise-depth', label: env.t('canvasRaiseDepth') },
+          { action: 'lower-depth', label: env.t('canvasLowerDepth') },
+        ]
         : canvasBlankContextMenuEntries();
       for (const entry of entries) {
         const button = document.createElement('button');
@@ -525,6 +557,10 @@
       };
       closeCanvasContextMenu();
       if (state.mode === 'node') {
+        if (action === 'raise-depth' || action === 'lower-depth') {
+          env.nudgeCanvasIslandDepth?.(state.itemId, action === 'raise-depth' ? 1 : -1);
+          return;
+        }
         await env.runCanvasNodeAction(state.itemId, action);
         return;
       }

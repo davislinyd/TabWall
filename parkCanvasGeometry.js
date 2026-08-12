@@ -14,6 +14,12 @@
   const CANVAS_WHEEL_ZOOM_SENSITIVITY = 0.0015;
   const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0.006;
   const CANVAS_WHEEL_ZOOM_FRAME_LIMIT = 120;
+  const CANVAS_PERSPECTIVE = 1400;
+  const CANVAS_DEPTH_MIN = -400;
+  const CANVAS_DEPTH_MAX = 400;
+  const CANVAS_DEPTH_STEP = 24;
+  const CANVAS_TILT_FAR_DEG = 18;
+  const CANVAS_TILT_NEAR_DEG = 2;
 
   function canvasDefaultPosition(index) {
     const i = Math.max(0, Number(index) || 0);
@@ -25,6 +31,7 @@
       w: CANVAS_NODE_DEFAULT_WIDTH,
       h: CANVAS_NODE_DEFAULT_HEIGHT,
       z: i,
+      depth: 0,
     };
   }
 
@@ -37,6 +44,7 @@
       w: Math.max(1, numeric(value.w, fallback.w)) * CANVAS_NODE_DISPLAY_SCALE,
       h: Math.max(1, numeric(value.h, fallback.h)) * CANVAS_NODE_DISPLAY_SCALE,
       z: numeric(value.z, fallback.z),
+      depth: numeric(value.depth, fallback.depth ?? 0),
     };
   }
 
@@ -235,6 +243,177 @@
       : CANVAS_WHEEL_ZOOM_SENSITIVITY;
   }
 
+  function normalizeCanvasDepth(value, fallback = 0) {
+    const n = Number(value);
+    const base = Number.isFinite(n) ? n : (Number.isFinite(Number(fallback)) ? Number(fallback) : 0);
+    return Math.min(CANVAS_DEPTH_MAX, Math.max(CANVAS_DEPTH_MIN, Math.round(base / CANVAS_DEPTH_STEP) * CANVAS_DEPTH_STEP));
+  }
+
+  function cameraTiltForZoom(zoom, quiet = false) {
+    if (quiet) return 0;
+    const t = Math.max(0, Math.min(1, ((Number(zoom) || 1) - 0.45) / 0.7));
+    return CANVAS_TILT_FAR_DEG * (1 - t) + CANVAS_TILT_NEAR_DEG * t;
+  }
+
+  function canvasCameraState(viewport, viewSize, options = {}) {
+    const zoom = Number(viewport?.zoom) || 1;
+    const tiltDeg = cameraTiltForZoom(zoom, options.quiet === true);
+    return {
+      x: Number(viewport?.x) || 0,
+      y: Number(viewport?.y) || 0,
+      zoom,
+      tiltDeg,
+      tilt: tiltDeg * Math.PI / 180,
+      width: Math.max(0, Number(viewSize?.width) || 0),
+      height: Math.max(0, Number(viewSize?.height) || 0),
+      perspective: CANVAS_PERSPECTIVE,
+    };
+  }
+
+  function projectCanvasPoint(world, camera) {
+    if (!world || !camera || !camera.zoom) return null;
+    const ox = camera.width / 2;
+    const oy = camera.height / 2;
+    const px = (Number(world.x) - camera.x) * camera.zoom;
+    const py = (Number(world.y) - camera.y) * camera.zoom;
+    const pz = (Number(world.depth) || 0) * camera.zoom;
+    const cos = Math.cos(camera.tilt);
+    const sin = Math.sin(camera.tilt);
+    const y0 = py - oy;
+    const y1 = y0 * cos - pz * sin;
+    const z1 = y0 * sin + pz * cos;
+    const denom = camera.perspective - z1;
+    if (Math.abs(denom) < 1e-6) return null;
+    const k = camera.perspective / denom;
+    return { x: ox + k * (px - ox), y: oy + k * y1 };
+  }
+
+  function unprojectCanvasPoint(screen, camera, depth = 0) {
+    if (!screen || !camera || !camera.zoom) return null;
+    const ox = camera.width / 2;
+    const oy = camera.height / 2;
+    const cos = Math.cos(camera.tilt);
+    const sin = Math.sin(camera.tilt);
+    const pz = (Number(depth) || 0) * camera.zoom;
+    const dy = Number(screen.y) - oy;
+    const denomU = camera.perspective * cos + dy * sin;
+    if (Math.abs(denomU) < 1e-6) return null;
+    const u = (dy * (camera.perspective - pz * cos) + camera.perspective * pz * sin) / denomU;
+    const z1 = u * sin + pz * cos;
+    const kDenom = camera.perspective - z1;
+    if (Math.abs(kDenom) < 1e-6) return null;
+    const k = camera.perspective / kDenom;
+    if (Math.abs(k) < 1e-6) return null;
+    const px = ox + (Number(screen.x) - ox) / k;
+    return {
+      x: px / camera.zoom + camera.x,
+      y: (u + oy) / camera.zoom + camera.y,
+    };
+  }
+
+  function canvasConnectionAdjacency(connections) {
+    const adj = new Map();
+    const add = (from, to) => {
+      if (!adj.has(from)) adj.set(from, new Set());
+      adj.get(from).add(to);
+    };
+    for (const connection of Array.isArray(connections) ? connections : []) {
+      const sourceId = String(connection?.sourceId || '');
+      const targetId = String(connection?.targetId || '');
+      if (!sourceId || !targetId || sourceId === targetId) continue;
+      add(sourceId, targetId);
+      add(targetId, sourceId);
+    }
+    return adj;
+  }
+
+  function canvasIslandIds(startId, connections) {
+    const origin = String(startId || '');
+    if (!origin) return [];
+    const adj = canvasConnectionAdjacency(connections);
+    const seen = new Set([origin]);
+    const queue = [origin];
+    while (queue.length) {
+      const id = queue.shift();
+      for (const next of adj.get(id) || []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    return [...seen];
+  }
+
+  function applyCanvasIslandDepth(positions, ids, depth) {
+    const next = { ...(positions || {}) };
+    const value = normalizeCanvasDepth(depth);
+    for (const id of ids || []) {
+      const key = String(id || '');
+      if (!key || !next[key]) continue;
+      next[key] = { ...next[key], depth: value };
+    }
+    return next;
+  }
+
+  function mergeCanvasIslandDepth(positions, connections, sourceId, targetId) {
+    const targetDepth = normalizeCanvasDepth(positions?.[targetId]?.depth);
+    const ids = new Set([
+      ...canvasIslandIds(sourceId, connections),
+      ...canvasIslandIds(targetId, connections),
+    ]);
+    return applyCanvasIslandDepth(positions, ids, targetDepth);
+  }
+
+  function unifyCanvasIslandDepths(positions, connections) {
+    const next = { ...(positions || {}) };
+    const seen = new Set();
+    for (const id of Object.keys(next)) {
+      if (seen.has(id)) continue;
+      const island = canvasIslandIds(id, connections).filter((member) => next[member]);
+      island.forEach((member) => seen.add(member));
+      if (island.length < 2) {
+        if (next[id]) next[id] = { ...next[id], depth: normalizeCanvasDepth(next[id].depth) };
+        continue;
+      }
+      const counts = new Map();
+      for (const member of island) {
+        const depth = normalizeCanvasDepth(next[member]?.depth);
+        counts.set(depth, (counts.get(depth) || 0) + 1);
+      }
+      let chosen = normalizeCanvasDepth(next[island.slice().sort()[0]]?.depth);
+      let best = -1;
+      for (const [depth, count] of counts) {
+        if (count > best || (count === best && depth < chosen)) {
+          best = count;
+          chosen = depth;
+        }
+      }
+      for (const member of island) next[member] = { ...next[member], depth: chosen };
+    }
+    return next;
+  }
+
+  function pickCanvasNodeAtScreen(screen, camera, rects) {
+    let best = '';
+    let bestZ = -Infinity;
+    for (const entry of Array.isArray(rects) ? rects : []) {
+      const depth = Number(entry.depth) || 0;
+      const point = unprojectCanvasPoint(screen, camera, depth);
+      if (!point) continue;
+      if (
+        point.x < entry.x
+        || point.y < entry.y
+        || point.x > entry.x + entry.w
+        || point.y > entry.y + entry.h
+      ) continue;
+      if (depth >= bestZ) {
+        bestZ = depth;
+        best = String(entry.id || '');
+      }
+    }
+    return best;
+  }
+
   global.TabWallCanvasGeometry = {
     CANVAS_NODE_DISPLAY_SCALE,
     CANVAS_NODE_DEFAULT_WIDTH,
@@ -262,5 +441,21 @@
     canvasMinimapProjectionFor,
     canvasWheelZoomFactor,
     canvasWheelZoomSensitivity,
+    CANVAS_PERSPECTIVE,
+    CANVAS_DEPTH_MIN,
+    CANVAS_DEPTH_MAX,
+    CANVAS_DEPTH_STEP,
+    CANVAS_TILT_FAR_DEG,
+    CANVAS_TILT_NEAR_DEG,
+    normalizeCanvasDepth,
+    cameraTiltForZoom,
+    canvasCameraState,
+    projectCanvasPoint,
+    unprojectCanvasPoint,
+    canvasIslandIds,
+    applyCanvasIslandDepth,
+    mergeCanvasIslandDepth,
+    unifyCanvasIslandDepths,
+    pickCanvasNodeAtScreen,
   };
 })(typeof self !== 'undefined' ? self : globalThis);

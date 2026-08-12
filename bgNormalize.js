@@ -263,6 +263,39 @@ async function getParkedItems() {
   return items.map(toStoredMeta);
 }
 
+function slimSearchHit(item) {
+  return {
+    id: item.id,
+    kind: item.kind || 'tab',
+    title: item.title || '',
+    url: item.url || '',
+    note: item.note || '',
+    markdown: item.kind === 'note' ? String(item.markdown || '').slice(0, 160) : '',
+    tags: Array.isArray(item.tags) ? item.tags : [],
+  };
+}
+
+async function searchParkedItems(query, limit = 8) {
+  const q = String(query || '').trim();
+  const Search = self.TabWallSearchQuery;
+  if (!Search?.matchesQuery) return { ok: false, error: 'search_unavailable', hits: [] };
+  if (!q) return { ok: true, hits: [] };
+  const cap = Math.min(20, Math.max(1, Number(limit) || 8));
+  Search.bind({
+    getQuery: () => q,
+    getSearchScope: () => 'all',
+    getSearchRegex: () => false,
+  });
+  Search.compileSearchQuery(q);
+  const items = await getParkedItems();
+  const hits = [];
+  for (const item of items) {
+    if (Search.matchesQuery(item, q)) hits.push(slimSearchHit(item));
+    if (hits.length >= cap) break;
+  }
+  return { ok: true, hits };
+}
+
 async function ensureMediaMigration() {
   if (migrationPromise) return migrationPromise;
   migrationPromise = (async () => {

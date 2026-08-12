@@ -178,7 +178,7 @@ function canvasNodeHtml(item) {
   return `
     <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${selected ? ' selected' : ''}"
       data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
-      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}">
+      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)};transform:translateZ(${Number(position.depth) || 0}px)">
       <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
       <div class="canvas-node-copy">
         <div class="canvas-node-title">
@@ -425,7 +425,9 @@ function updateCanvasNodePositions(snapshot = canvasStoreSnapshot(), searchConte
     node.style.top = `${position.y}px`;
     node.style.width = `${position.w}px`;
     node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
+    node.style.zIndex = String(Math.round(((Number(position.depth) || 0) + 400) * 10 + (position.z || 0)));
+    node.style.setProperty('--node-depth', `${Number(position.depth) || 0}px`);
+    node.style.transform = `translateZ(${Number(position.depth) || 0}px)`;
   }
 }
 
@@ -623,7 +625,9 @@ function renderCanvas() {
     node.style.top = `${position.y}px`;
     node.style.width = `${position.w}px`;
     node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
+    node.style.zIndex = String(Math.round(((Number(position.depth) || 0) + 400) * 10 + (position.z || 0)));
+    node.style.setProperty('--node-depth', `${Number(position.depth) || 0}px`);
+    node.style.transform = `translateZ(${Number(position.depth) || 0}px)`;
     // Moving an existing node through the fragment keeps DOM order without
     // recreating its listeners, focus target, or media loader state.
     fragment.appendChild(node);

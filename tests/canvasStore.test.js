@@ -23,7 +23,7 @@ test('canvas fallback positions keep logical card size and use the wider 96px gr
     { id: 'd' },
     { id: 'e' },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions.a)), { x: 96, y: 96, w: 220, h: 170, z: 0 });
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions.a)), { x: 96, y: 96, w: 220, h: 170, z: 0, depth: 0 });
   assert.equal(layout.positions.b.x - layout.positions.a.x, 338);
   assert.equal(layout.positions.e.y - layout.positions.a.y, 283);
   assert.equal(layout.positions.e.w, 220);
