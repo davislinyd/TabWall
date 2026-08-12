@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.29.15');
+  assert.equal(MANIFEST.version, '2.29.16');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -2252,6 +2252,89 @@ test('auto-backup pruning only deletes exact folder and mode names', async () =>
     subfolder: 'TabWall-Backups',
   });
   assert.deepEqual(runtime.removedDownloads, [2]);
+});
+
+test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  assert.equal(typeof runtime.api.autoBackupShouldRun, 'function');
+  const shouldRun = runtime.api.autoBackupShouldRun;
+  const normalize = runtime.api.normalizeAutoBackup;
+  const intervalOf = runtime.api.autoBackupIntervalMinutes;
+  const now = Date.now();
+  const intervalMin = 60;
+  const ab = normalize({
+    enabled: true,
+    mode: 'full',
+    onChange: true,
+    intervalUnit: 'minute',
+    intervalValue: intervalMin,
+    dirtyAt: now - 5000,
+    lastSuccessAt: now - 1000, // success after dirty → covered
+  });
+  assert.equal(intervalOf(ab), intervalMin);
+
+  // Peer run already covered this dirty burst
+  const coveredOnchange = shouldRun(ab, { reason: 'onchange' });
+  assert.equal(coveredOnchange.run, false);
+  assert.equal(coveredOnchange.skipReason, 'already_backed_up');
+  const coveredLocal = shouldRun(ab, { force: true, reason: 'local' });
+  assert.equal(coveredLocal.run, false);
+  assert.equal(coveredLocal.skipReason, 'not_due');
+  const coveredSchedule = shouldRun(ab, { reason: 'schedule' });
+  assert.equal(coveredSchedule.run, false);
+  assert.equal(coveredSchedule.skipReason, 'not_due');
+
+  // Fresh dirty after last success → onchange / local run; schedule still not due
+  const dirtyAgain = normalize({
+    ...ab,
+    dirtyAt: now,
+    lastSuccessAt: now - 1000,
+  });
+  assert.equal(shouldRun(dirtyAgain, { reason: 'onchange' }).run, true);
+  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).run, true);
+  assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).run, false);
+  assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).skipReason, 'not_due');
+
+  // Schedule due after interval
+  const due = normalize({
+    ...ab,
+    dirtyAt: 0,
+    lastSuccessAt: now - (intervalMin + 1) * 60 * 1000,
+  });
+  assert.equal(shouldRun(due, { reason: 'schedule' }).run, true);
+  assert.equal(shouldRun(due, { reason: 'onchange' }).run, false);
+  assert.equal(shouldRun(due, { reason: 'onchange' }).skipReason, 'not_dirty');
+
+  // Manual always runs when forced even if just backed up
+  assert.equal(shouldRun(ab, { force: true, reason: 'manual' }).run, true);
+});
+
+test('PATCH_SETTINGS does not mark auto-backup dirty', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    afterSave: 'close',
+    autoBackup: {
+      enabled: true,
+      mode: 'full',
+      onChange: true,
+      intervalUnit: 'hour',
+      intervalValue: 24,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: Date.now(),
+      lastError: '',
+      dirtyAt: 0,
+    },
+  };
+  const result = await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: { theme: 'light' },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.settings.autoBackup.dirtyAt, 0);
 });
 
 test('mutation queue executes concurrent tasks in FIFO order', async () => {

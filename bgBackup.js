@@ -254,7 +254,9 @@ async function patchSettings(partial) {
   });
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
   if (patch.autoBackup) await syncAutoBackupAlarms(next.autoBackup);
-  await markAutoBackupDirty();
+  // Settings-only writes must not schedule on-change backups. Parked data /
+  // tags / canvas already call markAutoBackupDirty via their own writers;
+  // preferences ride along on the next data or scheduled backup.
   return { ok: true, settings: next };
 }
 
@@ -302,13 +304,68 @@ async function markAutoBackupDirty() {
 async function syncAutoBackupAlarms(autoBackup) {
   const ab = normalizeAutoBackup(autoBackup);
   await chrome.alarms.clear(AUTO_BACKUP_ALARM);
-  if (ab.enabled) {
-    const periodInMinutes = Math.max(10, autoBackupIntervalMinutes(ab));
-    await chrome.alarms.create(AUTO_BACKUP_ALARM, {
-      delayInMinutes: Math.min(periodInMinutes, 60),
-      periodInMinutes,
-    });
+  if (!ab.enabled) return;
+  const periodInMinutes = Math.max(10, autoBackupIntervalMinutes(ab));
+  // Align first fire with lastSuccessAt so re-sync (settings write / SW wake)
+  // does not restart the full period from "now".
+  let delayInMinutes = periodInMinutes;
+  if (ab.lastSuccessAt) {
+    const elapsedMin = (Date.now() - ab.lastSuccessAt) / 60000;
+    delayInMinutes = Math.max(1, periodInMinutes - elapsedMin);
   }
+  await chrome.alarms.create(AUTO_BACKUP_ALARM, {
+    delayInMinutes: Math.min(delayInMinutes, periodInMinutes),
+    periodInMinutes,
+  });
+}
+
+/**
+ * Gate for non-manual auto-backup paths. Manual (reason === 'manual') always
+ * proceeds when force or enabled; automatic reasons dedupe on dirtyAt /
+ * lastSuccessAt so schedule + onchange + park catch-up cannot each write a
+ * full backup within the same interval.
+ * @param {object} ab normalizeAutoBackup result
+ * @param {{ force?: boolean, reason?: string }} opts
+ * @returns {{ run: boolean, skipReason?: string }}
+ */
+function autoBackupShouldRun(ab, opts = {}) {
+  const force = Boolean(opts.force);
+  const reason = typeof opts.reason === 'string' && opts.reason ? opts.reason : 'manual';
+  const normalized = normalizeAutoBackup(ab);
+  const isManual = reason === 'manual';
+
+  if (isManual) {
+    if (!force && !normalized.enabled) return { run: false, skipReason: 'disabled' };
+    return { run: true };
+  }
+
+  if (!normalized.enabled) return { run: false, skipReason: 'disabled' };
+
+  const intervalMs = Math.max(10, autoBackupIntervalMinutes(normalized)) * 60 * 1000;
+  const now = Date.now();
+  const sinceOk = normalized.lastSuccessAt ? now - normalized.lastSuccessAt : Infinity;
+  const dirtyCovered =
+    normalized.dirtyAt > 0 &&
+    normalized.lastSuccessAt > 0 &&
+    normalized.lastSuccessAt >= normalized.dirtyAt;
+  const dueDirty = normalized.onChange && normalized.dirtyAt > 0 && !dirtyCovered;
+  const dueSchedule = !normalized.lastSuccessAt || sinceOk >= intervalMs;
+
+  if (reason === 'onchange') {
+    if (!normalized.onChange) return { run: false, skipReason: 'onchange_disabled' };
+    if (!normalized.dirtyAt) return { run: false, skipReason: 'not_dirty' };
+    if (dirtyCovered) return { run: false, skipReason: 'already_backed_up' };
+    return { run: true };
+  }
+
+  if (reason === 'schedule') {
+    if (!dueSchedule) return { run: false, skipReason: 'not_due' };
+    return { run: true };
+  }
+
+  // local / catch-up / any other automatic reason
+  if (!dueDirty && !dueSchedule) return { run: false, skipReason: 'not_due' };
+  return { run: true };
 }
 
 /**
@@ -318,14 +375,17 @@ async function syncAutoBackupAlarms(autoBackup) {
  */
 async function runAutoBackup(opts = {}) {
   const force = Boolean(opts.force);
+  const reason = typeof opts.reason === 'string' && opts.reason ? opts.reason : 'manual';
   if (autoBackupRunning) return { ok: false, error: 'busy' };
   autoBackupRunning = true;
+  const startedAt = Date.now();
   try {
     const settings = await getSettings();
     const ab = settings.autoBackup;
-    if (!force && !ab.enabled) return { ok: false, error: 'disabled' };
-    if (!force && opts.reason === 'onchange' && ab.onChange && !ab.dirtyAt) {
-      return { ok: true, skipped: true };
+    const gate = autoBackupShouldRun(ab, { force, reason });
+    if (!gate.run) {
+      if (gate.skipReason === 'disabled') return { ok: false, error: 'disabled' };
+      return { ok: true, skipped: true, reason: gate.skipReason };
     }
 
     if (!Build || typeof Build.buildLiteBlob !== 'function') {
@@ -368,13 +428,33 @@ async function runAutoBackup(opts = {}) {
 
     // Always prefer path from this download (clears stale FS-access paths)
     const folderPath = dirnameOfLocalPath(downloaded.filename) || '';
+    // Preserve dirtyAt set while this run was in progress so mid-backup edits
+    // still get an on-change follow-up; otherwise clear and drop the alarm.
+    const latest = await getSettings();
+    const dirtyDuring = Number(latest.autoBackup?.dirtyAt) || 0;
+    const keepDirty = dirtyDuring > startedAt;
     await patchAutoBackup({
       lastSuccessAt: Date.now(),
       lastError: '',
-      dirtyAt: 0,
+      dirtyAt: keepDirty ? dirtyDuring : 0,
       subfolder,
       folderPath,
     });
+    try {
+      await chrome.alarms.clear(AUTO_BACKUP_ONCHANGE_ALARM);
+    } catch {
+      // ignore
+    }
+    autoBackupAlarmPending = false;
+    if (keepDirty) {
+      autoBackupAlarmPending = true;
+      try {
+        await chrome.alarms.create(AUTO_BACKUP_ONCHANGE_ALARM, { delayInMinutes: 0.5 });
+      } catch (err) {
+        autoBackupAlarmPending = false;
+        console.warn('[TabWall] re-arm onchange backup failed:', err);
+      }
+    }
 
     try {
       await pruneDownloadedAutoBackups(mode, ab.maxKeep, { folderPath, subfolder });

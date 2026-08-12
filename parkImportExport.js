@@ -75,7 +75,9 @@
     try {
       const res = await env.sendMessage({
         type: 'AUTO_BACKUP_RUN',
-        force: true,
+        // Manual "Backup now" may force even if the toggle is off; catch-up
+        // must not force or it bypasses lastSuccessAt / dirtyAt dedupe.
+        force: Boolean(force),
         reason: force ? 'manual' : 'local',
       });
       env.settings = await env.loadSettings();

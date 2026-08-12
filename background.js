@@ -173,10 +173,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   const tasks = [];
   if (changes.settings) {
-    const next = changes.settings.newValue;
-    const ab = normalizeAutoBackup(next?.autoBackup);
-    autoBackupFlagsCache = { enabled: ab.enabled, onChange: ab.onChange };
-    tasks.push(syncAutoBackupAlarms(ab));
+    const nextAb = normalizeAutoBackup(changes.settings.newValue?.autoBackup);
+    const prevAb = normalizeAutoBackup(changes.settings.oldValue?.autoBackup);
+    autoBackupFlagsCache = { enabled: nextAb.enabled, onChange: nextAb.onChange };
+    // Only re-create the periodic alarm when schedule-relevant fields change.
+    // dirtyAt / lastSuccessAt / folderPath writes used to reset delay every
+    // edit and after each backup, which could align schedule with onchange.
+    const scheduleChanged =
+      nextAb.enabled !== prevAb.enabled ||
+      nextAb.intervalUnit !== prevAb.intervalUnit ||
+      nextAb.intervalValue !== prevAb.intervalValue;
+    if (scheduleChanged) {
+      tasks.push(syncAutoBackupAlarms(nextAb));
+    }
   }
   if (changes[STORAGE_ITEMS]) {
     // Defensive resync in case something bypasses commitItemsAndCanvas —
@@ -1877,6 +1886,11 @@ if (globalThis.__TABWALL_TEST__) {
     setParkedItems,
     importBackup,
     pruneDownloadedAutoBackups,
+    autoBackupShouldRun,
+    runAutoBackup,
+    normalizeAutoBackup,
+    autoBackupIntervalMinutes,
+    getSettings,
     stackItems,
     createStack,
     getCanvasLayout,
