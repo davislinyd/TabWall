@@ -734,9 +734,11 @@ const I18N = {
     searchPhTag: '搜尋 tag…  && 且、|| 或',
     searchPhNote: '搜尋 note…',
     searchPhGroup: '搜尋群組名稱或成員…',
+    searchPhDomain: '搜尋網域（僅分頁與群組成員）…',
     searchPhTagRegex: 'Regex 搜尋 tag…',
     searchPhNoteRegex: 'Regex 搜尋 note…',
     searchPhGroupRegex: '群組／成員正規表示式…',
+    searchPhDomainRegex: 'Regex 搜尋網域…',
     searchScopeClear: '清除欄位模式（或 all + Tab）',
     searchTagSuggestTitle: 'Tag 建議',
     searchTagSuggestEmpty: '找不到符合的 tag',
@@ -745,7 +747,7 @@ const I18N = {
     searchTagSuggestRemove: '已加入，點擊移除',
     helpShortcutRegex: '切換正規表示式搜尋（支援 /pattern/flags）',
     helpShortcutSearchMode:
-      '搜尋框輸入 t/tag、n/note、g/group、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
+      '搜尋框輸入 t/tag、n/note、g/group、d/domain、re/regex 後按 Tab 進入模式；all + Tab 回到全搜',
     searchHitsCount: '命中 {n} 個分頁',
     searchHitGroupMeta: '符合 group 名稱／note／tags',
     searchHitsMore: '還有 {n} 個…',
@@ -760,6 +762,12 @@ const I18N = {
     canvasSnapshot: '快照',
     canvasNodeHint: '單擊預覽快照；雙擊還原；按住拖曳移動',
     canvasAddNote: '新增 Sticker Note',
+    canvasContextMenuLabel: '畫布選單',
+    canvasCtxSortDate: '按日期排序',
+    canvasCtxArrangeAlign: '重新對齊卡片',
+    canvasCtxBackup: '備份資料',
+    canvasCtxAddNote: '新增 Sticker Note',
+    canvasCtxSortedDate: '已改為依日期排序',
     canvasNotePlaceHint: '點擊空白畫布放置 Sticker Note；按 Esc 取消',
     noteKind: 'Sticker Note',
     noteTitlePh: 'Note 標題',
@@ -1126,9 +1134,11 @@ const I18N = {
     searchPhTag: 'Search tags…  && AND, || OR',
     searchPhNote: 'Search notes…',
     searchPhGroup: 'Search group name or member tabs…',
+    searchPhDomain: 'Search domains (tabs and group members only)…',
     searchPhTagRegex: 'Regex search tags…',
     searchPhNoteRegex: 'Regex search notes…',
     searchPhGroupRegex: 'Group/member regex…',
+    searchPhDomainRegex: 'Regex search domains…',
     searchScopeClear: 'Clear field mode (or all + Tab)',
     searchTagSuggestTitle: 'Tag suggestions',
     searchTagSuggestEmpty: 'No matching tags',
@@ -1137,7 +1147,7 @@ const I18N = {
     searchTagSuggestRemove: 'Added — click to remove',
     helpShortcutRegex: 'Toggle regex search (supports /pattern/flags)',
     helpShortcutSearchMode:
-      'In search, type t/tag, n/note, g/group, or re/regex then Tab; all + Tab resets scope',
+      'In search, type t/tag, n/note, g/group, d/domain, or re/regex then Tab; all + Tab resets scope',
     searchHitsCount: '{n} matching tab(s)',
     searchHitGroupMeta: 'Matched group title / note / tags',
     searchHitsMore: '+{n} more…',
@@ -1152,6 +1162,12 @@ const I18N = {
     canvasSnapshot: 'Snapshot',
     canvasNodeHint: 'Click to preview; double-click to restore; drag to move',
     canvasAddNote: 'Add Sticker Note',
+    canvasContextMenuLabel: 'Canvas menu',
+    canvasCtxSortDate: 'Sort by date',
+    canvasCtxArrangeAlign: 'Realign cards',
+    canvasCtxBackup: 'Backup data',
+    canvasCtxAddNote: 'Add Sticker Note',
+    canvasCtxSortedDate: 'Sorted by date',
     canvasNotePlaceHint: 'Click an empty canvas area to place a Sticker Note; Esc cancels',
     noteKind: 'Sticker Note',
     noteTitlePh: 'Note title',
@@ -1492,6 +1508,7 @@ const canvasConnectionsEl = document.getElementById('canvasConnections');
 const canvasNodesEl = document.getElementById('canvasNodes');
 const canvasSelectionEl = document.getElementById('canvasSelection');
 const canvasContextBar = document.getElementById('canvasContextBar');
+const canvasContextMenu = document.getElementById('canvasContextMenu');
 const canvasMinimap = document.getElementById('canvasMinimap');
 const canvasMinimapViewport = document.getElementById('canvasMinimapViewport');
 const canvasZoomValueWrap = document.getElementById('canvasZoomValueWrap');
@@ -1829,6 +1846,8 @@ let stickerNoteDraftAttachments = [];
 let stickerNoteMediaBusy = false;
 let stickerNoteUsageRequest = 0;
 let canvasNotePlacementArmed = false;
+/** @type {{ mode: 'blank' | 'node', itemId: string, worldPoint: { x: number, y: number } | null }} */
+let canvasContextMenuState = { mode: 'blank', itemId: '', worldPoint: null };
 /** @type {{ type: 'item' | 'member' | 'batch', groupId?: string, memberId?: string, ids?: string[] } | null} */
 let editContext = null;
 /** @type {string|null} */
@@ -2577,6 +2596,7 @@ function syncViewModeButton(mode) {
 }
 
 function applyViewMode(mode) {
+  closeCanvasContextMenu();
   if (mode !== 'list' && mode !== 'canvas') mode = 'canvas';
   const isList = mode === 'list';
   const isCanvas = mode === 'canvas';
@@ -3834,11 +3854,12 @@ function searchPlaceholderText() {
   if (searchScope === 'tag') return re ? t('searchPhTagRegex') : t('searchPhTag');
   if (searchScope === 'note') return re ? t('searchPhNoteRegex') : t('searchPhNote');
   if (searchScope === 'group') return re ? t('searchPhGroupRegex') : t('searchPhGroup');
+  if (searchScope === 'domain') return re ? t('searchPhDomainRegex') : t('searchPhDomain');
   return re ? t('searchRegexPh') : t('searchPh');
 }
 
 function syncSearchScopeUi() {
-  const scoped = searchScope === 'tag' || searchScope === 'note' || searchScope === 'group';
+  const scoped = searchScope === 'tag' || searchScope === 'note' || searchScope === 'group' || searchScope === 'domain';
   if (searchWrap) searchWrap.classList.toggle('has-scope', scoped);
   if (searchScopeChip) {
     if (scoped) {
@@ -4140,7 +4161,7 @@ function refilterSearchIfNeeded() {
 }
 
 async function applySearchTabToken(token) {
-  if (token === 'tag' || token === 'note' || token === 'group' || token === 'all') {
+  if (token === 'tag' || token === 'note' || token === 'group' || token === 'domain' || token === 'all') {
     searchScope = token === 'all' ? 'all' : token;
     clearSearchInputKeepFocus();
     syncSearchScopeUi();
@@ -4275,6 +4296,8 @@ const SEARCH_TAB_TOKENS = {
   note: 'note',
   g: 'group',
   group: 'group',
+  d: 'domain',
+  domain: 'domain',
   re: 'regex',
   regex: 'regex',
   a: 'all',
@@ -4372,6 +4395,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
+    if (isCanvasContextMenuOpen()) {
+      closeCanvasContextMenu();
+      return;
+    }
     if (canvasNotePlacementArmed) {
       resetCanvasNotePlacement();
       return;
@@ -4936,6 +4963,14 @@ function initCanvasRailResize() {
 }
 
 function itemHaystack(item, scope = searchScope) {
+  if (scope === 'domain') {
+    // Hostname only: standalone tabs + group member tabs (not notes).
+    if (item.kind === 'note') return '';
+    if (item.kind === 'group') {
+      return (item.tabs || []).map((m) => domainOf(m.url)).filter(Boolean).join(' ');
+    }
+    return domainOf(item.url);
+  }
   if (scope === 'group') {
     // Only group cards; name + member tabs (title/url/domain)
     if (item.kind !== 'group') return '';
@@ -5124,6 +5159,10 @@ function textMatchesQuery(text, q) {
 
 function memberHaystack(member, scope = searchScope) {
   if (!member) return '';
+  if (scope === 'domain') {
+    if (member.kind === 'note') return '';
+    return domainOf(member.url);
+  }
   if (scope === 'group') {
     if (member.kind === 'note') return [member.title || '', member.markdown || ''].join(' ');
     return [member.title || '', member.url || '', domainOf(member.url)].join(' ');
@@ -5145,6 +5184,10 @@ function memberHaystack(member, scope = searchScope) {
 }
 
 function groupMetaHaystack(group, scope = searchScope) {
+  if (scope === 'domain') {
+    // Group title is not a domain; hits come only from member tabs.
+    return '';
+  }
   if (scope === 'group') {
     return group.title || '';
   }
@@ -5196,14 +5239,22 @@ function getGroupSearchMatch(group, q = query) {
 
 function matchesQuery(item, q) {
   if (!q) {
-    // Empty query: group scope still only shows groups
+    // Empty query: scoped modes still restrict card kinds
     if (searchScope === 'group') return item?.kind === 'group';
+    if (searchScope === 'domain') return item?.kind === 'tab' || item?.kind === 'group';
     return true;
   }
   if (searchScope === 'group') {
     if (item?.kind !== 'group') return false;
     const { hits, metaHit } = getGroupSearchMatch(item, q);
     return metaHit || hits.length > 0;
+  }
+  if (searchScope === 'domain') {
+    if (item?.kind === 'note') return false;
+    if (item?.kind === 'group') {
+      const { hits, metaHit } = getGroupSearchMatch(item, q);
+      return metaHit || hits.length > 0;
+    }
   }
   if (isTagExpressionMode()) return tagsMatchQuery(itemTagNames(item), q);
   const hay = itemHaystack(item);
@@ -5846,25 +5897,34 @@ async function estimateFullBackupMediaBytes(items) {
   return values.reduce((total, size) => total + size, 0);
 }
 
-exportLiteBtn.addEventListener('click', async () => {
-  backupStatus.textContent = t('backupExporting');
+async function exportLiteBackup({ toast = false } = {}) {
+  if (backupStatus) backupStatus.textContent = t('backupExporting');
   uiLog('info', 'export', 'lite start');
   try {
     const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
     if (!res.ok || !res.backup) {
       const err = res?.error || 'export_failed';
       uiLog('error', 'export', 'lite failed', err);
-      backupStatus.textContent = `${t('backupError')}: ${err}`;
-      return;
+      if (backupStatus) backupStatus.textContent = `${t('backupError')}: ${err}`;
+      if (toast) showCopyToast(`${t('backupError')}: ${err}`);
+      return { ok: false, error: err };
     }
     const { blob, filename } = Build.buildLiteBlob(res.backup, { auto: false });
     downloadBlob(blob, filename);
     uiLog('info', 'export', 'lite ok', `file=${filename} bytes=${blob.size}`);
-    backupStatus.textContent = t('backupExported');
+    if (backupStatus) backupStatus.textContent = t('backupExported');
+    if (toast) showCopyToast(t('backupExported'));
+    return { ok: true, filename };
   } catch (err) {
     uiLog('error', 'export', 'lite exception', err?.message || err);
-    backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
+    if (backupStatus) backupStatus.textContent = `${t('backupError')}: ${err?.message || err}`;
+    if (toast) showCopyToast(`${t('backupError')}: ${err?.message || err}`);
+    return { ok: false, error: err?.message || err };
   }
+}
+
+exportLiteBtn.addEventListener('click', () => {
+  exportLiteBackup();
 });
 
 exportFullBtn.addEventListener('click', async () => {
@@ -8685,6 +8745,50 @@ function wireStickerAttachmentImages(root, note) {
   });
 }
 
+/** Single-card toolbar + context-menu actions (tab / group / note). */
+function canvasNodeActionEntries(item) {
+  if (!item) return [];
+  if (item.kind === 'group') {
+    return [
+      { action: 'restore', label: t('restoreGroup'), icon: 'restore' },
+      { action: 'members', label: t('expandGroup'), icon: 'members' },
+      { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
+      { action: 'delete', label: t('delete'), icon: 'delete' },
+    ];
+  }
+  if (item.kind === 'note') {
+    return [
+      { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
+      { action: 'delete', label: t('delete'), icon: 'delete' },
+    ];
+  }
+  return [
+    { action: 'restore', label: t('restore'), icon: 'restore' },
+    { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
+    { action: 'edit', label: t('edit'), icon: 'edit' },
+    { action: 'copy', label: t('copyLink'), icon: 'copy' },
+    { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
+    { action: 'delete', label: t('delete'), icon: 'delete' },
+  ];
+}
+
+async function runCanvasNodeAction(id, action) {
+  const item = canvasItemById(id);
+  if (!item || !action) return;
+  if (action === 'restore') await restoreItem(item.id);
+  else if (action === 'snapshot') openLightbox(item);
+  else if (action === 'copy') await copySavedLink(item);
+  else if (action === 'members') openMembersBox(item);
+  else if (action === 'edit') {
+    if (item.kind === 'note') openStickerNoteEditor(item);
+    else openEditBox(item);
+  }
+  else if (action === 'pin') await togglePinned(item);
+  else if (action === 'delete') await deleteItem(item.id);
+}
+
 function canvasNodeHtml(item) {
   const title = itemTitle(item);
   const selected = activeCanvasSelection().has(item.id);
@@ -8696,30 +8800,8 @@ function canvasNodeHtml(item) {
     : isNote
       ? `${t('noteKind')} · ${formatSavedAt(item.savedAt)} · ${t('noteCount', { n: (item.attachments || []).length })}`
       : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
-  const actions = item.kind === 'group'
-    ? [
-        ['restore', t('restoreGroup'), 'restore'],
-        ['members', t('expandGroup'), 'members'],
-        ['edit', t('edit'), 'edit'],
-        ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
-        ['delete', t('delete'), 'delete'],
-      ]
-    : isNote
-      ? [
-          ['edit', t('edit'), 'edit'],
-          ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
-          ['delete', t('delete'), 'delete'],
-        ]
-      : [
-        ['restore', t('restore'), 'restore'],
-        ['snapshot', t('canvasSnapshot'), 'snapshot'],
-        ['edit', t('edit'), 'edit'],
-        ['copy', t('copyLink'), 'copy'],
-        ['pin', t(item.pinned ? 'unpin' : 'pin'), 'pin'],
-        ['delete', t('delete'), 'delete'],
-      ];
-  const actionHtml = actions
-    .map(([action, label, icon]) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
+  const actionHtml = canvasNodeActionEntries(item)
+    .map(({ action, label, icon }) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
     .join('');
   const linkHandles = [
     ['top', 'canvasLinkHandleTop'],
@@ -8825,17 +8907,7 @@ function wireCanvasNodeActions(node) {
     button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const action = button.dataset.canvasNodeAction;
-      if (action === 'restore') await restoreItem(item.id);
-      else if (action === 'snapshot') openLightbox(item);
-      else if (action === 'copy') await copySavedLink(item);
-      else if (action === 'members') openMembersBox(item);
-      else if (action === 'edit') {
-        if (item.kind === 'note') openStickerNoteEditor(item);
-        else openEditBox(item);
-      }
-      else if (action === 'pin') await togglePinned(item);
-      else if (action === 'delete') await deleteItem(item.id);
+      await runCanvasNodeAction(item.id, button.dataset.canvasNodeAction || '');
     });
   });
 }
@@ -10184,9 +10256,114 @@ function handleCanvasMiddleClick(event) {
 function isCanvasControlTarget(target) {
   return Boolean(
     target?.closest?.(
-      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
+      'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
     )
   );
+}
+
+function isCanvasContextMenuOpen() {
+  return Boolean(canvasContextMenu && !canvasContextMenu.hidden);
+}
+
+function closeCanvasContextMenu() {
+  if (!canvasContextMenu) return;
+  canvasContextMenu.hidden = true;
+  canvasContextMenu.setAttribute('aria-hidden', 'true');
+  canvasContextMenu.innerHTML = '';
+  canvasContextMenuState = { mode: 'blank', itemId: '', worldPoint: null };
+}
+
+function canvasBlankContextMenuEntries() {
+  return [
+    { action: 'sort-date', label: t('canvasCtxSortDate') },
+    { action: 'arrange-align', label: t('canvasCtxArrangeAlign') },
+    { action: 'backup-lite', label: t('canvasCtxBackup') },
+    { action: 'add-note', label: t('canvasCtxAddNote') },
+  ];
+}
+
+function renderCanvasContextMenuItems(mode, item) {
+  if (!canvasContextMenu) return;
+  canvasContextMenu.innerHTML = '';
+  const entries = mode === 'node'
+    ? canvasNodeActionEntries(item).map(({ action, label }) => ({
+      action,
+      label,
+      danger: action === 'delete',
+    }))
+    : canvasBlankContextMenuEntries();
+  for (const entry of entries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    button.dataset.canvasCtx = entry.action;
+    button.textContent = entry.label;
+    if (entry.danger) button.classList.add('danger');
+    canvasContextMenu.appendChild(button);
+  }
+}
+
+function openCanvasContextMenu(clientX, clientY, options = {}) {
+  if (!canvasContextMenu) return;
+  const mode = options.mode === 'node' ? 'node' : 'blank';
+  const itemId = mode === 'node' ? String(options.itemId || '') : '';
+  const item = itemId ? canvasItemById(itemId) : null;
+  if (mode === 'node' && !item) return;
+  canvasContextMenuState = {
+    mode,
+    itemId,
+    worldPoint: options.worldPoint
+      ? { x: options.worldPoint.x, y: options.worldPoint.y }
+      : null,
+  };
+  renderCanvasContextMenuItems(mode, item);
+  canvasContextMenu.hidden = false;
+  canvasContextMenu.setAttribute('aria-hidden', 'false');
+  // Measure after unhide so we can clamp within the window.
+  const rect = canvasContextMenu.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(clientX, window.innerWidth - rect.width - pad));
+  const top = Math.max(pad, Math.min(clientY, window.innerHeight - rect.height - pad));
+  canvasContextMenu.style.left = `${Math.round(left)}px`;
+  canvasContextMenu.style.top = `${Math.round(top)}px`;
+  canvasContextMenu.querySelector('button[role="menuitem"]')?.focus?.({ preventScroll: true });
+}
+
+async function handleCanvasContextMenuAction(action) {
+  const state = {
+    mode: canvasContextMenuState.mode,
+    itemId: canvasContextMenuState.itemId,
+    worldPoint: canvasContextMenuState.worldPoint
+      ? { ...canvasContextMenuState.worldPoint }
+      : null,
+  };
+  closeCanvasContextMenu();
+  if (state.mode === 'node') {
+    await runCanvasNodeAction(state.itemId, action);
+    return;
+  }
+  switch (action) {
+    case 'sort-date': {
+      const sortBy = normalizeSortBy('newest');
+      if (sortByEl) sortByEl.value = sortBy;
+      settings.sortBy = sortBy;
+      await saveSettings({ sortBy });
+      renderGrid();
+      showCopyToast(t('canvasCtxSortedDate'));
+      break;
+    }
+    case 'arrange-align':
+      arrangeCanvas('align');
+      break;
+    case 'backup-lite':
+      await exportLiteBackup({ toast: true });
+      break;
+    case 'add-note':
+      placeStickerNoteAt(state.worldPoint || canvasWorldViewportCenter());
+      break;
+    default:
+      break;
+  }
 }
 
 function isCanvasWheelControlTarget(target) {
@@ -10541,7 +10718,40 @@ function placeStickerNoteAt(point) {
 
 function initCanvasInteractions() {
   if (!canvasViewportEl) return;
+  canvasViewportEl.addEventListener('contextmenu', (event) => {
+    const node = event.target.closest?.('.canvas-node');
+    if (node) {
+      event.preventDefault();
+      const id = node.dataset.id || '';
+      if (!id) return;
+      ensureCanvasStore()?.setSelection([id]);
+      updateCanvasNodeSelection();
+      updateBatchBar();
+      openCanvasContextMenu(event.clientX, event.clientY, { mode: 'node', itemId: id });
+      return;
+    }
+    if (isCanvasControlTarget(event.target)) return;
+    event.preventDefault();
+    openCanvasContextMenu(event.clientX, event.clientY, {
+      mode: 'blank',
+      worldPoint: canvasPointFromEvent(event),
+    });
+  });
+  canvasContextMenu?.addEventListener('click', (event) => {
+    const btn = event.target.closest?.('[data-canvas-ctx]');
+    if (!btn || !canvasContextMenu.contains(btn)) return;
+    event.preventDefault();
+    handleCanvasContextMenuAction(btn.dataset.canvasCtx || '');
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (!isCanvasContextMenuOpen()) return;
+    if (event.target.closest?.('#canvasContextMenu')) return;
+    closeCanvasContextMenu();
+  }, true);
   canvasViewportEl.addEventListener('pointerdown', (event) => {
+    if (isCanvasContextMenuOpen() && !event.target.closest?.('#canvasContextMenu')) {
+      closeCanvasContextMenu();
+    }
     if (event.button === 1) {
       handleCanvasMiddleClick(event);
       if (!isCanvasControlTarget(event.target)) beginCanvasPointer(event, 'pan');
@@ -10609,6 +10819,7 @@ function initCanvasInteractions() {
     if (isCanvasWheelControlTarget(event.target)) return;
     const { dx, dy } = normalizeCanvasWheelDelta(event);
     if (!dx && !dy) return;
+    closeCanvasContextMenu();
     const modifierZoom = Boolean(event.ctrlKey || event.metaKey) && dy !== 0;
     event.preventDefault();
     if (modifierZoom) {
@@ -10668,6 +10879,11 @@ function initCanvasInteractions() {
       }
     }
     if (event.key === 'Escape') {
+      if (isCanvasContextMenuOpen()) {
+        event.preventDefault();
+        closeCanvasContextMenu();
+        return;
+      }
       if (canvasNotePlacementArmed) {
         event.preventDefault();
         resetCanvasNotePlacement();

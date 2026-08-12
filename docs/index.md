@@ -44,9 +44,10 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `t` or `tag` + Tab | Search tags only |
 | `n` or `note` + Tab | Search notes only |
 | `g` or `group` + Tab | Search groups only |
+| `d` or `domain` + Tab | Search domains only (standalone tabs and group member tabs) |
 | `re` or `regex` + Tab | Enable regular-expression search |
 | `all` + Tab | Reset the search field scope |
-| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, or regular-expression mode |
+| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, domain, or regular-expression mode |
 | `.*` in the toolbar | Toggle regular-expression search; `/pattern/flags` is supported |
 | `Esc` | Close panels or the TabWall wall |
 | `←` / `→` | Show the previous or next snapshot |

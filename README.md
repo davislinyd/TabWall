@@ -38,9 +38,10 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `t` or `tag` + Tab | Search tags only |
 | `n` or `note` + Tab | Search notes only |
 | `g` or `group` + Tab | Search groups only |
+| `d` or `domain` + Tab | Search domains only (standalone tabs and group member tabs) |
 | `re` or `regex` + Tab | Enable regular-expression search |
 | `all` + Tab | Reset the search field scope |
-| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, or regular-expression mode |
+| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, domain, or regular-expression mode |
 | `.*` in the toolbar | Toggle regular-expression search; `/pattern/flags` is supported |
 | `Esc` | Close panels or the TabWall wall |
 | `←` / `→` | Show the previous or next snapshot |
@@ -63,6 +64,8 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Click a title or metadata area | Copy the saved URL or the member URLs |
 | Click the pin control | Pin or unpin the top-level item; use the toolbar filter to show pinned items |
 | Select a node | Show the contextual actions; hold `Shift` / `Control` for multi-select |
+| Right-click empty canvas | Custom menu: sort by date, realign cards, export lite backup, add Sticker Note |
+| Right-click a card | Same actions as the card toolbar (restore, snapshot, edit, copy, pin, delete—by kind) |
 | Drag a node | Move it on the canvas; positions are saved automatically |
 | Drag one node onto another | Stack the items into a group |
 | Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
@@ -79,7 +82,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 - Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
-- Field scope: use `tag`, `note`, or `group` followed by Tab.
+- Field scope: use `tag`, `note`, `group`, or `domain` followed by Tab. Domain mode matches hostnames on standalone tabs and group member tabs only (not Sticker Notes).
 - Tag mode (`tag` + Tab) shows a type-ahead suggestion dropdown: pick multiple tags, and combine them with `&&` (AND) or `||` (OR) — click a suggestion's `||` button or press Alt+Enter to insert OR. Unlike plain search, whitespace inside a tag-mode query is *not* an AND separator (so a tag name that itself contains a space keeps working) — only `&&` and `||` are operators.
 - When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
@@ -92,7 +95,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Park and restore groups, with member notes and tags.
 - **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. New images are normalized to WebP (PNG fallback), capped at 4096px on the long edge, 16MP, and 24 MiB per source/output file; GIF and SVG become static images. Notes can join Stacks but are never restored as browser tabs.
 - Multi-selection and batch operations.
-- **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible.
+- **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible. Right-click the empty canvas or a card for a custom context menu.
+- **Domain search:** `d` / `domain` + Tab matches hostnames on tabs and group member tabs only (not Sticker Notes).
 - **Canvas settings:** sort by date, FQDN, or Group; arrange with Grid or Aligned Rows using a 96px card gap while preserving stored node sizes.
 - **Stack:** select two or more items or drop one node onto another to create a Stack; tab members restore as a Chrome Tab Group while note members remain on the Canvas.
 - New installations default to the dark Editorial Workbench; Light/Dark preferences remain available, and existing explicit theme and list preferences are preserved while legacy `cards` preferences migrate to `canvas`.
@@ -183,9 +187,10 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `t` 或 `tag` 加 Tab | 只搜尋標籤 |
 | `n` 或 `note` 加 Tab | 只搜尋備註 |
 | `g` 或 `group` 加 Tab | 只搜尋群組 |
+| `d` 或 `domain` 加 Tab | 只搜尋網域（獨立分頁與群組成員分頁） |
 | `re` 或 `regex` 加 Tab | 啟用正規表示式搜尋 |
 | `all` 加 Tab | 重設搜尋欄位範圍 |
-| 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組或正規表示式模式 |
+| 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組、網域或正規表示式模式 |
 | 工具列中的 `.*` | 開關正規表示式搜尋，支援 `/pattern/flags` |
 | `Esc` | 關閉面板或空間畫布 |
 | `←`／`→` | 顯示上一張或下一張快照 |
@@ -208,6 +213,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
 | 點擊固定控制項 | 固定／取消固定頂層項目；可用工具列篩選已固定項目 |
 | 選取節點 | 顯示上下文操作；按住 `Shift`／`Control` 可多選 |
+| 空白畫布右鍵 | 自訂選單：按日期排序、重新對齊卡片、匯出精簡備份、新增 Sticker Note |
+| 卡片右鍵 | 與卡片工具列相同操作（開啟／快照／編輯／複製／固定／刪除，依類型） |
 | 拖曳節點 | 在畫布上移動；位置會自動儲存 |
 | 將節點拖到另一節點 | 將項目堆疊成群組 |
 | 使用平移／框選工具 | 平移畫布或框選多個節點 |
@@ -223,7 +230,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 - 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
-- 欄位範圍：輸入 `tag`、`note` 或 `group` 後按 Tab。
+- 欄位範圍：輸入 `tag`、`note`、`group` 或 `domain` 後按 Tab。Domain 模式只比對 hostname，適用獨立分頁與群組成員分頁，不含 Sticker Note。
 - Tag 模式（輸入 `tag` 後按 Tab）會顯示即時下拉建議，可多選 tag 並以 `&&`（且）／`||`（或）組合；點擊建議旁的 `||` 按鈕或按 Alt+Enter 可直接以「或」加入。與一般搜尋不同，tag 模式下空白鍵**不會**被當作且的分隔符（保留給包含空白的 tag 名稱本身），只有 `&&`／`||` 才是運算子。
 - 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
@@ -236,7 +243,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 暫存與還原群組，支援成員備註與標籤。
 - **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件。新圖片會自動正規化為 WebP（不可用時退回 PNG），長邊上限 4096px、總像素 16MP，原始檔與儲存檔各不得超過 24 MiB；GIF／SVG 會靜態化。note 可加入 Stack，但不會還原成瀏覽器分頁。
 - 多選與批次操作。
-- **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。
+- **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。空白畫布或卡片可右鍵開啟自訂選單。
+- **網域搜尋：** `d`／`domain` + Tab 只比對分頁與群組成員的 hostname（不含 Sticker Note）。
 - **畫布設定：** 可依日期、FQDN 或 Group 排序；排列提供棋盤與對齊格式，使用 96px 卡片間距並保留儲存的卡片尺寸。
 - **堆疊：** 選取兩個以上項目建立 Stack，或將節點拖到另一節點合併；分頁成員可還原為 Chrome Tab Group，note 成員留在 Canvas。
 - 新安裝預設深色畫布；既有明確主題與列表偏好會保留，舊 `cards` 偏好會遷移為 `canvas`。

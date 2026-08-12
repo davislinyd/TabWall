@@ -24,8 +24,10 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /id="canvasLinkBtn"[^>]*data-canvas-tool="link"/);
   assert.match(HTML_SOURCE, /id="lbGroupMosaic" class="lb-group-mosaic"/);
   for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
-    assert.match(PARK_SOURCE, new RegExp(`\\['${action}',`));
+    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
   }
+  assert.match(PARK_SOURCE, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_SOURCE, /async function runCanvasNodeAction\(/);
   assert.match(PARK_SOURCE, /function isCanvasControlTarget\(target\)/);
   assert.match(PARK_SOURCE, /function isCanvasWheelControlTarget\(target\)/);
   assert.match(PARK_SOURCE, /if \(isCanvasControlTarget\(event\.target\)\) return;/);
@@ -82,6 +84,54 @@ test('Top bar exposes Canvas organization and manual add popovers', () => {
   assert.match(PARK_SOURCE, /if \(kind === 'url'\) \{[\s\S]*?openManualAddPanel\(\)/);
   assert.match(PARK_SOURCE, /canvasOrganizePanel\?\.querySelectorAll\('\[data-canvas-arrange\]'\)/);
   assert.match(PARK_SOURCE, /#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap/);
+});
+
+test('Search field scopes include domain mode via d/domain + Tab', () => {
+  assert.match(PARK_SOURCE, /d:\s*'domain'/);
+  assert.match(PARK_SOURCE, /domain:\s*'domain'/);
+  assert.match(PARK_SOURCE, /token === 'tag' \|\| token === 'note' \|\| token === 'group' \|\| token === 'domain' \|\| token === 'all'/);
+  assert.match(PARK_SOURCE, /searchScope === 'domain'/);
+  assert.match(PARK_SOURCE, /searchPhDomain/);
+  assert.match(PARK_SOURCE, /searchPhDomainRegex/);
+  assert.match(PARK_SOURCE, /scope === 'domain'/);
+  assert.match(PARK_SOURCE, /d\/domain/);
+  assert.match(PARK_SOURCE, /item\?\.kind === 'tab' \|\| item\?\.kind === 'group'/);
+});
+
+test('Canvas context menu covers blank canvas and single-card node actions', () => {
+  assert.match(HTML_SOURCE, /id="canvasContextMenu"[^>]*role="menu"[^>]*hidden/);
+  assert.match(HTML_SOURCE, /\.canvas-context-menu\s*\{[\s\S]*?position:\s*fixed;/);
+  assert.match(HTML_SOURCE, /\.canvas-context-menu button\.danger\s*\{/);
+  assert.match(PARK_SOURCE, /function canvasNodeActionEntries\(/);
+  assert.match(PARK_SOURCE, /async function runCanvasNodeAction\(/);
+  assert.match(PARK_SOURCE, /function canvasBlankContextMenuEntries\(/);
+  assert.match(PARK_SOURCE, /function renderCanvasContextMenuItems\(/);
+  assert.match(PARK_SOURCE, /function openCanvasContextMenu\(/);
+  assert.match(PARK_SOURCE, /function closeCanvasContextMenu\(/);
+  assert.match(PARK_SOURCE, /function handleCanvasContextMenuAction\(/);
+  assert.match(PARK_SOURCE, /async function exportLiteBackup\(/);
+  assert.match(PARK_SOURCE, /addEventListener\('contextmenu'/);
+  assert.match(PARK_SOURCE, /const node = event\.target\.closest\?\.\('\.canvas-node'\)/);
+  assert.match(PARK_SOURCE, /mode: 'node'/);
+  assert.match(PARK_SOURCE, /mode: 'blank'/);
+  assert.match(PARK_SOURCE, /setSelection\(\[id\]\)/);
+  assert.match(PARK_SOURCE, /await runCanvasNodeAction\(state\.itemId, action\)/);
+  assert.match(PARK_SOURCE, /await runCanvasNodeAction\(item\.id, button\.dataset\.canvasNodeAction/);
+  assert.match(PARK_SOURCE, /canvasNodeActionEntries\(item\)/);
+  assert.match(PARK_SOURCE, /#canvasContextMenu/);
+  assert.match(PARK_SOURCE, /placeStickerNoteAt\(state\.worldPoint \|\| canvasWorldViewportCenter\(\)\)/);
+  assert.match(PARK_SOURCE, /arrangeCanvas\('align'\)/);
+  assert.match(PARK_SOURCE, /exportLiteBackup\(\{ toast: true \}\)/);
+  assert.match(PARK_SOURCE, /normalizeSortBy\('newest'\)/);
+  for (const key of ['canvasCtxSortDate', 'canvasCtxArrangeAlign', 'canvasCtxBackup', 'canvasCtxAddNote']) {
+    assert.match(PARK_SOURCE, new RegExp(`'${key}'`));
+  }
+  for (const action of ['sort-date', 'arrange-align', 'backup-lite', 'add-note']) {
+    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
+  }
+  for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
+    assert.match(PARK_SOURCE, new RegExp(`action: '${action}'`));
+  }
 });
 
 test('Canvas Sticker Note exposes placement, split editing, attachments, and safe actions', () => {

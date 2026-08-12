@@ -11,6 +11,14 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.29.0 — 2026-08-12
+
+- 搜尋新增 domain scope：`d`／`domain` + Tab，只比對分頁與群組成員的 hostname；獨立 Sticker Note 不參與。
+
+## 2.28.0 — 2026-08-12
+
+- 畫布空白處與卡片右鍵自訂選單：空白處可排序／對齊／精簡備份／新增 Note；卡片動作與左鍵工具列一致。
+
 ## 2.26.0 — 2026-08-10
 
 - Canvas 排序／排列移至 top bar 的「畫布整理」面板；手動新增卡片移至常駐的「新增卡片」面板，設定面板不再承載這些操作。

@@ -4513,6 +4513,52 @@
         color: var(--danger);
       }
 
+      .canvas-context-menu {
+        position: fixed;
+        z-index: 200;
+        display: grid;
+        min-width: 168px;
+        padding: 4px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--panel-raised, var(--panel));
+        box-shadow: var(--edit-shadow, var(--shadow));
+      }
+
+      .canvas-context-menu[hidden] {
+        display: none !important;
+      }
+
+      .canvas-context-menu button {
+        width: 100%;
+        min-height: 34px;
+        padding: 6px 10px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .canvas-context-menu button:hover,
+      .canvas-context-menu button:focus-visible {
+        background: var(--btn-hover);
+        color: var(--accent);
+        outline: none;
+      }
+
+      .canvas-context-menu button.danger {
+        color: var(--danger);
+      }
+
+      .canvas-context-menu button.danger:hover,
+      .canvas-context-menu button.danger:focus-visible {
+        color: var(--danger);
+      }
+
       .canvas-minimap {
         position: absolute;
         right: 22px;
@@ -6452,6 +6498,7 @@
             <span id="canvasSyncStatus" class="canvas-sync-status" aria-live="polite"></span>
           </div>
         </div>
+        <div id="canvasContextMenu" class="canvas-context-menu" role="menu" hidden aria-hidden="true" data-i18n-aria="canvasContextMenuLabel" aria-label="畫布選單"></div>
       </section>
       <div id="grid" class="cards" role="list"></div>
     </main>
