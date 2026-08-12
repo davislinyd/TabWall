@@ -227,7 +227,7 @@ const I18N = {
     countFiltered: '{shown} / {total}',
     emptyTitle: '尚無暫存分頁',
     emptyBody:
-      '在網頁按下 <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> 存分頁；在 Group 內按 <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 存整個群組。<br/>開啟後按 <kbd>/</kbd> 可搜尋。',
+      '在網頁按下 <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> 存分頁；在 Group 內按 <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 存整個群組。<br/>任何分頁按 <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 可搜尋已存項目；開啟後按 <kbd>/</kbd> 可聚焦牆上搜尋。',
     noResultsTitle: '沒有符合的結果',
     noResultsBody: '試試其他關鍵字，或清除搜尋。',
     expand: '放大',
@@ -342,6 +342,7 @@ const I18N = {
     helpShortcutWall: '開關 TabWall 空間畫布',
     helpShortcutChrome: '以上四項快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。',
     helpShortcutSearch: '聚焦搜尋',
+    helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）',
     helpShortcutSettings: '開啟／關閉設定（⌥⌘S）',
     helpShortcutEsc: '關閉浮層／空間畫布',
     helpShortcutArrows: '快照上一張／下一張',
@@ -634,7 +635,7 @@ const I18N = {
     countFiltered: '{shown} / {total}',
     emptyTitle: 'No parked tabs yet',
     emptyBody:
-      'Press <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> to park a tab; <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> to park the whole Tab Group.<br/>Press <kbd>/</kbd> to search.',
+      'Press <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd> to park a tab; <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> to park the whole Tab Group.<br/>Press <kbd>Option</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> on any tab to search parked items; press <kbd>/</kbd> after opening TabWall to focus wall search.',
     noResultsTitle: 'No matches',
     noResultsBody: 'Try another query or clear the search.',
     expand: 'Expand',
@@ -749,6 +750,7 @@ const I18N = {
     helpShortcutWall: 'Toggle TabWall canvas',
     helpShortcutChrome: 'The four action shortcuts are managed by Chrome. Configure them in Chrome shortcut settings.',
     helpShortcutSearch: 'Focus search',
+    helpShortcutQuickSearch: 'Search parked items on any tab (without opening TabWall)',
     helpShortcutSettings: 'Open / close settings (⌥⌘S / Alt+Win+S)',
     helpShortcutEsc: 'Close panels / canvas',
     helpShortcutArrows: 'Previous / next snapshot',

@@ -452,6 +452,10 @@
             <span class="shortcut-label" data-i18n="helpShortcutWall">開關 TabWall 空間畫布</span>
             <span class="chrome-bind" data-chrome-cmd="toggle-park"></span>
           </div>
+          <div class="shortcut-row" data-action="quick-search">
+            <span class="shortcut-label" data-i18n="helpShortcutQuickSearch">在任何分頁搜尋已存項目（不必開啟 TabWall）</span>
+            <span class="chrome-bind">⌥/</span>
+          </div>
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
             <button type="button" class="btn" id="openChromeShortcutsBtn" data-i18n="shortcutsOpenChrome">在 Chrome 設定管理快捷鍵</button>
           </div>
@@ -628,6 +632,10 @@
           <ul>
             <li><span data-i18n="helpShortcutChrome">以上四項快捷鍵由 Chrome 管理，請在 Chrome 設定頁設定。</span></li>
             <li><kbd>/</kbd> — <span data-i18n="helpShortcutSearch">聚焦搜尋</span></li>
+            <li>
+              <kbd>⌥</kbd>+<kbd>/</kbd> —
+              <span data-i18n="helpShortcutQuickSearch">在任何分頁搜尋已存項目（不必開啟 TabWall）</span>
+            </li>
             <li>
               <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> —
               <span data-i18n="helpShortcutSettings">開啟／關閉設定（⌥⌘S）</span>
@@ -875,6 +883,7 @@
     <script src="parkImportExport.js"></script>
     <script src="parkStickerUi.js"></script>
     <script src="parkSearchQuery.js"></script>
+    <script src="quickSearch.js"></script>
     <script src="parkSearchUi.js"></script>
     <script src="parkMediaUi.js"></script>
         <script src="parkCanvasInteraction.js"></script>

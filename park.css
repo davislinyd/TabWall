@@ -5160,6 +5160,22 @@ select#sortBy {
   transform: translate(-50%, -50%) !important;
 }
 
+#helpBox {
+  box-sizing: border-box;
+  right: auto !important;
+  bottom: auto !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  height: auto;
+}
+
+#helpBox.open {
+  display: flex;
+  transform: translate(-50%, -50%) !important;
+}
+
 #settingsBox .float-drag,
 #settingsBox .settings-layout,
 #settingsBox .settings-footer {
@@ -5622,6 +5638,23 @@ main {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
   background: var(--accent-soft);
+}
+
+/* Newsprint tooth sits in the background layer so type contrast is unchanged. */
+#grid.cards .card,
+.canvas-node:not(.canvas-note) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+html[data-theme='light'] #grid.cards .card,
+html[data-theme='light'] .canvas-node:not(.canvas-note) {
+  background-blend-mode: multiply;
+}
+
+html[data-theme='dark'] #grid.cards .card,
+html[data-theme='dark'] .canvas-node:not(.canvas-note) {
+  background-blend-mode: soft-light;
 }
 
 .card-actions {

@@ -26,6 +26,7 @@ zip -r "$OUT_ZIP" \
   bgBackup.js \
   bgRestore.js \
   content.js \
+  quickSearch.js \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \

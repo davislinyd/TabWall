@@ -352,6 +352,14 @@ test('Chrome shortcut settings expose the tab-or-group keep command', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });
 
+test('Help panel is centered; cards have newsprint; Option+/ is documented', () => {
+  assert.match(CSS_SOURCE, /#helpBox\.open\s*\{[\s\S]*?transform:\s*translate\(-50%, -50%\) !important;/);
+  assert.match(WORKBENCH_CSS, /#grid\.cards \.card,[\s\S]*?\.canvas-node:not\(\.canvas-note\)[\s\S]*?feTurbulence/);
+  assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
+  assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
+  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）'/);
+});
+
 test('Canvas rail is resizable, collapsible, and the header mark is a stacked-panel SVG', () => {
   assert.match(HTML_SOURCE, /id="canvasRail" class="canvas-rail"/);
   assert.match(HTML_SOURCE, /class="canvas-rail-content"/);
