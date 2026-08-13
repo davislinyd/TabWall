@@ -26,6 +26,7 @@
       const n = (item.tabs || []).length + (item.notes || []).length;
       const storedOnlyCount = env.countStoredOnlyUrls(item);
       const color = env.GROUP_COLORS[item.color] || env.GROUP_COLORS.grey;
+      card.style.setProperty('--group-color', color);
       const note = item.note || '';
       const tags = Array.isArray(item.tags) ? item.tags : [];
       const savedAt = formatSavedAt(item.savedAt);

@@ -6,9 +6,9 @@
 // ── original background.js L313-705 ──
 const LEGACY_DEFAULT_CANVAS_ZOOM = 0.76;
 const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
-const DEFAULT_CANVAS_CARD_GAP = 96;
-const DEFAULT_CANVAS_CARD_STEP_X = 338;
-const DEFAULT_CANVAS_CARD_STEP_Y = 283;
+const DEFAULT_CANVAS_CARD_GAP = 128;
+const DEFAULT_CANVAS_CARD_STEP_X = 370;
+const DEFAULT_CANVAS_CARD_STEP_Y = 315;
 const DEFAULT_CANVAS_DISPLAY_SCALE = 1.1;
 
 function clampNumber(value, min, max, fallback) {

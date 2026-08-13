@@ -430,6 +430,9 @@ test('Editorial Workbench is desktop-only with low-contrast theme tokens', () =>
   assert.match(WORKBENCH_CSS, /\.app-header\s*\{[\s\S]*?flex-wrap: nowrap;[\s\S]*?border: 0;/);
   assert.match(WORKBENCH_CSS, /\.canvas-rail\s*\{[\s\S]*?flex: 0 0 var\(--canvas-rail-width\);[\s\S]*?border: 0;/);
   assert.match(WORKBENCH_CSS, /\.canvas-node\.selected\s*\{[\s\S]*?border-color: var\(--accent\);/);
+  assert.match(WORKBENCH_CSS, /\.canvas-node\.canvas-group\s*\{[\s\S]*?border-top:\s*3px solid var\(--group-color/);
+  assert.match(WORKBENCH_CSS, /\.group-card\s*\{[\s\S]*?--group-color/);
+  assert.match(CANVAS_RENDER_SOURCE, /--group-color:\$\{escapeAttr\(groupColor\)\}/);
   const quickAddCss =
     WORKBENCH_CSS.match(/\.quick-add-main,[\s\S]*?background: var\(--btn-bg\) !important;[\s\S]*?\n\s*\}/)?.[0] || '';
   assert.match(quickAddCss, /color: var\(--muted\) !important;/);
@@ -647,7 +650,7 @@ test('Canvas search relations and connection gestures have a stable UI contract'
 test('Canvas display geometry and connection endpoints use the four side handles', () => {
   // Display-scale / default position math lives in parkCanvasGeometry.js (v2.29.5+)
   assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DISPLAY_SCALE = 1\.1/);
-  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_DEFAULT_CARD_GAP = 96/);
+  assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_DEFAULT_CARD_GAP = 128/);
   assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DEFAULT_WIDTH = 220/);
   assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DEFAULT_HEIGHT = 170/);
   assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_NODE_DISPLAY_SCALE/);
@@ -760,6 +763,8 @@ test('Canvas zoom controls expose a hover slider and accessible fit menu', () =>
 
 test('Canvas fit actions use visible card bounds and preserve the viewport schema', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_FIT_PADDING = 24/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasZoomToFitCardColumns\(viewportWidth/);
+  assert.match(PARK_BEHAVIOR_FLAT, /canvasZoomToFitCardColumns\(width/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasFitViewport\(mode\)/);
   // Bounds math lives in parkCanvasGeometry.js (v2.29.5+)
   assert.match(CANVAS_GEOM_SOURCE, /function canvasBoundsForItems\(items, layout\)/);

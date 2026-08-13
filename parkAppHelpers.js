@@ -976,11 +976,15 @@
       const { width, height } = env.canvasViewportSize();
       const state = canvasStoreSnapshot();
       const bounds = env.canvasBoundsForItems(env.allTabs, state.layout || env.canvasLayout);
+      const zoom = env.canvasZoomToFitCardColumns(width, {
+        padding: env.CANVAS_FIT_PADDING,
+        minZoom: env.CANVAS_ZOOM_MIN,
+        maxZoom: env.CANVAS_ZOOM_MAX,
+      });
       if (!width || !height || !bounds) {
-        ensureCanvasStore()?.commitViewport({ ...env.DEFAULT_CANVAS_VIEWPORT });
+        ensureCanvasStore()?.commitViewport({ ...env.DEFAULT_CANVAS_VIEWPORT, zoom });
         return;
       }
-      const zoom = env.DEFAULT_CANVAS_VIEWPORT.zoom;
       ensureCanvasStore()?.commitViewport({
         x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
         y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),

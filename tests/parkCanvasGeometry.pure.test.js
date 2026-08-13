@@ -52,3 +52,18 @@ test('canvasConnectionPathD and wheel zoom factor boundaries', () => {
   const huge = G.canvasWheelZoomFactor(1e9, sens);
   assert.ok(Number.isFinite(huge) && huge > 0);
 });
+
+test('canvasZoomToFitCardColumns fits six default cards in the viewport width', () => {
+  const G = loadGeom();
+  const displayW = G.CANVAS_NODE_DEFAULT_WIDTH * G.CANVAS_NODE_DISPLAY_SCALE;
+  const gap = G.CANVAS_DEFAULT_CARD_GAP;
+  const padding = 24;
+  const content = 6 * displayW + 5 * gap;
+  const viewport = 1932;
+  const expected = (viewport - padding * 2) / content;
+  assert.equal(G.CANVAS_DEFAULT_VISIBLE_COLUMNS, 6);
+  assert.equal(G.CANVAS_DEFAULT_CARD_GAP, 128);
+  assert.ok(Math.abs(G.canvasZoomToFitCardColumns(viewport, { padding, minZoom: 0.25, maxZoom: 2 }) - expected) < 1e-9);
+  assert.equal(G.canvasZoomToFitCardColumns(400, { padding, minZoom: 0.25, maxZoom: 2 }), 0.25);
+  assert.equal(G.canvasZoomToFitCardColumns(20000, { padding, minZoom: 0.25, maxZoom: 2 }), 2);
+});

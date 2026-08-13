@@ -9,7 +9,8 @@
   const CANVAS_NODE_DISPLAY_SCALE = 1.1;
   const CANVAS_NODE_DEFAULT_WIDTH = 220;
   const CANVAS_NODE_DEFAULT_HEIGHT = 170;
-  const CANVAS_DEFAULT_CARD_GAP = 96;
+  const CANVAS_DEFAULT_CARD_GAP = 128;
+  const CANVAS_DEFAULT_VISIBLE_COLUMNS = 6;
   const CANVAS_CONNECTION_MAX_CURVE_OFFSET = 2000;
   const CANVAS_WHEEL_ZOOM_SENSITIVITY = 0.0015;
   const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0.006;
@@ -20,8 +21,8 @@
     const stepX = Math.round(CANVAS_NODE_DEFAULT_WIDTH * CANVAS_NODE_DISPLAY_SCALE) + CANVAS_DEFAULT_CARD_GAP;
     const stepY = Math.round(CANVAS_NODE_DEFAULT_HEIGHT * CANVAS_NODE_DISPLAY_SCALE) + CANVAS_DEFAULT_CARD_GAP;
     return {
-      x: 96 + (i % 4) * stepX,
-      y: 96 + Math.floor(i / 4) * stepY,
+      x: CANVAS_DEFAULT_CARD_GAP + (i % 4) * stepX,
+      y: CANVAS_DEFAULT_CARD_GAP + Math.floor(i / 4) * stepY,
       w: CANVAS_NODE_DEFAULT_WIDTH,
       h: CANVAS_NODE_DEFAULT_HEIGHT,
       z: i,
@@ -235,11 +236,25 @@
       : CANVAS_WHEEL_ZOOM_SENSITIVITY;
   }
 
+  /** Zoom so `columns` default-size cards (plus gaps) fit in the viewport width. */
+  function canvasZoomToFitCardColumns(viewportWidth, options = {}) {
+    const columns = Math.max(1, Number(options.columns) || CANVAS_DEFAULT_VISIBLE_COLUMNS);
+    const padding = Number.isFinite(Number(options.padding)) ? Number(options.padding) : 24;
+    const minZoom = Number.isFinite(Number(options.minZoom)) ? Number(options.minZoom) : 0.25;
+    const maxZoom = Number.isFinite(Number(options.maxZoom)) ? Number(options.maxZoom) : 2;
+    const displayWidth = CANVAS_NODE_DEFAULT_WIDTH * CANVAS_NODE_DISPLAY_SCALE;
+    const contentWidth = columns * displayWidth + (columns - 1) * CANVAS_DEFAULT_CARD_GAP;
+    const available = Math.max(1, Number(viewportWidth) || 0) - padding * 2;
+    if (!(available > 0) || !(contentWidth > 0)) return minZoom;
+    return Math.min(maxZoom, Math.max(minZoom, available / contentWidth));
+  }
+
   global.TabWallCanvasGeometry = {
     CANVAS_NODE_DISPLAY_SCALE,
     CANVAS_NODE_DEFAULT_WIDTH,
     CANVAS_NODE_DEFAULT_HEIGHT,
     CANVAS_DEFAULT_CARD_GAP,
+    CANVAS_DEFAULT_VISIBLE_COLUMNS,
     CANVAS_CONNECTION_MAX_CURVE_OFFSET,
     CANVAS_WHEEL_ZOOM_SENSITIVITY,
     CANVAS_TRACKPAD_ZOOM_SENSITIVITY,
@@ -262,5 +277,6 @@
     canvasMinimapProjectionFor,
     canvasWheelZoomFactor,
     canvasWheelZoomSensitivity,
+    canvasZoomToFitCardColumns,
   };
 })(typeof self !== 'undefined' ? self : globalThis);

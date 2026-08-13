@@ -161,6 +161,8 @@ function canvasNodeHtml(item) {
   const position = canvasDisplayPosition(canvasPositionFor(item.id));
   const pin = item.pinned ? `<span class="canvas-pin" title="${escapeAttr(t('pinnedOnly'))}" aria-label="${escapeAttr(t('pinnedOnly'))}">${iconSvg('pin')}</span>` : '';
   const isNote = item.kind === 'note';
+  const groupColors = get('GROUP_COLORS', {}) || {};
+  const groupColor = item.kind === 'group' ? (groupColors[item.color] || groupColors.grey || '#9ca3af') : '';
   const meta = item.kind === 'group'
     ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
     : isNote
@@ -175,13 +177,15 @@ function canvasNodeHtml(item) {
     ['bottom', 'canvasLinkHandleBottom'],
     ['left', 'canvasLinkHandleLeft'],
   ].map(([side, labelKey]) => `<button type="button" class="canvas-link-handle canvas-link-handle-${side}" data-canvas-link-handle="${side}" tabindex="-1" title="${escapeAttr(t(labelKey))}" aria-label="${escapeAttr(t(labelKey))}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>`).join('');
+  const groupStyle = groupColor ? `;--group-color:${escapeAttr(groupColor)}` : '';
   return `
     <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${selected ? ' selected' : ''}"
       data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
-      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}">
+      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}${groupStyle}">
       <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
       <div class="canvas-node-copy">
         <div class="canvas-node-title">
+          ${item.kind === 'group' ? `<span class="color-dot" style="background:${escapeAttr(groupColor)}"></span>` : ''}
           ${item.kind === 'tab' && item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : ''}
           <span>${escapeHtml(title)}</span>${pin}
         </div>

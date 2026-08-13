@@ -159,6 +159,7 @@ const canvasConnectionHandlePoint = CanvasGeom.canvasConnectionHandlePoint;
 const canvasMinimapProjectionFor = CanvasGeom.canvasMinimapProjectionFor;
 const canvasWheelZoomFactor = CanvasGeom.canvasWheelZoomFactor;
 const canvasWheelZoomSensitivity = CanvasGeom.canvasWheelZoomSensitivity;
+const canvasZoomToFitCardColumns = CanvasGeom.canvasZoomToFitCardColumns;
 
 // Media thumb/snap/attachment URL cache + lazy load lives in parkMediaUi.js
 // (bound near SearchUi once page state/DOM refs exist).
@@ -543,6 +544,7 @@ CanvasRender.bind({
   canvasMediaObserver: () => null,
   canvasItemById: (id) => canvasItemById(id),
   CANVAS_CONNECTION_HIT_WIDTH: () => CANVAS_CONNECTION_HIT_WIDTH,
+  GROUP_COLORS: () => GROUP_COLORS,
 });
 
 // Compact live env for panel + domain modules (no eval/with).
@@ -654,6 +656,7 @@ function bindPanelModules() {
     "canvasWorldViewportCenter": () => canvasWorldViewportCenter,
     "canvasZoomMenu": () => canvasZoomMenu,
     "canvasZoomSlider": () => canvasZoomSlider,
+    "canvasZoomToFitCardColumns": () => canvasZoomToFitCardColumns,
     "canvasZoomValue": () => canvasZoomValue,
     "canvasZoomValueWrap": () => canvasZoomValueWrap,
     "cardColsEl": () => cardColsEl,

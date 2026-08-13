@@ -133,10 +133,25 @@
 
   }
 
+  function isUnsetCanvasZoom(zoom) {
+    const fallback = Number(env.DEFAULT_CANVAS_VIEWPORT.zoom);
+    const current = Number(zoom);
+    const value = Number.isFinite(current) ? current : fallback;
+    return Math.abs(value - fallback) < 0.001;
+  }
+
+  function canvasSixCardZoom(viewportWidth) {
+    return env.canvasZoomToFitCardColumns(viewportWidth, {
+      padding: env.CANVAS_FIT_PADDING,
+      minZoom: env.CANVAS_ZOOM_MIN,
+      maxZoom: env.CANVAS_ZOOM_MAX,
+    });
+  }
+
   function centerCanvasInitialView() {
     ensureBound('centerCanvasInitialView');
 
-      if (!env.canvasNeedsInitialCenter || env.settings.viewMode !== 'canvas' || env.canvasSessionFallback || !env.canvasViewportEl) return;
+      if (env.settings.viewMode !== 'canvas' || env.canvasSessionFallback || !env.canvasViewportEl) return;
       const width = env.canvasViewportEl.clientWidth || env.canvasViewportEl.getBoundingClientRect?.().width || 0;
       const height = env.canvasViewportEl.clientHeight || env.canvasViewportEl.getBoundingClientRect?.().height || 0;
       if (!width || !height) return;
@@ -145,20 +160,34 @@
         env.canvasNeedsInitialCenter = false;
         return;
       }
-      if (!env.allTabs.length) {
+      const currentZoom = Number(state.layout.viewport.zoom) || env.DEFAULT_CANVAS_VIEWPORT.zoom;
+      const shouldFitSix = env.canvasNeedsInitialCenter || isUnsetCanvasZoom(currentZoom);
+      if (!shouldFitSix) return;
+      const zoom = canvasSixCardZoom(width);
+      if (env.canvasNeedsInitialCenter) {
+        if (!env.allTabs.length) {
+          env.canvasNeedsInitialCenter = false;
+          return;
+        }
+        const bounds = env.canvasBoundsForItems(env.allTabs, state.layout);
+        if (!bounds) {
+          env.canvasNeedsInitialCenter = false;
+          return;
+        }
         env.canvasNeedsInitialCenter = false;
+        env.canvasStore?.commitViewport({
+          x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
+          y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
+          zoom,
+        });
         return;
       }
-      const bounds = env.canvasBoundsForItems(env.allTabs, state.layout);
-      if (!bounds) {
-        env.canvasNeedsInitialCenter = false;
-        return;
-      }
-      const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || env.DEFAULT_CANVAS_VIEWPORT.zoom);
       env.canvasNeedsInitialCenter = false;
+      const centerX = (Number(state.layout.viewport.x) || 0) + width / (2 * currentZoom);
+      const centerY = (Number(state.layout.viewport.y) || 0) + height / (2 * currentZoom);
       env.canvasStore?.commitViewport({
-        x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
-        y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
+        x: centerX - width / (2 * zoom),
+        y: centerY - height / (2 * zoom),
         zoom,
       });
 
@@ -167,7 +196,10 @@
   function scheduleInitialCanvasCenter() {
     ensureBound('scheduleInitialCanvasCenter');
 
-      if (!env.canvasNeedsInitialCenter || env.canvasInitialCenterRaf) return;
+      const state = env.canvasStoreSnapshot?.();
+      const shouldRun = env.canvasNeedsInitialCenter
+        || isUnsetCanvasZoom(state?.layout?.viewport?.zoom);
+      if (!shouldRun || env.canvasInitialCenterRaf) return;
       const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
       env.canvasInitialCenterRaf = schedule(() => {
         env.canvasInitialCenterRaf = 0;

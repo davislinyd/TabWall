@@ -3546,7 +3546,13 @@ main {
 }
 
 .group-color-bar {
-  display: none;
+  display: block;
+  height: 3px;
+}
+
+.group-card {
+  background-color: color-mix(in srgb, var(--group-color, var(--accent)) 12%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--group-color, var(--accent)) 45%, transparent);
 }
 
 .group-badge {
@@ -4477,7 +4483,7 @@ html[data-theme='dark'] .canvas-node {
   line-height: 1.35;
 }
 
-.canvas-node-title > span:not(.canvas-pin) {
+.canvas-node-title > span:not(.canvas-pin):not(.color-dot) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5640,6 +5646,15 @@ main {
   background: var(--accent-soft);
 }
 
+.group-card {
+  background-color: color-mix(in srgb, var(--group-color, var(--accent)) 12%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--group-color, var(--accent)) 45%, transparent);
+}
+
+.group-card:hover {
+  background-color: color-mix(in srgb, var(--group-color, var(--accent)) 18%, var(--row-hover));
+}
+
 /* Newsprint tooth sits in the background layer so type contrast is unchanged. */
 #grid.cards .card,
 .canvas-node:not(.canvas-note) {
@@ -5947,7 +5962,10 @@ html[data-theme='dark'] .canvas-node {
 }
 
 .canvas-node.canvas-group {
-  border-top: 1px solid var(--border-strong);
+  border-color: color-mix(in srgb, var(--group-color, var(--accent)) 45%, var(--border-strong));
+  border-top: 3px solid var(--group-color, var(--accent));
+  background-color: color-mix(in srgb, var(--group-color, var(--accent)) 12%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--group-color, var(--accent)) 40%, transparent);
 }
 
 .canvas-node.selected {

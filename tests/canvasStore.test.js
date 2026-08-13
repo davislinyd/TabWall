@@ -14,7 +14,7 @@ function loadStore() {
 
 const ITEM = { id: 'a', kind: 'tab' };
 
-test('canvas fallback positions keep logical card size and use the wider 96px grid gap', () => {
+test('canvas fallback positions keep logical card size and use the wider 128px grid gap', () => {
   const api = loadStore();
   const layout = api.normalizeLayout({}, [
     { id: 'a' },
@@ -23,9 +23,9 @@ test('canvas fallback positions keep logical card size and use the wider 96px gr
     { id: 'd' },
     { id: 'e' },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions.a)), { x: 96, y: 96, w: 220, h: 170, z: 0 });
-  assert.equal(layout.positions.b.x - layout.positions.a.x, 338);
-  assert.equal(layout.positions.e.y - layout.positions.a.y, 283);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.positions.a)), { x: 128, y: 128, w: 220, h: 170, z: 0 });
+  assert.equal(layout.positions.b.x - layout.positions.a.x, 370);
+  assert.equal(layout.positions.e.y - layout.positions.a.y, 315);
   assert.equal(layout.positions.e.w, 220);
   assert.equal(layout.positions.e.h, 170);
 });

@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.35.0');
+  assert.equal(MANIFEST.version, '2.35.1');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -1341,7 +1341,7 @@ test('canvas layout defaults missing positions and normalizes bounds', async () 
   assert.equal(normalized.positions[ITEM_ID].w, 640);
   assert.equal(normalized.positions[ITEM_ID].h, 120);
   assert.equal(normalized.positions[ITEM_ID].z, 0);
-  assert.equal(normalized.positions[SOURCE_ID].x, 1026);
+  assert.equal(normalized.positions[SOURCE_ID].x, 752);
   assert.equal(normalized.positions['unknown-id'], undefined);
 });
 
@@ -1415,9 +1415,9 @@ test('newly saved tabs stay near the existing canvas cluster without overlap', a
   assert.deepEqual(
     JSON.parse(JSON.stringify([first.id, second.id, third.id].map((id) => layout.positions[id]))),
     [
-      { x: 3076, y: 1800, w: 220, h: 170, z: 9 },
-      { x: 3414, y: 1800, w: 220, h: 170, z: 10 },
-      { x: 2400, y: 2083, w: 220, h: 170, z: 11 },
+      { x: 3140, y: 1800, w: 220, h: 170, z: 9 },
+      { x: 3510, y: 1800, w: 220, h: 170, z: 10 },
+      { x: 2400, y: 2115, w: 220, h: 170, z: 11 },
     ]
   );
   assert.equal(new Set(rects.map(({ x, y }) => `${x},${y}`)).size, rects.length);

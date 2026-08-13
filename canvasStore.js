@@ -14,7 +14,7 @@
   const DEFAULT_CARD_WIDTH = 220;
   const DEFAULT_CARD_HEIGHT = 170;
   const DEFAULT_CARD_DISPLAY_SCALE = 1.1;
-  const DEFAULT_CARD_GAP = 96;
+  const DEFAULT_CARD_GAP = 128;
   const MAX_CURVE_OFFSET = 2000;
   const DEFAULT_RETRY_DELAYS = Object.freeze([250, 1000, 3000, 10000, 30000]);
 
@@ -28,8 +28,8 @@
     const stepX = Math.round(DEFAULT_CARD_WIDTH * DEFAULT_CARD_DISPLAY_SCALE) + DEFAULT_CARD_GAP;
     const stepY = Math.round(DEFAULT_CARD_HEIGHT * DEFAULT_CARD_DISPLAY_SCALE) + DEFAULT_CARD_GAP;
     return {
-      x: 96 + (i % 4) * stepX,
-      y: 96 + Math.floor(i / 4) * stepY,
+      x: DEFAULT_CARD_GAP + (i % 4) * stepX,
+      y: DEFAULT_CARD_GAP + Math.floor(i / 4) * stepY,
       w: DEFAULT_CARD_WIDTH,
       h: DEFAULT_CARD_HEIGHT,
       z: i,
