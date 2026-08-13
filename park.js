@@ -68,6 +68,16 @@ const DEFAULT_SETTINGS = {
   canvasSnap: true,
   canvasRailWidth: CANVAS_RAIL_DEFAULT_WIDTH,
   canvasRailCollapsed: false,
+  wallpaper: {
+    enabled: false,
+    fit: 'center',
+    opacity: 40,
+    blurPx: 16,
+    mime: '',
+    width: 0,
+    height: 0,
+    updatedAt: 0,
+  },
 };
 
 const Build = self.TabWallBackupBuild;
@@ -79,6 +89,7 @@ const Media = self.TabWallMediaDB;
 const MediaUi = self.TabWallMediaUi;
 const CanvasGeom = self.TabWallCanvasGeometry;
 const CanvasRender = self.TabWallCanvasRender;
+const Wallpaper = self.TabWallWallpaper;
 const SettingsUi = self.TabWallSettingsUi;
 const ImportExport = self.TabWallImportExport;
 const StickerUi = self.TabWallStickerUi;
@@ -87,6 +98,7 @@ const CanvasChrome = self.TabWallCanvasChrome;
 const ListUi = self.TabWallListUi;
 const WorkspaceUi = self.TabWallWorkspaceUi;
 const AppHelpers = self.TabWallAppHelpers;
+const ParkHistory = self.TabWallHistory;
 
 function classifyStoredUrl(...args) { return AppHelpers.classifyStoredUrl(...args); }
 
@@ -796,6 +808,7 @@ function bindPanelModules() {
     "openStickerNoteEditor": () => openStickerNoteEditor,
     "openWithSearchFocusEl": () => openWithSearchFocusEl,
     "PARENT_ORIGIN": () => PARENT_ORIGIN,
+    "ParkHistory": () => ParkHistory,
     "pinnedOnlyBtn": () => pinnedOnlyBtn,
     "placeFloatBox": () => placeFloatBox,
     "placeMembersBoxCentered": () => placeMembersBoxCentered,
@@ -908,6 +921,7 @@ function bindPanelModules() {
     "viewModeCanvasIcon": () => viewModeCanvasIcon,
     "viewModeLabel": () => viewModeLabel,
     "viewModeListIcon": () => viewModeListIcon,
+    "Wallpaper": () => Wallpaper,
     "withUiActionLock": () => withUiActionLock,
   };
   const rw = {
@@ -985,6 +999,7 @@ function bindPanelModules() {
     Object.defineProperty(env, name, { enumerable: true, configurable: true, get: acc.get, set: acc.set });
   }
   SettingsUi.bind(env);
+  Wallpaper?.bind?.(env);
   ImportExport.bind(env);
   StickerUi.bind(env);
   CanvasIx.bind(env);
@@ -992,6 +1007,7 @@ function bindPanelModules() {
   ListUi.bind(env);
   WorkspaceUi.bind(env);
   AppHelpers.bind(env);
+  ParkHistory?.bind?.(env);
 }
 bindPanelModules();
 
@@ -1618,6 +1634,8 @@ closeBtn.setAttribute('aria-label', t('close'));
 closeBtn.title = t('close');
 
 document.addEventListener('keydown', (e) => {
+  if (ParkHistory?.handleKeydown?.(e)) return;
+
   if (e.key === '/' && !isTypingTarget(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault();
     e.stopPropagation();
@@ -2001,6 +2019,9 @@ exportFullBtn.addEventListener('click', async () => {
       media: 'inline',
       parkedItems: hydrated,
     };
+    if (Wallpaper?.hydrateForExport) {
+      backup.settings = await Wallpaper.hydrateForExport(backup.settings);
+    }
     const { blob, filename } = Build.buildFullZipBlob(backup, { auto: false });
     downloadBlob(blob, filename);
     hydrated = [];
@@ -2073,6 +2094,13 @@ importBackupFile.addEventListener('change', async () => {
       if (Array.isArray(backup.parkedItems)) {
         backup.parkedItems = Build.rehydrateMedia(
           backup.parkedItems,
+          zipFiles,
+          backup.mediaMimes || {}
+        );
+      }
+      if (backup.settings && Build.rehydrateWallpaper) {
+        backup.settings = Build.rehydrateWallpaper(
+          backup.settings,
           zipFiles,
           backup.mediaMimes || {}
         );
@@ -2997,6 +3025,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
       ...(settings.autoBackup || {}),
     });
     settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
+    if (Wallpaper?.normalizeWallpaper) {
+      settings.wallpaper = Wallpaper.normalizeWallpaper(settings.wallpaper);
+    }
     normalizeCanvasRailSettings(settings);
     syncSettingsUi();
     renderGrid();

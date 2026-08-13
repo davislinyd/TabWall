@@ -228,6 +228,7 @@ test('Search field scopes include domain mode via d/domain + Tab', () => {
 
 test('Canvas context menu covers blank canvas and single-card node actions', () => {
   assert.match(HTML_SOURCE, /id="canvasContextMenu"[^>]*role="menu"[^>]*hidden/);
+  assert.match(HTML_MARKUP, /id="canvasContextMenu"/);
   assert.match(HTML_SOURCE, /\.canvas-context-menu\s*\{[\s\S]*?position:\s*fixed;/);
   assert.match(HTML_SOURCE, /\.canvas-context-menu button\.danger\s*\{/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasNodeActionEntries\(/);
@@ -296,7 +297,9 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(PARK_BEHAVIOR_FLAT, /event\.clipboardData\?\.items/);
   assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteDrop\?\.addEventListener\('drop'/);
   assert.match(HTML_SOURCE, /<script src="noteMedia\.js"><\/script>/);
+  assert.match(HTML_SOURCE, /<script src="parkWallpaper\.js"><\/script>/);
   assert.match(PARK_SOURCE, /const NoteMedia = self\.TabWallNoteMedia/);
+  assert.match(PARK_SOURCE, /const Wallpaper = self\.TabWallWallpaper/);
   assert.match(STICKER_UI_SOURCE, /await env\.NoteMedia\.normalizeBlob\(file\)/);
   assert.match(STICKER_UI_SOURCE, /type: 'GET_ATTACHMENT_USAGE'/);
   // Attachment URL cache + observe lives in parkMediaUi.js (v2.29.4+)
@@ -358,6 +361,19 @@ test('Help panel is centered; cards have newsprint; Option+/ is documented', () 
   assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
   assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
   assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／domain \+ Tab 切換欄位'/);
+});
+
+test('Undo shortcut is documented and wired for stack plus connections', () => {
+  assert.match(HTML_SOURCE, /<script src="parkHistory\.js"><\/script>/);
+  assert.match(HTML_SOURCE, /data-i18n="helpShortcutUndo"/);
+  assert.match(HTML_SOURCE, /data-i18n="helpShortcutRedo"/);
+  assert.match(I18N_SOURCE, /helpShortcutUndo: '復原上一動作（誤 Stack 或連線）'/);
+  assert.match(PARK_SOURCE, /ParkHistory\?\.handleKeydown/);
+  assert.match(PARK_SOURCE, /const ParkHistory = self\.TabWallHistory/);
+  assert.match(CANVAS_IX_SOURCE, /env\.ParkHistory\.commitConnectionsTracked/);
+  assert.match(CANVAS_IX_SOURCE, /env\.ParkHistory\.push\(\{ kind: 'stack'/);
+  assert.match(LIST_UI_SOURCE, /env\.ParkHistory\.push\(\{ kind: 'stack'/);
+  assert.match(CANVAS_CHROME_SOURCE, /env\.ParkHistory\.push\(\{ kind: 'stack'/);
 });
 
 test('Canvas rail is resizable, collapsible, and the header mark is a stacked-panel SVG', () => {
@@ -525,6 +541,23 @@ test('Automatic note and tag save rules expose a localized settings editor', () 
   assert.match(PARK_BEHAVIOR_FLAT, /function saveSettings\(/);
   assert.match(SETTINGS_UI_SOURCE, /data-auto-save-rule-prop/);
   assert.match(SETTINGS_UI_SOURCE, /data-auto-save-condition-prop/);
+});
+
+test('Display settings expose wallpaper upload and four fit modes', () => {
+  assert.match(HTML_SOURCE, /id="wallBg"/);
+  assert.match(HTML_SOURCE, /id="settingsWallpaperFile"[^>]*accept="image\/\*"/);
+  assert.match(HTML_SOURCE, /name="wallpaperFit" value="center"/);
+  assert.match(HTML_SOURCE, /name="wallpaperFit" value="fitWidth"/);
+  assert.match(HTML_SOURCE, /name="wallpaperFit" value="fitHeight"/);
+  assert.match(HTML_SOURCE, /name="wallpaperFit" value="original"/);
+  assert.match(HTML_SOURCE, /id="settingsWallpaperBlur"/);
+  assert.match(HTML_SOURCE, /id="settingsWallpaperOpacity"/);
+  assert.match(CSS_SOURCE, /body\[data-wallpaper-fit='fitWidth'\] \.wall-bg-image/);
+  assert.match(CSS_SOURCE, /body\[data-wallpaper-fit='fitHeight'\] \.wall-bg-image/);
+  assert.match(CSS_SOURCE, /body\[data-wallpaper-fit='original'\] \.wall-bg-image/);
+  assert.match(CSS_SOURCE, /\.wall-bg-image\s*\{[\s\S]*?background-size:\s*contain;/);
+  assert.match(I18N_SOURCE, /wallpaperTitle:/);
+  assert.match(SETTINGS_UI_SOURCE, /Wallpaper\.setFromFile/);
 });
 
 test('Spatial Canvas uses the single store and keyed interaction lifecycle', () => {

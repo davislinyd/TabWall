@@ -4,7 +4,7 @@
  */
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
-importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js');
+importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
@@ -1217,13 +1217,14 @@ async function stackItems(sourceId, targetId, options = {}) {
       next,
       remapCanvasLayout(canvasBefore, removedIds, groupId, anchors),
     );
-    if (!options.deferMediaCleanup) {
-      try {
-        await Media.removeMany([...obsoleteMediaKeys]);
-      } catch (err) {
-        appLogPush('warn', 'stack', 'old media cleanup deferred', err?.message || err);
-      }
-    }
+    return recordStackUndo({
+      beforeItems: list,
+      beforeLayout: canvasBefore,
+      removedIds,
+      newGroupId: groupId,
+      obsoleteMediaKeys: [...obsoleteMediaKeys],
+      createdMediaKeys: [...mediaState.created],
+    });
   };
 
   try {
@@ -1252,8 +1253,8 @@ async function stackItems(sourceId, targetId, options = {}) {
         notes,
       };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, group);
-      await finalize(next, groupId, [targetId, sourceId], [sourceId, targetId]);
-      return { ok: true, items: next, groupId };
+      const undoToken = await finalize(next, groupId, [targetId, sourceId], [sourceId, targetId]);
+      return { ok: true, items: next, groupId, undoToken };
     }
 
     // tab → group : add tab into group
@@ -1276,8 +1277,8 @@ async function stackItems(sourceId, targetId, options = {}) {
       const next = list
         .map((i) => (i.id === target.id ? updated : i))
         .filter((i) => i.id !== source.id);
-      await finalize(next, target.id, [target.id, sourceId], [sourceId]);
-      return { ok: true, items: next, groupId: target.id };
+      const undoToken = await finalize(next, target.id, [target.id, sourceId], [sourceId]);
+      return { ok: true, items: next, groupId: target.id, undoToken };
     }
 
     // group → tab : add tab into group, place group where tab was
@@ -1298,8 +1299,8 @@ async function stackItems(sourceId, targetId, options = {}) {
             savedAt: Date.now(),
           };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, updated);
-      await finalize(next, source.id, [source.id, targetId], [targetId]);
-      return { ok: true, items: next, groupId: source.id };
+      const undoToken = await finalize(next, source.id, [source.id, targetId], [targetId]);
+      return { ok: true, items: next, groupId: source.id, undoToken };
     }
 
     // group → group : merge source members into target
@@ -1315,8 +1316,8 @@ async function stackItems(sourceId, targetId, options = {}) {
       const next = list
         .map((i) => (i.id === target.id ? updated : i))
         .filter((i) => i.id !== source.id);
-      await finalize(next, target.id, [target.id, sourceId], [sourceId]);
-      return { ok: true, items: next, groupId: target.id };
+      const undoToken = await finalize(next, target.id, [target.id, sourceId], [sourceId]);
+      return { ok: true, items: next, groupId: target.id, undoToken };
     }
 
     return { ok: false, error: 'unsupported' };
@@ -1442,8 +1443,17 @@ async function createStack(ids, title = '') {
     // Metadata and the final canvas layout are committed together. If this
     // write fails, no partial multi-select result is observable.
     await commitItemsAndCanvas(next, workingLayout);
-    await cleanupOrphanMedia(next);
-    return { ok: true, groupId: targetId, item: next.find((item) => item.id === targetId) };
+    const afterIds = new Set(next.map((item) => item.id));
+    const removedIds = initial.filter((item) => !afterIds.has(item.id)).map((item) => item.id);
+    const undoToken = recordStackUndo({
+      beforeItems: initial,
+      beforeLayout: initialLayout,
+      removedIds,
+      newGroupId: targetId,
+      obsoleteMediaKeys: [...obsoleteMediaKeys],
+      createdMediaKeys: [...mediaState.created],
+    });
+    return { ok: true, groupId: targetId, item: next.find((item) => item.id === targetId), undoToken };
   } catch (err) {
     try {
       await Media.removeMany([...mediaState.created]);
@@ -1653,6 +1663,8 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'STACK_ITEMS',
   'PATCH_CANVAS_LAYOUT',
   'CREATE_STACK',
+  'UNDO_STACK',
+  'REDO_STACK',
   'SAVE_ACTIVE_TAB',
   'SAVE_TAB_FROM_CONTENT',
   'SAVE_ACTIVE_GROUP',
@@ -1722,6 +1734,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return patchCanvasLayout(message.layout, message.baseRevision);
       case 'CREATE_STACK':
         return createStack(message.ids, message.title);
+      case 'UNDO_STACK':
+        return undoStack(message.token);
+      case 'REDO_STACK':
+        return redoStack(message.token);
+      case 'CLEAR_STACK_UNDO':
+        return clearStackUndo();
       case 'SAVE_ACTIVE_TAB':
         return saveActiveTab({ afterSave: message.afterSave });
       case 'SAVE_TAB_FROM_CONTENT':
@@ -1893,6 +1911,13 @@ if (globalThis.__TABWALL_TEST__) {
     getSettings,
     stackItems,
     createStack,
+    undoStack,
+    redoStack,
+    clearStackUndo,
+    recordStackUndo,
+    mergeLayoutForStackUndo,
+    mergeLayoutForStackRedo,
+    collectStackUndoMediaKeys,
     getCanvasLayout,
     getCanvasLayoutRecord,
     setCanvasLayout,

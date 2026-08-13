@@ -46,6 +46,8 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | Empty search + Backspace, Delete, or Esc | Leave tag, note, group, domain, or regular-expression mode |
 | `.*` in the toolbar | Toggle regular-expression search; `/pattern/flags` is supported |
 | `Esc` | Close panels or the TabWall wall |
+| `⌘Z` / `Ctrl+Z` | Undo last accidental stack or connection |
+| `⌘⇧Z` / `Ctrl+⇧Z` / `Ctrl+Y` | Redo stack or connection |
 | `←` / `→` | Show the previous or next snapshot |
 
 The first four actions are Chrome commands. Their `suggested_key` values provide install-time defaults. Existing Chrome assignments, shortcut conflicts, and platform rules can leave a command unbound. Manage the commands in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
@@ -197,6 +199,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組、網域或正規表示式模式 |
 | 工具列中的 `.*` | 開關正規表示式搜尋，支援 `/pattern/flags` |
 | `Esc` | 關閉面板或空間畫布 |
+| `⌘Z`／`Ctrl+Z` | 復原誤 Stack 或連線 |
+| `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
 前四項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。

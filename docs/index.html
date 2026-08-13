@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.34.0 使用者說明：儲存分頁與 Tab Group、空間畫布、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.35.0 使用者說明：儲存分頁與 Tab Group、空間畫布、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.34.0</span>
+      <span>使用者說明 · v2.35.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -66,7 +66,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.34.0</span><span lang="en">Version 2.34.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.35.0</span><span lang="en">Version 2.35.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -274,8 +274,8 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">「連結」</td>
               <td lang="en">Link</td>
-              <td lang="zh-Hant">游標移到卡片會出現四側 <code>+</code>。從任一側拖到另一張；也可點兩張卡片當後備。連線無方向、會保存。</td>
-              <td lang="en">Hover a card for four-side <code>+</code> handles, then drag. Clicking two cards still works. Links are undirected and saved.</td>
+              <td lang="zh-Hant">游標移到卡片會出現四側 <code>+</code>。從任一側拖到另一張；也可點兩張卡片當後備。連線無方向、會保存。誤連可用 <kbd>⌘</kbd>+<kbd>Z</kbd> 復原。</td>
+              <td lang="en">Hover a card for four-side <code>+</code> handles, then drag. Clicking two cards still works. Links are undirected and saved. Undo an accidental link with <kbd>⌘</kbd>+<kbd>Z</kbd>.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">拖連線</td>
@@ -292,8 +292,8 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">拖曳卡片</td>
               <td lang="en">Drag a card</td>
-              <td lang="zh-Hant">位置自動儲存。拖到另一張的標題／中繼資料區可組成 Stack。</td>
-              <td lang="en">Position saves automatically. Drop onto another card’s title or metadata to make a Stack.</td>
+              <td lang="zh-Hant">位置自動儲存。拖到另一張的標題／中繼資料區可組成 Stack。誤疊按 <kbd>⌘</kbd>+<kbd>Z</kbd>。</td>
+              <td lang="en">Position saves automatically. Drop onto another card’s title or metadata to make a Stack. Undo with <kbd>⌘</kbd>+<kbd>Z</kbd>.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">拖 minimap 視角框</td>
@@ -381,8 +381,8 @@ https://wiki.example.com
           </article>
           <article class="card">
             <h3>Canvas Stack</h3>
-            <p lang="zh-Hant">在牆上把兩張以上卡片疊在一起：多選後合併，或把一張拖到另一張標題區。分頁成員還原成 Tab Group；note 留在畫布。</p>
-            <p lang="en">Stack two or more cards on the wall: multi-select and merge, or drop one onto another’s title. Tab members restore as a Tab Group; notes stay on the canvas.</p>
+            <p lang="zh-Hant">在牆上把兩張以上卡片疊在一起：多選後合併，或把一張拖到另一張標題區。分頁成員還原成 Tab Group；note 留在畫布。誤疊可用 <kbd>⌘</kbd>+<kbd>Z</kbd>／<kbd>Ctrl</kbd>+<kbd>Z</kbd> 復原。</p>
+            <p lang="en">Stack two or more cards on the wall: multi-select and merge, or drop one onto another’s title. Tab members restore as a Tab Group; notes stay on the canvas. Undo an accidental stack with <kbd>⌘</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
           </article>
         </div>
         <div class="callout warn">
@@ -659,8 +659,8 @@ https://wiki.example.com
           <li lang="en">Check <code>chrome://extensions/shortcuts</code> for unbound or conflicting commands.</li>
           <li lang="zh-Hant">重新整理目前分頁（更新後舊注入會失效）。</li>
           <li lang="en">Refresh the tab (old injections die after an update).</li>
-          <li lang="zh-Hant">牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
-          <li lang="en">In-wall keys (<kbd>/</kbd>, search modes, <kbd>Esc</kbd>, snapshot arrows) cannot be changed in Chrome settings.</li>
+          <li lang="zh-Hant">牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、<kbd>⌘</kbd>+<kbd>Z</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
+          <li lang="en">In-wall keys (<kbd>/</kbd>, search modes, <kbd>Esc</kbd>, <kbd>⌘</kbd>+<kbd>Z</kbd>, snapshot arrows) cannot be changed in Chrome settings.</li>
         </ol>
         <h3 lang="zh-Hant">畫布很空或卡片跑很遠</h3>
         <h3 lang="en">The canvas looks empty or cards are far away</h3>
@@ -731,6 +731,16 @@ https://wiki.example.com
               <td lang="en">Toggle settings</td>
             </tr>
             <tr>
+              <td>Mac <kbd>⌘</kbd>+<kbd>Z</kbd> / Windows <kbd>Ctrl</kbd>+<kbd>Z</kbd></td>
+              <td lang="zh-Hant">復原誤 Stack 或連線（最多 20 步；輸入框內不攔截）</td>
+              <td lang="en">Undo an accidental stack or connection (up to 20 steps; ignored while typing)</td>
+            </tr>
+            <tr>
+              <td>Mac <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> / Windows <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> 或 <kbd>Ctrl</kbd>+<kbd>Y</kbd></td>
+              <td lang="zh-Hant">重做 Stack 或連線</td>
+              <td lang="en">Redo stack or connection</td>
+            </tr>
+            <tr>
               <td><kbd>Esc</kbd></td>
               <td lang="zh-Hant">關上面板或畫布</td>
               <td lang="en">Close panels or the canvas</td>
@@ -747,8 +757,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.34.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.34.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.35.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.35.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

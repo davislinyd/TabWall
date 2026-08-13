@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="park.css" />
   </head>
   <body>
+    <div id="wallBg" class="wall-bg" hidden aria-hidden="true">
+      <div class="wall-bg-image"></div>
+      <div class="wall-bg-wash"></div>
+    </div>
     <header class="app-header">
       <div class="header-primary">
         <div class="brand">
@@ -377,6 +381,39 @@
           </div>
         </div>
         <div class="settings-block" data-settings-section="display">
+          <h2 data-i18n="wallpaperTitle">背景</h2>
+          <p class="hint" style="margin:0 0 12px;font-size:12px;color:var(--muted)" data-i18n="wallpaperHint">圖片會自動壓縮，並加上模糊與透明，以免干擾卡片。</p>
+          <div class="wallpaper-picker">
+            <div id="settingsWallpaperPreview" class="wallpaper-preview is-empty" aria-hidden="true"></div>
+            <div class="wallpaper-picker-actions">
+              <button type="button" class="btn" id="settingsWallpaperUpload" data-i18n="wallpaperUpload">上傳圖片</button>
+              <button type="button" class="btn" id="settingsWallpaperRemove" data-i18n="wallpaperRemove" disabled>移除</button>
+              <input id="settingsWallpaperFile" type="file" accept="image/*" hidden />
+            </div>
+          </div>
+          <div id="settingsWallpaperStatus" class="wallpaper-status" role="status" aria-live="polite"></div>
+          <div class="radios" style="margin-top:12px">
+            <label><input type="radio" name="wallpaperFit" value="center" checked /> <span data-i18n="wallpaperFitCenter">置中</span></label>
+            <label><input type="radio" name="wallpaperFit" value="fitWidth" /> <span data-i18n="wallpaperFitWidth">符合寬度</span></label>
+            <label><input type="radio" name="wallpaperFit" value="fitHeight" /> <span data-i18n="wallpaperFitHeight">符合高度</span></label>
+            <label><input type="radio" name="wallpaperFit" value="original" /> <span data-i18n="wallpaperFitOriginal">原始大小</span></label>
+          </div>
+          <div class="settings-row" style="margin-top:12px">
+            <label class="inline">
+              <span data-i18n="wallpaperBlur">模糊</span>
+              <input id="settingsWallpaperBlur" type="range" min="0" max="32" step="1" value="16" />
+              <span id="settingsWallpaperBlurValue">16</span>
+            </label>
+          </div>
+          <div class="settings-row" style="margin-top:10px">
+            <label class="inline">
+              <span data-i18n="wallpaperOpacity">濃度</span>
+              <input id="settingsWallpaperOpacity" type="range" min="15" max="70" step="1" value="40" />
+              <span id="settingsWallpaperOpacityValue">40</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="display">
           <h2 data-i18n="fxTitle">視覺效果</h2>
           <p class="hint" style="margin:0 0 12px;font-size:12px;color:var(--muted)" data-i18n="fxHint">選取、拖曳、連線與搜尋時的動態回饋；系統「減少動態效果」會強制安靜。</p>
           <div class="radios">
@@ -649,6 +686,8 @@
               >
             </li>
             <li><kbd>Esc</kbd> — <span data-i18n="helpShortcutEsc">關閉浮層／空間畫布</span></li>
+            <li><kbd>⌘</kbd>+<kbd>Z</kbd> — <span data-i18n="helpShortcutUndo">復原上一動作（誤 Stack 或連線）</span></li>
+            <li><kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> — <span data-i18n="helpShortcutRedo">重做 Stack／連線</span></li>
             <li><kbd>←</kbd> <kbd>→</kbd> — <span data-i18n="helpShortcutArrows">快照上一張／下一張</span></li>
           </ul>
         </div>
@@ -875,6 +914,7 @@
     <script src="mediaDb.js"></script>
     <script src="backupBuild.js"></script>
     <script src="noteMedia.js"></script>
+    <script src="parkWallpaper.js"></script>
     <script src="canvasStore.js"></script>
     <script src="parkI18n.js"></script>
     <script src="parkCanvasGeometry.js"></script>
@@ -891,6 +931,7 @@
     <script src="parkListUi.js"></script>
     <script src="parkWorkspaceUi.js"></script>
     <script src="parkAppHelpers.js"></script>
+    <script src="parkHistory.js"></script>
     <script src="park.js"></script>
   </body>
 </html>

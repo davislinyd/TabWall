@@ -220,6 +220,25 @@ async function getSettings() {
   return normalizeSettings(data[SETTINGS_KEY]);
 }
 
+function normalizeWallpaper(raw) {
+  const o = raw && typeof raw === 'object' ? raw : {};
+  const fit = o.fit === 'fitWidth' || o.fit === 'fitHeight' || o.fit === 'original'
+    ? o.fit
+    : 'center';
+  return {
+    enabled: o.enabled === true,
+    fit,
+    opacity: clampInt(o.opacity, 15, 70, 40),
+    blurPx: clampInt(o.blurPx, 0, 32, 16),
+    mime: typeof o.mime === 'string' && /^image\/(webp|png|jpeg|jpg)$/i.test(o.mime)
+      ? String(o.mime).toLowerCase()
+      : '',
+    width: clampInt(o.width, 0, 16384, 0),
+    height: clampInt(o.height, 0, 16384, 0),
+    updatedAt: Number(o.updatedAt) > 0 ? Number(o.updatedAt) : 0,
+  };
+}
+
 function normalizeSettings(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === 'object' ? raw : {}) };
   // Local shortcut settings were removed; discard the legacy field on the next write.
@@ -230,6 +249,7 @@ function normalizeSettings(raw) {
   });
   merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
   merged.preSaveEdit = merged.preSaveEdit !== false;
+  merged.wallpaper = normalizeWallpaper(merged.wallpaper);
   return merged;
 }
 
@@ -560,6 +580,22 @@ async function hydrateItemMedia(item) {
   return { ...item, ...(await hydrateMediaFields(Media.mediaKeyTab(item.id))) };
 }
 
+async function hydrateWallpaperSettings(settings) {
+  const next = settings && typeof settings === 'object' ? { ...settings } : {};
+  const wallpaper = normalizeWallpaper(next.wallpaper);
+  next.wallpaper = { ...wallpaper };
+  if (!wallpaper.enabled || !Media?.getAttachment) return next;
+  try {
+    const blob = await Media.getAttachment(Media.mediaKeyWallpaper());
+    if (blob && Media.blobToDataUrl) {
+      next.wallpaper.data = await Media.blobToDataUrl(blob);
+    }
+  } catch (err) {
+    console.warn('[TabWall] wallpaper hydrate failed:', err);
+  }
+  return next;
+}
+
 /**
  * @param {'lite'|'full'} mode
  * @param {{ hydrate?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
@@ -574,9 +610,11 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
 
   let items = parkedItems;
   let media = 'none';
+  let settings = settingsData[SETTINGS_KEY] || {};
   if (mode === 'full' && hydrate) {
     items = await mapWithConcurrency(parkedItems, 4, hydrateItemMedia);
     media = 'inline';
+    settings = await hydrateWallpaperSettings(settings);
   } else if (mode === 'full') {
     // Meta only — park hydrates from IDB to avoid huge extension messages
     media = 'idb';
@@ -598,7 +636,7 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
       exportedAt: new Date().toISOString(),
       parkedItems: items,
       parkedTabs,
-      settings: settingsData[SETTINGS_KEY] || {},
+      settings,
       tagCatalog,
       canvasLayout,
     },
@@ -867,6 +905,21 @@ async function cleanupOrphanMedia(items = null) {
     } else if (item.hasThumb || item.hasSnap) {
       keep.add(Media.mediaKeyTab(item.id));
     }
+  }
+  try {
+    if (typeof collectStackUndoMediaKeys === 'function') {
+      for (const key of collectStackUndoMediaKeys()) keep.add(key);
+    }
+  } catch {
+    // undo snapshots are best-effort; never fail item cleanup
+  }
+  try {
+    const settings = await getSettings();
+    if (settings?.wallpaper?.enabled && Media.mediaKeyWallpaper) {
+      keep.add(Media.mediaKeyWallpaper());
+    }
+  } catch {
+    // settings read is best-effort; never drop keep-set of item media
   }
   try {
     return await Media.removeOrphans([...keep]);

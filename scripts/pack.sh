@@ -25,11 +25,13 @@ zip -r "$OUT_ZIP" \
   bgLayout.js \
   bgBackup.js \
   bgRestore.js \
+  bgUndo.js \
   content.js \
   quickSearch.js \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \
+  parkWallpaper.js \
   canvasStore.js \
   parkCanvasGeometry.js \
   parkCanvasRender.js \
@@ -49,6 +51,7 @@ zip -r "$OUT_ZIP" \
   parkListUi.js \
   parkWorkspaceUi.js \
   parkAppHelpers.js \
+  parkHistory.js \
   park.js \
   icons/icon16.png \
   icons/icon48.png \

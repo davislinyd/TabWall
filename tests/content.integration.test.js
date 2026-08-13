@@ -149,6 +149,13 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+test('overlay CSS is 98% panel with backdrop blur', () => {
+  assert.match(SOURCE, /backdrop-filter:\s*blur\(/);
+  assert.match(SOURCE, /-webkit-backdrop-filter:\s*blur\(/);
+  assert.match(SOURCE, /\.panel\s*\{[^}]*width:\s*98%/);
+  assert.match(SOURCE, /\.panel\s*\{[^}]*height:\s*98%/);
+});
+
 test('overlay quick save hides TabWall before capture and restores it after response', async () => {
   const runtime = createContentRuntime();
   runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });

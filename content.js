@@ -1,6 +1,6 @@
 /**
  * TabWall — Content shell
- * 低對比遮罩 + 全視窗畫布（iframe park UI）
+ * 低對比遮罩 + 98% 畫布（iframe park UI），其餘 2% 為原頁模糊框
  */
 
 (() => {
@@ -182,13 +182,15 @@
         align-items: center;
         justify-content: center;
         padding: 0;
-        background: rgba(32, 38, 41, 0.2);
+        background: rgba(32, 38, 41, 0.28);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
       }
       .panel {
-        width: 100vw;
-        height: 100vh;
-        max-width: 100vw;
-        max-height: 100vh;
+        width: 98%;
+        height: 98%;
+        max-width: 98%;
+        max-height: 98%;
         border-radius: 0;
         overflow: hidden;
         border: 0;

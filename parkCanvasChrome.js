@@ -384,6 +384,7 @@
         env.showCopyToast(env.t('stackFailed'));
         return;
       }
+      if (res.undoToken) env.ParkHistory.push({ kind: 'stack', token: res.undoToken });
       env.ensureCanvasStore()?.setSelection([]);
       await env.loadList();
       env.showCopyToast(env.t('stackMerged'));

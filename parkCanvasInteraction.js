@@ -150,13 +150,13 @@
           };
         });
         if (!next.some((connection) => env.canvasConnectionId(connection.sourceId, connection.targetId) === state.connectionId)) return false;
-        env.canvasStore?.commitConnections(next);
+        env.ParkHistory.commitConnectionsTracked(next);
         return true;
       }
       if (!state.targetId) return false;
       if (state.kind === 'handle') {
         if (state.targetId === state.sourceId) return false;
-        env.canvasStore?.commitConnections([...current, { sourceId: state.sourceId, targetId: state.targetId }]);
+        env.ParkHistory.commitConnectionsTracked([...current, { sourceId: state.sourceId, targetId: state.targetId }]);
         return true;
       }
       if (state.targetId === state.fixedId || state.targetId === state.movingId) return false;
@@ -167,7 +167,7 @@
           targetId: state.movingEndpoint === 'targetId' ? state.targetId : state.fixedId,
         };
       });
-      env.canvasStore?.commitConnections(next);
+      env.ParkHistory.commitConnectionsTracked(next);
       return true;
 
   }
@@ -221,7 +221,7 @@
       });
       env.selectedCanvasConnectionId = '';
       env.canvasConnectionSourceId = '';
-      if (changed) env.canvasStore?.commitConnections(next);
+      if (changed) env.ParkHistory.commitConnectionsTracked(next);
       else env.renderCanvasConnections();
       updateCanvasNodeSelection();
       env.updateBatchBar();
@@ -262,7 +262,7 @@
       );
       env.selectedCanvasConnectionId = '';
       const store = env.ensureCanvasStore();
-      if (store) store.commitConnections(connections);
+      if (store) env.ParkHistory.commitConnectionsTracked(connections);
       else env.renderCanvasConnections();
       updateCanvasNodeSelection();
       env.updateBatchBar();
@@ -296,7 +296,7 @@
       const next = [...(state.layout.connections || []), { sourceId, targetId }];
       env.canvasConnectionSourceId = '';
       env.selectedCanvasConnectionId = '';
-      env.canvasStore?.commitConnections(next);
+      env.ParkHistory.commitConnectionsTracked(next);
 
   }
 
@@ -583,6 +583,7 @@
             if (pointerGeneration !== env.canvasInteractionGeneration) return;
             const result = await env.sendMessage({ type: 'STACK_ITEMS', sourceId: state.id, targetId });
             if (result?.ok) {
+              if (result.undoToken) env.ParkHistory.push({ kind: 'stack', token: result.undoToken });
               stacked = true;
               env.ensureCanvasStore()?.setSelection([]);
               env.selectMode = false;

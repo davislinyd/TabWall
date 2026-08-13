@@ -584,6 +584,47 @@
     return { items: clone, files, mediaMimes, totalBytes };
   }
 
+  function collectWallpaperMedia(settings) {
+    if (!settings || typeof settings !== 'object' || !settings.wallpaper || typeof settings.wallpaper !== 'object') {
+      return { settings, file: null, mime: '' };
+    }
+    const wallpaper = { ...settings.wallpaper };
+    const parsed = parseDataUrl(wallpaper.data);
+    delete wallpaper.data;
+    if (!parsed || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
+      return { settings: { ...settings, wallpaper }, file: null, mime: '' };
+    }
+    const ext = parsed.mime === 'image/png' ? 'png' : 'webp';
+    const path = `media/wallpaper.${ext}`;
+    wallpaper.data = path;
+    return {
+      settings: { ...settings, wallpaper },
+      file: { name: path, data: parsed.bytes },
+      mime: parsed.mime,
+    };
+  }
+
+  function rehydrateWallpaper(settings, zipFiles, mediaMimes = {}) {
+    if (!settings || typeof settings !== 'object' || !settings.wallpaper || typeof settings.wallpaper !== 'object') {
+      return settings;
+    }
+    const value = settings.wallpaper.data;
+    if (!value || typeof value !== 'string' || value.startsWith('data:')) return settings;
+    const bytes = zipFiles?.[value];
+    if (!bytes) {
+      const wallpaper = { ...settings.wallpaper };
+      delete wallpaper.data;
+      return { ...settings, wallpaper };
+    }
+    return {
+      ...settings,
+      wallpaper: {
+        ...settings.wallpaper,
+        data: bytesToDataUrl(bytes, mediaMimes[value] || mimeFromPath(value)),
+      },
+    };
+  }
+
   function rehydrateMedia(items, zipFiles, mediaMimes = {}) {
     const get = (path) => {
       if (!path || typeof path !== 'string') return '';
@@ -880,12 +921,18 @@
     }, { allowStoredOnlyUrls: true });
     if (!validation.ok) throw new Error(validation.error);
     const { items, files, mediaMimes } = collectMediaFiles(backup.parkedItems || []);
+    const wall = collectWallpaperMedia(backup.settings);
+    if (wall.file) {
+      files.push(wall.file);
+      mediaMimes[wall.file.name] = wall.mime;
+    }
     const meta = {
       ...backup,
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'zip',
       mediaMimes,
+      settings: wall.settings || backup.settings,
       parkedItems: items,
       parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...r }) => r),
     };
@@ -1270,7 +1317,9 @@
     zipStore,
     unzipStore,
     collectMediaFiles,
+    collectWallpaperMedia,
     rehydrateMedia,
+    rehydrateWallpaper,
     prepareImportedBackup,
     validateBackup,
     stamp,

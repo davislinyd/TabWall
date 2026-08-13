@@ -8,7 +8,7 @@ const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.ur
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js'].map((name) => [
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -425,12 +425,13 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.33.2');
+  assert.equal(MANIFEST.version, '2.35.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
-  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js'\)/);
+  assert.match(BACKGROUND_SOURCE, /bgUndo\.js/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
@@ -1691,6 +1692,85 @@ test('Stack merge remaps connection endpoints and removes self or duplicate link
     targetId: GROUP_HTTP_MEMBER_ID,
     curveOffset: { x: 60, y: -30 },
   });
+});
+
+test('STACK_ITEMS undo restores items, keeps later moves, and retains old media', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID), tab(TARGET_ID)]);
+  runtime.media.set(`t:${ITEM_ID}`, { thumb: 'item', snap: 'item' });
+  runtime.media.set(`t:${SOURCE_ID}`, { thumb: 'source', snap: 'source' });
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    positions: {
+      [ITEM_ID]: { x: 100, y: 100, w: 220, h: 170, z: 0 },
+      [SOURCE_ID]: { x: 400, y: 100, w: 220, h: 170, z: 1 },
+      [TARGET_ID]: { x: 700, y: 100, w: 220, h: 170, z: 2 },
+    },
+    connections: [
+      { sourceId: ITEM_ID, targetId: TARGET_ID, curveOffset: { x: 48, y: 12 } },
+    ],
+  });
+
+  const stacked = await runtime.api.stackItems(ITEM_ID, SOURCE_ID);
+  assert.equal(stacked.ok, true);
+  assert.equal(typeof stacked.undoToken, 'string');
+  assert.equal(runtime.media.has(`t:${ITEM_ID}`), true);
+  assert.equal(runtime.media.has(`t:${SOURCE_ID}`), true);
+  assert.ok([...runtime.media.keys()].some((key) => key.startsWith(`g:${stacked.groupId}:`)));
+
+  const afterStack = await runtime.api.getCanvasLayout();
+  afterStack.positions[TARGET_ID] = { x: 900, y: 240, w: 220, h: 170, z: 2 };
+  afterStack.viewport = { x: 12, y: 34, zoom: 1.2 };
+  await runtime.api.setCanvasLayout(afterStack);
+
+  const undone = await runtime.api.undoStack(stacked.undoToken);
+  assert.equal(undone.ok, true);
+  const items = await runtime.api.getParkedItems();
+  assert.deepEqual(JSON.parse(JSON.stringify(items.map((item) => item.id).sort())), [ITEM_ID, SOURCE_ID, TARGET_ID].sort());
+  const layout = await runtime.api.getCanvasLayout();
+  assert.equal(layout.viewport.x, 12);
+  assert.equal(layout.viewport.zoom, 1.2);
+  assert.equal(layout.positions[TARGET_ID].x, 900);
+  assert.equal(layout.positions[ITEM_ID].x, 100);
+  assert.equal(layout.positions[SOURCE_ID].x, 400);
+  assert.equal(Boolean(layout.positions[stacked.groupId]), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(layout.connections)), [{
+    sourceId: ITEM_ID,
+    targetId: TARGET_ID,
+    curveOffset: { x: 48, y: 12 },
+  }]);
+  assert.equal(runtime.media.has(`t:${ITEM_ID}`), true);
+  assert.equal(runtime.media.has(`t:${SOURCE_ID}`), true);
+
+  const redone = await runtime.api.redoStack(stacked.undoToken);
+  assert.equal(redone.ok, true);
+  const redoneItems = await runtime.api.getParkedItems();
+  assert.equal(redoneItems.length, 2);
+  assert.equal(redoneItems.some((item) => item.id === stacked.groupId), true);
+  assert.equal(redoneItems.some((item) => item.id === TARGET_ID), true);
+});
+
+test('CREATE_STACK undo restores the original cards', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID), tab(SOURCE_ID)]);
+  await runtime.api.setCanvasLayout({
+    version: 1,
+    viewport: { x: 20, y: 30, zoom: 0.9 },
+    positions: {
+      [ITEM_ID]: { x: 120, y: 240, w: 220, h: 170, z: 1 },
+      [SOURCE_ID]: { x: 420, y: 240, w: 220, h: 170, z: 2 },
+    },
+  });
+  const created = await runtime.api.createStack([ITEM_ID, SOURCE_ID], '工作 Stack');
+  assert.equal(created.ok, true);
+  assert.equal(typeof created.undoToken, 'string');
+  const undone = await runtime.api.undoStack(created.undoToken);
+  assert.equal(undone.ok, true);
+  const items = await runtime.api.getParkedItems();
+  assert.deepEqual(JSON.parse(JSON.stringify(items.map((item) => item.id).sort())), [ITEM_ID, SOURCE_ID].sort());
 });
 
 test('overlay quick save uses the content sender tab', async () => {

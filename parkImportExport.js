@@ -252,7 +252,15 @@
       return sizeOf(row?.thumb) + sizeOf(row?.snap);
     };
     const values = await mapWithConcurrencyLocal(items, 4, estimateItem);
-    return values.reduce((total, size) => total + size, 0);
+    let wallpaperBytes = 0;
+    if (env.Wallpaper?.blobSize) {
+      try {
+        wallpaperBytes = Number(await env.Wallpaper.blobSize()) || 0;
+      } catch {
+        wallpaperBytes = 0;
+      }
+    }
+    return values.reduce((total, size) => total + size, 0) + wallpaperBytes;
       
   }
 
@@ -643,6 +651,16 @@
       
     if (env.importPickStatus) env.importPickStatus.textContent = env.t('backupImporting');
     env.uiLog('info', 'import', `confirm mode=${mode}`, `selected=${filtered.length}/${all.length}`);
+    if (mode !== 'append' && payload.settings?.wallpaper?.data && env.Wallpaper?.persistFromDataUrl) {
+      try {
+        await env.Wallpaper.persistFromDataUrl(payload.settings.wallpaper.data);
+      } catch (err) {
+        env.uiLog('warn', 'import', 'wallpaper persist failed', err?.message || err);
+      }
+      const wallpaper = { ...payload.settings.wallpaper };
+      delete wallpaper.data;
+      payload.settings = { ...payload.settings, wallpaper };
+    }
     let importId = '';
     let messageSent = false;
     try {

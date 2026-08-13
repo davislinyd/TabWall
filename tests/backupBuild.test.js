@@ -197,6 +197,28 @@ test('full ZIP round-trip preserves backup version and media MIME', async () => 
   assert.match(hydrated[0].snapshot, /^data:image\/webp;base64,/);
 });
 
+test('full ZIP includes wallpaper blob and rehydrates it', async () => {
+  const backup = sampleBackup();
+  backup.settings = {
+    wallpaper: {
+      enabled: true,
+      fit: 'fitWidth',
+      opacity: 40,
+      blurPx: 16,
+      mime: 'image/webp',
+      data: 'data:image/webp;base64,BAUG',
+    },
+  };
+  const built = Build.buildFullZipBlob(backup);
+  const files = Build.unzipStore(new Uint8Array(await built.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  assert.equal(metadata.settings.wallpaper.data, 'media/wallpaper.webp');
+  assert.equal(metadata.mediaMimes['media/wallpaper.webp'], 'image/webp');
+  assert.ok(files['media/wallpaper.webp']);
+  const hydrated = Build.rehydrateWallpaper(metadata.settings, files, metadata.mediaMimes);
+  assert.match(hydrated.wallpaper.data, /^data:image\/webp;base64,/);
+});
+
 test('full ZIP export preserves stored-only file URLs and remains importable', async () => {
   const url = 'file:///Users/test/current.html';
   const backup = sampleBackup([sampleItem({ image: false })]);

@@ -6591,4 +6591,97 @@ html[data-fx='cinematic'] .canvas-connection-flow.is-visible {
     transform: none !important;
   }
 }
+
+/* Custom wallpaper — sits behind header/main; cards stay opaque. */
+.wall-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wall-bg-image {
+  position: absolute;
+  inset: -8%;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: var(--wall-opacity, 0.4);
+  filter: blur(var(--wall-blur, 16px));
+  transform: scale(1.08);
+}
+
+body[data-wallpaper-fit='fitWidth'] .wall-bg-image {
+  background-size: 100% auto;
+}
+
+body[data-wallpaper-fit='fitHeight'] .wall-bg-image {
+  background-size: auto 100%;
+}
+
+body[data-wallpaper-fit='original'] .wall-bg-image {
+  background-size: auto;
+}
+
+.wall-bg-wash {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.app-header,
+main {
+  position: relative;
+  z-index: 1;
+}
+
+html.has-wallpaper,
+html.has-wallpaper body,
+body.has-wallpaper,
+body.has-wallpaper .canvas-view,
+body.has-wallpaper .canvas-viewport {
+  background-color: transparent;
+}
+
+.wallpaper-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wallpaper-preview {
+  flex: 0 0 160px;
+  width: 160px;
+  height: 90px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.wallpaper-preview.is-empty {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--bg),
+    var(--bg) 8px,
+    var(--panel) 8px,
+    var(--panel) 16px
+  );
+}
+
+.wallpaper-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wallpaper-status {
+  margin-top: 8px;
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--muted);
+}
  

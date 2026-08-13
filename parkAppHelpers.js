@@ -202,7 +202,9 @@
               resolve({ ok: false, error: chrome.runtime.lastError.message });
               return;
             }
-            resolve(response || { ok: false, error: 'empty_response' });
+            const result = response || { ok: false, error: 'empty_response' };
+            env?.ParkHistory?.noteMessageResult?.(payload?.type, result);
+            resolve(result);
           });
         } catch (err) {
           resolve({ ok: false, error: String(err) });

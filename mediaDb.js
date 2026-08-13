@@ -51,6 +51,10 @@
     return `n:${noteId}:${attachmentId}`;
   }
 
+  function mediaKeyWallpaper() {
+    return 'w:background';
+  }
+
   function txDone(tx) {
     return new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve();
@@ -328,6 +332,7 @@
     mediaKeyTab,
     mediaKeyMember,
     mediaKeyNoteAttachment,
+    mediaKeyWallpaper,
     put,
     get,
     getPart,

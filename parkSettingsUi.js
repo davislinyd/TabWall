@@ -214,6 +214,9 @@
     merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
     merged.canvasSnap = merged.canvasSnap !== false;
     merged.fxLevel = normalizeFxLevel(merged.fxLevel);
+    merged.wallpaper = env.Wallpaper
+      ? env.Wallpaper.normalizeWallpaper(merged.wallpaper)
+      : merged.wallpaper;
     env.normalizeCanvasRailSettings(merged);
     return merged;
       
@@ -232,6 +235,9 @@
     }
     if (patch.autoSaveMetadata) {
       patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);
+    }
+    if (patch.wallpaper && env.Wallpaper) {
+      patch.wallpaper = env.Wallpaper.normalizeWallpaper(patch.wallpaper);
     }
     env.suppressSettingsOnChanged = true;
     if (env.suppressSettingsTimer) clearTimeout(env.suppressSettingsTimer);
@@ -397,6 +403,9 @@
 
     applyTheme(env.settings.theme);
     applyFxLevel(env.settings.fxLevel);
+    if (env.Wallpaper) {
+      env.Wallpaper.apply(env.settings.wallpaper).catch(() => {});
+    }
     applyViewMode(env.settings.viewMode);
     applyCardCols(env.settings.cardCols);
     env.canvasSnapToGrid = env.settings.canvasSnap !== false;
@@ -913,6 +922,67 @@
           applyTheme(input.value);
         }
       });
+    });
+
+    const wallpaperFile = document.getElementById('settingsWallpaperFile');
+    document.getElementById('settingsWallpaperUpload')?.addEventListener('click', () => {
+      wallpaperFile?.click();
+    });
+    wallpaperFile?.addEventListener('change', async () => {
+      const file = wallpaperFile.files && wallpaperFile.files[0];
+      wallpaperFile.value = '';
+      if (!file || !env.Wallpaper) return;
+      env.Wallpaper.setStatus(env.t('wallpaperProcessing'));
+      try {
+        const wallpaper = await env.Wallpaper.setFromFile(file);
+        await saveSettings({ wallpaper });
+        await env.Wallpaper.apply(wallpaper);
+        env.Wallpaper.setStatus('');
+      } catch (err) {
+        env.Wallpaper.setStatus(env.formatNoteMediaError(err?.code || err?.message || err));
+      }
+    });
+    document.getElementById('settingsWallpaperRemove')?.addEventListener('click', async () => {
+      if (!env.Wallpaper) return;
+      const wallpaper = await env.Wallpaper.clear();
+      await saveSettings({ wallpaper });
+      env.Wallpaper.setStatus(env.t('wallpaperNone'));
+    });
+    env.settingsEl.querySelectorAll('input[name="wallpaperFit"]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        if (!input.checked || !env.Wallpaper) return;
+        const wallpaper = env.Wallpaper.normalizeWallpaper({
+          ...env.settings.wallpaper,
+          fit: input.value,
+        });
+        await saveSettings({ wallpaper });
+        await env.Wallpaper.apply(wallpaper);
+      });
+    });
+    const persistWallpaperSlider = async (partial) => {
+      if (!env.Wallpaper) return;
+      const wallpaper = env.Wallpaper.normalizeWallpaper({
+        ...env.settings.wallpaper,
+        ...partial,
+      });
+      await saveSettings({ wallpaper });
+      await env.Wallpaper.apply(wallpaper);
+    };
+    const blurInput = document.getElementById('settingsWallpaperBlur');
+    const blurValue = document.getElementById('settingsWallpaperBlurValue');
+    blurInput?.addEventListener('input', () => {
+      if (blurValue) blurValue.textContent = blurInput.value;
+    });
+    blurInput?.addEventListener('change', async () => {
+      await persistWallpaperSlider({ blurPx: Number(blurInput.value) });
+    });
+    const opacityInput = document.getElementById('settingsWallpaperOpacity');
+    const opacityValue = document.getElementById('settingsWallpaperOpacityValue');
+    opacityInput?.addEventListener('input', () => {
+      if (opacityValue) opacityValue.textContent = opacityInput.value;
+    });
+    opacityInput?.addEventListener('change', async () => {
+      await persistWallpaperSlider({ opacity: Number(opacityInput.value) });
     });
 
     env.settingsEl.querySelectorAll('input[name="fxLevel"]').forEach((input) => {

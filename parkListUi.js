@@ -656,6 +656,7 @@
           targetId: stackTargetId,
         });
         if (res.ok && Array.isArray(res.items)) {
+          if (res.undoToken) env.ParkHistory.push({ kind: 'stack', token: res.undoToken });
           env.allTabs = env.normalizeParkedList(res.items);
           renderGrid();
           env.showCopyToast(t('stackMerged'));
