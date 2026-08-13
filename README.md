@@ -8,7 +8,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 
 **Current version:** See `manifest.json`.
 
-**User guide:** [github.io](https://davislinyd.github.io/TabWall/user-guide.html) · [source](docs/user-guide.html)
+**User guide:** [github.io](https://davislinyd.github.io/TabWall/) · [source](docs/index.html)
 
 **Release history:** [docs/CHANGELOG.md](docs/CHANGELOG.md)
 
@@ -159,7 +159,7 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 
 **目前版本：** 請查看 `manifest.json`。
 
-**使用者說明：** [github.io](https://davislinyd.github.io/TabWall/user-guide.html) · [原始檔](docs/user-guide.html)
+**使用者說明：** [github.io](https://davislinyd.github.io/TabWall/) · [原始檔](docs/index.html)
 
 **開發歷程：** [docs/CHANGELOG.md](docs/CHANGELOG.md)
 

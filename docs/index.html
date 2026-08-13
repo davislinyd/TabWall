@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TabWall — 本機照片牆</title>
-  <meta name="description" content="把分頁與 Tab Group 暫存成可搜尋的空間畫布。資料只留在本機。" />
+  <title>TabWall 使用者說明</title>
+  <meta name="description" content="TabWall 2.33.2 使用者說明：儲存分頁與 Tab Group、空間畫布、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
-  <meta property="og:title" content="TabWall" />
+  <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
   <meta property="og:url" content="https://davislinyd.github.io/TabWall/" />
   <meta property="og:type" content="website" />
@@ -16,40 +16,72 @@
 <body>
   <a class="skip" href="#content">跳到本文</a>
   <header class="topbar">
-    <a class="brand" href="./" aria-current="page">
+    <a class="brand" href="#intro">
       <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true">
         <path d="M4 8 11 5v21l-7 3z"></path>
         <path d="M14 6 21 2v21l-7 3z"></path>
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>本機照片牆 · v2.33.2</span>
+      <span>使用者說明 · v2.33.2</span>
     </a>
     <div class="top-actions">
-      <a class="nav-link" href="./" aria-current="page">首頁</a>
-      <a class="nav-link" href="user-guide.html">說明</a>
+      <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
       <button type="button" class="theme-btn" id="themeBtn" aria-pressed="false">淺色</button>
     </div>
   </header>
 
-  <div class="layout home">
+  <div class="layout">
+    <nav class="toc" aria-label="章節目錄">
+      <h2>目錄</h2>
+      <a href="#intro">這是什麼</a>
+      <a href="#install">安裝</a>
+      <a href="#start">五分鐘上手</a>
+      <a href="#entries">三種入口</a>
+      <a href="#save">儲存分頁與群組</a>
+      <a href="#presave">儲存前編輯與規則</a>
+      <a href="#canvas">空間畫布</a>
+      <a href="#cards">卡片與還原</a>
+      <a href="#notes">Sticker Note</a>
+      <a href="#stacks">Stack 與 Tab Group</a>
+      <a href="#search">牆上搜尋</a>
+      <a href="#quick">Option+/ 快速搜尋</a>
+      <a href="#list">列表、標籤與批次</a>
+      <a href="#settings">設定</a>
+      <a href="#backup">備份與還原</a>
+      <a href="#dedupe">去重複</a>
+      <a href="#privacy">隱私與資料</a>
+      <a href="#limits">限制與常見問題</a>
+      <a href="#keys">快捷鍵一覽</a>
+    </nav>
+
     <main id="content">
       <header class="hero" id="intro">
         <div class="kicker">本機照片牆</div>
         <h1>把分頁暫存成可搜尋的空間畫布</h1>
         <p class="lede">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
-        <p class="lede">Park tabs and Tab Groups on a spatial canvas. Search, stack, restore — data stays on your device.</p>
         <div class="meta-row">
           <span class="chip">版本 2.33.2</span>
           <span class="chip">無需帳號</span>
           <span class="chip">不上傳到 TabWall 伺服器</span>
           <span class="chip">New Tab 即畫布</span>
         </div>
-        <div class="hero-actions">
-          <a class="btn-primary" href="user-guide.html">閱讀說明手冊</a>
-          <a class="btn-ghost" href="https://github.com/davislinyd/TabWall">GitHub</a>
-        </div>
       </header>
+      <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「備份」「搜尋」或「快捷鍵」。</p>
+
+      <section class="chapter" id="install">
+        <h2>安裝</h2>
+        <p>目前以「載入未封裝項目」安裝。請使用乾淨 ZIP（解壓後的資料夾），不要載入整個 Git 倉庫。</p>
+        <ol class="steps">
+          <li>開啟 <code>chrome://extensions</code>（Edge 為 <code>edge://extensions</code>）。</li>
+          <li>打開右上角「開發人員模式」。</li>
+          <li>選擇「載入未封裝項目」，指定解壓後的 TabWall 資料夾（內含 <code>manifest.json</code>）。</li>
+          <li>到 <code>chrome://extensions/shortcuts</code> 確認四個 Chrome 命令是否已綁定。衝突時請改成你習慣的組合。</li>
+        </ol>
+        <div class="callout warn">
+          <p>安裝、重新載入或更新後，若網頁上的浮層或 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 沒反應，請重新整理該分頁。舊頁面可能仍掛著上一版注入腳本。</p>
+        </div>
+      </section>
 
       <section class="chapter" id="start">
         <h2>五分鐘上手</h2>
@@ -62,64 +94,332 @@
           <article class="card">
             <span class="n">2</span>
             <h3>打開牆</h3>
-            <p>開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>。</p>
+            <p>開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>，或在 popup 按「打開 TabWall 面板」。</p>
           </article>
           <article class="card">
             <span class="n">3</span>
             <h3>找回來</h3>
-            <p>點卡片縮圖還原。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+            <p>點卡片縮圖還原分頁。群組會先問一次。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+          </article>
+        </div>
+        <p>畫布上的「說明」按鈕可隨時打開精簡版提示。本手冊是完整版。</p>
+      </section>
+
+      <section class="chapter" id="entries">
+        <h2>三種入口</h2>
+        <div class="grid-3">
+          <article class="card">
+            <h3>工具列 popup</h3>
+            <p>點 TabWall 圖示後可分別：</p>
+            <ul>
+              <li>儲存目前分頁（關閉／不關閉）</li>
+              <li>儲存目前 Tab Group（關閉／不關閉）</li>
+              <li>打開 TabWall 面板</li>
+            </ul>
+            <p>目前分頁不在 Tab Group 時，群組按鈕會停用。</p>
+          </article>
+          <article class="card">
+            <h3>New Tab／獨立頁</h3>
+            <p>新分頁直接顯示空間畫布。受限頁（例如 <code>chrome://</code>）無法注入浮層時，會改開或聚焦獨立 TabWall 分頁。</p>
+          </article>
+          <article class="card">
+            <h3>網頁浮層</h3>
+            <p>一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
           </article>
         </div>
       </section>
 
-      <section class="chapter" id="features">
-        <h2>能做什麼</h2>
+      <section class="chapter" id="save">
+        <h2>儲存分頁與群組</h2>
+        <table>
+          <thead>
+            <tr><th>方式</th><th>結果</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd></td>
+              <td>暫存目前分頁（含截圖）。是否關閉分頁，依設定「儲存分頁後的行為」。</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td>
+              <td>暫存但不關閉。若目前分頁屬於 Tab Group，會存整組；否則只存這一頁。</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td>
+              <td>暫存目前 Tab Group。是否關閉，依設定「儲存 Group 後」。</td>
+            </tr>
+            <tr>
+              <td>牆上「儲存目前分頁／Group」</td>
+              <td>在 Overlay 可直接存目前頁；New Tab／獨立頁則改走貼上 URL。</td>
+            </tr>
+            <tr>
+              <td>「新增卡片」貼上 URL</td>
+              <td>每行一個網址。用 <code>#GROUP:名稱</code> 上下包住多行，會建成群組。</td>
+            </tr>
+          </tbody>
+        </table>
+        <pre><code>https://example.com/a
+https://example.com/b
+
+#GROUP:工作
+https://jira.example.com
+https://wiki.example.com
+#GROUP:工作</code></pre>
+        <div class="callout">
+          <p>截圖範圍由 Chrome 決定。群組可在設定選擇截「全部成員」「僅目前分頁」或「不截圖（只存結構）」。</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="presave">
+        <h2>儲存前編輯與自動規則</h2>
+        <h3>儲存前編輯</h3>
+        <p>預設開啟。儲存<strong>單一分頁</strong>（快捷鍵、popup 的分頁按鈕、Overlay 快速儲存）時，會先跳出面板讓你改 note／tag，確認後才寫入；取消則分頁維持原狀。</p>
+        <p>Group 儲存不受這項影響。可在設定關閉「儲存前先編輯 Note／Tag」。</p>
+        <h3>自動 Note／Tag 規則</h3>
+        <p>設定 → 儲存規則。依 hostname／FQDN 或 page title，用 match、contains、starts with、ends with、regex、not 判斷；每條規則可選 AND／OR。</p>
+        <ul>
+          <li>命中後：note 逐行附加並去重，tag 合併並去重。</li>
+          <li>存 Group 時會逐一判斷成員。</li>
+          <li>儲存前編輯面板會預填這些規則的結果，你仍可改。</li>
+        </ul>
+        <div class="callout ok">
+          <p>同一瀏覽器工作階段裡，還原過的分頁或群組若再次儲存，會沿用原本的備註與標籤。</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="canvas">
+        <h2>空間畫布</h2>
+        <p>預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
+        <table>
+          <thead>
+            <tr><th>操作</th><th>結果</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>左側「選取」＋拖空白處／滾輪</td><td>平移或縮放。滾輪以游標為錨；工具列 −／＋ 與滑桿以畫面中心縮放。</td></tr>
+            <tr><td>滑鼠中鍵拖曳</td><td>平移且不會開始選取。雙擊中鍵重設視角。</td></tr>
+            <tr><td>「框選」</td><td>拉矩形選多張卡片。</td></tr>
+            <tr><td>「連結」</td><td>游標移到卡片會出現四側 <code>+</code>。從任一側拖到另一張；也可點兩張卡片當後備。連線無方向、會保存。</td></tr>
+            <tr><td>拖連線</td><td>前／後三分之一重接端點；中間三分之一彎曲或拉長。雙擊線段重設曲線。</td></tr>
+            <tr><td>「新增 Sticker Note」或點空白畫布</td><td>建立僅存在於畫布的便條，並打開左右分割編輯器。</td></tr>
+            <tr><td>拖曳卡片</td><td>位置自動儲存。拖到另一張的標題／中繼資料區可組成 Stack。</td></tr>
+            <tr><td>拖 minimap 視角框</td><td>平移目前視野；放開後算一次操作。</td></tr>
+            <tr><td>空白處右鍵</td><td>按日期排序、重新對齊、匯出精簡備份、新增 Note。</td></tr>
+            <tr><td>卡片右鍵</td><td>與卡片工具列相同：還原、快照、編輯、複製、固定、刪除（依類型）。</td></tr>
+            <tr><td>「畫布整理」</td><td>依日期、FQDN 或 Group 排序；棋盤或對齊排列（96px 間距，保留卡片尺寸）。</td></tr>
+          </tbody>
+        </table>
+        <p>左側索引可切「全部／未整理／已固定」與各個 Stack。側欄可拖寬或收合。</p>
+        <div class="callout">
+          <p>搜尋進行中，命中卡片會暫時排成棋盤。這段期間的拖曳與排列只是預覽，不會寫回正式座標，也不會因拖放建立 Stack。清空搜尋後恢復原布局。</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="cards">
+        <h2>卡片與還原</h2>
+        <ul>
+          <li>點<strong>縮圖</strong>：還原分頁；群組會先確認。</li>
+          <li>點<strong>標題或中繼資料</strong>：複製已存網址（群組則複製成員網址）。</li>
+          <li>點<strong>編輯</strong>：改 note／tags。Note 可點標題進入。</li>
+          <li>點<strong>展開</strong>：看全尺寸快照。沒有全圖時顯示縮圖。快照裡用 <kbd>←</kbd>／<kbd>→</kbd> 切上一張／下一張。</li>
+          <li>點<strong>固定</strong>：只作用於頂層項目。工具列「已固定」是篩選，不改手動順序，也不寫進備份的篩選狀態。</li>
+          <li>點<strong>刪除</strong>：從牆移除。</li>
+        </ul>
+        <h3>群組卡片</h3>
+        <p>展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。</p>
+      </section>
+
+      <section class="chapter" id="notes">
+        <h2>Sticker Note</h2>
+        <p>便條只活在畫布上，用來寫脈絡、貼圖、跟分頁放在一起。可以加入 Stack，<strong>永遠不會還原成瀏覽器分頁</strong>。</p>
+        <ul>
+          <li>標題、標籤、安全 Markdown 預覽。</li>
+          <li>最多 12 張本機圖片。新圖會轉成 WebP（不行就 PNG）；長邊 ≤ 4096px、總像素 ≤ 16MP；原始檔與輸出檔各 ≤ 24 MiB。</li>
+          <li>GIF／SVG 會變成靜態圖。</li>
+          <li>單一 note 附件合計 ≤ 96 MiB；整個擴充功能附件 ≤ 512 MiB。舊附件不會自動遷移，限制套用在新上傳與匯入。</li>
+        </ul>
+      </section>
+
+      <section class="chapter" id="stacks">
+        <h2>Stack 與 Tab Group</h2>
+        <p>兩種「一組東西」不要混為一談：</p>
         <div class="grid-2">
           <article class="card">
-            <h3>空間畫布</h3>
-            <p>自由排列、平移縮放、框選、連線、minimap。列表檢視仍保留給大量瀏覽。</p>
+            <h3>Chrome Tab Group</h3>
+            <p>瀏覽器原生群組。用 <kbd>⌥</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 或 popup 整組存進牆。還原時重建為真正的 Tab Group。</p>
           </article>
           <article class="card">
-            <h3>Tab Group 與 Stack</h3>
-            <p>整組存進牆；或把卡片拖在一起。還原時重建為真正的 Chrome Tab Group。</p>
+            <h3>Canvas Stack</h3>
+            <p>在牆上把兩張以上卡片疊在一起：多選後合併，或把一張拖到另一張標題區。分頁成員還原成 Tab Group；note 留在畫布。</p>
           </article>
-          <article class="card">
-            <h3>搜尋</h3>
-            <p>牆上按 <kbd>/</kbd>。任何一般頁按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd>。支援 tag／note／group／domain 與 regex。</p>
-          </article>
-          <article class="card">
-            <h3>本機備份</h3>
-            <p>精簡 JSON 或完整 ZIP。可自動寫入 Chrome 下載目錄。不上傳。</p>
-          </article>
+        </div>
+        <div class="callout warn">
+          <p>TabWall 的存檔<strong>不是</strong> Chrome 書籤列內建的 Save group。兩邊資料不相通。</p>
         </div>
       </section>
 
-      <section class="chapter" id="install">
-        <h2>安裝</h2>
-        <p>目前以「載入未封裝項目」安裝。請使用乾淨 ZIP（解壓後的資料夾），不要載入整個 Git 倉庫。</p>
-        <ol class="steps">
-          <li>開啟 <code>chrome://extensions</code>（Edge 為 <code>edge://extensions</code>）。</li>
-          <li>打開「開發人員模式」。</li>
-          <li>選擇「載入未封裝項目」，指定解壓後、內含 <code>manifest.json</code> 的資料夾。</li>
-          <li>到 <code>chrome://extensions/shortcuts</code> 確認四個 Chrome 命令是否已綁定。</li>
-        </ol>
+      <section class="chapter" id="search">
+        <h2>牆上搜尋</h2>
+        <p>在牆上按 <kbd>/</kbd> 聚焦搜尋框。不分大小寫，輸入有短暫延遲；縮圖接近可視範圍才載入。</p>
+        <table>
+          <thead>
+            <tr><th>輸入</th><th>意義</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>grafana zabbix</code> 或 <code>&&</code></td><td>且（AND）</td></tr>
+            <tr><td><code>grafana||zabbix</code></td><td>或（OR）</td></tr>
+            <tr><td><kbd>t</kbd>／<kbd>tag</kbd> 再按 Tab</td><td>只搜標籤</td></tr>
+            <tr><td><kbd>n</kbd>／<kbd>note</kbd> 再按 Tab</td><td>只搜備註</td></tr>
+            <tr><td><kbd>g</kbd>／<kbd>group</kbd> 再按 Tab</td><td>只搜群組名稱／成員</td></tr>
+            <tr><td><kbd>d</kbd>／<kbd>domain</kbd> 再按 Tab</td><td>只搜 hostname（獨立分頁與群組成員；不含 Sticker Note）</td></tr>
+            <tr><td><kbd>re</kbd>／<kbd>regex</kbd> 再按 Tab，或工具列 <kbd>.*</kbd></td><td>正規表示式；支援 <code>/pattern/flags</code></td></tr>
+            <tr><td><kbd>all</kbd> 再按 Tab</td><td>回到全欄位</td></tr>
+            <tr><td>空白搜尋時 Backspace／Delete／Esc</td><td>離開目前欄位或 regex 模式</td></tr>
+          </tbody>
+        </table>
+        <h3>Tag 模式</h3>
+        <p>會出現即時建議。可多選 tag。用 <code>&&</code>／<code>||</code> 組合；點建議旁的 <code>||</code> 或按 <kbd>Alt</kbd>+<kbd>Enter</kbd> 以「或」加入。此模式下空白<strong>不是</strong> AND 分隔符，以便 tag 名稱本身含空白。</p>
+        <p>群組命中時，卡片會列出符合的成員分頁與 note。若命中卡片有直接畫布連線，會多顯示一層關聯卡片（較淡；游標移上去或聚焦會恢復）。</p>
+      </section>
+
+      <section class="chapter" id="quick">
+        <h2>Option+/ 快速搜尋</h2>
+        <p>在<strong>任何一般網頁</strong>（不必打開 TabWall）按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 開啟輕量面板。</p>
+        <ul>
+          <li>左欄結果（最多 12 筆），右欄預覽截圖、note、tags、成員。</li>
+          <li>方向鍵移動；<kbd>Enter</kbd> 或雙擊還原分頁／群組。Note 不能還原成分頁。</li>
+          <li>欄位切換與牆上相同：<kbd>tag</kbd>／<kbd>group</kbd>／<kbd>note</kbd>／<kbd>domain</kbd> 再按 Tab；<kbd>all</kbd>+Tab 重設。</li>
+          <li><kbd>Esc</kbd> 關閉。</li>
+        </ul>
         <div class="callout warn">
-          <p>安裝或更新後，若快捷鍵沒反應，請重新整理該分頁。完整步驟與限制見<a href="user-guide.html">說明手冊</a>。</p>
+          <p>這不是 Chrome command，無法在 <code>chrome://extensions/shortcuts</code> 改鍵。特殊頁無法注入時請改開 TabWall 本體搜尋。</p>
         </div>
+      </section>
+
+      <section class="chapter" id="list">
+        <h2>列表、標籤與批次</h2>
+        <h3>列表檢視</h3>
+        <p>標題列可在畫布與列表之間切換。列表是較密、較利於鍵盤與大量瀏覽的 fallback；畫布座標與列表排序互不覆蓋。</p>
+        <p>列表可用「欄數」滑桿（4–10）。窄視窗仍維持桌面版面，必要時水平捲動，沒有手機重排。</p>
+        <h3>Tags</h3>
+        <p>標題列「Tags」開啟管理抽屜：搜尋、新增、重新命名、刪除。刪除 tag 會從所有已存項目移除該標籤。</p>
+        <h3>複選與批次</h3>
+        <p>按「選擇」進入複選。勾選後可批次還原、合併 tags、編輯 note、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
+        <p><kbd>Shift</kbd>／<kbd>Control</kbd> 可在畫布上加選。</p>
+      </section>
+
+      <section class="chapter" id="settings">
+        <h2>設定</h2>
+        <p>牆上按「設定」，或 Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd>、Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd>。變更會自動儲存。</p>
+        <table>
+          <thead>
+            <tr><th>分頁</th><th>內容</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>一般</td><td>語言、儲存分頁／Group 後是否關閉、儲存前編輯、Group 截圖範圍、還原 Group 到目前視窗或新視窗。</td></tr>
+            <tr><td>儲存規則</td><td>自動 Note／Tag 條件與附加內容。</td></tr>
+            <tr><td>顯示</td><td>主題（淺／深；新安裝預設深色工作台）、視覺效果（安靜／標準／電影感；系統「減少動態效果」會強制安靜）、預設欄數與檢視、開啟時是否聚焦搜尋。</td></tr>
+            <tr><td>整理</td><td>與畫布／列表整理相關的偏好。</td></tr>
+            <tr><td>備份</td><td>手動匯出／還原／附加，以及自動備份。</td></tr>
+            <tr><td>快捷鍵</td><td>只讀顯示 Chrome 綁定；可開啟 Chrome 設定頁。不能在 TabWall 裡錄製熱鍵。</td></tr>
+            <tr><td>診斷</td><td>匯出、匯入、自動備份事件。可複製或清除。</td></tr>
+          </tbody>
+        </table>
+        <p>標題列的 Light／Dark 可快速切主題。背景是靜態主題，不支援影片背景或自行匯入影片。</p>
+      </section>
+
+      <section class="chapter" id="backup">
+        <h2>備份與還原</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>精簡 JSON</h3>
+            <p>保留網址、標題、note、tags、附件 metadata。不含截圖與圖片二進位。檔案小，適合日常與自動備份。</p>
+          </article>
+          <article class="card">
+            <h3>完整 ZIP</h3>
+            <p>另外帶本機圖片。預估超過 256 MiB 會拒絕，請改精簡或分批（多選匯出）。還原預覽可看圖；精簡預覽看文字與成員。</p>
+          </article>
+        </div>
+        <ul>
+          <li><strong>還原（覆蓋）</strong>：取代牆上全部資料，會再確認一次。</li>
+          <li><strong>匯入（附加）</strong>：只新增，不刪現有卡片。選檔後可挑要寫入哪些分頁與群組。</li>
+          <li>檔名使用本機時間與 UTC 時差，例如 <code>2026-08-04T13-00-00+0800</code>。</li>
+        </ul>
+        <h3>自動備份</h3>
+        <p>寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可依排程、或資料變更後備份；保留 1–99 份。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
+      </section>
+
+      <section class="chapter" id="dedupe">
+        <h2>去重複</h2>
+        <p>儲存時若牆上已有<strong>完全相同的 URL</strong>，會詢問：保留兩者、取代舊項、或取消。</p>
+        <p>工具列「更多工具」→「掃描重複」可掃整牆，選擇只留最新、只留最舊、全部保留，再套用刪除。</p>
       </section>
 
       <section class="chapter" id="privacy">
-        <h2>隱私</h2>
-        <p>沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。網址、備註、標籤與截圖都留在你的瀏覽器本機。</p>
-        <p><a href="privacy.html">隱私權政策</a> · <a href="CHANGELOG.html">開發歷程</a> · <a href="https://github.com/davislinyd/TabWall/blob/main/LICENSE">MIT License</a></p>
+        <h2>隱私與資料</h2>
+        <ul>
+          <li>沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。</li>
+          <li>網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
+          <li>縮圖與快照存在本機 IndexedDB。</li>
+          <li>只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
+          <li>解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
+        </ul>
+        <p>完整條款見 <a href="privacy.html">隱私權政策</a>。</p>
+      </section>
+
+      <section class="chapter" id="limits">
+        <h2>限制與常見問題</h2>
+        <h3>做不到的事</h3>
+        <ul>
+          <li><code>chrome://</code>、<code>edge://</code>、Chrome Web Store 等受限頁無法截圖或注入浮層。</li>
+          <li>不是 Chrome 書籤、不是同步帳號、不能當跨裝置雲端牆。</li>
+          <li>沒有手機版重排或觸控工具列。</li>
+          <li>Sticker Note 不能還原成分頁；<code>file:</code> 一類 stored-only 項目也不可直接還原。</li>
+        </ul>
+        <h3>快捷鍵沒反應</h3>
+        <ol>
+          <li>到 <code>chrome://extensions/shortcuts</code> 看四個命令是否「未綁定」或跟別的擴充功能衝突。</li>
+          <li>重新整理目前分頁（更新後舊注入會失效）。</li>
+          <li>牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
+        </ol>
+        <h3>畫布很空或卡片跑很遠</h3>
+        <p>新卡片會靠近既有群配置到下一個不重疊格。可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
+      </section>
+
+      <section class="chapter" id="keys">
+        <h2>快捷鍵一覽</h2>
+        <h3>由 Chrome 管理（可改）</h3>
+        <p>預設只在安裝時建議；實際以 <code>chrome://extensions/shortcuts</code> 為準。</p>
+        <table>
+          <thead>
+            <tr><th>預設</th><th>動作</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd></td><td>暫存目前分頁（依儲存後行為）</td></tr>
+            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>暫存目前分頁或 Tab Group，不關閉</td></tr>
+            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>暫存目前 Tab Group（依儲存後行為）</td></tr>
+            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd></td><td>開關空間畫布</td></tr>
+          </tbody>
+        </table>
+        <h3>畫布內建（不可在 TabWall 自訂）</h3>
+        <table>
+          <thead>
+            <tr><th>按鍵</th><th>動作</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><kbd>/</kbd></td><td>聚焦牆上搜尋</td></tr>
+            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd></td><td>任何一般頁開啟快速搜尋（不必開牆）</td></tr>
+            <tr><td>Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd>／Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd></td><td>開關設定</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>關上面板或畫布</td></tr>
+            <tr><td><kbd>←</kbd>／<kbd>→</kbd></td><td>快照上一張／下一張</td></tr>
+          </tbody>
+        </table>
       </section>
     </main>
   </div>
 
   <footer class="site">
-    <p>TabWall <strong>2.33.2</strong> · 授權 MIT</p>
+    <p>對應 TabWall <strong>2.33.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
     <p>
-      <a href="user-guide.html">說明手冊</a> ·
       <a href="privacy.html">隱私權政策</a> ·
       <a href="CHANGELOG.html">開發歷程</a> ·
       <a href="https://github.com/davislinyd/TabWall">GitHub</a>
@@ -127,5 +427,45 @@
   </footer>
 
   <script src="site.js"></script>
+  <script>
+    (function () {
+      var find = document.getElementById("find");
+      var emptyFind = document.getElementById("emptyFind");
+      var chapters = Array.prototype.slice.call(document.querySelectorAll("section.chapter"));
+      var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".toc a"));
+
+      function setActive(id) {
+        tocLinks.forEach(function (link) {
+          link.classList.toggle("active", link.getAttribute("href") === "#" + id);
+        });
+      }
+      if ("IntersectionObserver" in window) {
+        var io = new IntersectionObserver(function (entries) {
+          var visible = entries.filter(function (e) { return e.isIntersecting; });
+          if (!visible.length) return;
+          visible.sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+          setActive(visible[0].target.id);
+        }, { rootMargin: "-20% 0px -65% 0px", threshold: 0.01 });
+        chapters.forEach(function (section) { io.observe(section); });
+      }
+
+      function filterManual(q) {
+        var query = String(q || "").trim().toLowerCase();
+        var shown = 0;
+        chapters.forEach(function (section) {
+          var hit = !query || section.textContent.toLowerCase().indexOf(query) !== -1;
+          section.classList.toggle("is-hidden", !hit);
+          if (hit) shown += 1;
+        });
+        tocLinks.forEach(function (link) {
+          var id = (link.getAttribute("href") || "").slice(1);
+          var section = document.getElementById(id);
+          link.style.display = !section || section.classList.contains("is-hidden") ? "none" : "";
+        });
+        emptyFind.classList.toggle("show", shown === 0);
+      }
+      if (find) find.addEventListener("input", function () { filterManual(find.value); });
+    })();
+  </script>
 </body>
 </html>
