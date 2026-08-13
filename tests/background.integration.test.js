@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.36.1');
+  assert.equal(MANIFEST.version, '2.37.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -1107,6 +1107,52 @@ function dispatchMessage(runtime, message, sender = {}) {
     listener(message, sender, resolve);
   });
 }
+
+test('BATCH_UPDATE_ITEMS appends unique note lines and merges tags', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const withNote = tab(ITEM_ID);
+  withNote.note = 'existing line\nkeep me';
+  withNote.tags = ['old'];
+  const other = tab(SOURCE_ID, 'https://other.example/');
+  other.note = 'existing line';
+  other.tags = ['keep'];
+  const sticker = note(NOTE_ID, { attachment: false, tags: ['idea'] });
+  sticker.markdown = 'Plain note';
+  const empty = tab(TARGET_ID, 'https://empty.example/');
+  await runtime.api.setParkedItems([withNote, other, sticker, empty]);
+
+  const appended = await dispatchMessage(runtime, {
+    type: 'BATCH_UPDATE_ITEMS',
+    ids: [ITEM_ID, SOURCE_ID, NOTE_ID, TARGET_ID],
+    note: 'existing line\nnew line',
+    tags: ['keep', 'new'],
+    tagMode: 'merge',
+  });
+  assert.equal(appended.ok, true);
+  const byId = Object.fromEntries((await runtime.api.getParkedItems()).map((item) => [item.id, item]));
+  assert.equal(byId[ITEM_ID].note, 'existing line\nkeep me\nnew line');
+  assert.deepEqual([...byId[ITEM_ID].tags], ['old', 'keep', 'new']);
+  assert.equal(byId[SOURCE_ID].note, 'existing line\nnew line');
+  assert.deepEqual([...byId[SOURCE_ID].tags], ['keep', 'new']);
+  assert.equal(byId[NOTE_ID].markdown, 'Plain note\nexisting line\nnew line');
+  assert.ok(byId[NOTE_ID].tags.includes('idea'));
+  assert.ok(byId[NOTE_ID].tags.includes('keep'));
+  assert.ok(byId[NOTE_ID].tags.includes('new'));
+  assert.equal(byId[TARGET_ID].note, 'existing line\nnew line');
+
+  const emptyPatch = await dispatchMessage(runtime, {
+    type: 'BATCH_UPDATE_ITEMS',
+    ids: [ITEM_ID],
+    note: '',
+    tags: [],
+    tagMode: 'merge',
+  });
+  assert.equal(emptyPatch.ok, true);
+  const afterEmpty = (await runtime.api.getParkedItems()).find((item) => item.id === ITEM_ID);
+  assert.equal(afterEmpty.note, 'existing line\nkeep me\nnew line');
+  assert.deepEqual([...afterEmpty.tags], ['old', 'keep', 'new']);
+});
 
 test('legacy items default top-level pinned to false and update keeps order', async () => {
   const runtime = createRuntime();

@@ -236,7 +236,11 @@ function canvasConnectionPosition(id) {
   const node = canvasNodeElements.get(id);
   const measured = node?.isConnected ? canvasNodeWorldRect(node) : null;
   if (measured && measured.w > 0 && measured.h > 0) return measured;
-  const position = canvasStoreSnapshot().layout?.positions?.[id];
+  const searchContext = getCanvasSearchContext();
+  const layout = isCanvasSearchPreviewActive(searchContext)
+    ? canvasSearchLayoutFor(searchContext)
+    : (canvasStoreSnapshot().layout || getCanvasLayout());
+  const position = layout?.positions?.[id];
   return position ? canvasDisplayPosition(position) : null;
 }
 

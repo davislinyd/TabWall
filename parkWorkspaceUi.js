@@ -757,7 +757,7 @@
           const deleteConnectionButton = env.canvasContextBar.querySelector('[data-canvas-action="delete-connection"]');
           if (snapshotButton) snapshotButton.hidden = connectionSelected || selectedItem?.kind !== 'tab';
           if (membersButton) membersButton.hidden = connectionSelected || selectedItem?.kind !== 'group';
-          if (editButton) editButton.hidden = connectionSelected || n !== 1;
+          if (editButton) editButton.hidden = connectionSelected || n < 1;
           if (restoreButton) {
             restoreButton.hidden = connectionSelected || (n === 1 && (
               selectedItem?.kind === 'note'
@@ -1227,6 +1227,28 @@
         if (env.tagsBox.classList.contains('open')) refreshTagManager();
       });
       return true;
+
+  }
+
+  function openBatchEdit(ids) {
+    ensureBound('openBatchEdit');
+
+      const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+      if (!list.length) return;
+      env.editingId = 'batch';
+      env.editContext = { type: 'batch', ids: list };
+      env.editHeading.textContent = env.t('batchEditHeading');
+      env.editItemTitle.textContent = env.t('batchCount', { n: list.length });
+      env.editSub.textContent = env.t('batchEditSub');
+      env.editNote.value = '';
+      env.editTagList = [];
+      env.editTagDraft.value = '';
+      renderEditChips();
+      env.editBox.classList.add('open');
+      env.editBox.setAttribute('aria-hidden', 'false');
+      placeEditBoxCentered();
+      syncFloatBackdrop();
+      setTimeout(() => env.editNote.focus(), 0);
 
   }
 
@@ -1707,6 +1729,7 @@
     renderEditChips,
     commitTagDraft,
     openEditBox,
+    openBatchEdit,
     closeEditBox,
     openMemberEditBox,
     placeEditBoxCentered,

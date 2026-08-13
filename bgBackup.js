@@ -1274,8 +1274,8 @@ async function batchUpdateItems(ids, patch) {
     changed++;
     const updated = { ...item };
     if (typeof patch.note === 'string' && patch.note.length > 0) {
-      if (item.kind === 'note') updated.markdown = patch.note;
-      else updated.note = patch.note;
+      if (item.kind === 'note') updated.markdown = appendUniqueAutoSaveNote(item.markdown, [patch.note]);
+      else updated.note = appendUniqueAutoSaveNote(item.note, [patch.note]);
     }
     if (Array.isArray(patch.tags)) {
       const incoming = patch.tags

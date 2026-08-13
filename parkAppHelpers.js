@@ -432,17 +432,15 @@
       }
 
       const key = env.canvasSearchPreviewKey(searchContext);
-      if (
-        !env.canvasSearchPreview
-        || env.canvasSearchPreview.key !== key
-        || env.canvasSearchPreview.revision !== state.revision
-      ) {
+      if (!env.canvasSearchPreview || env.canvasSearchPreview.key !== key) {
         env.canvasSearchPreview = {
           key,
           revision: state.revision,
           positions: env.arrangeCanvasGrid(searchContext.items, layout),
           mode: 'grid',
         };
+      } else {
+        env.canvasSearchPreview.revision = state.revision;
       }
 
       return {

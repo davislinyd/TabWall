@@ -442,10 +442,16 @@
         if (item?.kind === 'tab') env.openLightbox(item);
         return;
       }
-      if (action === 'edit' && ids.length === 1) {
-        const item = env.allTabs.find((candidate) => candidate.id === ids[0]);
-        if (item?.kind === 'note') env.openStickerNoteEditor(item);
-        else if (item) env.openEditBox(item);
+      if (action === 'edit') {
+        if (ids.length > 1) {
+          env.openBatchEdit(ids);
+          return;
+        }
+        if (ids.length === 1) {
+          const item = env.allTabs.find((candidate) => candidate.id === ids[0]);
+          if (item?.kind === 'note') env.openStickerNoteEditor(item);
+          else if (item) env.openEditBox(item);
+        }
         return;
       }
       if (action === 'members' && ids.length === 1) {

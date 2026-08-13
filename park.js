@@ -811,6 +811,7 @@ function bindPanelModules() {
     "openCanvasStackDialog": () => openCanvasStackDialog,
     "openConflictModal": () => openConflictModal,
     "openDedupeBtn": () => openDedupeBtn,
+    "openBatchEdit": () => openBatchEdit,
     "openEditBox": () => openEditBox,
     "openLightbox": () => openLightbox,
     "openManualAddPanel": () => openManualAddPanel,
@@ -2264,22 +2265,7 @@ batchDelete.addEventListener('click', async () => {
 });
 
 batchEdit.addEventListener('click', () => {
-  const ids = [...selectedIds];
-  if (!ids.length) return;
-  editingId = 'batch';
-  editContext = { type: 'batch', ids };
-  editHeading.textContent = t('batchEditHeading');
-  editItemTitle.textContent = t('batchCount', { n: ids.length });
-  editSub.textContent = t('batchEditSub');
-  editNote.value = '';
-  editTagList = [];
-  editTagDraft.value = '';
-  renderEditChips();
-  editBox.classList.add('open');
-  editBox.setAttribute('aria-hidden', 'false');
-  placeEditBoxCentered();
-  syncFloatBackdrop();
-  setTimeout(() => editNote.focus(), 0);
+  openBatchEdit([...selectedIds]);
 });
 
 editTagDraft.addEventListener('keydown', (e) => {
@@ -2302,6 +2288,8 @@ editTagDraft.addEventListener('keydown', (e) => {
 function placeEditBoxCentered(...args) { return WorkspaceUi.placeEditBoxCentered(...args); }
 
 function openEditBox(...args) { return WorkspaceUi.openEditBox(...args); }
+
+function openBatchEdit(...args) { return WorkspaceUi.openBatchEdit(...args); }
 
 function openMemberEditBox(...args) { return WorkspaceUi.openMemberEditBox(...args); }
 
@@ -2896,7 +2884,11 @@ function canvasNodeWorldRect(...args) { return AppHelpers.canvasNodeWorldRect(..
 // canvasNodeWorldRect's coordinate space via canvasDisplayPosition (which
 // applies the same CANVAS_NODE_DISPLAY_SCALE the DOM box is actually sized to).
 function canvasNodeWorldRectFromState(id) {
-  const raw = canvasStoreSnapshot().layout?.positions?.[id];
+  const searchContext = getCanvasSearchContext();
+  const layout = isCanvasSearchPreviewActive(searchContext)
+    ? canvasSearchLayoutFor(searchContext)
+    : canvasStoreSnapshot().layout;
+  const raw = layout?.positions?.[id];
   if (!raw) return null;
   const position = canvasDisplayPosition(raw);
   return { x: position.x, y: position.y, w: position.w, h: position.h, z: position.z || 0 };

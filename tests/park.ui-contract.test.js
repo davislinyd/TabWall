@@ -724,6 +724,29 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.doesNotMatch(transientEndBranch, /STACK_ITEMS|commitPositions|flush/);
 });
 
+test('Canvas search preview hit-tests preview positions and batch-edits multi-select', () => {
+  const rectSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasNodeWorldRectFromState');
+  assert.match(rectSource, /isCanvasSearchPreviewActive\(searchContext\)/);
+  assert.match(rectSource, /canvasSearchLayoutFor\(searchContext\)/);
+
+  const connSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasConnectionPosition');
+  assert.match(connSource, /isCanvasSearchPreviewActive\(searchContext\)/);
+  assert.match(connSource, /canvasSearchLayoutFor\(searchContext\)/);
+
+  const layoutSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasSearchLayoutFor');
+  assert.match(layoutSource, /if \(!canvasSearchPreview \|\| canvasSearchPreview\.key !== key\)/);
+  assert.doesNotMatch(layoutSource, /canvasSearchPreview\.revision !== state\.revision/);
+  assert.match(layoutSource, /canvasSearchPreview\.revision = state\.revision/);
+
+  const actionSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasAction');
+  assert.match(actionSource, /openBatchEdit\(ids\)/);
+  assert.match(actionSource, /ids\.length > 1/);
+
+  const barSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'updateBatchBar');
+  assert.match(barSource, /editButton\.hidden = connectionSelected \|\| n < 1/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function openBatchEdit\(ids\)/);
+});
+
 test('Canvas zoom uses a layout-scaled inner world and translation-only outer transform', () => {
   assert.match(HTML_SOURCE, /id="canvasWorld" class="canvas-world">[\s\S]*?id="canvasWorldScale" class="canvas-world-scale">[\s\S]*?id="canvasConnections"/);
   const worldCss = HTML_SOURCE.match(/\.canvas-world\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';

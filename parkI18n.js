@@ -359,7 +359,7 @@ const I18N = {
     importPreviewGroupEmpty: '此 group 無成員',
     batchDeleteConfirm: '刪除選取的 {n} 項？',
     batchEditHeading: '批次編輯 Note / Tags',
-    batchEditSub: 'Note 非空則覆寫；Tags 預設合併到各項目',
+    batchEditSub: 'Note 與 Tags 皆附加到各項目（逐行／逐 tag 去重）',
     editFailed: '儲存失敗',
     help: '說明',
     helpTitle: '說明',
@@ -411,7 +411,7 @@ const I18N = {
     helpGroupBody:
       'Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。成員面板可預覽、編輯、還原單一或整個 group。',
     helpSelectTitle: '複選',
-    helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。',
+    helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原、附加 note／tags、或刪除。',
     helpBackupTitle: '備份',
     helpBackupBody:
       '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾。',
@@ -797,7 +797,7 @@ const I18N = {
     importPreviewGroupEmpty: 'This group has no members',
     batchDeleteConfirm: 'Delete {n} selected items?',
     batchEditHeading: 'Batch edit note / tags',
-    batchEditSub: 'Non-empty note overwrites; tags are merged by default',
+    batchEditSub: 'Notes and tags append to each item; duplicate lines and tags are skipped',
     editFailed: 'Save failed',
     help: 'Help',
     helpTitle: 'Help',
@@ -849,7 +849,7 @@ const I18N = {
     helpGroupBody:
       'Alt+Shift+G parks a group; stacking tabs also builds a group. The member panel previews, edits, and restores one or all members.',
     helpSelectTitle: 'Multi-select',
-    helpSelectBody: 'Turn on Select, pick cards, then batch restore, merge tags, or delete.',
+    helpSelectBody: 'Turn on Select, pick cards, then batch restore, append notes / tags, or delete.',
     helpBackupTitle: 'Backup',
     helpBackupBody:
       'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder.',
