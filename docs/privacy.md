@@ -6,7 +6,7 @@ permalink: /privacy.html
 
 # Privacy Policy — TabWall
 
-**Last updated:** 2026-08-13  
+**Last updated:** 2026-08-14  
 **Product:** TabWall (Chrome / Chromium extension)  
 **Contact:** Use the [GitHub repository issues](https://github.com/davislinyd/TabWall/issues).
 
@@ -23,7 +23,7 @@ When you use TabWall, it may process:
 |------|---------|----------------|
 | Tab / group URLs, titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
 | Notes and tags you enter | Search and organize parked items | `chrome.storage.local` |
-| Screenshots (thumbnails and full snapshots) | Photo-wall preview | IndexedDB on your device |
+| Screenshots (thumbnails and full snapshots) and image-card files | Photo-wall preview | IndexedDB on your device |
 | Custom wallpaper image (optional) | Canvas background | IndexedDB on your device |
 | Extension settings (theme, wallpaper fit/blur/strength, sort, view, auto-backup preferences, etc.) | Preferences | `chrome.storage.local` |
 | Auto-backup preferences (subfolder name, schedule) | Control local automatic backups under your download directory | `chrome.storage.local` |
@@ -79,7 +79,7 @@ For privacy questions about TabWall, contact the publisher through the [project�
 
 # 隱私權政策 — TabWall（中文摘要）
 
-**最後更新日期：** 2026-08-13
+**最後更新日期：** 2026-08-14
 
 TabWall 將分頁與 Tab Group 暫存為本機照片牆。  
 **不會**把您的網址、備註、標籤、截圖或自訂背景上傳到 TabWall 自有伺服器（本產品不提供此類後端）。資料保存在**您的瀏覽器本機**（`chrome.storage` 與 IndexedDB）。

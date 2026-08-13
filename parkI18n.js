@@ -415,6 +415,13 @@ const I18N = {
     helpBackupTitle: '備份',
     helpBackupBody:
       '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾。',
+    helpStorageTitle: '硬碟用量',
+    helpStorageBody:
+      '網址、標題、備註、標籤與設定存在 chrome.storage；截圖、Sticker 附件與自訂背景存在 IndexedDB（通常是最大一塊）。下載資料夾裡的自動備份不算擴充儲存。設定／編輯器顯示的 Sticker 用量只含 Note 附件，不含分頁截圖。',
+    helpStorageChrome:
+      '在網址列開 chrome://settings/content/all，搜尋 chrome-extension://（擴充 ID 見 chrome://extensions），即可看到 Storage used。',
+    helpStorageEstimate:
+      '更精準：在 TabWall 按 ⌥⌘I 開 Console，執行 navigator.storage.estimate()，看 usage（不要看 quota）。',
     helpLimitsTitle: '限制',
     helpLimitsBody:
       'chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。',
@@ -853,6 +860,13 @@ const I18N = {
     helpBackupTitle: 'Backup',
     helpBackupBody:
       'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder.',
+    helpStorageTitle: 'Disk usage',
+    helpStorageBody:
+      'URLs, titles, notes, tags, and settings live in chrome.storage. Screenshots, sticker attachments, and the custom wallpaper live in IndexedDB (usually the bulk). Auto-backups in Downloads are not extension storage. The sticker usage meter counts note attachments only, not tab screenshots.',
+    helpStorageChrome:
+      'Open chrome://settings/content/all, search for chrome-extension:// (the ID is on chrome://extensions), and read Storage used.',
+    helpStorageEstimate:
+      'More precise: on TabWall, open the Console with ⌥⌘I and run navigator.storage.estimate(); read usage, not quota.',
     helpLimitsTitle: 'Limits',
     helpLimitsBody:
       'chrome:// pages cannot be captured or injected into. TabWall storage is not Chrome’s built-in Save group.',

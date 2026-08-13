@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.35.0 使用者說明：儲存分頁與 Tab Group、空間畫布、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.37.2 使用者說明：儲存分頁與 Tab Group、空間畫布、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.35.0</span>
+      <span>使用者說明 · v2.37.2</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -51,6 +51,7 @@
       <a href="#settings"><span lang="zh-Hant">設定</span><span lang="en">Settings</span></a>
       <a href="#wallpaper"><span lang="zh-Hant">自訂背景</span><span lang="en">Custom background</span></a>
       <a href="#backup"><span lang="zh-Hant">備份與還原</span><span lang="en">Backup and restore</span></a>
+      <a href="#storage"><span lang="zh-Hant">硬碟用量</span><span lang="en">Disk usage</span></a>
       <a href="#dedupe"><span lang="zh-Hant">去重複</span><span lang="en">Duplicates</span></a>
       <a href="#privacy"><span lang="zh-Hant">隱私與資料</span><span lang="en">Privacy and data</span></a>
       <a href="#limits"><span lang="zh-Hant">限制與常見問題</span><span lang="en">Limits and FAQ</span></a>
@@ -66,13 +67,13 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.35.0</span><span lang="en">Version 2.35.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.37.2</span><span lang="en">Version 2.37.2</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
         </div>
       </header>
-      <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「備份」「搜尋」或「快捷鍵」。</p>
+      <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「備份」「硬碟」「搜尋」或「快捷鍵」。</p>
 
       <section class="chapter" id="install">
         <h2 lang="zh-Hant">安裝</h2>
@@ -198,6 +199,12 @@
               <td lang="zh-Hant">每行一個網址。用 <code>#GROUP:名稱</code> 上下包住多行，會建成群組。</td>
               <td lang="en">One URL per line. Wrap lines with <code>#GROUP:Name</code> to create a group.</td>
             </tr>
+            <tr>
+              <td lang="zh-Hant">「新增卡片」上傳／貼上／拖放圖片</td>
+              <td lang="en">Add an image card (upload, paste, or drop)</td>
+              <td lang="zh-Hant">JPEG、PNG、WEBP、GIF、SVG、HEIC。壓縮成縮圖與快照，存在 IndexedDB；不是瀏覽器分頁。</td>
+              <td lang="en">JPEG, PNG, WEBP, GIF, SVG, HEIC. Compressed to a thumbnail and snapshot in IndexedDB; not a browser tab.</td>
+            </tr>
           </tbody>
         </table>
         <pre><code>https://example.com/a
@@ -316,16 +323,16 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">「畫布整理」</td>
               <td lang="en">Arrange canvas</td>
-              <td lang="zh-Hant">依日期、FQDN 或 Group 排序；棋盤或對齊排列（96px 間距，保留卡片尺寸）。</td>
-              <td lang="en">Sort by date, FQDN, or Group; Grid or Aligned Rows (96px gap, stored sizes kept).</td>
+              <td lang="zh-Hant">依日期、FQDN 或 Group 排序；棋盤或對齊排列（128px 間距，保留卡片尺寸）。</td>
+              <td lang="en">Sort by date, FQDN, or Group; Grid or Aligned Rows (128px gap, stored sizes kept).</td>
             </tr>
           </tbody>
         </table>
         <p lang="zh-Hant">左側索引可切「全部／未整理／已固定」與各個 Stack。側欄可拖寬或收合。</p>
         <p lang="en">The left index switches All / Unsorted / Pinned and each Stack. The rail can be resized or collapsed.</p>
         <div class="callout">
-          <p lang="zh-Hant">搜尋進行中，命中卡片會暫時排成棋盤。這段期間的拖曳與排列只是預覽，不會寫回正式座標，也不會因拖放建立 Stack。清空搜尋後恢復原布局。</p>
-          <p lang="en">During search, hits temporarily snap to a grid. Drags and arrange in that state are preview-only: they do not save positions or create Stacks. Clearing search restores the real layout.</p>
+          <p lang="zh-Hant">搜尋進行中，命中卡片會暫時排成棋盤。這段期間的拖曳與排列只是預覽，不會寫回正式座標，也不會因拖放建立 Stack。連線仍可操作並保存。清空搜尋後恢復原布局。</p>
+          <p lang="en">During search, hits temporarily snap to a grid. Drags and arrange in that state are preview-only: they do not save positions or create Stacks. Connections still work and persist. Clearing search restores the real layout.</p>
         </div>
       </section>
 
@@ -348,8 +355,12 @@ https://wiki.example.com
         </ul>
         <h3 lang="zh-Hant">群組卡片</h3>
         <h3 lang="en">Group cards</h3>
-        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。</p>
-        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore one member or the whole group. Restore can target the current window or a new one. Note members never become browser tabs.</p>
+        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。群組卡有色條與淡色，方便和一般分頁區分。</p>
+        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore one member or the whole group. Restore can target the current window or a new one. Note members never become browser tabs. Group cards have a color bar and tint so they stand apart from tab cards.</p>
+        <h3 lang="zh-Hant">圖片卡</h3>
+        <h3 lang="en">Image cards</h3>
+        <p lang="zh-Hant">用「新增卡片」上傳、貼上或拖放本機圖片。支援 JPEG、PNG、WEBP、GIF、SVG、HEIC。會壓縮成縮圖與快照，以 contain 填滿節點。這不是分頁，點縮圖不會還原瀏覽器分頁。</p>
+        <p lang="en">Use Add card to upload, paste, or drop a local image. JPEG, PNG, WEBP, GIF, SVG, and HEIC are accepted. Files are compressed to a thumbnail and snapshot, and fill the node with contain. This is not a tab — clicking it does not restore a browser tab.</p>
       </section>
 
       <section class="chapter" id="notes">
@@ -492,8 +503,8 @@ https://wiki.example.com
         <p lang="en">Header → Tags opens the manager: search, add, rename, delete. Deleting a tag removes it from every parked item.</p>
         <h3 lang="zh-Hant">複選與批次</h3>
         <h3 lang="en">Multi-select and batch</h3>
-        <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原、合併 tags、編輯 note、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
-        <p lang="en">Turn on Select, pick cards, then batch restore, merge tags, edit notes, delete, or export only the selection (lite JSON or full ZIP).</p>
+        <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原、附加 note／tags（不覆蓋既有內容）、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
+        <p lang="en">Turn on Select, pick cards, then batch restore, append notes / tags (without overwriting existing text), delete, or export only the selection (lite JSON or full ZIP).</p>
         <p lang="zh-Hant"><kbd>Shift</kbd>／<kbd>Control</kbd> 可在畫布上加選。</p>
         <p lang="en">Hold <kbd>Shift</kbd> / <kbd>Control</kbd> to add to the canvas selection.</p>
       </section>
@@ -603,8 +614,33 @@ https://wiki.example.com
         </ul>
         <h3 lang="zh-Hant">自動備份</h3>
         <h3 lang="en">Automatic backup</h3>
-        <p lang="zh-Hant">寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可依排程、或資料變更後備份；保留 1–99 份。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
-        <p lang="en">Writes into a subfolder of Chrome’s download location (not always <code>Downloads</code> — see <code>chrome://settings/downloads</code>). Run on a schedule and/or after data changes. Keep 1–99 copies. TabWall recognizes its own files and deletes older ones. Nothing is uploaded.</p>
+        <p lang="zh-Hant">寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可依排程、或資料變更後備份；保留 1–99 份。開新分頁只在間隔已到期時才補跑，不會每次開牆就下載。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
+        <p lang="en">Writes into a subfolder of Chrome’s download location (not always <code>Downloads</code> — see <code>chrome://settings/downloads</code>). Run on a schedule and/or after data changes. Keep 1–99 copies. Opening a new tab only catch-up backups if the interval is already overdue. TabWall recognizes its own files and deletes older ones. Nothing is uploaded.</p>
+      </section>
+
+      <section class="chapter" id="storage">
+        <h2 lang="zh-Hant">硬碟用量</h2>
+        <h2 lang="en">Disk usage</h2>
+        <p lang="zh-Hant">資料只留在這台電腦的瀏覽器。應用內說明也有精簡版。</p>
+        <p lang="en">Data stays in this browser, on this device. In-app Help has a short version of this section.</p>
+        <ul>
+          <li lang="zh-Hant">網址、標題、備註、標籤與設定存在 <code>chrome.storage.local</code>，通常只有數 MB。</li>
+          <li lang="en">URLs, titles, notes, tags, and settings live in <code>chrome.storage.local</code> — usually a few megabytes.</li>
+          <li lang="zh-Hant">縮圖、完整快照、圖片卡、Sticker 附件與自訂背景存在 IndexedDB（通常是最大一塊）。</li>
+          <li lang="en">Thumbnails, snapshots, image cards, sticker attachments, and the custom wallpaper live in IndexedDB (usually the bulk).</li>
+          <li lang="zh-Hant">下載目錄裡的自動備份是一般檔案，<strong>不算</strong>擴充儲存；解除安裝也不會刪。</li>
+          <li lang="en">Automatic backups in the download folder are ordinary files. They are <strong>not</strong> extension storage, and uninstalling does not delete them.</li>
+          <li lang="zh-Hant">設定／編輯器顯示的 Sticker 用量只含 Note 附件配額，不含分頁截圖或 wallpaper。</li>
+          <li lang="en">The sticker usage meter counts note-attachment quota only, not tab screenshots or wallpaper.</li>
+        </ul>
+        <h3 lang="zh-Hant">怎麼查看目前用量</h3>
+        <h3 lang="en">How to see current usage</h3>
+        <ol class="steps">
+          <li lang="zh-Hant">開 <code>chrome://settings/content/all</code>，搜尋 <code>chrome-extension://</code>（擴充 ID 在 <code>chrome://extensions</code>），看 Storage used。</li>
+          <li lang="en">Open <code>chrome://settings/content/all</code>, search for <code>chrome-extension://</code> (the ID is on <code>chrome://extensions</code>), and read Storage used.</li>
+          <li lang="zh-Hant">更精準：在 TabWall 按 <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>I</kbd> 開 Console，執行 <code>navigator.storage.estimate()</code>，看 <code>usage</code>（不要看 <code>quota</code>；有 unlimitedStorage 時 quota 接近整顆碟）。例如 <code>33740107</code> bytes ≈ 32.2 MiB。</li>
+          <li lang="en">More precise: on TabWall, open the Console with <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>I</kbd> and run <code>navigator.storage.estimate()</code>. Read <code>usage</code>, not <code>quota</code> (with unlimitedStorage, quota is nearly the whole disk). Example: <code>33740107</code> bytes ≈ 32.2 MiB.</li>
+        </ol>
       </section>
 
       <section class="chapter" id="dedupe">
@@ -624,8 +660,8 @@ https://wiki.example.com
           <li lang="en">There is no TabWall cloud account, and the wall is not uploaded to TabWall servers.</li>
           <li lang="zh-Hant">網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
           <li lang="en">URLs, titles, notes, tags, and order live in <code>chrome.storage.local</code>.</li>
-          <li lang="zh-Hant">縮圖、快照、note 附件與自訂背景圖存在本機 IndexedDB。</li>
-          <li lang="en">Thumbnails, snapshots, note attachments, and the custom wallpaper live in local IndexedDB.</li>
+          <li lang="zh-Hant">縮圖、快照、圖片卡、note 附件與自訂背景圖存在本機 IndexedDB。</li>
+          <li lang="en">Thumbnails, snapshots, image cards, note attachments, and the custom wallpaper live in local IndexedDB.</li>
           <li lang="zh-Hant">只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
           <li lang="en">The current tab or group is read only when you act (including Chrome commands).</li>
           <li lang="zh-Hant">解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
@@ -757,8 +793,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.35.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.35.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.37.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.37.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

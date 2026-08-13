@@ -362,6 +362,16 @@ test('Chrome shortcut settings expose the tab-or-group keep command', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });
 
+test('Help panel documents how to measure disk usage', () => {
+  assert.match(HTML_SOURCE, /data-i18n="helpStorageTitle"/);
+  assert.match(HTML_SOURCE, /data-i18n="helpStorageBody"/);
+  assert.match(HTML_SOURCE, /data-i18n="helpStorageChrome"/);
+  assert.match(HTML_SOURCE, /data-i18n="helpStorageEstimate"/);
+  assert.match(I18N_SOURCE, /helpStorageTitle: '硬碟用量'/);
+  assert.match(I18N_SOURCE, /helpStorageTitle: 'Disk usage'/);
+  assert.match(I18N_SOURCE, /navigator\.storage\.estimate\(\)/);
+});
+
 test('Help panel is centered; cards have newsprint; Option+/ is documented', () => {
   assert.match(CSS_SOURCE, /#helpBox\.open\s*\{[\s\S]*?transform:\s*translate\(-50%, -50%\) !important;/);
   assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
