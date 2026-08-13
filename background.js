@@ -380,6 +380,8 @@ async function updateGroupMember(groupId, memberId, patch) {
   if (mIdx === -1) return { ok: false, error: 'member_not_found' };
   const member = { ...group.tabs[mIdx] };
   if (typeof patch.note === 'string') member.note = patch.note;
+  applyDisplayTitlePatch(member, patch);
+  applyLockPatch(member, patch);
   if (Array.isArray(patch.tags)) {
     member.tags = patch.tags
       .map((t) => String(t).trim())
@@ -1194,6 +1196,7 @@ async function tabItemToMember(tabItem, groupId, indexInGroup, mediaState) {
     tags: Array.isArray(tabItem.tags) ? tabItem.tags : [],
     hasThumb: Boolean(tabItem.hasThumb),
     hasSnap: Boolean(tabItem.hasSnap),
+    ...storedTitleLockFields(tabItem),
   };
 }
 
@@ -1220,6 +1223,7 @@ async function rekeyGroupMembers(group, newGroupId, startIndex, mediaState) {
       tags: Array.isArray(m.tags) ? m.tags : [],
       hasThumb: Boolean(m.hasThumb),
       hasSnap: Boolean(m.hasSnap),
+      ...storedTitleLockFields(m),
     });
   }
   return members;
@@ -1764,6 +1768,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return updateGroupMember(message.groupId, message.memberId, {
           note: message.note,
           tags: message.tags,
+          displayTitle: message.displayTitle,
+          locked: message.locked,
+          lockSalt: message.lockSalt,
+          lockHash: message.lockHash,
         });
       case 'CREATE_NOTE':
         return createNote(message.note || message.item, message.position);
@@ -1782,6 +1790,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           note: message.note,
           tags: message.tags,
           pinned: message.pinned,
+          displayTitle: message.displayTitle,
+          locked: message.locked,
+          lockSalt: message.lockSalt,
+          lockHash: message.lockHash,
         });
       case 'REORDER_TABS':
       case 'REORDER_ITEMS':

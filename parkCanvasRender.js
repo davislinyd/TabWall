@@ -110,6 +110,11 @@
   
 
 function canvasThumbHtml(item) {
+  if (call('isMediaLocked', item)) {
+    const needsPassword = Boolean(item.lockHash);
+    const label = t(needsPassword ? 'unlockWithPassword' : 'unlockTap');
+    return `<button type="button" class="media-lock-overlay" data-unlock-id="${escapeAttr(item.id)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg('lock')}<span>${escapeHtml(label)}</span></button>`;
+  }
   if (item.kind === 'group') return groupCoverHtml(item, { canvas: true });
   if (item.kind === 'note') {
     const attachment = item.attachments?.[0];
@@ -130,11 +135,16 @@ function safeNotePreviewHtml(note, className = 'canvas-note-preview') {
 
 function canvasNodeActionEntries(item) {
   if (!item) return [];
+  const sessionUnlocked = Boolean(item.locked && !call('isMediaLocked', item));
+  const lockEntry = item.locked
+    ? { action: sessionUnlocked ? 'relock' : 'unlock', label: t(sessionUnlocked ? 'lockAction' : 'unlockAction'), icon: sessionUnlocked ? 'lock' : 'unlock' }
+    : { action: 'lock', label: t('lockAction'), icon: 'lock' };
   if (item.kind === 'group') {
     return [
       { action: 'restore', label: t('restoreGroup'), icon: 'restore' },
       { action: 'members', label: t('expandGroup'), icon: 'members' },
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
     ];
@@ -142,6 +152,7 @@ function canvasNodeActionEntries(item) {
   if (item.kind === 'note') {
     return [
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
     ];
@@ -150,6 +161,7 @@ function canvasNodeActionEntries(item) {
     return [
       { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
     ];
@@ -159,6 +171,7 @@ function canvasNodeActionEntries(item) {
     { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
     { action: 'edit', label: t('edit'), icon: 'edit' },
     { action: 'copy', label: t('copyLink'), icon: 'copy' },
+    lockEntry,
     { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
     { action: 'delete', label: t('delete'), icon: 'delete' },
   ];
@@ -201,8 +214,12 @@ function canvasNodeHtml(item) {
           ${item.kind === 'tab' && item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : ''}
           <span>${escapeHtml(title)}</span>${pin}
         </div>
+        ${(() => {
+          const original = call('itemOriginalTitle', item);
+          return original ? `<div class="title-original" title="${escapeAttr(original)}">${escapeHtml(original)}</div>` : '';
+        })()}
         <div class="canvas-node-meta">${escapeHtml(meta)}</div>
-        ${isNote ? safeNotePreviewHtml(item) : item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
+        ${isNote && !call('isMediaLocked', item) ? safeNotePreviewHtml(item) : !isNote && item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
         ${item.tags?.length ? `<div class="canvas-node-tags">${item.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ')}</div>` : ''}
       </div>
       <div class="canvas-node-actions" aria-label="${escapeAttr(title)}">${actionHtml}</div>
@@ -530,10 +547,15 @@ function renderCanvasMinimap(items, renderLayout = null) {
 }
 
 function canvasNodeRenderKey(item) {
+  const unlockedIds = get('sessionUnlockedIds');
   return JSON.stringify({
     id: item.id,
     kind: item.kind,
     title: item.title,
+    displayTitle: item.displayTitle || '',
+    locked: Boolean(item.locked),
+    lockHash: item.lockHash || '',
+    unlocked: Boolean(unlockedIds?.has?.(item.id)),
     url: item.url,
     note: item.note,
     tags: item.tags,
@@ -545,7 +567,15 @@ function canvasNodeRenderKey(item) {
       ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
       : undefined,
     tabs: item.kind === 'group'
-      ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
+      ? (item.tabs || []).map((member) => [
+        member.id,
+        member.title,
+        member.displayTitle || '',
+        member.url,
+        member.hasThumb,
+        member.hasSnap,
+        Boolean(member.locked),
+      ])
       : undefined,
     notes: item.kind === 'group'
       ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
@@ -562,6 +592,14 @@ function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item)) {
   if (item.kind === 'group') appendGroupSearchHits(node, item);
   node.dataset.canvasRenderKey = renderKey;
   wireCanvasNodeActions(node);
+  node.querySelectorAll('[data-unlock-id]').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => event.stopPropagation());
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      call('requestUnlockItem', item);
+    });
+  });
   node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
   node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
   return node;

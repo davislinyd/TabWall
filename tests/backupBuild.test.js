@@ -284,6 +284,21 @@ test('backup schema rejects duplicate IDs and non-HTTP URLs', () => {
   assert.equal(Build.validateBackup(invalidUrl).error, 'invalid_url');
 });
 
+test('backup accepts optional displayTitle and lock fields', () => {
+  const locked = {
+    ...sampleItem(),
+    displayTitle: 'Friendly name',
+    locked: true,
+    lockSalt: 'ab'.repeat(16),
+    lockHash: 'cd'.repeat(32),
+  };
+  assert.equal(Build.validateBackup(sampleBackup([locked])).ok, true);
+  assert.equal(
+    Build.validateBackup(sampleBackup([{ ...sampleItem(), lockSalt: 'nope' }])).error,
+    'invalid_lock_salt'
+  );
+});
+
 test('backup accepts image cards with empty URL and rejects a URL on them', () => {
   const imageCard = {
     ...sampleItem({ image: true }),

@@ -96,12 +96,12 @@
     if (scope === 'group') {
       // Only group cards; name + member tabs (title/url/domain)
       if (item.kind !== 'group') return '';
-      const parts = [item.title || ''];
+      const parts = [item.title || '', item.displayTitle || ''];
       for (const m of item.tabs || []) {
-        parts.push(m.title || '', m.url || '', domainOf(m.url));
+        parts.push(m.title || '', m.displayTitle || '', m.url || '', domainOf(m.url));
       }
       for (const note of item.notes || []) {
-        parts.push(note.title || '', note.markdown || '', ...(note.tags || []));
+        parts.push(note.title || '', note.displayTitle || '', note.markdown || '', ...(note.tags || []));
       }
       return parts.join(' ');
     }
@@ -122,21 +122,23 @@
       if (item.kind === 'group') {
         const parts = [item.note || ''];
         for (const m of item.tabs || []) parts.push(m.note || '');
-        for (const note of item.notes || []) parts.push(note.title || '', note.markdown || '');
+        for (const note of item.notes || []) parts.push(note.title || '', note.displayTitle || '', note.markdown || '');
         return parts.join(' ');
       }
-      if (item.kind === 'note') return [item.title || '', item.markdown || ''].join(' ');
+      if (item.kind === 'note') return [item.title || '', item.displayTitle || '', item.markdown || ''].join(' ');
       return item.note || '';
     }
     if (item.kind === 'group') {
       const parts = [
         item.title || '',
+        item.displayTitle || '',
         item.note || '',
         ...(Array.isArray(item.tags) ? item.tags : []),
       ];
       for (const m of item.tabs || []) {
         parts.push(
           m.title || '',
+          m.displayTitle || '',
           m.url || '',
           domainOf(m.url),
           m.note || '',
@@ -144,16 +146,17 @@
         );
       }
       for (const note of item.notes || []) {
-        parts.push(note.title || '', note.markdown || '', ...(Array.isArray(note.tags) ? note.tags : []));
+        parts.push(note.title || '', note.displayTitle || '', note.markdown || '', ...(Array.isArray(note.tags) ? note.tags : []));
         for (const attachment of note.attachments || []) parts.push(attachment.name || '', attachment.alt || '');
       }
       return parts.join(' ');
     }
     if (item.kind === 'note') {
       if (scope === 'tag') return (item.tags || []).join(' ');
-      if (scope === 'note') return [item.title || '', item.markdown || ''].join(' ');
+      if (scope === 'note') return [item.title || '', item.displayTitle || '', item.markdown || ''].join(' ');
       return [
         item.title || '',
+        item.displayTitle || '',
         item.markdown || '',
         ...(Array.isArray(item.tags) ? item.tags : []),
         ...(item.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']),
@@ -161,6 +164,7 @@
     }
     return [
       item.title || '',
+      item.displayTitle || '',
       item.url || '',
       domainOf(item.url),
       item.note || '',

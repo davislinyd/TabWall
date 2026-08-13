@@ -1553,7 +1553,8 @@ html[data-theme='light'] .group-badge {
 .thumb-wrap > .thumb,
 .thumb-wrap > img,
 .thumb-wrap > .group-mosaic,
-.thumb-wrap > .empty-cover {
+.thumb-wrap > .empty-cover,
+.thumb-wrap > .media-lock-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2042,7 +2043,8 @@ html[data-theme='light'] #lightbox {
 }
 
 /* Movable edit floating box — no full-screen dimmer */
-#editBox {
+#editBox,
+#unlockBox {
   display: none;
   position: fixed;
   z-index: 110;
@@ -2055,7 +2057,8 @@ html[data-theme='light'] #lightbox {
   overflow: hidden;
 }
 
-#editBox.open {
+#editBox.open,
+#unlockBox.open {
   display: flex;
 }
 
@@ -4533,7 +4536,7 @@ html[data-theme='dark'] .canvas-node {
   line-height: 1.35;
 }
 
-.canvas-node-title > span:not(.canvas-pin):not(.color-dot) {
+.canvas-node-title > span:not(.canvas-pin):not(.color-dot):not(.title-original) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5319,6 +5322,7 @@ select#sortBy {
 }
 
 #editBox,
+#unlockBox,
 #membersBox {
   left: 50% !important;
   top: 50% !important;
@@ -5332,6 +5336,7 @@ select#sortBy {
 }
 
 #editBox .edit-drag,
+#unlockBox .edit-drag,
 #membersBox .members-drag,
 #membersBox .members-toolbar {
   border-bottom-color: var(--border);
@@ -6255,6 +6260,100 @@ html[data-theme='dark'] .canvas-node {
   border-radius: 4px;
   background: var(--panel);
   box-shadow: var(--edit-shadow);
+}
+
+.title-original {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.canvas-node-copy .title-original,
+.member-title .title-original {
+  margin-top: 1px;
+}
+
+.edit-lock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.edit-lock-toggle input {
+  margin: 0;
+}
+
+.edit-lock-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.media-lock-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border: 0;
+  background: color-mix(in srgb, var(--bg) 82%, #111827 18%);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.media-lock-overlay svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+}
+
+.canvas-node-thumb > .media-lock-overlay,
+.row-thumb.media-lock-overlay,
+.member-thumb.media-lock-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.row-thumb.media-lock-overlay,
+.member-thumb.media-lock-overlay {
+  position: relative;
+  inset: auto;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+#lbLockOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+#lbLockOverlay[hidden] {
+  display: none;
+}
+
+.lb-image-pane {
+  position: relative;
+}
+
+.lock-btn.active {
+  color: var(--accent);
 }
 
 #settingsBox .float-drag,

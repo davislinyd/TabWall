@@ -956,6 +956,24 @@
     );
   }
 
+  function validateTitleLockFields(item) {
+    if (item.displayTitle != null && !validateString(item.displayTitle, LIMITS.MAX_TITLE_LENGTH)) {
+      return 'invalid_display_title';
+    }
+    if (item.locked != null && typeof item.locked !== 'boolean') return 'invalid_locked';
+    if (item.lockSalt != null && item.lockSalt !== '') {
+      if (typeof item.lockSalt !== 'string' || !/^[0-9a-f]{32}$/i.test(item.lockSalt)) {
+        return 'invalid_lock_salt';
+      }
+    }
+    if (item.lockHash != null && item.lockHash !== '') {
+      if (typeof item.lockHash !== 'string' || !/^[0-9a-f]{64}$/i.test(item.lockHash)) {
+        return 'invalid_lock_hash';
+      }
+    }
+    return '';
+  }
+
   function validateTags(tags) {
     if (!Array.isArray(tags) || tags.length > LIMITS.MAX_TAGS) return false;
     const seen = new Set();
@@ -1024,6 +1042,8 @@
     idSet.add(note.id);
     memberSet.add(note.id);
     if (!validateString(note.title, LIMITS.MAX_TITLE_LENGTH)) return 'invalid_title';
+    const titleLockError = validateTitleLockFields(note);
+    if (titleLockError) return titleLockError;
     if (!validateString(note.markdown, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_markdown';
     if (!validateTags(note.tags)) return 'invalid_tags';
     if (note.pinned != null && typeof note.pinned !== 'boolean') return 'invalid_pinned';
@@ -1091,6 +1111,8 @@
       return 'invalid_url';
     }
     if (!validateString(tab.title, LIMITS.MAX_TITLE_LENGTH, { allowEmpty: false })) return 'invalid_title';
+    const titleLockError = validateTitleLockFields(tab);
+    if (titleLockError) return titleLockError;
     if (!validateString(tab.favIconUrl, LIMITS.MAX_FAVICON_LENGTH)) return 'invalid_favicon';
     if (tab.favIconUrl && !isHttpUrl(tab.favIconUrl, LIMITS.MAX_FAVICON_LENGTH) && !isImageDataUrl(tab.favIconUrl)) {
       return 'invalid_favicon';
@@ -1213,6 +1235,8 @@
         if (!validateString(item.note, LIMITS.MAX_NOTE_LENGTH)) return validationError('invalid_note');
         if (!validateTags(item.tags)) return validationError('invalid_tags');
         if (!validateString(item.title, LIMITS.MAX_TITLE_LENGTH)) return validationError('invalid_title');
+        const titleLockError = validateTitleLockFields(item);
+        if (titleLockError) return validationError(titleLockError, item.id);
         if (!validateImageField(item.thumbnail, media, mediaMimes) || !validateImageField(item.snapshot, media, mediaMimes)) {
           return validationError('invalid_image');
         }

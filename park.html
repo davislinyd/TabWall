@@ -656,6 +656,7 @@
       <div class="lb-image-pane">
         <img id="lbImage" alt="Full snapshot" />
         <div id="lbGroupMosaic" class="lb-group-mosaic" hidden></div>
+        <button type="button" id="lbLockOverlay" class="media-lock-overlay" hidden></button>
       </div>
       <div class="lb-hint" id="lbSnapHint" hidden data-i18n="noSnapshot">此項目無全尺寸快照，顯示縮圖。</div>
     </div>
@@ -858,6 +859,26 @@
         <div id="editItemTitle" style="font-size:13px;font-weight:600;word-break:break-word">—</div>
         <div class="sub" id="editSub">—</div>
         <label>
+          <span data-i18n="editDisplayTitle">顯示標題</span>
+          <input id="editDisplayTitle" type="text" maxlength="2048" autocomplete="off" data-i18n-placeholder="editDisplayTitleHint" placeholder="留空則使用原始名稱" />
+        </label>
+        <div class="sub" id="editOriginalTitle" hidden></div>
+        <label class="edit-lock-toggle">
+          <input id="editLockEnabled" type="checkbox" />
+          <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
+        </label>
+        <div id="editLockFields" class="edit-lock-fields" hidden>
+          <label>
+            <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+            <input id="editLockPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            <span data-i18n="lockPasswordConfirm">確認密碼</span>
+            <input id="editLockPasswordConfirm" type="password" autocomplete="new-password" />
+          </label>
+          <p class="hint" data-i18n="lockPasswordHint">不設密碼則點一下即可解鎖。密碼無法加密本機快照。</p>
+        </div>
+        <label>
           <span data-i18n="note">Note</span>
           <textarea id="editNote" data-i18n-placeholder="notePh" placeholder="加入備註…"></textarea>
         </label>
@@ -876,6 +897,24 @@
       </div>
     </div>
 
+    <div id="unlockBox" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="unlockHeading">
+      <div class="edit-drag" id="unlockDrag">
+        <h2 id="unlockHeading" data-i18n="unlockTitle">解鎖卡片</h2>
+        <button type="button" class="btn icon-close" id="unlockCloseX" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div class="edit-body">
+        <label>
+          <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+          <input id="unlockPassword" type="password" autocomplete="current-password" />
+        </label>
+        <div class="sub" id="unlockError" hidden></div>
+        <div class="edit-actions">
+          <button type="button" class="btn" id="unlockCancel" data-i18n="cancel">取消</button>
+          <button type="button" class="btn primary" id="unlockSubmit" data-i18n="unlockSubmit">解鎖</button>
+        </div>
+      </div>
+    </div>
+
     <div id="stickerNoteBox" class="sticker-note-box" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stickerNoteHeading">
       <div class="sticker-note-drag" id="stickerNoteDrag">
         <h2 id="stickerNoteHeading" data-i18n="noteEditHeading">編輯 Sticker Note</h2>
@@ -887,6 +926,21 @@
             <span data-i18n="noteTitlePh">Note 標題</span>
             <input id="stickerNoteTitle" type="text" maxlength="2048" autocomplete="off" data-i18n-placeholder="noteTitlePh" placeholder="Note 標題" />
           </label>
+          <label class="edit-lock-toggle">
+            <input id="stickerNoteLockEnabled" type="checkbox" />
+            <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
+          </label>
+          <div id="stickerNoteLockFields" class="edit-lock-fields" hidden>
+            <label>
+              <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+              <input id="stickerNoteLockPassword" type="password" autocomplete="new-password" />
+            </label>
+            <label>
+              <span data-i18n="lockPasswordConfirm">確認密碼</span>
+              <input id="stickerNoteLockPasswordConfirm" type="password" autocomplete="new-password" />
+            </label>
+            <p class="hint" data-i18n="lockPasswordHint">不設密碼則點一下即可解鎖。密碼無法加密本機快照。</p>
+          </div>
           <div class="edit-field">
             <span data-i18n="tags">Tags</span>
             <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>

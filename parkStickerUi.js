@@ -47,15 +47,23 @@
   function stickerNoteDraftRecord() {
     ensureBound('stickerNoteDraftRecord');
 
+    const typed = env.stickerNoteTitle?.value?.trim() || env.t('noteUntitled');
+    const isEdit = env.stickerNoteContext?.mode === 'edit';
+    const original = isEdit
+      ? (env.stickerNoteContext.originalTitle || typed)
+      : typed;
+    const displayTitle = isEdit && typed !== original ? typed : '';
     return {
       kind: 'note',
       id: env.stickerNoteContext?.id || stickerNoteUuid(),
-      title: env.stickerNoteTitle?.value?.trim() || env.t('noteUntitled'),
+      title: original,
+      ...(displayTitle ? { displayTitle } : {}),
       markdown: env.stickerNoteMarkdown?.value || '',
       tags: [...env.stickerNoteTagList],
       pinned: Boolean(env.stickerNoteContext?.pinned),
       savedAt: env.stickerNoteContext?.savedAt || Date.now(),
       attachments: stickerNoteDraftMeta(),
+      locked: Boolean(env.stickerNoteLockEnabled?.checked),
     };
       
   }
@@ -302,6 +310,8 @@
       position,
       pinned: Boolean(source.pinned),
       savedAt: source.savedAt,
+      originalTitle: source.title || env.t('noteUntitled'),
+      hasPassword: Boolean(source.lockHash),
     };
     env.stickerNoteTagList = [...(source.tags || [])];
     env.stickerNoteDraftAttachments = (source.attachments || []).map((attachment) => ({
@@ -309,7 +319,11 @@
       blob: null,
       previewUrl: '',
     }));
-    env.stickerNoteTitle.value = source.title || env.t('noteUntitled');
+    env.stickerNoteTitle.value = (source.displayTitle || source.title || env.t('noteUntitled'));
+    if (env.stickerNoteLockEnabled) env.stickerNoteLockEnabled.checked = Boolean(source.locked);
+    if (env.stickerNoteLockPassword) env.stickerNoteLockPassword.value = '';
+    if (env.stickerNoteLockPasswordConfirm) env.stickerNoteLockPasswordConfirm.value = '';
+    if (env.stickerNoteLockFields) env.stickerNoteLockFields.hidden = !source.locked;
     env.stickerNoteMarkdown.value = source.markdown || '';
     env.stickerNoteTagDraft.value = '';
     setStickerNoteMediaBusy(false);
@@ -352,6 +366,17 @@
     if (!env.stickerNoteContext || env.stickerNoteMediaBusy) return;
     commitStickerNoteTagDraft();
     const note = stickerNoteDraftRecord();
+    const lockPatch = await env.collectLockPatchFromFields?.({
+      locked: Boolean(env.stickerNoteLockEnabled?.checked),
+      password: env.stickerNoteLockPassword?.value || '',
+      confirm: env.stickerNoteLockPasswordConfirm?.value || '',
+      hasPassword: Boolean(env.stickerNoteContext?.hasPassword),
+    });
+    if (lockPatch?.error) {
+      setStickerNoteMediaStatus(env.t(lockPatch.error), true);
+      return;
+    }
+    if (lockPatch) Object.assign(note, lockPatch);
     const writtenKeys = [];
     try {
       for (const attachment of env.stickerNoteDraftAttachments) {

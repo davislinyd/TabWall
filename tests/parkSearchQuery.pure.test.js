@@ -39,6 +39,14 @@ test('TabWallSearchQuery matches plain title/url haystack', () => {
   const miss = { kind: 'tab', title: 'Other', url: 'https://bar.test/', note: '', tags: [] };
   assert.equal(SQ.matchesQuery(hit, query), true);
   assert.equal(SQ.matchesQuery(miss, query), false);
+
+  const aliased = { kind: 'tab', title: 'AAA', displayTitle: 'BBB', url: 'https://foo.test/', note: '', tags: [] };
+  query = 'BBB';
+  SQ.compileSearchQuery(query);
+  assert.equal(SQ.matchesQuery(aliased, query), true);
+  query = 'AAA';
+  SQ.compileSearchQuery(query);
+  assert.equal(SQ.matchesQuery(aliased, query), true);
 });
 
 test('TabWallSearchQuery tag expression and domain scope + invalid regex boundary', () => {

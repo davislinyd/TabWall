@@ -21,13 +21,14 @@ When you use TabWall, it may process:
 
 | Data | Purpose | Where stored |
 |------|---------|----------------|
-| Tab / group URLs, titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
+| Tab / group URLs, titles, display titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
 | Notes and tags you enter | Search and organize parked items | `chrome.storage.local` |
+| Card lock status and optional password hashes | Card privacy (salted SHA-256 hash) | `chrome.storage.local` |
 | Screenshots (thumbnails and full snapshots) and image-card files | Photo-wall preview | IndexedDB on your device |
 | Custom wallpaper image (optional) | Canvas background | IndexedDB on your device |
 | Extension settings (theme, wallpaper fit/blur/strength, sort, view, auto-backup preferences, etc.) | Preferences | `chrome.storage.local` |
 | Auto-backup preferences (subfolder name, schedule) | Control local automatic backups under your download directory | `chrome.storage.local` |
-| Temporary in-memory state | Conflict UI, drag/stack, open panels | Memory only (cleared when the service worker or page unloads) |
+| Temporary in-memory state | Unlocked card session IDs, conflict UI, drag/stack, open panels | Memory only (cleared when the service worker or page unloads) |
 
 The extension reads the **currently active tab** (and related group tabs when you park a Tab Group) to capture a screenshot and save metadata. It does this only when **you** trigger park / related actions or use a Chrome command assigned to TabWall.
 

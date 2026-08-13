@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.37.2 使用者說明：儲存分頁與 Tab Group、空間畫布、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。" />
+  <meta name="description" content="TabWall 2.38.0 使用者說明：儲存分頁與 Tab Group、空間畫布、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.37.2</span>
+      <span>使用者說明 · v2.38.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -67,7 +67,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.37.2</span><span lang="en">Version 2.37.2</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.38.0</span><span lang="en">Version 2.38.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -344,8 +344,8 @@ https://wiki.example.com
           <li lang="en">Click the <strong>thumbnail</strong> to restore. Groups ask first.</li>
           <li lang="zh-Hant">點<strong>標題或中繼資料</strong>：複製已存網址（群組則複製成員網址）。</li>
           <li lang="en">Click the <strong>title or metadata</strong> to copy the saved URL (or member URLs for a group).</li>
-          <li lang="zh-Hant">點<strong>編輯</strong>：改 note／tags。Note 可點標題進入。</li>
-          <li lang="en">Click <strong>Edit</strong> for notes/tags. Notes also open from the title.</li>
+          <li lang="zh-Hant">點<strong>編輯</strong>：改顯示標題、note／tags 與上鎖設定。Note 可點標題進入。</li>
+          <li lang="en">Click <strong>Edit</strong> for display titles, notes/tags, and lock settings. Notes also open from the title.</li>
           <li lang="zh-Hant">點<strong>展開</strong>：看全尺寸快照。沒有全圖時顯示縮圖。快照裡用 <kbd>←</kbd>／<kbd>→</kbd> 切上一張／下一張。</li>
           <li lang="en">Click <strong>Expand</strong> for the full snapshot (thumbnail if none). Use <kbd>←</kbd> / <kbd>→</kbd> for previous / next.</li>
           <li lang="zh-Hant">點<strong>固定</strong>：只作用於頂層項目。工具列「已固定」是篩選，不改手動順序，也不寫進備份的篩選狀態。</li>
@@ -353,6 +353,14 @@ https://wiki.example.com
           <li lang="zh-Hant">點<strong>刪除</strong>：從牆移除。</li>
           <li lang="en">Click <strong>Delete</strong> to remove it from the wall.</li>
         </ul>
+        <h3 lang="zh-Hant">自訂顯示標題與原始名稱</h3>
+        <h3 lang="en">Display titles and subtitles</h3>
+        <p lang="zh-Hant">在編輯盒中設定「顯示標題」後，卡片主標題會改用自訂名稱，下方以小字保留分頁或群組的原始名稱。搜尋與 Option+/ 快速搜尋會同時比對自訂名稱與原始名稱。</p>
+        <p lang="en">Set a Display title in the edit box to replace the main title while keeping the original page or group title in a small subtitle line. Plain search and Option+/ search match both display and original titles.</p>
+        <h3 lang="zh-Hant">卡片上鎖與隱私（可選密碼）</h3>
+        <h3 lang="en">Card lock and privacy</h3>
+        <p lang="zh-Hant">分頁卡、Group、圖片卡、Sticker Note 及 Group 成員皆可在編輯盒勾選「上鎖」。上鎖後縮圖與快照會被鎖頭遮罩隱藏，避免他人直接看到畫面；還原分頁或編輯備註不需解鎖。解鎖狀態僅保留在本次打開分頁的記憶體中（關閉後自動重新上鎖）。可選填密碼（以 SHA-256 加鹽雜湊驗證），不設密碼時點擊鎖頭即可直接解鎖。</p>
+        <p lang="en">Tab cards, groups, image cards, notes, and group members can be locked from the edit box. Locking hides thumbnails and full snapshots with a lock overlay so passersby cannot see page contents. Restoring tabs and editing notes still work without unlocking. Unlocking lasts only for the current tab session (re-locks upon closing). An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately.</p>
         <h3 lang="zh-Hant">群組卡片</h3>
         <h3 lang="en">Group cards</h3>
         <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。群組卡有色條與淡色，方便和一般分頁區分。</p>
@@ -793,8 +801,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.37.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.37.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.38.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.38.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

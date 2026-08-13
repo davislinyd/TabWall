@@ -85,7 +85,7 @@
       const lower = q.toLowerCase();
       return list
         .filter((item) => {
-          const hay = [item.title, item.url, item.note, item.markdown, ...(item.tags || [])].join(' ').toLowerCase();
+          const hay = [item.title, item.displayTitle, item.url, item.note, item.markdown, ...(item.tags || [])].join(' ').toLowerCase();
           return hay.includes(lower);
         })
         .slice(0, MAX_RESULTS);
@@ -112,7 +112,7 @@
   }
 
   function previewMediaKind(item) {
-    if (!item) return '';
+    if (!item || item.locked) return '';
     if (item.kind === 'group') {
       const member = previewMember(item);
       if (!member) return '';
@@ -140,7 +140,7 @@
       };
     }
     return {
-      title: item.title || item.url || '',
+      title: (item.displayTitle && String(item.displayTitle).trim()) || item.title || item.url || '',
       url: item.kind === 'group' || item.kind === 'note' ? '' : item.url || '',
       note: item.kind === 'note' ? item.markdown || item.note || '' : item.note || '',
       tags: Array.isArray(item.tags) ? item.tags.filter(Boolean) : [],
@@ -151,7 +151,7 @@
       members: item.kind === 'group'
         ? (item.tabs || []).map((member) => ({
             id: member.id || '',
-            title: member.title || member.url || '',
+            title: (member.displayTitle && String(member.displayTitle).trim()) || member.title || member.url || '',
             url: member.url || '',
           }))
         : [],
@@ -318,7 +318,7 @@
             : item.favIconUrl
               ? `<img class="fav" src="${escapeHtml(item.favIconUrl)}" alt="" width="16" height="16">`
               : '<span class="fav fav-empty"></span>';
-          return `<button type="button" class="row" data-index="${index}" aria-selected="${index === selected ? 'true' : 'false'}">${icon}<span class="meta"><span class="title">${escapeHtml(item.title || item.url || '')}</span><span class="sub">${escapeHtml(rowLabel(item))}</span></span></button>`;
+          return `<button type="button" class="row" data-index="${index}" aria-selected="${index === selected ? 'true' : 'false'}">${icon}<span class="meta"><span class="title">${escapeHtml((item.displayTitle && String(item.displayTitle).trim()) || item.title || item.url || '')}</span><span class="sub">${escapeHtml(rowLabel(item))}</span></span></button>`;
         })
         .join('');
       listEl.querySelectorAll('img.fav').forEach((img) => {

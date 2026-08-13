@@ -39,11 +39,18 @@
           ? env.Media.mediaKeyNoteAttachment(m.id, m.attachments[0].id)
           : env.mediaKeyForMember(group.id, m.id);
         row.innerHTML = `
-          ${isNote ? `<div class="member-thumb note-member-thumb">${env.iconSvg('note')}</div>` : `<img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />`}
+          ${
+            isNote
+              ? `<div class="member-thumb note-member-thumb">${env.iconSvg('note')}</div>`
+              : env.isMediaLocked?.(group) || env.isMediaLocked?.(m)
+                ? `<button type="button" class="member-thumb media-lock-overlay" data-unlock-id="${escapeAttr((env.isMediaLocked?.(m) ? m : group).id)}">${env.iconSvg('lock')}</button>`
+                : `<img class="member-thumb lazy-thumb" alt="" data-media-key="${escapeAttr(mKey)}" />`
+          }
           <div class="member-body">
-            <div class="member-title" title="${escapeAttr(m.title || '')}">
-              ${escapeHtml(m.title || m.url || '')}
+            <div class="member-title" title="${escapeAttr(itemTitle(m))}">
+              ${escapeHtml(itemTitle(m))}
               ${storedOnly ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}</span>` : ''}
+              ${env.itemOriginalTitle?.(m) ? `<div class="title-original">${escapeHtml(env.itemOriginalTitle(m))}</div>` : ''}
             </div>
             <div class="member-url" title="${escapeAttr(isNote ? t('noteKind') : m.url || '')}">${escapeHtml(isNote ? t('noteKind') : m.url || '')}</div>
             ${storedOnly ? `<div class="note-preview">${env.escapeHtml(env.t('storedOnly'))}</div>` : ''}
@@ -63,15 +70,26 @@
           </div>
         `;
         env.observeThumb(row.querySelector('img.lazy-thumb'));
+        const unlockTarget = env.isMediaLocked?.(m) ? m : env.isMediaLocked?.(group) ? group : null;
+        row.querySelector('[data-unlock-id]')?.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (unlockTarget) env.requestUnlockItem?.(unlockTarget);
+        });
         const openMemberSnap = () => {
           if (isNote) {
             env.openStickerNoteEditor(m, { groupId: group.id });
             return;
           }
+          if (unlockTarget) {
+            env.requestUnlockItem?.(unlockTarget);
+            return;
+          }
           openLightbox(
             {
+              ...m,
               id: m.id,
-              title: m.title,
+              title: itemTitle(m),
               url: m.url,
               hasSnap: m.hasSnap,
               hasThumb: m.hasThumb,
@@ -80,7 +98,7 @@
           );
         };
         row.querySelector('.snap-btn').addEventListener('click', openMemberSnap);
-        row.querySelector('.member-thumb').addEventListener('click', openMemberSnap);
+        row.querySelector('.member-thumb')?.addEventListener('click', openMemberSnap);
         row.querySelector('.edit-m-btn').addEventListener('click', () => {
           if (isNote) env.openStickerNoteEditor(m, { groupId: group.id });
           else openMemberEditBox(group.id, m);
@@ -307,10 +325,13 @@
       .map((m) => ({
         key: `m:${group.id}:${m.id}`,
         mediaKey: env.mediaKeyForMember(group.id, m.id),
-        title: m.title || m.url || 'Untitled',
+        title: itemTitle(m),
+        originalTitle: env.itemOriginalTitle?.(m) || '',
         url: m.url || '',
         hasSnap: Boolean(m.hasSnap || m.snapshot),
         hasThumb: Boolean(m.hasThumb || m.thumbnail),
+        lockItem: m,
+        groupLockItem: group,
         restore: { type: 'member', groupId: group.id, memberId: m.id },
         fromOverview: true,
       }));
@@ -343,7 +364,7 @@
     }
     const cells = members.map((m) => {
       const isNote = m.kind === 'note';
-      const titleText = m.title || m.url || (isNote ? t('noteUntitled') : 'Untitled');
+      const titleText = itemTitle(m);
       const subText = isNote ? t('noteKind') : (m.url || '');
       if (isNote) {
         return `<button type="button" class="lb-group-cell" data-kind="note" data-member-id="${escapeAttr(m.id)}">
@@ -354,9 +375,12 @@
       }
       const mKey = env.mediaKeyForMember(group.id, m.id);
       const hasMedia = Boolean(m.hasThumb || m.thumbnail || m.hasSnap || m.snapshot);
-      const media = hasMedia
-        ? `<img class="lb-group-cell-media lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mKey)}" />`
-        : `<div class="lb-group-cell-media is-placeholder" aria-hidden="true"></div>`;
+      const mediaLocked = env.isMediaLocked?.(group) || env.isMediaLocked?.(m);
+      const media = mediaLocked
+        ? `<div class="lb-group-cell-media media-lock-overlay">${env.iconSvg('lock')}</div>`
+        : hasMedia
+          ? `<img class="lb-group-cell-media lazy-thumb" alt="" draggable="false" data-media-key="${escapeAttr(mKey)}" />`
+          : `<div class="lb-group-cell-media is-placeholder" aria-hidden="true"></div>`;
       return `<button type="button" class="lb-group-cell" data-kind="tab" data-member-id="${escapeAttr(m.id)}">
         ${media}
         <div class="lb-group-cell-title" title="${escapeAttr(titleText)}">${escapeHtml(titleText)}</div>
@@ -424,7 +448,11 @@
           : null;
       env.lightboxNav = { list, index };
       env.lbTitle.textContent = entry.title;
-      env.lbUrl.textContent = entry.url;
+      if (entry.originalTitle) {
+        env.lbUrl.textContent = entry.originalTitle + (entry.url ? ` · ${entry.url}` : '');
+      } else {
+        env.lbUrl.textContent = entry.url;
+      }
       env.lbImage.hidden = false;
       if (env.lbGroupMosaic) {
         env.lbGroupMosaic.hidden = true;
@@ -445,6 +473,21 @@
       const prevSrc = env.lbImage.src;
       if (prevSrc && prevSrc.startsWith('blob:') && ![...env.snapCache.values()].includes(prevSrc)) {
         // keep snap cache; don't revoke mid-nav of cached
+      }
+
+      const lockSource = lightboxLockSource(entry);
+      if (env.lbLockOverlay) {
+        if (lockSource) {
+          const label = env.t(lockSource.lockHash ? 'unlockWithPassword' : 'unlockTap');
+          env.lbLockOverlay.hidden = false;
+          env.lbLockOverlay.innerHTML = `${env.iconSvg('lock')}<span>${escapeHtml(label)}</span>`;
+          env.lbLockOverlay.onclick = () => env.requestUnlockItem?.(lockSource);
+          env.lbImage.removeAttribute('src');
+          env.lbSnapHint.hidden = true;
+          return;
+        }
+        env.lbLockOverlay.hidden = true;
+        env.lbLockOverlay.onclick = null;
       }
 
       let shownSnap = false;
@@ -534,10 +577,12 @@
           mediaKey: meta?.groupId
             ? env.mediaKeyForMember(meta.groupId, item.id)
             : env.mediaKeyForItem(item),
-          title: item.title || item.url || 'Untitled',
+          title: itemTitle(item),
+          originalTitle: env.itemOriginalTitle?.(item) || '',
           url: item.url || '',
           hasSnap: Boolean(item.hasSnap || item.snapshot),
           hasThumb: Boolean(item.hasThumb || item.thumbnail),
+          lockItem: item,
           restore: meta?.groupId
             ? { type: 'member', groupId: meta.groupId, memberId: item.id }
             : { type: 'tab', id: item.id },
@@ -622,10 +667,13 @@
             list.push({
               key: `m:${item.id}:${m.id}`,
               mediaKey: env.mediaKeyForMember(item.id, m.id),
-              title: m.title || m.url || 'Untitled',
+              title: itemTitle(m),
+              originalTitle: env.itemOriginalTitle?.(m) || '',
               url: m.url || '',
               hasSnap: Boolean(m.hasSnap || m.snapshot),
               hasThumb: Boolean(m.hasThumb || m.thumbnail),
+              lockItem: m,
+              groupLockItem: item,
               restore: { type: 'member', groupId: item.id, memberId: m.id },
             });
           }
@@ -633,10 +681,12 @@
           list.push({
             key: `t:${item.id}`,
             mediaKey: env.mediaKeyForItem(item),
-            title: item.title || item.url || 'Untitled',
+            title: itemTitle(item),
+            originalTitle: env.itemOriginalTitle?.(item) || '',
             url: item.url || '',
             hasSnap: Boolean(item.hasSnap || item.snapshot),
             hasThumb: Boolean(item.hasThumb || item.thumbnail),
+            lockItem: item,
             restore: { type: 'tab', id: item.id },
           });
         }
@@ -889,6 +939,7 @@
   async function loadList() {
     ensureBound('loadList');
 
+    try {
       const generation = ++env.canvasLoadGeneration;
       const [res, layoutRes] = await Promise.all([
         env.sendMessage({ type: 'GET_PARKED_ITEMS' }),
@@ -944,7 +995,11 @@
       env.renderGrid();
       env.scheduleInitialCanvasCenter();
       return true;
-
+    } catch (err) {
+      if (env.loadStatusEl) env.loadStatusEl.textContent = env.t('loadFailed');
+      env.uiLog('error', 'load', 'loadList failed', err?.message || err);
+      return false;
+    }
   }
 
   function initConflictUi() {
@@ -1240,6 +1295,7 @@
       env.editHeading.textContent = env.t('batchEditHeading');
       env.editItemTitle.textContent = env.t('batchCount', { n: list.length });
       env.editSub.textContent = env.t('batchEditSub');
+      fillEditTitleLockFields(null, { hidden: true });
       env.editNote.value = '';
       env.editTagList = [];
       env.editTagDraft.value = '';
@@ -1256,13 +1312,14 @@
     ensureBound('openEditBox');
 
       env.editingId = item.id;
-      env.editContext = { type: 'item' };
+      env.editContext = { type: 'item', hasPassword: Boolean(item.lockHash) };
       env.editHeading.textContent = env.t('editHeading');
       env.editItemTitle.textContent = env.itemTitle(item);
       env.editSub.textContent =
         item.kind === 'group'
           ? env.t('groupTabs', { n: (item.tabs || []).length })
           : item.url || '';
+      fillEditTitleLockFields(item);
       env.editNote.value = item.note || '';
       env.editTagList = Array.isArray(item.tags) ? [...item.tags] : [];
       env.editTagDraft.value = '';
@@ -1287,14 +1344,168 @@
 
   }
 
+  function lightboxLockSource(entry) {
+    if (entry?.lockItem && env.isMediaLocked?.(entry.lockItem)) return entry.lockItem;
+    if (entry?.groupLockItem && env.isMediaLocked?.(entry.groupLockItem)) return entry.groupLockItem;
+    return null;
+  }
+
+  function fillEditTitleLockFields(item, { hidden = false } = {}) {
+    const titleLabel = env.editDisplayTitle?.closest('label');
+    const lockToggle = env.editLockEnabled?.closest('label');
+    if (titleLabel) titleLabel.hidden = hidden;
+    if (lockToggle) lockToggle.hidden = hidden;
+    if (env.editDisplayTitle) {
+      env.editDisplayTitle.value = hidden ? '' : (item?.displayTitle || '');
+    }
+    if (env.editOriginalTitle) {
+      const original = hidden ? '' : (item?.title || '');
+      env.editOriginalTitle.hidden = hidden || !original;
+      env.editOriginalTitle.textContent = original
+        ? `${env.t('editOriginalTitle')}：${original}`
+        : '';
+    }
+    if (env.editLockEnabled) env.editLockEnabled.checked = Boolean(!hidden && item?.locked);
+    if (env.editLockPassword) env.editLockPassword.value = '';
+    if (env.editLockPasswordConfirm) env.editLockPasswordConfirm.value = '';
+    syncEditLockFields();
+    if (hidden && env.editLockFields) env.editLockFields.hidden = true;
+  }
+
+  function syncEditLockFields() {
+    if (!env.editLockFields || !env.editLockEnabled) return;
+    env.editLockFields.hidden = !env.editLockEnabled.checked;
+  }
+
+  function finishUnlockDialog(ok) {
+    const waiter = env.unlockWaiter;
+    env.unlockWaiter = null;
+    if (env.unlockBox) {
+      env.unlockBox.classList.remove('open');
+      env.unlockBox.setAttribute('aria-hidden', 'true');
+    }
+    if (env.unlockPassword) env.unlockPassword.value = '';
+    if (env.unlockError) {
+      env.unlockError.hidden = true;
+      env.unlockError.textContent = '';
+    }
+    syncFloatBackdrop();
+    waiter?.resolve?.(Boolean(ok));
+  }
+
+  function closeUnlockDialog() {
+    ensureBound('closeUnlockDialog');
+    finishUnlockDialog(false);
+  }
+
+  function openUnlockDialog(item) {
+    ensureBound('openUnlockDialog');
+    if (!env.unlockBox) return Promise.resolve(false);
+    if (env.unlockWaiter) finishUnlockDialog(false);
+    env.unlockContext = item;
+    return new Promise((resolve) => {
+      env.unlockWaiter = { resolve };
+      if (env.unlockError) {
+        env.unlockError.hidden = true;
+        env.unlockError.textContent = '';
+      }
+      if (env.unlockPassword) env.unlockPassword.value = '';
+      env.unlockBox.classList.add('open');
+      env.unlockBox.setAttribute('aria-hidden', 'false');
+      syncFloatBackdrop();
+      setTimeout(() => env.unlockPassword?.focus(), 0);
+    });
+  }
+
+  async function submitUnlockDialog() {
+    ensureBound('submitUnlockDialog');
+    const item = env.unlockContext;
+    if (!item) return finishUnlockDialog(false);
+    const ok = await env.verifyLockPassword?.(
+      env.unlockPassword?.value || '',
+      item.lockSalt || '',
+      item.lockHash || ''
+    );
+    if (!ok) {
+      if (env.unlockError) {
+        env.unlockError.hidden = false;
+        env.unlockError.textContent = env.t('unlockFailed');
+      }
+      return;
+    }
+    env.sessionUnlockedIds.add(item.id);
+    finishUnlockDialog(true);
+    env.renderGrid?.();
+    if (env.lightbox?.classList.contains('open') && env.lightboxNav) {
+      const { list, index } = env.lightboxNav;
+      showLightboxEntry(list[index], index, list);
+    }
+  }
+
+  async function requestUnlockItem(item) {
+    ensureBound('requestUnlockItem');
+    if (!item?.locked) return true;
+    if (env.sessionUnlockedIds.has(item.id)) return true;
+    if (!item.lockHash) {
+      env.sessionUnlockedIds.add(item.id);
+      env.renderGrid?.();
+      if (env.lightbox?.classList.contains('open') && env.lightboxNav) {
+        const { list, index } = env.lightboxNav;
+        showLightboxEntry(list[index], index, list);
+      }
+      return true;
+    }
+    return openUnlockDialog(item);
+  }
+
+  async function persistItemLock(item, patch) {
+    if (item.kind === 'note') {
+      return env.sendMessage({
+        type: 'UPDATE_NOTE',
+        noteId: item.id,
+        patch,
+      });
+    }
+    return env.sendMessage({
+      type: 'UPDATE_ITEM',
+      id: item.id,
+      ...patch,
+    });
+  }
+
+  async function toggleCardLock(item) {
+    ensureBound('toggleCardLock');
+    if (!item) return;
+    if (!item.locked) {
+      const res = await persistItemLock(item, { locked: true, lockSalt: '', lockHash: '' });
+      if (res?.ok) {
+        item.locked = true;
+        delete item.lockSalt;
+        delete item.lockHash;
+        const updated = res.item || res.tab || item;
+        const idx = env.allTabs.findIndex((candidate) => candidate.id === item.id);
+        if (idx !== -1) env.allTabs[idx] = { ...env.allTabs[idx], ...updated, locked: true };
+        env.renderGrid?.();
+      }
+      return;
+    }
+    if (env.isMediaLocked(item)) {
+      await requestUnlockItem(item);
+      return;
+    }
+    env.sessionUnlockedIds.delete(item.id);
+    env.renderGrid?.();
+  }
+
   function openMemberEditBox(groupId, member) {
     ensureBound('openMemberEditBox');
 
       env.editingId = member.id;
-      env.editContext = { type: 'member', groupId, memberId: member.id };
+      env.editContext = { type: 'member', groupId, memberId: member.id, hasPassword: Boolean(member.lockHash) };
       env.editHeading.textContent = env.t('editMemberHeading');
-      env.editItemTitle.textContent = member.title || member.url || 'Untitled';
+      env.editItemTitle.textContent = itemTitle(member);
       env.editSub.textContent = member.url || '';
+      fillEditTitleLockFields(member);
       env.editNote.value = member.note || '';
       env.editTagList = Array.isArray(member.tags) ? [...member.tags] : [];
       env.editTagDraft.value = '';
@@ -1365,6 +1576,7 @@
         env.tagsBox.classList.contains('open') ||
         env.helpBox.classList.contains('open') ||
         env.editBox.classList.contains('open') ||
+        (env.unlockBox && env.unlockBox.classList.contains('open')) ||
         env.membersBox.classList.contains('open') ||
         (env.stickerNoteBox && env.stickerNoteBox.classList.contains('open')) ||
         (env.dedupeBox && env.dedupeBox.classList.contains('open')) ||
@@ -1394,6 +1606,7 @@
       if (except !== 'tags') closeTagsBox(false);
       if (except !== 'help') closeHelpBox(false);
       if (except !== 'edit') closeEditBox();
+      if (except !== 'unlock') closeUnlockDialog();
       if (except !== 'members') closeMembersBox();
       if (except !== 'stickerNote') env.closeStickerNoteEditor();
       if (except !== 'dedupe') closeDedupeBox(false);
@@ -1732,6 +1945,13 @@
     openBatchEdit,
     closeEditBox,
     openMemberEditBox,
+    fillEditTitleLockFields,
+    syncEditLockFields,
+    openUnlockDialog,
+    closeUnlockDialog,
+    submitUnlockDialog,
+    requestUnlockItem,
+    toggleCardLock,
     placeEditBoxCentered,
     setupFloatDrag,
     anyFloatOpen,

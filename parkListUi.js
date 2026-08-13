@@ -43,6 +43,7 @@
             <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
             <button type="button" class="icon-btn lg members-btn" title="${escapeAttr(t('expandGroup'))}">${iconSvg('members')}<span>${escapeHtml(t('expandGroup'))}</span></button>
           </div>
+          <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
           <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
           <span class="group-badge">${escapeHtml(t('groupTabs', { n }))}</span>
@@ -55,6 +56,7 @@
               ${storedOnlyCount ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))} ×${storedOnlyCount}</span>` : ''}
             </div>
           </div>
+          ${originalTitleHtml(item)}
           <div class="url">${escapeHtml(t('groupTabs', { n }))}</div>
           <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
           ${note ? `<div class="note-preview">${env.escapeHtml(note)}</div>` : ''}
@@ -67,6 +69,7 @@
       `;
 
       card.querySelectorAll('img.lazy-thumb').forEach((img) => env.observeThumb(img));
+      wireMediaLockOverlay(card, item);
       appendGroupSearchHits(card, item);
 
       card.querySelector('.card-check').addEventListener('click', (e) => {
@@ -77,8 +80,16 @@
 
       bindMetaCopy(card.querySelector('.meta'), item);
 
+      card.querySelector('.lock-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        env.toggleCardLock?.(item);
+      });
+      card.querySelector('.pin-btn:not(.lock-btn)').addEventListener('click', (e) => {
+        e.stopPropagation();
+        env.togglePinned(item);
+      });
       card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-        if (e.target.closest('.card-actions, .delete-btn, .members-btn, .pin-btn, .card-check')) return;
+        if (e.target.closest('.card-actions, .delete-btn, .members-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
         if (env.dragState?.active) return;
         if (env.selectMode || env.isMultiSelectModifier(e)) {
           env.handleCardSelectClick(item.id, e);
@@ -94,10 +105,6 @@
       card.querySelector('.edit-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         env.openEditBox(item);
-      });
-      card.querySelector('.pin-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        env.togglePinned(item);
       });
       card.querySelector('.delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -137,11 +144,16 @@
       card.innerHTML = `
         <input type="checkbox" class="card-check" ${selectedIds.has(item.id) ? 'checked' : ''} aria-label="select" />
         <div class="thumb-wrap">
-          <img class="thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />
+          ${
+            env.isMediaLocked?.(item)
+              ? mediaLockOverlayHtml(item)
+              : `<img class="thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" />`
+          }
           <div class="card-actions">
             <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
             <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}<span>${escapeHtml(t('expand'))}</span></button>
           </div>
+          <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
           <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
         </div>
@@ -157,6 +169,7 @@
               ${storedOnly ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}</span>` : ''}
             </div>
           </div>
+          ${originalTitleHtml(item)}
           <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
           <div class="saved-at">${escapeHtml(t('savedAt', { time: savedAt }))}</div>
           ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${env.escapeHtml(note)}</div>` : ''}
@@ -170,6 +183,7 @@
 
       wireFavicon(card);
       env.observeThumb(card.querySelector('img.lazy-thumb'));
+      wireMediaLockOverlay(card, item);
       card.querySelector('.card-check').addEventListener('click', (e) => {
         e.stopPropagation();
         if (!env.selectMode) env.setSelectMode(true);
@@ -185,7 +199,12 @@
         if (env.selectMode) return;
         env.openEditBox(item);
       });
-      card.querySelector('.pin-btn').addEventListener('click', (e) => {
+      card.querySelector('.lock-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (env.selectMode) return;
+        env.toggleCardLock?.(item);
+      });
+      card.querySelector('.pin-btn:not(.lock-btn)').addEventListener('click', (e) => {
         e.stopPropagation();
         if (env.selectMode) return;
         env.togglePinned(item);
@@ -197,7 +216,7 @@
       });
       if (!isImage) bindMetaCopy(card.querySelector('.meta'), item);
       card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-        if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .card-check')) return;
+        if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
         if (env.dragState?.active) return;
         if (env.selectMode || env.isMultiSelectModifier(e)) {
           env.handleCardSelectClick(item.id, e);
@@ -236,15 +255,20 @@
       const storedOnlyCount = env.countStoredOnlyUrls(item);
 
       row.innerHTML = `
-        ${isNote
-          ? `<button type="button" class="row-thumb note-row-thumb" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('note')}</button>`
-          : `<img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />`}
+        ${
+          isNote
+            ? `<button type="button" class="row-thumb note-row-thumb" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('note')}</button>`
+            : env.isMediaLocked?.(item)
+              ? mediaLockOverlayHtml(item, 'row-thumb')
+              : `<img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />`
+        }
         <div class="row-main">
           <div class="title copy-hit" title="${escapeAttr(title)}">
             ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
             ${escapeHtml(title)}
             ${storedOnlyCount ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
           </div>
+          ${originalTitleHtml(item)}
           <div class="url copy-hit" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
           <div class="saved-at">${escapeHtml(t('savedAt', { time: formatSavedAt(item.savedAt) }))}</div>
         </div>
@@ -257,6 +281,7 @@
           }
         </div>
         <div class="row-actions">
+          <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
           <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
           ${
@@ -269,8 +294,10 @@
       `;
 
       env.observeThumb(row.querySelector('img.lazy-thumb'));
+      wireMediaLockOverlay(row, item);
       if (isGroup) appendGroupSearchHits(row, item);
-      row.querySelector('.row-thumb').addEventListener('click', (e) => {
+      row.querySelector('.row-thumb')?.addEventListener('click', (e) => {
+        if (e.currentTarget.classList.contains('media-lock-overlay')) return;
         if (env.selectMode || env.isMultiSelectModifier(e)) {
           env.handleCardSelectClick(item.id, e);
           return;
@@ -298,7 +325,12 @@
         if (isNote) env.openStickerNoteEditor(item);
         else env.openEditBox(item);
       });
-      row.querySelector('.pin-btn').addEventListener('click', (e) => {
+      row.querySelector('.lock-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (env.selectMode) return;
+        env.toggleCardLock?.(item);
+      });
+      row.querySelector('.pin-btn:not(.lock-btn)').addEventListener('click', (e) => {
         e.stopPropagation();
         if (env.selectMode) return;
         env.togglePinned(item);
@@ -496,6 +528,8 @@
   function groupCoverHtml(item, { canvas = false } = {}) {
     ensureBound('groupCoverHtml');
 
+      if (env.isMediaLocked?.(item)) return mediaLockOverlayHtml(item);
+
       const mediaClass = canvas ? ' canvas-thumb' : '';
       const mediaAttribute = canvas ? ' data-canvas-media="true"' : '';
       const mediaAvailability = (member) => canvas
@@ -540,6 +574,8 @@
         delete: '<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path>',
         restore: '<path d="M5 8h9a5 5 0 1 1-3.5 8.5L8 14"></path><path d="M5 8V4M5 8l4-2"></path>',
         copy: '<rect x="8" y="8" width="11" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"></path>',
+        lock: '<rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path>',
+        unlock: '<rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0"></path>',
         snapshot: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle><path d="M8 5 9.2 3h5.6L16 5"></path>',
         close: '<path d="m6 6 12 12M18 6 6 18"></path>',
         note: '<path d="M5 4h14v16H5z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>',
@@ -551,11 +587,43 @@
   function itemTitle(item) {
     ensureBound('itemTitle');
 
+      const display = typeof item?.displayTitle === 'string' ? item.displayTitle.trim() : '';
+      if (display) return display;
       if (item.kind === 'group') return item.title || env.t('unnamedGroup');
       if (item.kind === 'note') return item.title || env.t('noteUntitled');
       if (item.cardSource === 'image') return item.title || env.t('imageCardUntitled');
       return item.title || item.url || 'Untitled';
 
+  }
+
+  function itemOriginalTitle(item) {
+    const display = typeof item?.displayTitle === 'string' ? item.displayTitle.trim() : '';
+    const original = typeof item?.title === 'string' ? item.title.trim() : '';
+    if (!display || !original || display === original) return '';
+    return original;
+  }
+
+  function originalTitleHtml(item) {
+    const original = itemOriginalTitle(item);
+    if (!original) return '';
+    return `<div class="title-original" title="${escapeAttr(original)}">${escapeHtml(original)}</div>`;
+  }
+
+  function mediaLockOverlayHtml(item, extraClass = '') {
+    if (!env.isMediaLocked?.(item)) return '';
+    const needsPassword = Boolean(item.lockHash);
+    const label = env.t(needsPassword ? 'unlockWithPassword' : 'unlockTap');
+    return `<button type="button" class="media-lock-overlay${extraClass ? ` ${extraClass}` : ''}" data-unlock-id="${escapeAttr(item.id)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg('lock')}<span>${escapeHtml(label)}</span></button>`;
+  }
+
+  function wireMediaLockOverlay(root, item) {
+    root?.querySelectorAll?.('[data-unlock-id]')?.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        env.requestUnlockItem?.(item);
+      });
+    });
   }
 
   function formatSavedAt(ts) {
@@ -938,5 +1006,5 @@
 
   }
 
-  global.TabWallListUi = { bind, createGroupCard, createCard, createRow, renderGrid, renderEmpty, wireFavicon, appendGroupSearchHits, groupCoverHtml, iconSvg, itemTitle, formatSavedAt, beginCardDrag, endCardDrag, attachCardDrag, onCardPointerMove, updateStackHoverState, bindMetaCopy };
+  global.TabWallListUi = { bind, createGroupCard, createCard, createRow, renderGrid, renderEmpty, wireFavicon, appendGroupSearchHits, groupCoverHtml, iconSvg, itemTitle, itemOriginalTitle, formatSavedAt, beginCardDrag, endCardDrag, attachCardDrag, onCardPointerMove, updateStackHoverState, bindMetaCopy };
 })(typeof self !== 'undefined' ? self : globalThis);

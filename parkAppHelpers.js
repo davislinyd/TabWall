@@ -1039,6 +1039,10 @@
         id: item.id,
         kind: item.kind,
         title: item.title,
+        displayTitle: item.displayTitle || '',
+        locked: Boolean(item.locked),
+        lockHash: item.lockHash || '',
+        unlocked: Boolean(env.sessionUnlockedIds?.has(item.id)),
         url: item.url,
         note: item.note,
         tags: item.tags,
@@ -1050,7 +1054,16 @@
           ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
           : undefined,
         tabs: item.kind === 'group'
-          ? (item.tabs || []).map((member) => [member.id, member.title, member.url, member.hasThumb, member.hasSnap])
+          ? (item.tabs || []).map((member) => [
+            member.id,
+            member.title,
+            member.displayTitle || '',
+            member.url,
+            member.hasThumb,
+            member.hasSnap,
+            Boolean(member.locked),
+            Boolean(env.sessionUnlockedIds?.has(member.id)),
+          ])
           : undefined,
         notes: item.kind === 'group'
           ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
@@ -1059,6 +1072,63 @@
         locale: env.settings.locale,
       });
 
+  }
+
+  function bytesToHex(bytes) {
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  function hexToBytes(hex) {
+    const clean = String(hex || '');
+    const out = new Uint8Array(Math.floor(clean.length / 2));
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+
+  function normalizeDisplayTitleValue(value, originalTitle) {
+    const display = String(value || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim();
+    const original = String(originalTitle || '').trim();
+    if (!display || display === original) return '';
+    return display.slice(0, 2048);
+  }
+
+  async function hashLockPassword(password, saltHex) {
+    const salt = saltHex && /^[0-9a-f]{32}$/i.test(saltHex)
+      ? saltHex.toLowerCase()
+      : bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+    const encoded = new TextEncoder().encode(String(password || ''));
+    const saltBytes = hexToBytes(salt);
+    const payload = new Uint8Array(saltBytes.length + 1 + encoded.length);
+    payload.set(saltBytes, 0);
+    payload[saltBytes.length] = 0;
+    payload.set(encoded, saltBytes.length + 1);
+    const digest = await crypto.subtle.digest('SHA-256', payload);
+    return { salt, hash: bytesToHex(new Uint8Array(digest)) };
+  }
+
+  async function verifyLockPassword(password, saltHex, hashHex) {
+    if (!saltHex || !hashHex) return String(password || '') === '';
+    const { hash } = await hashLockPassword(password, saltHex);
+    return hash === String(hashHex).toLowerCase();
+  }
+
+  async function collectLockPatchFromFields({ locked, password, confirm, hasPassword } = {}) {
+    if (!locked) return { locked: false };
+    const pw = String(password || '');
+    const confirmPw = String(confirm || '');
+    if (pw || confirmPw) {
+      if (pw !== confirmPw) return { error: 'lockPasswordMismatch' };
+      if (!pw) return { locked: true, lockSalt: '', lockHash: '' };
+      const { salt, hash } = await hashLockPassword(pw);
+      return { locked: true, lockSalt: salt, lockHash: hash };
+    }
+    if (hasPassword) return { locked: true };
+    return { locked: true, lockSalt: '', lockHash: '' };
+  }
+
+  function isItemMediaLocked(item, unlockedIds) {
+    if (!item?.locked) return false;
+    return !unlockedIds?.has?.(item.id);
   }
 
   function classifyStoredUrl(url) {
@@ -1140,5 +1210,5 @@
 
   }
 
-  global.TabWallAppHelpers = { bind, getParentOrigin, uiLog, classifyStoredUrl, isStoredOnlyUrl, isImageCard, countStoredOnlyUrls, formatNoteBytes, formatNoteMediaError, postToParent,  refreshDiagLogPanel, canvasStoreSnapshot, updateCanvasSyncStatus, handleCanvasStoreChange, ensureCanvasStore, closeStandaloneTab, requestHostClose, sendMessage, syncQuickCaptureAvailability, setClusterKeepMode, sortTabs, copyTextFallback, copySavedLink, showCopyToast, handleCardSelectClick, getCanvasSearchContext, canvasSearchLayoutFor, syncCanvasIndexUi, renderCanvasStackIndex, focusCanvasItem, restoreMember, flipCards, findStackTargetAt, cleanupCardDragVisual, normalizeParkedList, normalizeNoteProjection, detachCardDragListeners, togglePinned, normalizeCanvasLayoutLocal, normalizeCanvasConnectionsLocal, wireStickerAttachmentImages, canvasSelectNode, moveCanvasSearchPreview, applyCanvasSearchPointerPreview, finishCanvasSearchPointer, canvasMoveSelected, arrangeCanvas, canvasNodeWorldRect, canvasTargetAt, resetCanvasView, cancelCanvasPointer, setCanvasActiveTool, gridNodeRenderKey, scheduleLoadList };
+  global.TabWallAppHelpers = { bind, getParentOrigin, uiLog, classifyStoredUrl, isStoredOnlyUrl, isImageCard, countStoredOnlyUrls, formatNoteBytes, formatNoteMediaError, postToParent,  refreshDiagLogPanel, canvasStoreSnapshot, updateCanvasSyncStatus, handleCanvasStoreChange, ensureCanvasStore, closeStandaloneTab, requestHostClose, sendMessage, syncQuickCaptureAvailability, setClusterKeepMode, sortTabs, copyTextFallback, copySavedLink, showCopyToast, handleCardSelectClick, getCanvasSearchContext, canvasSearchLayoutFor, syncCanvasIndexUi, renderCanvasStackIndex, focusCanvasItem, restoreMember, flipCards, findStackTargetAt, cleanupCardDragVisual, normalizeParkedList, normalizeNoteProjection, detachCardDragListeners, togglePinned, normalizeCanvasLayoutLocal, normalizeCanvasConnectionsLocal, wireStickerAttachmentImages, canvasSelectNode, moveCanvasSearchPreview, applyCanvasSearchPointerPreview, finishCanvasSearchPointer, canvasMoveSelected, arrangeCanvas, canvasNodeWorldRect, canvasTargetAt, resetCanvasView, cancelCanvasPointer, setCanvasActiveTool, gridNodeRenderKey, scheduleLoadList, normalizeDisplayTitleValue, hashLockPassword, verifyLockPassword, collectLockPatchFromFields, isItemMediaLocked };
 })(typeof self !== 'undefined' ? self : globalThis);

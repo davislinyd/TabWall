@@ -668,6 +668,25 @@ test('Canvas search relations and connection gestures have a stable UI contract'
   assert.match(HTML_SOURCE, /data-i18n-aria="canvasConnectionsLabel"/);
 });
 
+test('Edit box exposes display title, lock controls, and unlock dialog', () => {
+  assert.match(HTML_MARKUP, /id="editDisplayTitle"/);
+  assert.match(HTML_MARKUP, /id="editLockEnabled"/);
+  assert.match(HTML_MARKUP, /id="editLockPassword"/);
+  assert.match(HTML_MARKUP, /id="unlockBox"/);
+  assert.match(HTML_MARKUP, /id="unlockPassword"/);
+  assert.match(HTML_MARKUP, /id="stickerNoteLockEnabled"/);
+  assert.match(HTML_MARKUP, /id="lbLockOverlay"/);
+  assert.match(I18N_SOURCE, /editDisplayTitle: '顯示標題'/);
+  assert.match(I18N_SOURCE, /editDisplayTitle: 'Display title'/);
+  assert.match(I18N_SOURCE, /lockCard: '上鎖（隱藏縮圖與快照）'/);
+  assert.match(I18N_SOURCE, /unlockTitle: 'Unlock card'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function requestUnlockItem\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function toggleCardLock\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function itemOriginalTitle\(/);
+  assert.match(CSS_SOURCE, /\.media-lock-overlay/);
+  assert.match(CSS_SOURCE, /\.title-original/);
+});
+
 test('Canvas display geometry and connection endpoints use the four side handles', () => {
   // Display-scale / default position math lives in parkCanvasGeometry.js (v2.29.5+)
   assert.match(CANVAS_GEOM_SOURCE, /const CANVAS_NODE_DISPLAY_SCALE = 1\.1/);
@@ -826,3 +845,15 @@ test('Canvas fit actions use visible card bounds and preserve the viewport schem
   assert.match(PARK_BEHAVIOR_FLAT, /if \(action === 'reset'\) resetCanvasView\(\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /if \(canvasZoomMenu && !canvasZoomMenu\.hidden\)/);
 });
+
+test('All scripts and stylesheets loaded in park.html are in manifest web_accessible_resources', () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  const accessible = new Set(manifest.web_accessible_resources?.flatMap((entry) => entry.resources) || []);
+  const scriptMatches = [...HTML_MARKUP.matchAll(/<script\s+src="([^"]+)"/g)].map((m) => m[1]);
+  for (const script of scriptMatches) {
+    assert.ok(accessible.has(script), `Missing script in web_accessible_resources: ${script}`);
+  }
+  assert.ok(accessible.has('park.html'));
+  assert.ok(accessible.has('park.css'));
+});
+

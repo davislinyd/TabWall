@@ -195,6 +195,10 @@ const canvasAddNoteBtn = document.getElementById('canvasAddNoteBtn');
 const stickerNoteBox = document.getElementById('stickerNoteBox');
 const stickerNoteDrag = document.getElementById('stickerNoteDrag');
 const stickerNoteTitle = document.getElementById('stickerNoteTitle');
+const stickerNoteLockEnabled = document.getElementById('stickerNoteLockEnabled');
+const stickerNoteLockFields = document.getElementById('stickerNoteLockFields');
+const stickerNoteLockPassword = document.getElementById('stickerNoteLockPassword');
+const stickerNoteLockPasswordConfirm = document.getElementById('stickerNoteLockPasswordConfirm');
 const stickerNoteMarkdown = document.getElementById('stickerNoteMarkdown');
 const stickerNotePreview = document.getElementById('stickerNotePreview');
 const stickerNoteFile = document.getElementById('stickerNoteFile');
@@ -408,6 +412,19 @@ const editTagDraft = document.getElementById('editTagDraft');
 const editCancel = document.getElementById('editCancel');
 const editSave = document.getElementById('editSave');
 const editCloseX = document.getElementById('editCloseX');
+const editDisplayTitle = document.getElementById('editDisplayTitle');
+const editOriginalTitle = document.getElementById('editOriginalTitle');
+const editLockEnabled = document.getElementById('editLockEnabled');
+const editLockFields = document.getElementById('editLockFields');
+const editLockPassword = document.getElementById('editLockPassword');
+const editLockPasswordConfirm = document.getElementById('editLockPasswordConfirm');
+const unlockBox = document.getElementById('unlockBox');
+const unlockPassword = document.getElementById('unlockPassword');
+const unlockError = document.getElementById('unlockError');
+const unlockCancel = document.getElementById('unlockCancel');
+const unlockSubmit = document.getElementById('unlockSubmit');
+const unlockCloseX = document.getElementById('unlockCloseX');
+const lbLockOverlay = document.getElementById('lbLockOverlay');
 
 const membersBox = document.getElementById('membersBox');
 const membersDrag = document.getElementById('membersDrag');
@@ -419,6 +436,7 @@ const membersDelete = document.getElementById('membersDelete');
 
 /** @type {Array<any>} */
 let allTabs = []; // ParkItem[] (kind tab | group | note)
+const sessionUnlockedIds = new Set();
 /** Store-owned read projection; canvas mutations must go through canvasStore. */
 let canvasLayout = {
   version: CANVAS_LAYOUT_VERSION,
@@ -500,6 +518,10 @@ CanvasRender.bind({
   iconSvg: (name) => iconSvg(name),
   groupCoverHtml: (item, opts) => groupCoverHtml(item, opts),
   itemTitle: (item) => itemTitle(item),
+  itemOriginalTitle: (item) => itemOriginalTitle(item),
+  isMediaLocked: (item) => isMediaLocked(item),
+  requestUnlockItem: (item) => requestUnlockItem(item),
+  sessionUnlockedIds: () => sessionUnlockedIds,
   formatSavedAt: (ts) => formatSavedAt(ts),
   domainOf: (url) => domainOf(url),
   mediaKeyForItem: (item) => mediaKeyForItem(item),
@@ -714,11 +736,18 @@ function bindPanelModules() {
     "disconnectCanvasMediaObserver": () => disconnectCanvasMediaObserver,
     "domainOf": () => domainOf,
     "DRAG_THRESHOLD": () => DRAG_THRESHOLD,
+    "collectLockPatchFromFields": () => collectLockPatchFromFields,
     "editBox": () => editBox,
     "editChips": () => editChips,
+    "editDisplayTitle": () => editDisplayTitle,
     "editHeading": () => editHeading,
     "editItemTitle": () => editItemTitle,
+    "editLockEnabled": () => editLockEnabled,
+    "editLockFields": () => editLockFields,
+    "editLockPassword": () => editLockPassword,
+    "editLockPasswordConfirm": () => editLockPasswordConfirm,
     "editNote": () => editNote,
+    "editOriginalTitle": () => editOriginalTitle,
     "editSub": () => editSub,
     "editTagDraft": () => editTagDraft,
     "ensureCanvasStore": () => ensureCanvasStore,
@@ -746,6 +775,7 @@ function bindPanelModules() {
     "groupCoverHtml": () => groupCoverHtml,
     "handleCanvasContextMenuAction": () => handleCanvasContextMenuAction,
     "handleCardSelectClick": () => handleCardSelectClick,
+    "hashLockPassword": () => hashLockPassword,
     "helpBox": () => helpBox,
     "helpBtn": () => helpBtn,
     "iconSvg": () => iconSvg,
@@ -764,14 +794,17 @@ function bindPanelModules() {
     "isCanvasContextMenuOpen": () => isCanvasContextMenuOpen,
     "isCanvasSearchPreviewActive": () => isCanvasSearchPreviewActive,
     "isImageCard": () => isImageCard,
+    "isMediaLocked": () => isMediaLocked,
     "isMultiSelectModifier": () => isMultiSelectModifier,
     "isStoredOnlyUrl": () => isStoredOnlyUrl,
     "isTypingTarget": () => isTypingTarget,
+    "itemOriginalTitle": () => itemOriginalTitle,
     "itemTitle": () => itemTitle,
     "lbBack": () => lbBack,
     "lbCounter": () => lbCounter,
     "lbGroupMosaic": () => lbGroupMosaic,
     "lbImage": () => lbImage,
+    "lbLockOverlay": () => lbLockOverlay,
     "lbManageMembers": () => lbManageMembers,
     "lbNext": () => lbNext,
     "lbPrev": () => lbPrev,
@@ -858,6 +891,7 @@ function bindPanelModules() {
     "resetCanvasNotePlacement": () => resetCanvasNotePlacement,
     "resetCanvasView": () => resetCanvasView,
     "restoreItem": () => restoreItem,
+    "requestUnlockItem": () => requestUnlockItem,
     "restoreMember": () => restoreMember,
     "runCanvasNodeAction": () => runCanvasNodeAction,
     "runLocalAutoBackup": () => runLocalAutoBackup,
@@ -869,6 +903,7 @@ function bindPanelModules() {
     "SearchQuery": () => SearchQuery,
     "selectModeBtn": () => selectModeBtn,
     "sendMessage": () => sendMessage,
+    "sessionUnlockedIds": () => sessionUnlockedIds,
     "setCanvasActiveTool": () => setCanvasActiveTool,
     "setCanvasIndexFilter": () => setCanvasIndexFilter,
     "setCanvasSelection": () => setCanvasSelection,
@@ -902,6 +937,10 @@ function bindPanelModules() {
     "stickerNoteSave": () => stickerNoteSave,
     "stickerNoteTagDraft": () => stickerNoteTagDraft,
     "stickerNoteTitle": () => stickerNoteTitle,
+    "stickerNoteLockEnabled": () => stickerNoteLockEnabled,
+    "stickerNoteLockFields": () => stickerNoteLockFields,
+    "stickerNoteLockPassword": () => stickerNoteLockPassword,
+    "stickerNoteLockPasswordConfirm": () => stickerNoteLockPasswordConfirm,
     "suppressCanvasNodeClick": () => suppressCanvasNodeClick,
     "syncAutoBackupUi": () => syncAutoBackupUi,
     "syncCanvasOrganizeUi": () => syncCanvasOrganizeUi,
@@ -919,6 +958,7 @@ function bindPanelModules() {
     "themeBtn": () => themeBtn,
     "toggleCanvasZoomMenu": () => toggleCanvasZoomMenu,
     "toggleHeaderPopover": () => toggleHeaderPopover,
+    "toggleCardLock": () => toggleCardLock,
     "togglePinned": () => togglePinned,
     "toggleSelect": () => toggleSelect,
     "UI_LOG_MAX": () => UI_LOG_MAX,
@@ -929,7 +969,14 @@ function bindPanelModules() {
     "updateCanvasNodeSelection": () => updateCanvasNodeSelection,
     "updateCanvasTransform": () => updateCanvasTransform,
     "updateGridSelectionUi": () => updateGridSelectionUi,
+    "unlockBox": () => unlockBox,
+    "unlockCancel": () => unlockCancel,
+    "unlockCloseX": () => unlockCloseX,
+    "unlockError": () => unlockError,
+    "unlockPassword": () => unlockPassword,
+    "unlockSubmit": () => unlockSubmit,
     "updateSavedBadge": () => updateSavedBadge,
+    "verifyLockPassword": () => verifyLockPassword,
     "versionBadge": () => versionBadge,
     "viewModeBtn": () => viewModeBtn,
     "viewModeCanvasIcon": () => viewModeCanvasIcon,
@@ -978,6 +1025,8 @@ function bindPanelModules() {
     "editContext": { get: () => editContext, set: (v) => { editContext = v; } },
     "editingId": { get: () => editingId, set: (v) => { editingId = v; } },
     "editTagList": { get: () => editTagList, set: (v) => { editTagList = v; } },
+    "unlockContext": { get: () => unlockContext, set: (v) => { unlockContext = v; } },
+    "unlockWaiter": { get: () => unlockWaiter, set: (v) => { unlockWaiter = v; } },
     "expandedId": { get: () => expandedId, set: (v) => { expandedId = v; } },
     "expandedMeta": { get: () => expandedMeta, set: (v) => { expandedMeta = v; } },
     "gridNodeIsList": { get: () => gridNodeIsList, set: (v) => { gridNodeIsList = v; } },
@@ -1103,6 +1152,8 @@ let expandedMeta = null;
 let lightboxNav = null;
 /** @type {string|null} */
 let editingId = null;
+let unlockContext = null;
+let unlockWaiter = null;
 let stickerNoteContext = null;
 let stickerNoteTagList = [];
 let stickerNoteDraftAttachments = [];
@@ -1712,6 +1763,10 @@ document.addEventListener('keydown', (e) => {
       closeImportPreview();
       return;
     }
+    if (unlockBox?.classList.contains('open')) {
+      WorkspaceUi.closeUnlockDialog();
+      return;
+    }
     if (editBox.classList.contains('open')) {
       closeEditBox();
       return;
@@ -1906,6 +1961,20 @@ const SEARCH_HIT_LIMIT = 8;
 function appendGroupSearchHits(...args) { return ListUi.appendGroupSearchHits(...args); }
 
 function itemTitle(...args) { return ListUi.itemTitle(...args); }
+
+function itemOriginalTitle(...args) { return ListUi.itemOriginalTitle(...args); }
+
+function hashLockPassword(...args) { return AppHelpers.hashLockPassword(...args); }
+
+function verifyLockPassword(...args) { return AppHelpers.verifyLockPassword(...args); }
+
+function collectLockPatchFromFields(...args) { return AppHelpers.collectLockPatchFromFields(...args); }
+
+function isMediaLocked(item) { return AppHelpers.isItemMediaLocked(item, sessionUnlockedIds); }
+
+function requestUnlockItem(...args) { return WorkspaceUi.requestUnlockItem(...args); }
+
+function toggleCardLock(...args) { return WorkspaceUi.toggleCardLock(...args); }
 
 function buildLightboxNavList(...args) { return WorkspaceUi.buildLightboxNavList(...args); }
 
@@ -2297,17 +2366,42 @@ function closeEditBox(...args) { return WorkspaceUi.closeEditBox(...args); }
 
 editCancel.addEventListener('click', closeEditBox);
 editCloseX.addEventListener('click', closeEditBox);
+editLockEnabled?.addEventListener('change', () => WorkspaceUi.syncEditLockFields());
+unlockCancel?.addEventListener('click', () => WorkspaceUi.closeUnlockDialog());
+unlockCloseX?.addEventListener('click', () => WorkspaceUi.closeUnlockDialog());
+unlockSubmit?.addEventListener('click', () => WorkspaceUi.submitUnlockDialog());
+unlockPassword?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    WorkspaceUi.submitUnlockDialog();
+  }
+});
+stickerNoteLockEnabled?.addEventListener('change', () => {
+  if (stickerNoteLockFields) stickerNoteLockFields.hidden = !stickerNoteLockEnabled.checked;
+});
 
 editSave.addEventListener('click', async () => {
   if (!editContext) return;
   commitTagDraft();
   if (editContext.type === 'member') {
+    const lockPatch = await collectLockPatchFromFields({
+      locked: Boolean(editLockEnabled?.checked),
+      password: editLockPassword?.value || '',
+      confirm: editLockPasswordConfirm?.value || '',
+      hasPassword: Boolean(editContext.hasPassword),
+    });
+    if (lockPatch.error) {
+      editSub.textContent = t(lockPatch.error);
+      return;
+    }
     const res = await sendMessage({
       type: 'UPDATE_GROUP_MEMBER',
       groupId: editContext.groupId,
       memberId: editContext.memberId,
       note: editNote.value,
       tags: [...editTagList],
+      displayTitle: editDisplayTitle?.value || '',
+      ...lockPatch,
     });
     if (res.ok) {
       closeEditBox();
@@ -2340,11 +2434,23 @@ editSave.addEventListener('click', async () => {
     return;
   }
   if (!editingId) return;
+  const lockPatch = await collectLockPatchFromFields({
+    locked: Boolean(editLockEnabled?.checked),
+    password: editLockPassword?.value || '',
+    confirm: editLockPasswordConfirm?.value || '',
+    hasPassword: Boolean(editContext.hasPassword),
+  });
+  if (lockPatch.error) {
+    editSub.textContent = t(lockPatch.error);
+    return;
+  }
   const res = await sendMessage({
     type: 'UPDATE_ITEM',
     id: editingId,
     note: editNote.value,
     tags: [...editTagList],
+    displayTitle: editDisplayTitle?.value || '',
+    ...lockPatch,
   });
   if (res.ok && (res.item || res.tab)) {
     const updated = res.item || res.tab;
@@ -3052,13 +3158,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
 initCanvasInteractions();
 initCanvasRailResize();
 
-initSettingsUi().then(async () => {
-  if (Media?.openDb) Media.openDb().catch(() => {});
-  await loadList();
-  maybeCatchUpAutoBackup().catch(() => {});
-  try {
-    window.focus();
-  } catch {
-    // ignore
-  }
-});
+initSettingsUi()
+  .catch((err) => {
+    uiLog('error', 'init', 'settings init failed', err?.message || err);
+  })
+  .then(async () => {
+    if (Media?.openDb) Media.openDb().catch(() => {});
+    try {
+      await loadList();
+    } catch (err) {
+      if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
+      uiLog('error', 'load', 'loadList failed', err?.message || err);
+    }
+    maybeCatchUpAutoBackup().catch(() => {});
+    try {
+      window.focus();
+    } catch {
+      // ignore
+    }
+  });

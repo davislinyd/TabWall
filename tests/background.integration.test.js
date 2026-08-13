@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.37.1');
+  assert.equal(MANIFEST.version, '2.38.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -1152,6 +1152,43 @@ test('BATCH_UPDATE_ITEMS appends unique note lines and merges tags', async () =>
   const afterEmpty = (await runtime.api.getParkedItems()).find((item) => item.id === ITEM_ID);
   assert.equal(afterEmpty.note, 'existing line\nkeep me\nnew line');
   assert.deepEqual([...afterEmpty.tags], ['old', 'keep', 'new']);
+});
+
+test('UPDATE_ITEM persists displayTitle and lock fields through normalize', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  const salted = await dispatchMessage(runtime, {
+    type: 'UPDATE_ITEM',
+    id: ITEM_ID,
+    displayTitle: 'BBB',
+    locked: true,
+    lockSalt: 'aa'.repeat(16),
+    lockHash: 'bb'.repeat(32),
+  });
+  assert.equal(salted.ok, true);
+  assert.equal(salted.item.displayTitle, 'BBB');
+  assert.equal(salted.item.title, ITEM_ID);
+  assert.equal(salted.item.locked, true);
+  assert.equal(salted.item.lockSalt, 'aa'.repeat(16));
+  assert.equal(salted.item.lockHash, 'bb'.repeat(32));
+
+  const sameTitle = await dispatchMessage(runtime, {
+    type: 'UPDATE_ITEM',
+    id: ITEM_ID,
+    displayTitle: ITEM_ID,
+  });
+  assert.equal(sameTitle.ok, true);
+  assert.equal(sameTitle.item.displayTitle, undefined);
+
+  const unlocked = await dispatchMessage(runtime, {
+    type: 'UPDATE_ITEM',
+    id: ITEM_ID,
+    locked: false,
+  });
+  assert.equal(unlocked.ok, true);
+  assert.equal(unlocked.item.locked, undefined);
+  assert.equal(unlocked.item.lockHash, undefined);
 });
 
 test('legacy items default top-level pinned to false and update keeps order', async () => {

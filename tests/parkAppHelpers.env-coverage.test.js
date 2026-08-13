@@ -54,7 +54,22 @@ function bindPanelRoRwKeys() {
 }
 
 function loadAppHelpers() {
-  const sandbox = { self: null, console, Date, String, Number, Object, Array, JSON, Math, Error, URL };
+  const sandbox = {
+    self: null,
+    console,
+    Date,
+    String,
+    Number,
+    Object,
+    Array,
+    JSON,
+    Math,
+    Error,
+    URL,
+    crypto,
+    TextEncoder,
+    Uint8Array,
+  };
   sandbox.self = sandbox;
   sandbox.window = { location: { ancestorOrigins: undefined } };
   sandbox.document = { referrer: '' };
@@ -302,4 +317,33 @@ test('AppHelpers.bind + uiLog uses live uiLogBuffer via env (real module path)',
   assert.equal(buffer.length, 3);
   assert.equal(buffer[0].tag, 't2');
   assert.equal(buffer[2].tag, 't4');
+});
+
+test('hashLockPassword / verifyLockPassword / collectLockPatchFromFields', async () => {
+  const H = loadAppHelpers();
+  const { salt, hash } = await H.hashLockPassword('secret');
+  assert.equal(salt.length, 32);
+  assert.equal(hash.length, 64);
+  assert.equal(await H.verifyLockPassword('secret', salt, hash), true);
+  assert.equal(await H.verifyLockPassword('wrong', salt, hash), false);
+  assert.equal(await H.verifyLockPassword('', '', ''), true);
+  assert.equal(await H.verifyLockPassword('x', '', ''), false);
+  assert.equal(H.isItemMediaLocked({ locked: true }, new Set()), true);
+  assert.equal(H.isItemMediaLocked({ locked: true, id: 'a' }, new Set(['a'])), false);
+  assert.equal(H.isItemMediaLocked({ locked: false, id: 'a' }, new Set()), false);
+  assert.equal(H.normalizeDisplayTitleValue('BBB', 'AAA'), 'BBB');
+  assert.equal(H.normalizeDisplayTitleValue('AAA', 'AAA'), '');
+  assert.equal(H.normalizeDisplayTitleValue('  ', 'AAA'), '');
+
+  const keep = await H.collectLockPatchFromFields({ locked: true, hasPassword: true });
+  assert.equal(keep.locked, true);
+  assert.equal('lockSalt' in keep, false);
+  const clear = await H.collectLockPatchFromFields({ locked: false });
+  assert.equal(clear.locked, false);
+  const mismatch = await H.collectLockPatchFromFields({
+    locked: true,
+    password: 'a',
+    confirm: 'b',
+  });
+  assert.equal(mismatch.error, 'lockPasswordMismatch');
 });

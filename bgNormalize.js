@@ -11,7 +11,7 @@ function normalizeTabItem(raw) {
   const hasInlineThumb = typeof raw.thumbnail === 'string' && raw.thumbnail.startsWith('data:');
   const hasInlineSnap = typeof raw.snapshot === 'string' && raw.snapshot.startsWith('data:');
   const tags = normalizeTags(raw.tags);
-  return {
+  const item = {
     kind: 'tab',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
     url: safeText(raw.url, DATA_LIMITS.MAX_URL_LENGTH),
@@ -28,6 +28,7 @@ function normalizeTabItem(raw) {
     snapshot: hasInlineSnap ? raw.snapshot : '',
     ...(raw.cardSource === 'image' ? { cardSource: 'image' } : {}),
   };
+  return withTitleLockFields(item, raw);
 }
 
 function normalizeGroupItem(raw) {
@@ -37,7 +38,7 @@ function normalizeGroupItem(raw) {
         m = m && typeof m === 'object' ? m : {};
         const hasInlineThumb = typeof m.thumbnail === 'string' && m.thumbnail.startsWith('data:');
         const hasInlineSnap = typeof m.snapshot === 'string' && m.snapshot.startsWith('data:');
-        return {
+        return withTitleLockFields({
           id: typeof m.id === 'string' && m.id ? m.id : crypto.randomUUID(),
           url: safeText(m.url, DATA_LIMITS.MAX_URL_LENGTH),
           title: safeText(m.title || m.url || 'Untitled', DATA_LIMITS.MAX_TITLE_LENGTH) || 'Untitled',
@@ -51,11 +52,11 @@ function normalizeGroupItem(raw) {
           thumbnail: hasInlineThumb ? m.thumbnail : '',
           snapshot: hasInlineSnap ? m.snapshot : '',
           ...(m.cardSource === 'image' ? { cardSource: 'image' } : {}),
-        };
+        }, m);
       })
     : [];
   const normalizeNote = (value) => normalizeNoteItem(value);
-  return {
+  return withTitleLockFields({
     kind: 'group',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
     title: safeText(raw.title, DATA_LIMITS.MAX_TITLE_LENGTH),
@@ -69,7 +70,7 @@ function normalizeGroupItem(raw) {
     savedAt: safeTimestamp(raw.savedAt),
     tabs,
     notes: Array.isArray(raw.notes) ? raw.notes.map(normalizeNote).filter(Boolean) : [],
-  };
+  }, raw);
 }
 
 function normalizeNoteItem(raw) {
@@ -96,7 +97,7 @@ function normalizeNoteItem(raw) {
         };
       })
     : [];
-  return {
+  return withTitleLockFields({
     kind: 'note',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
     title: safeText(raw.title || 'Sticker note', DATA_LIMITS.MAX_TITLE_LENGTH) || 'Sticker note',
@@ -108,12 +109,87 @@ function normalizeNoteItem(raw) {
     ...(raw.__stageItemId ? { __stageItemId: raw.__stageItemId } : {}),
     ...(raw.__stageGroupId ? { __stageGroupId: raw.__stageGroupId } : {}),
     ...(raw.__stageNoteId ? { __stageNoteId: raw.__stageNoteId } : {}),
-  };
+  }, raw);
 }
 
 function safeText(value, maxLength) {
   if (typeof value !== 'string') return '';
   return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, maxLength);
+}
+
+function normalizeDisplayTitle(raw, originalTitle) {
+  const display = safeText(raw, DATA_LIMITS.MAX_TITLE_LENGTH).trim();
+  const original = safeText(originalTitle, DATA_LIMITS.MAX_TITLE_LENGTH).trim();
+  if (!display || display === original) return '';
+  return display;
+}
+
+function normalizeLockFields(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  if (!source.locked) return {};
+  const salt = typeof source.lockSalt === 'string' && /^[0-9a-f]{32}$/i.test(source.lockSalt)
+    ? source.lockSalt.toLowerCase()
+    : '';
+  const hash = typeof source.lockHash === 'string' && /^[0-9a-f]{64}$/i.test(source.lockHash)
+    ? source.lockHash.toLowerCase()
+    : '';
+  return {
+    locked: true,
+    ...(salt && hash ? { lockSalt: salt, lockHash: hash } : {}),
+  };
+}
+
+function storedTitleLockFields(item) {
+  if (!item || typeof item !== 'object') return {};
+  return {
+    ...(item.displayTitle ? { displayTitle: item.displayTitle } : {}),
+    ...(item.locked ? { locked: true } : {}),
+    ...(item.locked && item.lockSalt && item.lockHash
+      ? { lockSalt: item.lockSalt, lockHash: item.lockHash }
+      : {}),
+  };
+}
+
+function applyDisplayTitlePatch(item, patch) {
+  if (!item || typeof patch?.displayTitle !== 'string') return;
+  const display = normalizeDisplayTitle(patch.displayTitle, item.title);
+  if (display) item.displayTitle = display;
+  else delete item.displayTitle;
+}
+
+function applyLockPatch(item, patch) {
+  if (!item || typeof patch?.locked !== 'boolean') return;
+  if (!patch.locked) {
+    delete item.locked;
+    delete item.lockSalt;
+    delete item.lockHash;
+    return;
+  }
+  item.locked = true;
+  const hasSalt = Object.prototype.hasOwnProperty.call(patch, 'lockSalt');
+  const hasHash = Object.prototype.hasOwnProperty.call(patch, 'lockHash');
+  if (!hasSalt && !hasHash) return;
+  const fields = normalizeLockFields({
+    locked: true,
+    lockSalt: patch.lockSalt,
+    lockHash: patch.lockHash,
+  });
+  if (fields.lockSalt && fields.lockHash) {
+    item.lockSalt = fields.lockSalt;
+    item.lockHash = fields.lockHash;
+  } else {
+    delete item.lockSalt;
+    delete item.lockHash;
+  }
+}
+
+function withTitleLockFields(item, raw) {
+  const displayTitle = normalizeDisplayTitle(raw?.displayTitle, item.title);
+  return {
+    ...item,
+    ...(displayTitle ? { displayTitle } : {}),
+    ...normalizeLockFields(raw),
+  };
 }
 
 function safeTimestamp(value) {
@@ -200,8 +276,10 @@ function toStoredMeta(item) {
         hasThumb: Boolean(m.hasThumb),
         hasSnap: Boolean(m.hasSnap),
         ...(m.cardSource === 'image' ? { cardSource: 'image' } : {}),
+        ...storedTitleLockFields(m),
       })),
       notes: (item.notes || []).map((note) => toStoredMeta(note)),
+      ...storedTitleLockFields(item),
     };
   }
   if (item.kind === 'note') {
@@ -223,6 +301,7 @@ function toStoredMeta(item) {
         height: Number.isFinite(Number(attachment.height)) ? Number(attachment.height) : 0,
         hasData: Boolean(attachment.hasData),
       })),
+      ...storedTitleLockFields(item),
     };
   }
   return {
@@ -238,6 +317,7 @@ function toStoredMeta(item) {
     hasThumb: Boolean(item.hasThumb),
     hasSnap: Boolean(item.hasSnap),
     ...(item.cardSource === 'image' ? { cardSource: 'image' } : {}),
+    ...storedTitleLockFields(item),
   };
 }
 

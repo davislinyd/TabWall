@@ -535,6 +535,8 @@ async function updateItem(id, patch) {
   const item = { ...list[idx] };
   if (typeof patch.pinned === 'boolean') item.pinned = patch.pinned;
   if (typeof patch.note === 'string') item.note = patch.note;
+  applyDisplayTitlePatch(item, patch);
+  applyLockPatch(item, patch);
   if (Array.isArray(patch.tags)) {
     item.tags = patch.tags
       .map((t) => String(t).trim())

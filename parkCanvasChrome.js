@@ -442,6 +442,11 @@
         if (item?.kind === 'tab') env.openLightbox(item);
         return;
       }
+      if ((action === 'lock' || action === 'unlock' || action === 'relock') && ids.length === 1) {
+        const item = env.allTabs.find((candidate) => candidate.id === ids[0]);
+        if (item) await env.toggleCardLock?.(item);
+        return;
+      }
       if (action === 'edit') {
         if (ids.length > 1) {
           env.openBatchEdit(ids);

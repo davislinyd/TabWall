@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.38.0 — 2026-08-14
+
+- **卡片上鎖（可選密碼）**：支援分頁卡、Tab Group、圖片卡、Sticker Note 與 Group 成員獨立上鎖；上鎖後自動隱藏縮圖、快照與圖片附件，還原分頁與備註編輯不受阻。解鎖只存於記憶體 session，關閉分頁自動重新上鎖。支援免密碼點擊解鎖或 SHA-256 加鹽密碼保護。
+- **自訂顯示標題（Display Title）**：編輯盒可自訂卡片名稱，主標題顯示自訂標題，下方保留小字顯示原始標題；搜尋引擎與 Option+/ 全域搜尋同時支援搜尋顯示標題與原始標題。
+- **網頁浮層與啟動修正**：補齊 Manifest `web_accessible_resources` 白名單，修復在一般網頁按下 Option+O 浮層載入問題，並增強頁面載入鏈容錯。
+
 ## 2.37.2 — 2026-08-14
 
 - 應用內說明新增「硬碟用量」：中繼資料在 `chrome.storage`、截圖／附件／背景在 IndexedDB；自動備份在下載目錄、不算擴充儲存。可用 `chrome://settings/content/all` 或 `navigator.storage.estimate().usage` 查看。

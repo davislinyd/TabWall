@@ -1199,6 +1199,7 @@
         if (item.kind === 'note') env.openStickerNoteEditor(item);
         else env.openEditBox(item);
       }
+      else if (action === 'lock' || action === 'unlock' || action === 'relock') await env.toggleCardLock?.(item);
       else if (action === 'pin') await env.togglePinned(item);
       else if (action === 'delete') await env.deleteItem(item.id);
 
@@ -1209,7 +1210,7 @@
 
       return Boolean(
         target?.closest?.(
-          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
+          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits, .media-lock-overlay'
         )
       );
 
