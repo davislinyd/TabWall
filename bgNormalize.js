@@ -26,6 +26,7 @@ function normalizeTabItem(raw) {
     // keep inline only during migration pass
     thumbnail: hasInlineThumb ? raw.thumbnail : '',
     snapshot: hasInlineSnap ? raw.snapshot : '',
+    ...(raw.cardSource === 'image' ? { cardSource: 'image' } : {}),
   };
 }
 
@@ -49,6 +50,7 @@ function normalizeGroupItem(raw) {
           hasSnap: m.hasSnap === true || hasInlineSnap,
           thumbnail: hasInlineThumb ? m.thumbnail : '',
           snapshot: hasInlineSnap ? m.snapshot : '',
+          ...(m.cardSource === 'image' ? { cardSource: 'image' } : {}),
         };
       })
     : [];
@@ -197,6 +199,7 @@ function toStoredMeta(item) {
         tags: Array.isArray(m.tags) ? m.tags : [],
         hasThumb: Boolean(m.hasThumb),
         hasSnap: Boolean(m.hasSnap),
+        ...(m.cardSource === 'image' ? { cardSource: 'image' } : {}),
       })),
       notes: (item.notes || []).map((note) => toStoredMeta(note)),
     };
@@ -234,6 +237,7 @@ function toStoredMeta(item) {
     savedAt: item.savedAt || Date.now(),
     hasThumb: Boolean(item.hasThumb),
     hasSnap: Boolean(item.hasSnap),
+    ...(item.cardSource === 'image' ? { cardSource: 'image' } : {}),
   };
 }
 

@@ -478,6 +478,7 @@
         { action: 'arrange-align', label: env.t('canvasCtxArrangeAlign') },
         { action: 'backup-lite', label: env.t('canvasCtxBackup') },
         { action: 'add-note', label: env.t('canvasCtxAddNote') },
+        { action: 'add-image', label: env.t('canvasCtxAddImage') },
       ];
 
   }
@@ -579,6 +580,9 @@
           break;
         case 'add-note':
           env.placeStickerNoteAt(state.worldPoint || env.canvasWorldViewportCenter());
+          break;
+        case 'add-image':
+          env.pickImageCardFiles(state.worldPoint || env.canvasWorldViewportCenter());
           break;
         default:
           break;

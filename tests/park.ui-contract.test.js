@@ -254,10 +254,10 @@ test('Canvas context menu covers blank canvas and single-card node actions', () 
   assert.match(PARK_BEHAVIOR_FLAT, /arrangeCanvas\('align'\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /exportLiteBackup\(\{ toast: true \}\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /normalizeSortBy\('newest'\)/);
-  for (const key of ['canvasCtxSortDate', 'canvasCtxArrangeAlign', 'canvasCtxBackup', 'canvasCtxAddNote']) {
+  for (const key of ['canvasCtxSortDate', 'canvasCtxArrangeAlign', 'canvasCtxBackup', 'canvasCtxAddNote', 'canvasCtxAddImage']) {
     assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`'${key}'`));
   }
-  for (const action of ['sort-date', 'arrange-align', 'backup-lite', 'add-note']) {
+  for (const action of ['sort-date', 'arrange-align', 'backup-lite', 'add-note', 'add-image']) {
     assert.match(PARK_BEHAVIOR_FLAT, new RegExp(`action: '${action}'`));
   }
   for (const action of ['restore', 'snapshot', 'edit', 'copy', 'members', 'pin', 'delete']) {
@@ -328,6 +328,13 @@ test('Top-level actions are consolidated in the header', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /function syncViewModeButton\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /viewModeBtn\?\.addEventListener\('click'/);
   assert.match(SETTINGS_UI_SOURCE, /applyI18n\(\);[\s\S]{0,40}syncViewModeButton\(env\.settings\.viewMode\)/);
+  assert.match(HTML_SOURCE, /id="quickAddImageMenu"/);
+  assert.match(HTML_SOURCE, /id="imageCardFile"[^>]*accept=/);
+  assert.match(HTML_SOURCE, /<script src="noteMedia\.js"><\/script>/);
+  assert.match(WORKSPACE_UI_SOURCE, /type: 'CREATE_IMAGE_CARD'/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function createImageCardsFromFiles\(/);
+  assert.match(PARK_BEHAVIOR_FLAT, /function pickImageCardFiles\(/);
+  assert.match(CANVAS_IX_SOURCE, /clipboardData\?\.items/);
   assert.match(HTML_SOURCE, /class="btn quick-add-main" id="quickAddBtn"/);
   assert.match(HTML_SOURCE, /class="btn quick-add-menu-btn" id="quickAddMenuBtn"/);
   assert.doesNotMatch(HTML_SOURCE, /class="btn primary quick-add-main"/);
@@ -357,7 +364,7 @@ test('Chrome shortcut settings expose the tab-or-group keep command', () => {
 
 test('Help panel is centered; cards have newsprint; Option+/ is documented', () => {
   assert.match(CSS_SOURCE, /#helpBox\.open\s*\{[\s\S]*?transform:\s*translate\(-50%, -50%\) !important;/);
-  assert.match(WORKBENCH_CSS, /#grid\.cards \.card,[\s\S]*?\.canvas-node:not\(\.canvas-note\)[\s\S]*?feTurbulence/);
+  assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
   assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
   assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
   assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／domain \+ Tab 切換欄位'/);
@@ -486,6 +493,10 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.match(MEDIA_UI_SOURCE, /function loadCanvasThumbFallback\(img\)/);
   assert.match(MEDIA_UI_SOURCE, /function refreshCanvasMediaQuality\(\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /data-canvas-has-snap/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvas-image/);
+  assert.match(CANVAS_RENDER_SOURCE, /data-canvas-prefer-snap/);
+  assert.match(MEDIA_UI_SOURCE, /dataset\.canvasPreferSnap === 'true'/);
+  assert.match(CSS_SOURCE, /\.canvas-node\.canvas-image \.canvas-node-thumb img\.canvas-thumb[\s\S]*?object-fit:\s*contain/);
   assert.match(PARK_BEHAVIOR_FLAT, /const refreshCanvasMediaQuality = MediaUi\.refreshCanvasMediaQuality/);
   assert.match(PARK_BEHAVIOR_FLAT, /const canvasMinimapElements = new Map\(\)/);
   assert.match(CANVAS_RENDER_SOURCE, /function arrangeCanvasGrid\(items, layout\)/);

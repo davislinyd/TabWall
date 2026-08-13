@@ -333,6 +333,9 @@
   }
 
   function canvasMediaKindForImage(img) {
+    if (img?.dataset.canvasPreferSnap === 'true' && img.dataset.canvasHasSnap !== 'false') {
+      return 'snap';
+    }
     const preferred = canvasPreferredMediaKind();
     return preferred === 'snap' && img?.dataset.canvasHasSnap === 'false' ? 'thumb' : preferred;
   }

@@ -115,14 +115,16 @@
       if (item.kind === 'note') return createRow(item);
 
       const card = document.createElement('article');
-      card.className = 'card';
+      const isImage = env.isImageCard?.(item) || item.cardSource === 'image';
+      card.className = isImage ? 'card image-card' : 'card';
       card.draggable = false;
       card.dataset.id = item.id;
       card.dataset.kind = item.kind;
+      if (isImage) card.dataset.cardSource = 'image';
       card.setAttribute('role', 'listitem');
 
-      const title = item.title || item.url || 'Untitled';
-      const url = item.url || '';
+      const title = item.title || item.url || (isImage ? env.t('imageCardUntitled') : 'Untitled');
+      const url = isImage ? env.t('imageKind') : item.url || '';
       const mediaKey = env.mediaKeyForItem(item);
       const fav = item.favIconUrl || '';
       const storedOnly = env.isStoredOnlyUrl(url);
@@ -193,7 +195,7 @@
         if (env.selectMode) return;
         env.deleteItem(item.id);
       });
-      bindMetaCopy(card.querySelector('.meta'), item);
+      if (!isImage) bindMetaCopy(card.querySelector('.meta'), item);
       card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
         if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .card-check')) return;
         if (env.dragState?.active) return;
@@ -217,10 +219,11 @@
 
       const isGroup = item.kind === 'group';
       const isNote = item.kind === 'note';
+      const isImage = env.isImageCard?.(item) || item.cardSource === 'image';
       const title = itemTitle(item);
       const url = isGroup
         ? env.t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
-        : isNote ? env.t('noteKind') : item.url || '';
+        : isNote ? env.t('noteKind') : isImage ? env.t('imageKind') : item.url || '';
       const mediaKey = isGroup
         ? (() => {
             const m = (item.tabs || []).find((x) => x.hasThumb || x.id) || (item.tabs || [])[0];
@@ -273,6 +276,7 @@
           return;
         }
         if (isNote) env.openStickerNoteEditor(item);
+        else if (isImage) env.openLightbox(item);
         else env.restoreItem(item.id);
       });
       row.querySelectorAll('.copy-hit').forEach((el) => {
@@ -282,7 +286,7 @@
             env.handleCardSelectClick(item.id, e);
             return;
           }
-          if (!isNote) env.copySavedLink(item);
+          if (!isNote && !isImage) env.copySavedLink(item);
         });
       });
       if (env.selectedIds.has(item.id)) row.classList.add('selected');
@@ -549,6 +553,7 @@
 
       if (item.kind === 'group') return item.title || env.t('unnamedGroup');
       if (item.kind === 'note') return item.title || env.t('noteUntitled');
+      if (item.cardSource === 'image') return item.title || env.t('imageCardUntitled');
       return item.title || item.url || 'Untitled';
 
   }

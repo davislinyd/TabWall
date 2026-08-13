@@ -31,6 +31,7 @@ zip -r "$OUT_ZIP" \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \
+  vendor/libheif-bundle.js \
   parkWallpaper.js \
   canvasStore.js \
   parkCanvasGeometry.js \

@@ -783,7 +783,10 @@
       }
       if (env.batchRestore) {
         const selectedItems = [...selection].map((id) => env.allTabs.find((item) => item.id === id)).filter(Boolean);
-        const restorable = selectedItems.some((item) => item.kind === 'tab' || (item.kind === 'group' && (item.tabs || []).length));
+        const restorable = selectedItems.some((item) => (
+          (item.kind === 'tab' && item.cardSource !== 'image')
+          || (item.kind === 'group' && (item.tabs || []).some((member) => member.cardSource !== 'image'))
+        ));
         env.batchRestore.hidden = !restorable;
       }
 
@@ -836,6 +839,10 @@
         if (item?.kind === 'note') {
           env.openStickerNoteEditor(item);
           return { ok: false, error: 'note_not_restorable' };
+        }
+        if (item?.cardSource === 'image') {
+          env.openLightbox(item);
+          return { ok: false, error: 'image_not_restorable' };
         }
         if (item?.kind !== 'group' && env.isStoredOnlyUrl(item?.url)) {
           env.showCopyToast(t('restoreRestricted'));
@@ -1446,6 +1453,97 @@
 
   }
 
+  function parseImageCardPosition(raw) {
+    if (!raw) return null;
+    try {
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== 'object') return null;
+      const x = Number(value.x);
+      const y = Number(value.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x, y, w: Number(value.w) || undefined, h: Number(value.h) || undefined };
+    } catch {
+      return null;
+    }
+  }
+
+  function collectImageFiles(fileList, extraItems) {
+    ensureBound('collectImageFiles');
+    const files = [];
+    const seen = new Set();
+    const add = (file) => {
+      if (!file || seen.has(file)) return;
+      if (!env.NoteMedia?.identifyImageKind?.(file, file.name)) return;
+      seen.add(file);
+      files.push(file);
+    };
+    for (const file of fileList || []) add(file);
+    for (const item of extraItems || []) {
+      if (item?.kind === 'file' && env.NoteMedia?.identifyImageKind?.({ type: item.type }, '')) {
+        add(item.getAsFile?.());
+      }
+    }
+    return files;
+  }
+
+  function pickImageCardFiles(position = null) {
+    ensureBound('pickImageCardFiles');
+    const input = env.imageCardFile || global.document?.getElementById?.('imageCardFile');
+    if (!input) return;
+    input.value = '';
+    input.dataset.position = position ? JSON.stringify({
+      x: position.x,
+      y: position.y,
+      w: position.w,
+      h: position.h,
+    }) : '';
+    input.click();
+  }
+
+  async function createImageCardsFromFiles(files, position = null) {
+    ensureBound('createImageCardsFromFiles');
+    const list = collectImageFiles(files);
+    if (!list.length) {
+      env.showCopyToast(env.t('noteImageUnsupportedType'));
+      return { ok: false, added: 0 };
+    }
+    const maxFiles = env.NoteMedia?.LIMITS?.MAX_CARD_FILES || 8;
+    if (list.length > maxFiles) {
+      env.showCopyToast(env.t('imageCardTooMany'));
+      return { ok: false, added: 0 };
+    }
+    env.showCopyToast(env.t('imageCardProcessing'));
+    let added = 0;
+    let lastError = '';
+    for (let index = 0; index < list.length; index++) {
+      const file = list[index];
+      try {
+        if (!env.NoteMedia?.normalizeCardMedia) throw new Error('note_media_unavailable');
+        const media = await env.NoteMedia.normalizeCardMedia(file, { name: file.name });
+        const thumb = await env.Media.blobToDataUrl(media.thumbBlob);
+        const snap = await env.Media.blobToDataUrl(media.snapBlob);
+        const nextPosition = position && typeof position === 'object'
+          ? { ...position, x: Number(position.x) + index * 28, y: Number(position.y) + index * 28 }
+          : null;
+        const res = await env.sendMessage({
+          type: 'CREATE_IMAGE_CARD',
+          title: media.title || env.t('imageCardUntitled'),
+          position: nextPosition,
+          thumbnail: thumb,
+          snapshot: snap,
+        });
+        if (res?.ok) added++;
+        else lastError = res?.error || 'imageCardFailed';
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (added) await env.loadList();
+    if (added) env.showCopyToast(env.t('imageCardOk', { n: added }));
+    else env.showCopyToast(env.formatNoteMediaError(lastError) || env.t('imageCardFailed'));
+    return { ok: added > 0, added };
+  }
+
   function initQuickCaptureUi() {
     ensureBound('initQuickCaptureUi');
 
@@ -1454,6 +1552,18 @@
       env.quickAddTabMenu?.addEventListener('click', () => requestQuickCapture('tab'));
       env.quickAddGroupMenu?.addEventListener('click', () => requestQuickCapture('group'));
       env.quickAddUrlMenu?.addEventListener('click', () => requestQuickCapture('url'));
+      env.quickAddImageMenu?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        env.closeQuickMenus?.();
+        pickImageCardFiles();
+      });
+      const imageCardFile = env.imageCardFile || global.document?.getElementById?.('imageCardFile');
+      imageCardFile?.addEventListener('change', () => {
+        const position = parseImageCardPosition(imageCardFile.dataset.position);
+        imageCardFile.dataset.position = '';
+        createImageCardsFromFiles(imageCardFile.files, position);
+        imageCardFile.value = '';
+      });
       env.canvasOrganizeBtn?.addEventListener('click', (event) => {
         event.stopPropagation();
         const open = Boolean(env.canvasOrganizePanel && env.canvasOrganizePanel.hidden);
@@ -1611,6 +1721,9 @@
     closeHelpBox,
     positionTagsBoxUnderButton,
     initQuickCaptureUi,
+    collectImageFiles,
+    pickImageCardFiles,
+    createImageCardsFromFiles,
     requestQuickCapture,
     handleQuickCaptureResult,
     quickCaptureErrorText,

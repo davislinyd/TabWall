@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.35.1');
+  assert.equal(MANIFEST.version, '2.36.1');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -1166,6 +1166,33 @@ test('note CRUD persists fixed metadata and cleans attachment media', async () =
   assert.equal(updatedTag?.count, 1);
   assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
   assert.equal(runtime.store.parkedItems.length, 0);
+});
+
+test('CREATE_IMAGE_CARD stores a tab with cardSource image and no restorable URL', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const created = await runtime.api.createImageCard({
+    title: 'clip',
+    thumbnail: 'data:image/jpeg;base64,AAAA',
+    snapshot: 'data:image/jpeg;base64,BBBB',
+  }, { x: 40, y: 80 });
+  assert.equal(created.ok, true);
+  assert.equal(created.item.kind, 'tab');
+  assert.equal(created.item.cardSource, 'image');
+  assert.equal(created.item.url, '');
+  assert.equal(created.item.hasThumb, true);
+  assert.equal(created.item.hasSnap, true);
+  assert.equal(runtime.media.has(`t:${created.item.id}`), true);
+  const restored = await runtime.api.restoreTab(created.item.id);
+  assert.equal(restored.ok, false);
+  assert.equal(restored.error, 'image_not_restorable');
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].cardSource, 'image');
+  const layout = await runtime.api.getCanvasLayout();
+  assert.equal(layout.positions[created.item.id].x, 40);
+  assert.equal(layout.positions[created.item.id].y, 80);
+  assert.equal(layout.positions[created.item.id].h, 248);
 });
 
 test('attachment usage reports note and global quotas and rejects a full note', async () => {

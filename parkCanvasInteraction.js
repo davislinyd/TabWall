@@ -1055,6 +1055,30 @@
         if (event.key === 'Enter') env.createCanvasStackFromSelection();
       });
       env.canvasDropZone?.addEventListener('click', env.openCanvasStackDialog);
+      env.canvasViewportEl?.addEventListener('dragover', (event) => {
+        if (event.target.closest?.('.canvas-node')) return;
+        const items = [...(event.dataTransfer?.items || [])];
+        if (!items.some((item) => item.kind === 'file')) return;
+        event.preventDefault();
+      });
+      env.canvasViewportEl?.addEventListener('drop', (event) => {
+        if (event.target.closest?.('.canvas-node')) return;
+        const files = env.collectImageFiles?.(event.dataTransfer?.files || []);
+        if (!files?.length) return;
+        event.preventDefault();
+        env.createImageCardsFromFiles(files, env.canvasPointFromEvent(event));
+      });
+      document.addEventListener('paste', (event) => {
+        if (env.isTypingTarget?.(event.target)) return;
+        if (env.stickerNoteBox?.classList.contains('open')) return;
+        const files = env.collectImageFiles?.(
+          event.clipboardData?.files || [],
+          event.clipboardData?.items || []
+        );
+        if (!files?.length) return;
+        event.preventDefault();
+        env.createImageCardsFromFiles(files, env.canvasWorldViewportCenter());
+      });
 
   }
 

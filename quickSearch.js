@@ -401,7 +401,7 @@
 
     async function restoreSelected() {
       const item = results[selected];
-      if (!item?.id || item.kind === 'note') return;
+      if (!item?.id || item.kind === 'note' || item.cardSource === 'image') return;
       close();
       const type = item.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
       await sendMessage({ type, id: item.id });

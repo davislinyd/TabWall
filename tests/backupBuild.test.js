@@ -284,6 +284,21 @@ test('backup schema rejects duplicate IDs and non-HTTP URLs', () => {
   assert.equal(Build.validateBackup(invalidUrl).error, 'invalid_url');
 });
 
+test('backup accepts image cards with empty URL and rejects a URL on them', () => {
+  const imageCard = {
+    ...sampleItem({ image: true }),
+    url: '',
+    favIconUrl: '',
+    cardSource: 'image',
+    title: 'clip',
+  };
+  assert.equal(Build.validateBackup(sampleBackup([imageCard])).ok, true);
+  assert.equal(
+    Build.validateBackup(sampleBackup([{ ...imageCard, url: 'https://example.com' }])).error,
+    'invalid_url'
+  );
+});
+
 test('backup keeps optional top-level pinned state and accepts legacy omission', async () => {
   const pinnedBackup = sampleBackup([sampleItem({ pinned: true })]);
   assert.equal(Build.validateBackup(pinnedBackup).ok, true);

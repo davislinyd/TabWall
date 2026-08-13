@@ -4459,6 +4459,56 @@ html[data-theme='dark'] .canvas-node {
   object-fit: cover;
 }
 
+.canvas-node.canvas-image {
+  background: #111417;
+  background-image: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.canvas-node.canvas-image .canvas-node-thumb {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  aspect-ratio: auto;
+  background: #0b0d10;
+}
+
+.canvas-node.canvas-image .canvas-node-thumb img.canvas-thumb {
+  object-fit: contain;
+}
+
+.canvas-node.canvas-image .canvas-node-copy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  padding: 28px 10px 8px;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78));
+}
+
+.canvas-node.canvas-image .canvas-node-title,
+.canvas-node.canvas-image .canvas-node-meta,
+.canvas-node.canvas-image .canvas-node-note,
+.canvas-node.canvas-image .canvas-node-tags,
+.canvas-node.canvas-image .canvas-pin {
+  color: #f8fafc;
+}
+
+.canvas-node.canvas-image .canvas-node-meta,
+.canvas-node.canvas-image .canvas-node-note {
+  color: rgba(248, 250, 252, 0.78);
+}
+
+.card.image-card .thumb-wrap {
+  aspect-ratio: 4 / 3;
+  background: #0b0d10;
+}
+
+.card.image-card .thumb {
+  object-fit: contain;
+}
+
 .canvas-node-thumb > .group-mosaic {
   display: grid;
 }
@@ -5656,19 +5706,19 @@ main {
 }
 
 /* Newsprint tooth sits in the background layer so type contrast is unchanged. */
-#grid.cards .card,
-.canvas-node:not(.canvas-note) {
+#grid.cards .card:not(.image-card),
+.canvas-node:not(.canvas-note):not(.canvas-image) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
   background-size: 160px 160px;
 }
 
-html[data-theme='light'] #grid.cards .card,
-html[data-theme='light'] .canvas-node:not(.canvas-note) {
+html[data-theme='light'] #grid.cards .card:not(.image-card),
+html[data-theme='light'] .canvas-node:not(.canvas-note):not(.canvas-image) {
   background-blend-mode: multiply;
 }
 
-html[data-theme='dark'] #grid.cards .card,
-html[data-theme='dark'] .canvas-node:not(.canvas-note) {
+html[data-theme='dark'] #grid.cards .card:not(.image-card),
+html[data-theme='dark'] .canvas-node:not(.canvas-note):not(.canvas-image) {
   background-blend-mode: soft-light;
 }
 

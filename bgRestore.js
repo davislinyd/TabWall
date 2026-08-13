@@ -320,10 +320,13 @@ async function commitRestoredItem(
 ) {
   const next = list.filter((entry) => entry.id !== item.id);
   const remainingNotes = item.kind === 'group' ? (item.notes || []) : [];
-  if (remainingNotes.length) {
+  const remainingImageTabs = item.kind === 'group'
+    ? (item.tabs || []).filter((member) => member?.cardSource === 'image')
+    : [];
+  if (remainingNotes.length || remainingImageTabs.length) {
     next.splice(Math.min(index, next.length), 0, {
       ...item,
-      tabs: [],
+      tabs: remainingImageTabs,
       notes: remainingNotes,
       savedAt: Date.now(),
     });
@@ -349,7 +352,9 @@ async function commitRestoredItem(
   }
   try {
     const tabMediaKeys = item.kind === 'group'
-      ? (item.tabs || []).map((member) => Media.mediaKeyMember(item.id, member.id))
+      ? (item.tabs || [])
+        .filter((member) => member?.cardSource !== 'image')
+        .map((member) => Media.mediaKeyMember(item.id, member.id))
       : Media.keysForItem(item);
     await Media.removeMany(tabMediaKeys);
   } catch (err) {
@@ -366,6 +371,7 @@ async function restoreTab(id) {
   const item = list[i];
   if (item.kind === 'group') return restoreGroup(id);
   if (item.kind === 'note') return { ok: false, error: 'note_not_restorable' };
+  if (item.cardSource === 'image') return { ok: false, error: 'image_not_restorable' };
   if (!isRestorableUrl(item.url)) return { ok: false, error: 'restricted_url' };
 
   let tab;
@@ -470,6 +476,7 @@ async function restoreGroupMember(groupId, memberId) {
   const mIdx = group.tabs.findIndex((m) => m.id === memberId);
   if (mIdx === -1) return { ok: false, error: 'member_not_found' };
   const member = group.tabs[mIdx];
+  if (member.cardSource === 'image') return { ok: false, error: 'image_not_restorable' };
   if (!isRestorableUrl(member.url)) return { ok: false, error: 'restricted_url' };
 
   let created;

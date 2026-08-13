@@ -117,7 +117,8 @@ function canvasThumbHtml(item) {
     const key = Media().mediaKeyNoteAttachment(item.id, attachment.id);
     return `<img class="canvas-note-cover-image" alt="${escapeAttr(attachment.alt || attachment.name || '')}" data-note-attachment-key="${escapeAttr(key)}" data-note-attachment-id="${escapeAttr(attachment.id)}" />`;
   }
-  return `<img class="canvas-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKeyForItem(item))}" data-canvas-media="true" data-canvas-has-thumb="${item.hasThumb || item.thumbnail ? 'true' : 'false'}" data-canvas-has-snap="${item.hasSnap || item.snapshot ? 'true' : 'false'}" />`;
+  const preferSnap = item.cardSource === 'image' ? ' data-canvas-prefer-snap="true"' : '';
+  return `<img class="canvas-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKeyForItem(item))}" data-canvas-media="true" data-canvas-has-thumb="${item.hasThumb || item.thumbnail ? 'true' : 'false'}" data-canvas-has-snap="${item.hasSnap || item.snapshot ? 'true' : 'false'}"${preferSnap} />`;
 }
 
 function safeNotePreviewHtml(note, className = 'canvas-note-preview') {
@@ -145,6 +146,14 @@ function canvasNodeActionEntries(item) {
       { action: 'delete', label: t('delete'), icon: 'delete' },
     ];
   }
+  if (item.cardSource === 'image') {
+    return [
+      { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
+      { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
+      { action: 'delete', label: t('delete'), icon: 'delete' },
+    ];
+  }
   return [
     { action: 'restore', label: t('restore'), icon: 'restore' },
     { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
@@ -161,13 +170,16 @@ function canvasNodeHtml(item) {
   const position = canvasDisplayPosition(canvasPositionFor(item.id));
   const pin = item.pinned ? `<span class="canvas-pin" title="${escapeAttr(t('pinnedOnly'))}" aria-label="${escapeAttr(t('pinnedOnly'))}">${iconSvg('pin')}</span>` : '';
   const isNote = item.kind === 'note';
+  const isImage = item.cardSource === 'image';
   const groupColors = get('GROUP_COLORS', {}) || {};
   const groupColor = item.kind === 'group' ? (groupColors[item.color] || groupColors.grey || '#9ca3af') : '';
   const meta = item.kind === 'group'
     ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
     : isNote
       ? `${t('noteKind')} · ${formatSavedAt(item.savedAt)} · ${t('noteCount', { n: (item.attachments || []).length })}`
-      : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
+      : isImage
+        ? `${t('imageKind')} · ${formatSavedAt(item.savedAt)}`
+        : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
   const actionHtml = canvasNodeActionEntries(item)
     .map(({ action, label, icon }) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
     .join('');
@@ -179,8 +191,8 @@ function canvasNodeHtml(item) {
   ].map(([side, labelKey]) => `<button type="button" class="canvas-link-handle canvas-link-handle-${side}" data-canvas-link-handle="${side}" tabindex="-1" title="${escapeAttr(t(labelKey))}" aria-label="${escapeAttr(t(labelKey))}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>`).join('');
   const groupStyle = groupColor ? `;--group-color:${escapeAttr(groupColor)}` : '';
   return `
-    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${selected ? ' selected' : ''}"
-      data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}" role="button" tabindex="0"
+    <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${isImage ? ' canvas-image' : ''}${selected ? ' selected' : ''}"
+      data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}"${isImage ? ' data-card-source="image"' : ''} role="button" tabindex="0"
       aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}${groupStyle}">
       <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
       <div class="canvas-node-copy">

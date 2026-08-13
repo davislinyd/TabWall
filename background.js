@@ -595,6 +595,61 @@ async function createNote(raw, position = null) {
   return { ok: true, item: toStoredMeta(note) };
 }
 
+async function createImageCard(raw = {}, position = null) {
+  const item = normalizeTabItem({
+    ...(raw || {}),
+    kind: 'tab',
+    cardSource: 'image',
+    url: '',
+    favIconUrl: '',
+    title: raw.title || 'Image',
+  });
+  const thumb = typeof raw.thumbnail === 'string' ? raw.thumbnail : '';
+  const snap = typeof raw.snapshot === 'string' ? raw.snapshot : '';
+  if (!thumb && !snap) return { ok: false, error: 'note_image_invalid' };
+  const list = await getParkedItems();
+  if (list.some((entry) => entry.id === item.id)) item.id = crypto.randomUUID();
+  let writtenKey = '';
+  try {
+    const flags = await Media.putFromDataUrls(Media.mediaKeyTab(item.id), thumb, snap);
+    writtenKey = Media.mediaKeyTab(item.id);
+    item.hasThumb = flags.hasThumb;
+    item.hasSnap = flags.hasSnap;
+    item.thumbnail = '';
+    item.snapshot = '';
+    if (!item.hasThumb && !item.hasSnap) throw new Error('note_image_invalid');
+  } catch (err) {
+    if (writtenKey) await Media.remove(writtenKey).catch(() => {});
+    const errorCode = String(err?.code || err?.message || '');
+    return {
+      ok: false,
+      error: errorCode.startsWith('note_image_') ? errorCode : 'media_write_failed',
+      detail: String(err?.message || err),
+    };
+  }
+  try {
+    const layout = await getCanvasLayout();
+    const fallback = defaultCanvasPosition(list.length);
+    const rawPos = position && typeof position === 'object' ? position : fallback;
+    layout.positions = { ...(layout.positions || {}) };
+    layout.positions[item.id] = normalizeCanvasPosition({
+      ...fallback,
+      ...rawPos,
+      h: Number(rawPos.h) > 0 ? rawPos.h : 248,
+    }, fallback);
+    list.push(item);
+    await setParkedItems(list, { canvasLayout: layout });
+  } catch (err) {
+    if (writtenKey) await Media.remove(writtenKey).catch(() => {});
+    return {
+      ok: false,
+      error: 'storage_write_failed',
+      detail: String(err?.message || err),
+    };
+  }
+  return { ok: true, item: toStoredMeta(item) };
+}
+
 async function updateNote(noteId, patch = {}, groupId = '') {
   const list = await getParkedItems();
   const location = noteIndexInList(list, noteId, groupId);
@@ -1652,6 +1707,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'RESTORE_GROUP_MEMBER',
   'UPDATE_GROUP_MEMBER',
   'CREATE_NOTE',
+  'CREATE_IMAGE_CARD',
   'UPDATE_NOTE',
   'DELETE_NOTE',
   'DELETE_TAB',
@@ -1711,6 +1767,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       case 'CREATE_NOTE':
         return createNote(message.note || message.item, message.position);
+      case 'CREATE_IMAGE_CARD':
+        return createImageCard(message.item || message, message.position);
       case 'UPDATE_NOTE':
         return updateNote(message.noteId || message.id, message.patch || message.note || {}, message.groupId || '');
       case 'DELETE_NOTE':
@@ -1945,6 +2003,7 @@ if (globalThis.__TABWALL_TEST__) {
     resolveSaveConflict,
     updateItem,
     createNote,
+    createImageCard,
     updateNote,
     deleteNote,
     getAttachmentUsage,

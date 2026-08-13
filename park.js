@@ -104,6 +104,8 @@ function classifyStoredUrl(...args) { return AppHelpers.classifyStoredUrl(...arg
 
 function isStoredOnlyUrl(...args) { return AppHelpers.isStoredOnlyUrl(...args); }
 
+function isImageCard(...args) { return AppHelpers.isImageCard(...args); }
+
 function countStoredOnlyUrls(...args) { return AppHelpers.countStoredOnlyUrls(...args); }
 
 function formatImportWarnings(...args) { return ImportExport.formatImportWarnings(...args); }
@@ -217,6 +219,8 @@ const quickAddMenu = document.getElementById('quickAddMenu');
 const quickAddTabMenu = document.getElementById('quickAddTabMenu');
 const quickAddGroupMenu = document.getElementById('quickAddGroupMenu');
 const quickAddUrlMenu = document.getElementById('quickAddUrlMenu');
+const quickAddImageMenu = document.getElementById('quickAddImageMenu');
+const imageCardFile = document.getElementById('imageCardFile');
 const canvasOrganizeWrap = document.getElementById('canvasOrganizeWrap');
 const canvasOrganizeBtn = document.getElementById('canvasOrganizeBtn');
 const canvasOrganizePanel = document.getElementById('canvasOrganizePanel');
@@ -675,6 +679,7 @@ function bindPanelModules() {
     "closeQuickMenus": () => closeQuickMenus,
     "closeSettingsBox": () => closeSettingsBox,
     "closeStickerNoteEditor": () => closeStickerNoteEditor,
+    "collectImageFiles": () => collectImageFiles,
     "colsControl": () => colsControl,
     "colsValueEl": () => colsValueEl,
     "commitCanvasRailState": () => commitCanvasRailState,
@@ -689,6 +694,7 @@ function bindPanelModules() {
     "countEl": () => countEl,
     "countStoredOnlyUrls": () => countStoredOnlyUrls,
     "createCanvasStackFromSelection": () => createCanvasStackFromSelection,
+    "createImageCardsFromFiles": () => createImageCardsFromFiles,
     "dedupeApplyBtn": () => dedupeApplyBtn,
     "dedupeBox": () => dedupeBox,
     "dedupeCloseX": () => dedupeCloseX,
@@ -752,10 +758,12 @@ function bindPanelModules() {
     "importPreviewOverlay": () => importPreviewOverlay,
     "importPreviewTitle": () => importPreviewTitle,
     "importPreviewUrl": () => importPreviewUrl,
+    "imageCardFile": () => imageCardFile,
     "initDedupeUi": () => initDedupeUi,
     "initQuickCaptureUi": () => initQuickCaptureUi,
     "isCanvasContextMenuOpen": () => isCanvasContextMenuOpen,
     "isCanvasSearchPreviewActive": () => isCanvasSearchPreviewActive,
+    "isImageCard": () => isImageCard,
     "isMultiSelectModifier": () => isMultiSelectModifier,
     "isStoredOnlyUrl": () => isStoredOnlyUrl,
     "isTypingTarget": () => isTypingTarget,
@@ -815,6 +823,7 @@ function bindPanelModules() {
     "pinnedOnlyBtn": () => pinnedOnlyBtn,
     "placeFloatBox": () => placeFloatBox,
     "placeMembersBoxCentered": () => placeMembersBoxCentered,
+    "pickImageCardFiles": () => pickImageCardFiles,
     "placeStickerNoteAt": () => placeStickerNoteAt,
     "postToParent": () => postToParent,
     "preSaveCancel": () => preSaveCancel,
@@ -833,6 +842,7 @@ function bindPanelModules() {
     "quickAddMenu": () => quickAddMenu,
     "quickAddMenuBtn": () => quickAddMenuBtn,
     "quickAddTabMenu": () => quickAddTabMenu,
+    "quickAddImageMenu": () => quickAddImageMenu,
     "quickAddUrlMenu": () => quickAddUrlMenu,
     "refreshCanvasMediaQuality": () => refreshCanvasMediaQuality,
     "refreshCanvasSearchPreview": () => refreshCanvasSearchPreview,
@@ -1336,6 +1346,12 @@ async function requestQuickCapture(...args) { return await WorkspaceUi.requestQu
 
 function initQuickCaptureUi(...args) { return WorkspaceUi.initQuickCaptureUi(...args); }
 
+function collectImageFiles(...args) { return WorkspaceUi.collectImageFiles(...args); }
+
+function pickImageCardFiles(...args) { return WorkspaceUi.pickImageCardFiles(...args); }
+
+async function createImageCardsFromFiles(...args) { return await WorkspaceUi.createImageCardsFromFiles(...args); }
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -1787,6 +1803,7 @@ function linkTextForItem(item) {
       .join('\n');
   }
   if (item.kind === 'note') return '';
+  if (item.cardSource === 'image') return '';
   return item.url || '';
 }
 
@@ -2223,7 +2240,10 @@ batchRestore.addEventListener('click', async () => {
     const ids = [...selectedIds];
     for (const id of ids) {
       const item = allTabs.find((candidate) => candidate.id === id);
-      if (item?.kind === 'tab' || (item?.kind === 'group' && (item.tabs || []).length)) await restoreItem(id);
+      if (
+        (item?.kind === 'tab' && item.cardSource !== 'image')
+        || (item?.kind === 'group' && (item.tabs || []).some((member) => member.cardSource !== 'image'))
+      ) await restoreItem(id);
     }
     clearAllSelections();
     updateBatchBar();

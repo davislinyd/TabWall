@@ -1085,7 +1085,9 @@
     }
     idSet.add(tab.id);
     memberSet.add(tab.id);
-    if (classifyUrl(tab.url, { allowStoredOnly: allowStoredOnlyUrls }) === 'invalid') {
+    if (tab.cardSource === 'image') {
+      if (tab.url) return 'invalid_url';
+    } else if (classifyUrl(tab.url, { allowStoredOnly: allowStoredOnlyUrls }) === 'invalid') {
       return 'invalid_url';
     }
     if (!validateString(tab.title, LIMITS.MAX_TITLE_LENGTH, { allowEmpty: false })) return 'invalid_title';
@@ -1215,10 +1217,10 @@
           return validationError('invalid_image');
         }
         if (!isGroup) {
-          if (
-            item.kind !== 'tab' ||
-            classifyUrl(item.url, { allowStoredOnly: allowStoredOnlyUrls }) === 'invalid'
-          ) {
+          if (item.kind !== 'tab') return validationError('invalid_url', item.id);
+          if (item.cardSource === 'image') {
+            if (item.url) return validationError('invalid_url', item.id);
+          } else if (classifyUrl(item.url, { allowStoredOnly: allowStoredOnlyUrls }) === 'invalid') {
             return validationError('invalid_url', item.id);
           }
           if (!validateString(item.favIconUrl, LIMITS.MAX_FAVICON_LENGTH)) return validationError('invalid_favicon');

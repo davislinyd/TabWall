@@ -1075,6 +1075,10 @@
     return classifyStoredUrl(url) === 'stored_only';
   }
 
+  function isImageCard(item) {
+    return item?.kind === 'tab' && item.cardSource === 'image';
+  }
+
   function countStoredOnlyUrls(items) {
     const list = Array.isArray(items) ? items : items ? [items] : [];
     return list.reduce((count, item) => {
@@ -1101,6 +1105,9 @@
       note_image_output_too_large: 'noteImageOutputTooLarge',
       note_image_too_many: 'noteImageTooMany',
       attachment_quota_exceeded: 'noteImageQuotaExceeded',
+      note_image_unsupported_type: 'noteImageUnsupportedType',
+      note_image_heic_unsupported: 'noteImageHeicUnsupported',
+      note_image_svg_unsupported: 'noteImageSvgUnsupported',
     }[code];
     return key ? env.t(key) : env.t('noteImageInvalid');
   }
@@ -1135,5 +1142,5 @@
 
   }
 
-  global.TabWallAppHelpers = { bind, getParentOrigin, uiLog, classifyStoredUrl, isStoredOnlyUrl, countStoredOnlyUrls, formatNoteBytes, formatNoteMediaError, postToParent,  refreshDiagLogPanel, canvasStoreSnapshot, updateCanvasSyncStatus, handleCanvasStoreChange, ensureCanvasStore, closeStandaloneTab, requestHostClose, sendMessage, syncQuickCaptureAvailability, setClusterKeepMode, sortTabs, copyTextFallback, copySavedLink, showCopyToast, handleCardSelectClick, getCanvasSearchContext, canvasSearchLayoutFor, syncCanvasIndexUi, renderCanvasStackIndex, focusCanvasItem, restoreMember, flipCards, findStackTargetAt, cleanupCardDragVisual, normalizeParkedList, normalizeNoteProjection, detachCardDragListeners, togglePinned, normalizeCanvasLayoutLocal, normalizeCanvasConnectionsLocal, wireStickerAttachmentImages, canvasSelectNode, moveCanvasSearchPreview, applyCanvasSearchPointerPreview, finishCanvasSearchPointer, canvasMoveSelected, arrangeCanvas, canvasNodeWorldRect, canvasTargetAt, resetCanvasView, cancelCanvasPointer, setCanvasActiveTool, gridNodeRenderKey, scheduleLoadList };
+  global.TabWallAppHelpers = { bind, getParentOrigin, uiLog, classifyStoredUrl, isStoredOnlyUrl, isImageCard, countStoredOnlyUrls, formatNoteBytes, formatNoteMediaError, postToParent,  refreshDiagLogPanel, canvasStoreSnapshot, updateCanvasSyncStatus, handleCanvasStoreChange, ensureCanvasStore, closeStandaloneTab, requestHostClose, sendMessage, syncQuickCaptureAvailability, setClusterKeepMode, sortTabs, copyTextFallback, copySavedLink, showCopyToast, handleCardSelectClick, getCanvasSearchContext, canvasSearchLayoutFor, syncCanvasIndexUi, renderCanvasStackIndex, focusCanvasItem, restoreMember, flipCards, findStackTargetAt, cleanupCardDragVisual, normalizeParkedList, normalizeNoteProjection, detachCardDragListeners, togglePinned, normalizeCanvasLayoutLocal, normalizeCanvasConnectionsLocal, wireStickerAttachmentImages, canvasSelectNode, moveCanvasSearchPreview, applyCanvasSearchPointerPreview, finishCanvasSearchPointer, canvasMoveSelected, arrangeCanvas, canvasNodeWorldRect, canvasTargetAt, resetCanvasView, cancelCanvasPointer, setCanvasActiveTool, gridNodeRenderKey, scheduleLoadList };
 })(typeof self !== 'undefined' ? self : globalThis);
