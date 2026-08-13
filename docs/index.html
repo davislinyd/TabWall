@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TabWall — 本機照片牆</title>
+  <meta name="description" content="把分頁與 Tab Group 暫存成可搜尋的空間畫布。資料只留在本機。" />
+  <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
+  <meta property="og:title" content="TabWall" />
+  <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
+  <meta property="og:url" content="https://davislinyd.github.io/TabWall/" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABg0lEQVR42u3csQ2DMBRFUU+SiiY9XZZhhmyTAViBNkNkFSpSQE8iIYrof8fnSq9H9ilcUYokSZIkSdIPu1xvq30OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoNqGcVmjdnQJ/esRNgAAAAAAAAD4twdb5IXXBGC/FA9LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAlAFbxf4ccIgAOEgADwAAwAAwAA+Dk3s8uzY6+db5PaQYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAcAN9XWgkAAAAAAIBmAfh3T0UPNgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABJkiRJkpS2DbtXox22lvgJAAAAAElFTkSuQmCC" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <a class="skip" href="#content">跳到本文</a>
+  <header class="topbar">
+    <a class="brand" href="./" aria-current="page">
+      <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true">
+        <path d="M4 8 11 5v21l-7 3z"></path>
+        <path d="M14 6 21 2v21l-7 3z"></path>
+        <path d="M24 8 31 5v21l-7 3z"></path>
+      </svg>
+      <b>TabWall</b>
+      <span>本機照片牆 · v2.33.2</span>
+    </a>
+    <div class="top-actions">
+      <a class="nav-link" href="./" aria-current="page">首頁</a>
+      <a class="nav-link" href="user-guide.html">說明</a>
+      <button type="button" class="theme-btn" id="themeBtn" aria-pressed="false">淺色</button>
+    </div>
+  </header>
+
+  <div class="layout home">
+    <main id="content">
+      <header class="hero" id="intro">
+        <div class="kicker">本機照片牆</div>
+        <h1>把分頁暫存成可搜尋的空間畫布</h1>
+        <p class="lede">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
+        <p class="lede">Park tabs and Tab Groups on a spatial canvas. Search, stack, restore — data stays on your device.</p>
+        <div class="meta-row">
+          <span class="chip">版本 2.33.2</span>
+          <span class="chip">無需帳號</span>
+          <span class="chip">不上傳到 TabWall 伺服器</span>
+          <span class="chip">New Tab 即畫布</span>
+        </div>
+        <div class="hero-actions">
+          <a class="btn-primary" href="user-guide.html">閱讀說明手冊</a>
+          <a class="btn-ghost" href="https://github.com/davislinyd/TabWall">GitHub</a>
+        </div>
+      </header>
+
+      <section class="chapter" id="start">
+        <h2>五分鐘上手</h2>
+        <div class="grid-3">
+          <article class="card">
+            <span class="n">1</span>
+            <h3>存一頁</h3>
+            <p>打開任意網頁，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd>，或點工具列圖示選「儲存目前分頁」。</p>
+          </article>
+          <article class="card">
+            <span class="n">2</span>
+            <h3>打開牆</h3>
+            <p>開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>。</p>
+          </article>
+          <article class="card">
+            <span class="n">3</span>
+            <h3>找回來</h3>
+            <p>點卡片縮圖還原。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="chapter" id="features">
+        <h2>能做什麼</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>空間畫布</h3>
+            <p>自由排列、平移縮放、框選、連線、minimap。列表檢視仍保留給大量瀏覽。</p>
+          </article>
+          <article class="card">
+            <h3>Tab Group 與 Stack</h3>
+            <p>整組存進牆；或把卡片拖在一起。還原時重建為真正的 Chrome Tab Group。</p>
+          </article>
+          <article class="card">
+            <h3>搜尋</h3>
+            <p>牆上按 <kbd>/</kbd>。任何一般頁按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd>。支援 tag／note／group／domain 與 regex。</p>
+          </article>
+          <article class="card">
+            <h3>本機備份</h3>
+            <p>精簡 JSON 或完整 ZIP。可自動寫入 Chrome 下載目錄。不上傳。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="chapter" id="install">
+        <h2>安裝</h2>
+        <p>目前以「載入未封裝項目」安裝。請使用乾淨 ZIP（解壓後的資料夾），不要載入整個 Git 倉庫。</p>
+        <ol class="steps">
+          <li>開啟 <code>chrome://extensions</code>（Edge 為 <code>edge://extensions</code>）。</li>
+          <li>打開「開發人員模式」。</li>
+          <li>選擇「載入未封裝項目」，指定解壓後、內含 <code>manifest.json</code> 的資料夾。</li>
+          <li>到 <code>chrome://extensions/shortcuts</code> 確認四個 Chrome 命令是否已綁定。</li>
+        </ol>
+        <div class="callout warn">
+          <p>安裝或更新後，若快捷鍵沒反應，請重新整理該分頁。完整步驟與限制見<a href="user-guide.html">說明手冊</a>。</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="privacy">
+        <h2>隱私</h2>
+        <p>沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。網址、備註、標籤與截圖都留在你的瀏覽器本機。</p>
+        <p><a href="privacy.html">隱私權政策</a> · <a href="CHANGELOG.html">開發歷程</a> · <a href="https://github.com/davislinyd/TabWall/blob/main/LICENSE">MIT License</a></p>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site">
+    <p>TabWall <strong>2.33.2</strong> · 授權 MIT</p>
+    <p>
+      <a href="user-guide.html">說明手冊</a> ·
+      <a href="privacy.html">隱私權政策</a> ·
+      <a href="CHANGELOG.html">開發歷程</a> ·
+      <a href="https://github.com/davislinyd/TabWall">GitHub</a>
+    </p>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>
