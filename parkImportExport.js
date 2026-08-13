@@ -106,10 +106,11 @@
 
     const ab = env.normalizeAutoBackup(env.settings.autoBackup);
     if (!ab.enabled) return;
-    const dueDirty = ab.onChange && ab.dirtyAt > 0;
+    // park.html is the New Tab page — only recover a missed periodic backup.
+    // First-enable and on-change dirty are handled by the SW alarms.
+    if (!ab.lastSuccessAt) return;
     const intervalMs = Math.max(10, env.autoBackupIntervalMinutes(ab)) * 60 * 1000;
-    const dueSchedule = !ab.lastSuccessAt || Date.now() - ab.lastSuccessAt >= intervalMs;
-    if (!dueDirty && !dueSchedule) return;
+    if (Date.now() - ab.lastSuccessAt < intervalMs) return;
     await runLocalAutoBackup({ force: false });
       
   }

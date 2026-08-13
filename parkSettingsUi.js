@@ -231,7 +231,18 @@
     if (patch.canvasRailWidth != null) patch.canvasRailWidth = env.normalizeCanvasRailWidth(patch.canvasRailWidth);
     if (patch.canvasRailCollapsed != null) patch.canvasRailCollapsed = patch.canvasRailCollapsed === true;
     if (patch.autoBackup) {
-      patch.autoBackup = normalizeAutoBackup({ ...env.settings.autoBackup, ...patch.autoBackup });
+      const merged = normalizeAutoBackup({ ...env.settings.autoBackup, ...patch.autoBackup });
+      const allowed = {};
+      for (const key of Object.keys(patch.autoBackup)) {
+        if (key === 'lastSuccessAt' || key === 'dirtyAt' || key === 'lastError') continue;
+        if (Object.prototype.hasOwnProperty.call(merged, key)) allowed[key] = merged[key];
+      }
+      if (patch.autoBackup.intervalUnit != null || patch.autoBackup.intervalValue != null) {
+        allowed.intervalUnit = merged.intervalUnit;
+        allowed.intervalValue = merged.intervalValue;
+      }
+      if (patch.autoBackup.subfolder != null) allowed.subfolder = merged.subfolder;
+      patch.autoBackup = allowed;
     }
     if (patch.autoSaveMetadata) {
       patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);

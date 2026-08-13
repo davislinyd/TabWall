@@ -425,7 +425,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.37.0');
+  assert.equal(MANIFEST.version, '2.37.1');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -2439,16 +2439,31 @@ test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt'
   assert.equal(coveredSchedule.run, false);
   assert.equal(coveredSchedule.skipReason, 'not_due');
 
-  // Fresh dirty after last success → onchange / local run; schedule still not due
+  // Fresh dirty after last success → onchange runs; New Tab catch-up must not
   const dirtyAgain = normalize({
     ...ab,
     dirtyAt: now,
     lastSuccessAt: now - 1000,
   });
   assert.equal(shouldRun(dirtyAgain, { reason: 'onchange' }).run, true);
-  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).run, true);
+  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).run, false);
+  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).skipReason, 'not_due');
   assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).run, false);
   assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).skipReason, 'not_due');
+
+  // First enable: schedule may run once the alarm fires; New Tab must not
+  const firstEnable = normalize({
+    enabled: true,
+    onChange: true,
+    intervalUnit: 'hour',
+    intervalValue: 24,
+    lastSuccessAt: 0,
+    dirtyAt: 0,
+  });
+  assert.equal(shouldRun(firstEnable, { reason: 'schedule' }).run, true);
+  assert.equal(shouldRun(firstEnable, { reason: 'local' }).run, false);
+  assert.equal(shouldRun(firstEnable, { reason: 'local' }).skipReason, 'not_due');
+  assert.equal(shouldRun(firstEnable, { reason: 'onchange' }).run, false);
 
   // Schedule due after interval
   const due = normalize({
@@ -2457,11 +2472,67 @@ test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt'
     lastSuccessAt: now - (intervalMin + 1) * 60 * 1000,
   });
   assert.equal(shouldRun(due, { reason: 'schedule' }).run, true);
+  assert.equal(shouldRun(due, { reason: 'local' }).run, true);
   assert.equal(shouldRun(due, { reason: 'onchange' }).run, false);
   assert.equal(shouldRun(due, { reason: 'onchange' }).skipReason, 'not_dirty');
 
   // Manual always runs when forced even if just backed up
   assert.equal(shouldRun(ab, { force: true, reason: 'manual' }).run, true);
+});
+
+test('PATCH_SETTINGS keeps auto-backup clocks and does not resync on mode/onChange', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const lastSuccessAt = Date.now() - 60_000;
+  const dirtyAt = lastSuccessAt - 5_000;
+  runtime.store.settings = {
+    afterSave: 'close',
+    autoBackup: {
+      enabled: true,
+      mode: 'lite',
+      onChange: true,
+      intervalUnit: 'hour',
+      intervalValue: 24,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '/Downloads/TabWall-Backups',
+      lastSuccessAt,
+      lastError: '',
+      dirtyAt,
+    },
+  };
+  const created = [];
+  const originalCreate = runtime.chrome.alarms.create;
+  runtime.chrome.alarms.create = async (name, info) => {
+    created.push({ name, info });
+    return originalCreate.call(runtime.chrome.alarms, name, info);
+  };
+
+  const result = await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: {
+      autoBackup: {
+        enabled: true,
+        mode: 'full',
+        onChange: false,
+        intervalUnit: 'hour',
+        intervalValue: 24,
+        maxKeep: 5,
+        subfolder: 'TabWall-Backups',
+        folderPath: '',
+        lastSuccessAt: 0,
+        lastError: 'stale',
+        dirtyAt: 0,
+      },
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.settings.autoBackup.mode, 'full');
+  assert.equal(result.settings.autoBackup.onChange, false);
+  assert.equal(result.settings.autoBackup.lastSuccessAt, lastSuccessAt);
+  assert.equal(result.settings.autoBackup.dirtyAt, dirtyAt);
+  assert.equal(result.settings.autoBackup.lastError, '');
+  assert.equal(created.length, 0);
 });
 
 test('PATCH_SETTINGS does not mark auto-backup dirty', async () => {

@@ -256,11 +256,22 @@ function normalizeSettings(raw) {
 async function patchSettings(partial) {
   const current = await getSettings();
   const patch = partial && typeof partial === 'object' ? partial : {};
+  // lastSuccessAt / dirtyAt / lastError are owned by runAutoBackup and
+  // markAutoBackupDirty. Park saveSettings used to send a fully-normalized
+  // autoBackup object (stale lastSuccessAt: 0), which reset the schedule and
+  // made the next New Tab catch-up download immediately.
+  let autoBackupPatch = patch.autoBackup;
+  if (autoBackupPatch && typeof autoBackupPatch === 'object') {
+    autoBackupPatch = { ...autoBackupPatch };
+    delete autoBackupPatch.lastSuccessAt;
+    delete autoBackupPatch.dirtyAt;
+    delete autoBackupPatch.lastError;
+  }
   const next = normalizeSettings({
     ...current,
     ...patch,
-    autoBackup: patch.autoBackup
-      ? { ...current.autoBackup, ...patch.autoBackup }
+    autoBackup: autoBackupPatch
+      ? { ...current.autoBackup, ...autoBackupPatch }
       : current.autoBackup,
     autoSaveMetadata: patch.autoSaveMetadata
       ? {
@@ -273,7 +284,17 @@ async function patchSettings(partial) {
       : current.autoSaveMetadata,
   });
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
-  if (patch.autoBackup) await syncAutoBackupAlarms(next.autoBackup);
+  if (autoBackupPatch) {
+    const prev = current.autoBackup;
+    const nextAb = next.autoBackup;
+    if (
+      nextAb.enabled !== prev.enabled ||
+      nextAb.intervalUnit !== prev.intervalUnit ||
+      nextAb.intervalValue !== prev.intervalValue
+    ) {
+      await syncAutoBackupAlarms(nextAb);
+    }
+  }
   // Settings-only writes must not schedule on-change backups. Parked data /
   // tags / canvas already call markAutoBackupDirty via their own writers;
   // preferences ride along on the next data or scheduled backup.
@@ -341,9 +362,9 @@ async function syncAutoBackupAlarms(autoBackup) {
 
 /**
  * Gate for non-manual auto-backup paths. Manual (reason === 'manual') always
- * proceeds when force or enabled; automatic reasons dedupe on dirtyAt /
- * lastSuccessAt so schedule + onchange + park catch-up cannot each write a
- * full backup within the same interval.
+ * proceeds when force or enabled. schedule / onchange / local (New Tab
+ * catch-up) each have their own due rule so they cannot each write a full
+ * backup within the same interval.
  * @param {object} ab normalizeAutoBackup result
  * @param {{ force?: boolean, reason?: string }} opts
  * @returns {{ run: boolean, skipReason?: string }}
@@ -383,7 +404,17 @@ function autoBackupShouldRun(ab, opts = {}) {
     return { run: true };
   }
 
-  // local / catch-up / any other automatic reason
+  // New Tab / park catch-up: only recover a missed periodic backup.
+  // First-enable (!lastSuccessAt) waits for the schedule alarm; on-change
+  // dirty is handled by AUTO_BACKUP_ONCHANGE_ALARM. park.html is also the
+  // New Tab page, so treating those as due downloads a file on tab open.
+  if (reason === 'local') {
+    const overdue = normalized.lastSuccessAt > 0 && sinceOk >= intervalMs;
+    if (!overdue) return { run: false, skipReason: 'not_due' };
+    return { run: true };
+  }
+
+  // any other automatic reason
   if (!dueDirty && !dueSchedule) return { run: false, skipReason: 'not_due' };
   return { run: true };
 }
