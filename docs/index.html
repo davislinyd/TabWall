@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.33.2 使用者說明：儲存分頁與 Tab Group、空間畫布、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.34.0 使用者說明：儲存分頁與 Tab Group、空間畫布、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.33.2</span>
+      <span>使用者說明 · v2.34.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -49,6 +49,7 @@
       <a href="#quick"><span lang="zh-Hant">Option+/ 快速搜尋</span><span lang="en">Option+/ quick search</span></a>
       <a href="#list"><span lang="zh-Hant">列表、標籤與批次</span><span lang="en">List, tags, and batch</span></a>
       <a href="#settings"><span lang="zh-Hant">設定</span><span lang="en">Settings</span></a>
+      <a href="#wallpaper"><span lang="zh-Hant">自訂背景</span><span lang="en">Custom background</span></a>
       <a href="#backup"><span lang="zh-Hant">備份與還原</span><span lang="en">Backup and restore</span></a>
       <a href="#dedupe"><span lang="zh-Hant">去重複</span><span lang="en">Duplicates</span></a>
       <a href="#privacy"><span lang="zh-Hant">隱私與資料</span><span lang="en">Privacy and data</span></a>
@@ -65,7 +66,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.33.2</span><span lang="en">Version 2.33.2</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.34.0</span><span lang="en">Version 2.34.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -153,8 +154,8 @@
           <article class="card">
             <h3 lang="zh-Hant">網頁浮層</h3>
             <h3 lang="en">Page overlay</h3>
-            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
-            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. A green check on the icon means this URL is already on the wall (as a card or a group member).</p>
+            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
+            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. The overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green check on the icon means this URL is already on the wall (as a card or a group member).</p>
           </article>
         </div>
       </section>
@@ -525,8 +526,8 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">顯示</td>
               <td lang="en">Display</td>
-              <td lang="zh-Hant">主題（淺／深；新安裝預設深色工作台）、視覺效果（安靜／標準／電影感；系統「減少動態效果」會強制安靜）、預設欄數與檢視、開啟時是否聚焦搜尋。</td>
-              <td lang="en">Theme (light / dark; new installs default dark), motion (Quiet / Standard / Cinematic; OS reduce-motion forces Quiet), default columns and view, focus search on open.</td>
+              <td lang="zh-Hant">主題（淺／深；新安裝預設深色工作台）、自訂靜態背景、視覺效果（安靜／標準／電影感；系統「減少動態效果」會強制安靜）、預設欄數與檢視、開啟時是否聚焦搜尋。</td>
+              <td lang="en">Theme (light / dark; new installs default dark), custom static background, motion (Quiet / Standard / Cinematic; OS reduce-motion forces Quiet), default columns and view, focus search on open.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">整理</td>
@@ -554,8 +555,25 @@ https://wiki.example.com
             </tr>
           </tbody>
         </table>
-        <p lang="zh-Hant">標題列的 Light／Dark 可快速切主題。背景是靜態主題，不支援影片背景或自行匯入影片。</p>
-        <p lang="en">The header Light / Dark control toggles theme quickly. Backgrounds are static; video backgrounds and user-imported videos are not supported.</p>
+        <p lang="zh-Hant">標題列的 Light／Dark 可快速切主題。</p>
+        <p lang="en">The header Light / Dark control toggles theme quickly.</p>
+      </section>
+
+      <section class="chapter" id="wallpaper">
+        <h2 lang="zh-Hant">自訂背景</h2>
+        <h2 lang="en">Custom background</h2>
+        <p lang="zh-Hant">設定 → 顯示 → 背景。上傳一張靜態圖片；與 Sticker Note 附件相同會壓縮並正規化（WebP，必要時 PNG）。不支援影片。</p>
+        <p lang="en">Settings → Display → Background. Upload one static image. It is compressed and normalized like a Sticker Note attachment (WebP, PNG fallback). Video is not supported.</p>
+        <ul>
+          <li lang="zh-Hant"><strong>符合方式：</strong>置中、符合寬度、符合高度、原始大小。</li>
+          <li lang="en"><strong>Fit:</strong> center, fit to width, fit to height, or original size.</li>
+          <li lang="zh-Hant"><strong>模糊：</strong>0–32px，預設 16。濃度：15–70%，預設 40。另有主題洗色，避免蓋過卡片。</li>
+          <li lang="en"><strong>Blur:</strong> 0–32px, default 16. Strength: 15–70%, default 40. A theme wash keeps cards readable.</li>
+          <li lang="zh-Hant">圖片存在本機 IndexedDB；符合方式、模糊、濃度存在設定。</li>
+          <li lang="en">The image lives in local IndexedDB; fit, blur, and strength live in settings.</li>
+          <li lang="zh-Hant">按「移除」刪掉背景圖與設定。</li>
+          <li lang="en">Remove deletes the image and the wallpaper settings.</li>
+        </ul>
       </section>
 
       <section class="chapter" id="backup">
@@ -565,21 +583,21 @@ https://wiki.example.com
           <article class="card">
             <h3 lang="zh-Hant">精簡 JSON</h3>
             <h3 lang="en">Lite JSON</h3>
-            <p lang="zh-Hant">保留網址、標題、note、tags、附件 metadata。不含截圖與圖片二進位。檔案小，適合日常與自動備份。</p>
-            <p lang="en">Keeps URLs, titles, notes, tags, and attachment metadata. No screenshot or image binaries. Small enough for daily and automatic backups.</p>
+            <p lang="zh-Hant">保留網址、標題、note、tags、附件 metadata，以及背景的符合／模糊／濃度設定。不含截圖、附件或背景圖檔。檔案小，適合日常與自動備份。</p>
+            <p lang="en">Keeps URLs, titles, notes, tags, attachment metadata, and wallpaper fit / blur / strength. No screenshot, attachment, or wallpaper image binaries. Small enough for daily and automatic backups.</p>
           </article>
           <article class="card">
             <h3 lang="zh-Hant">完整 ZIP</h3>
             <h3 lang="en">Full ZIP</h3>
-            <p lang="zh-Hant">另外帶本機圖片。預估超過 256 MiB 會拒絕，請改精簡或分批（多選匯出）。還原預覽可看圖；精簡預覽看文字與成員。</p>
-            <p lang="en">Includes local images. Export is refused above about 256 MiB — use lite or export a selection. Full restore previews images; lite previews text and members.</p>
+            <p lang="zh-Hant">另外帶本機圖片與自訂背景圖。預估超過 256 MiB 會拒絕，請改精簡或分批（多選匯出）。還原預覽可看圖；精簡預覽看文字與成員。</p>
+            <p lang="en">Includes local images and the custom wallpaper. Export is refused above about 256 MiB — use lite or export a selection. Full restore previews images; lite previews text and members.</p>
           </article>
         </div>
         <ul>
-          <li lang="zh-Hant"><strong>還原（覆蓋）</strong>：取代牆上全部資料，會再確認一次。</li>
-          <li lang="en"><strong>Restore (replace)</strong> overwrites everything on the wall after a confirm.</li>
-          <li lang="zh-Hant"><strong>匯入（附加）</strong>：只新增，不刪現有卡片。選檔後可挑要寫入哪些分頁與群組。</li>
-          <li lang="en"><strong>Import (append)</strong> only adds cards. After picking a file, choose which tabs and groups to write.</li>
+          <li lang="zh-Hant"><strong>還原（覆蓋）</strong>：取代牆上全部資料（含自訂背景），會再確認一次。</li>
+          <li lang="en"><strong>Restore (replace)</strong> overwrites everything on the wall, including the custom wallpaper, after a confirm.</li>
+          <li lang="zh-Hant"><strong>匯入（附加）</strong>：只新增卡片，不刪現有項目，也不覆寫目前背景。選檔後可挑要寫入哪些分頁與群組。</li>
+          <li lang="en"><strong>Import (append)</strong> only adds cards. It does not delete existing items and does not overwrite the current wallpaper. After picking a file, choose which tabs and groups to write.</li>
           <li lang="zh-Hant">檔名使用本機時間與 UTC 時差，例如 <code>2026-08-04T13-00-00+0800</code>。</li>
           <li lang="en">Filenames use local time and the UTC offset, for example <code>2026-08-04T13-00-00+0800</code>.</li>
         </ul>
@@ -606,8 +624,8 @@ https://wiki.example.com
           <li lang="en">There is no TabWall cloud account, and the wall is not uploaded to TabWall servers.</li>
           <li lang="zh-Hant">網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
           <li lang="en">URLs, titles, notes, tags, and order live in <code>chrome.storage.local</code>.</li>
-          <li lang="zh-Hant">縮圖與快照存在本機 IndexedDB。</li>
-          <li lang="en">Thumbnails and snapshots live in local IndexedDB.</li>
+          <li lang="zh-Hant">縮圖、快照、note 附件與自訂背景圖存在本機 IndexedDB。</li>
+          <li lang="en">Thumbnails, snapshots, note attachments, and the custom wallpaper live in local IndexedDB.</li>
           <li lang="zh-Hant">只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
           <li lang="en">The current tab or group is read only when you act (including Chrome commands).</li>
           <li lang="zh-Hant">解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
@@ -629,6 +647,8 @@ https://wiki.example.com
           <li lang="en">It is not Chrome bookmarks, not a sync account, and not a cross-device cloud wall.</li>
           <li lang="zh-Hant">沒有手機版重排或觸控工具列。</li>
           <li lang="en">There is no mobile reflow or touch toolbar.</li>
+          <li lang="zh-Hant">背景只接受靜態圖片，不支援影片或動態桌布。</li>
+          <li lang="en">Backgrounds are static images only. Video and live wallpapers are not supported.</li>
           <li lang="zh-Hant">Sticker Note 不能還原成分頁；<code>file:</code> 一類 stored-only 項目也不可直接還原。</li>
           <li lang="en">Sticker Notes cannot restore as tabs. Stored-only items such as <code>file:</code> URLs also cannot restore directly.</li>
         </ul>
@@ -727,8 +747,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.33.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.33.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.34.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.34.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

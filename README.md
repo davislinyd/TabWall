@@ -19,7 +19,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 ### Architecture
 
 - Metadata such as URLs, titles, notes, tags, and order is stored in `chrome.storage.local`.
-- Thumbnails and full snapshots are stored as `IndexedDB` blobs.
+- Thumbnails, full snapshots, Sticker Note attachments, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
@@ -92,8 +92,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 ### Features
 
-- **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected.
-- **Static themes:** Backgrounds use static themes; video backgrounds and user-imported videos are not supported.
+- **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page.
+- **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
 - **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. New images are normalized to WebP (PNG fallback), capped at 4096px on the long edge, 16MP, and 24 MiB per source/output file; GIF and SVG become static images. Notes can join Stacks but are never restored as browser tabs.
 - Multi-selection and batch operations.
@@ -145,10 +145,10 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 ```text
 manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
-content.js      park.html       park.js
+content.js      park.html       park.js      parkWallpaper.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md
-docs/privacy.md docs/CHANGELOG.md
+docs/index.html docs/privacy.md docs/CHANGELOG.md
 ```
 
 ## 中文
@@ -170,7 +170,7 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 ### 架構
 
 - 網址、標題、備註、標籤與排序等中繼資料儲存在 `chrome.storage.local`。
-- 縮圖與完整快照以 `IndexedDB` 二進位資料儲存。
+- 縮圖、完整快照、Sticker Note 附件與可選的自訂背景以 `IndexedDB` 二進位資料儲存。背景的符合方式、模糊與濃度留在設定裡。
 - 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
@@ -242,8 +242,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 ### 功能
 
-- **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。
-- **靜態主題：** 背景使用靜態主題，不支援影片背景或使用者匯入影片。
+- **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。
+- **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。
 - **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件。新圖片會自動正規化為 WebP（不可用時退回 PNG），長邊上限 4096px、總像素 16MP，原始檔與儲存檔各不得超過 24 MiB；GIF／SVG 會靜態化。note 可加入 Stack，但不會還原成瀏覽器分頁。
 - 多選與批次操作。
@@ -295,8 +295,9 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 ```text
 manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
-content.js      popup.html      popup.js       park.html       park.js
+content.js      popup.html      popup.js     park.html       park.js
+parkWallpaper.js
 icons/          scripts/pack.sh
 AGENTS.md       README.md
-docs/privacy.md docs/CHANGELOG.md
+docs/index.html docs/privacy.md docs/CHANGELOG.md
 ```
