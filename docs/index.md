@@ -14,6 +14,8 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 
 **Current version:** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
 
+**User guide:** [使用者說明手冊](user-guide.html)
+
 **Release history:** [CHANGELOG](CHANGELOG.html)
 
 **Privacy policy:** [privacy policy](privacy.html)
@@ -155,6 +157,8 @@ docs/privacy.md docs/CHANGELOG.md
 TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 暫存到空間畫布，資料留在本機裝置。
 
 **目前版本：** [manifest.json](https://github.com/davislinyd/TabWall/blob/main/manifest.json)
+
+**使用者說明：** [說明手冊](user-guide.html)
 
 **開發歷程：** [CHANGELOG](CHANGELOG.html)
 
