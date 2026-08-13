@@ -1,22 +1,118 @@
 (function () {
   var root = document.documentElement;
   var themeBtn = document.getElementById("themeBtn");
-  if (!themeBtn) return;
+  var langBtn = document.getElementById("langBtn");
+  var find = document.getElementById("find");
 
-  function storedTheme() {
-    try { return localStorage.getItem("tabwall-manual-theme"); } catch (e) { return null; }
+  var COPY = {
+    zh: {
+      title: "TabWall 使用者說明",
+      description: "TabWall 2.33.2 使用者說明：儲存分頁與 Tab Group、空間畫布、搜尋、備份與隱私。",
+      skip: "跳到本文",
+      brand: "使用者說明 · v2.33.2",
+      find: "搜尋手冊…",
+      empty: "手冊中沒有符合的段落。試試「備份」「搜尋」或「快捷鍵」。",
+      toc: "目錄",
+      themeLight: "淺色",
+      themeDark: "深色",
+      langOther: "EN",
+    },
+    en: {
+      title: "TabWall User Guide",
+      description: "TabWall 2.33.2 user guide: park tabs and Tab Groups, spatial canvas, search, backup, and privacy.",
+      skip: "Skip to content",
+      brand: "User guide · v2.33.2",
+      find: "Search the guide…",
+      empty: "No matching section. Try “backup”, “search”, or “shortcut”.",
+      toc: "Contents",
+      themeLight: "Light",
+      themeDark: "Dark",
+      langOther: "中文",
+    },
+  };
+
+  function stored(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function store(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  function detectLang() {
+    var query = "";
+    try { query = new URLSearchParams(location.search).get("lang") || ""; } catch (e) {}
+    if (query === "en" || query === "zh") return query;
+    var saved = stored("tabwall-manual-lang");
+    if (saved === "en" || saved === "zh") return saved;
+    var nav = String(navigator.language || "").toLowerCase();
+    return nav.indexOf("en") === 0 ? "en" : "zh";
+  }
+
+  function currentLang() {
+    return root.getAttribute("data-lang") === "en" ? "en" : "zh";
+  }
+
+  function syncChrome() {
+    var copy = COPY[currentLang()];
+    document.title = copy.title;
+    var meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", copy.description);
+    var ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute("content", copy.title);
+    var ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute("content", copy.description);
+    var skip = document.querySelector(".skip");
+    if (skip) skip.textContent = copy.skip;
+    var brand = document.querySelector(".brand span");
+    if (brand) brand.textContent = copy.brand;
+    if (find) find.setAttribute("placeholder", copy.find);
+    var empty = document.getElementById("emptyFind");
+    if (empty) empty.textContent = copy.empty;
+    var toc = document.querySelector(".toc h2");
+    if (toc) toc.textContent = copy.toc;
+    if (langBtn) {
+      langBtn.textContent = copy.langOther;
+      langBtn.setAttribute("aria-label", currentLang() === "en" ? "Switch to Chinese" : "切換為英文");
+    }
+    if (themeBtn) {
+      var light = root.getAttribute("data-theme") !== "light";
+      themeBtn.textContent = light ? copy.themeLight : copy.themeDark;
+    }
   }
 
   function applyTheme(theme) {
     var next = theme === "light" ? "light" : "dark";
     root.setAttribute("data-theme", next);
-    themeBtn.textContent = next === "light" ? "深色" : "淺色";
-    themeBtn.setAttribute("aria-pressed", next === "light" ? "true" : "false");
-    try { localStorage.setItem("tabwall-manual-theme", next); } catch (e) {}
+    if (themeBtn) themeBtn.setAttribute("aria-pressed", next === "light" ? "true" : "false");
+    store("tabwall-manual-theme", next);
+    syncChrome();
   }
 
-  applyTheme(storedTheme() || "dark");
-  themeBtn.addEventListener("click", function () {
-    applyTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
-  });
+  function applyLang(lang) {
+    var next = lang === "en" ? "en" : "zh";
+    root.setAttribute("data-lang", next);
+    root.setAttribute("lang", next === "en" ? "en" : "zh-Hant");
+    store("tabwall-manual-lang", next);
+    try {
+      var url = new URL(location.href);
+      url.searchParams.set("lang", next);
+      history.replaceState({}, "", url);
+    } catch (e) {}
+    syncChrome();
+    document.dispatchEvent(new Event("tabwall-langchange"));
+  }
+
+  applyTheme(stored("tabwall-manual-theme") || "dark");
+  applyLang(detectLang());
+
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      applyTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+  }
+  if (langBtn) {
+    langBtn.addEventListener("click", function () {
+      applyLang(currentLang() === "en" ? "zh" : "en");
+    });
+  }
 })();

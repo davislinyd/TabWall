@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="dark">
+<html lang="zh-Hant" data-theme="dark" data-lang="zh">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -27,134 +27,175 @@
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
+      <button type="button" class="lang-btn" id="langBtn">EN</button>
       <button type="button" class="theme-btn" id="themeBtn" aria-pressed="false">淺色</button>
     </div>
   </header>
 
   <div class="layout">
-    <nav class="toc" aria-label="章節目錄">
+    <nav class="toc" aria-label="Contents">
       <h2>目錄</h2>
-      <a href="#intro">這是什麼</a>
-      <a href="#install">安裝</a>
-      <a href="#start">五分鐘上手</a>
-      <a href="#entries">三種入口</a>
-      <a href="#save">儲存分頁與群組</a>
-      <a href="#presave">儲存前編輯與規則</a>
-      <a href="#canvas">空間畫布</a>
-      <a href="#cards">卡片與還原</a>
+      <a href="#intro"><span lang="zh-Hant">這是什麼</span><span lang="en">What it is</span></a>
+      <a href="#install"><span lang="zh-Hant">安裝</span><span lang="en">Install</span></a>
+      <a href="#start"><span lang="zh-Hant">五分鐘上手</span><span lang="en">Five-minute start</span></a>
+      <a href="#entries"><span lang="zh-Hant">三種入口</span><span lang="en">Three ways in</span></a>
+      <a href="#save"><span lang="zh-Hant">儲存分頁與群組</span><span lang="en">Park tabs and groups</span></a>
+      <a href="#presave"><span lang="zh-Hant">儲存前編輯與規則</span><span lang="en">Edit before save and rules</span></a>
+      <a href="#canvas"><span lang="zh-Hant">空間畫布</span><span lang="en">Spatial canvas</span></a>
+      <a href="#cards"><span lang="zh-Hant">卡片與還原</span><span lang="en">Cards and restore</span></a>
       <a href="#notes">Sticker Note</a>
-      <a href="#stacks">Stack 與 Tab Group</a>
-      <a href="#search">牆上搜尋</a>
-      <a href="#quick">Option+/ 快速搜尋</a>
-      <a href="#list">列表、標籤與批次</a>
-      <a href="#settings">設定</a>
-      <a href="#backup">備份與還原</a>
-      <a href="#dedupe">去重複</a>
-      <a href="#privacy">隱私與資料</a>
-      <a href="#limits">限制與常見問題</a>
-      <a href="#keys">快捷鍵一覽</a>
+      <a href="#stacks"><span lang="zh-Hant">Stack 與 Tab Group</span><span lang="en">Stacks and Tab Groups</span></a>
+      <a href="#search"><span lang="zh-Hant">牆上搜尋</span><span lang="en">Wall search</span></a>
+      <a href="#quick"><span lang="zh-Hant">Option+/ 快速搜尋</span><span lang="en">Option+/ quick search</span></a>
+      <a href="#list"><span lang="zh-Hant">列表、標籤與批次</span><span lang="en">List, tags, and batch</span></a>
+      <a href="#settings"><span lang="zh-Hant">設定</span><span lang="en">Settings</span></a>
+      <a href="#backup"><span lang="zh-Hant">備份與還原</span><span lang="en">Backup and restore</span></a>
+      <a href="#dedupe"><span lang="zh-Hant">去重複</span><span lang="en">Duplicates</span></a>
+      <a href="#privacy"><span lang="zh-Hant">隱私與資料</span><span lang="en">Privacy and data</span></a>
+      <a href="#limits"><span lang="zh-Hant">限制與常見問題</span><span lang="en">Limits and FAQ</span></a>
+      <a href="#keys"><span lang="zh-Hant">快捷鍵一覽</span><span lang="en">Shortcuts</span></a>
     </nav>
 
     <main id="content">
       <header class="hero" id="intro">
-        <div class="kicker">本機照片牆</div>
-        <h1>把分頁暫存成可搜尋的空間畫布</h1>
-        <p class="lede">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
+        <div class="kicker" lang="zh-Hant">本機照片牆</div>
+        <div class="kicker" lang="en">Local photo wall</div>
+        <h1 lang="zh-Hant">把分頁暫存成可搜尋的空間畫布</h1>
+        <h1 lang="en">Park tabs on a searchable spatial canvas</h1>
+        <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
+        <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip">版本 2.33.2</span>
-          <span class="chip">無需帳號</span>
-          <span class="chip">不上傳到 TabWall 伺服器</span>
-          <span class="chip">New Tab 即畫布</span>
+          <span class="chip"><span lang="zh-Hant">版本 2.33.2</span><span lang="en">Version 2.33.2</span></span>
+          <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
+          <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
+          <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
         </div>
       </header>
       <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「備份」「搜尋」或「快捷鍵」。</p>
 
       <section class="chapter" id="install">
-        <h2>安裝</h2>
-        <p>目前以「載入未封裝項目」安裝。請使用乾淨 ZIP（解壓後的資料夾），不要載入整個 Git 倉庫。</p>
+        <h2 lang="zh-Hant">安裝</h2>
+        <h2 lang="en">Install</h2>
+        <p lang="zh-Hant">目前以「載入未封裝項目」安裝。請使用乾淨 ZIP（解壓後的資料夾），不要載入整個 Git 倉庫。</p>
+        <p lang="en">Install with Load unpacked. Use a clean ZIP (the unzipped folder), not the whole Git repository.</p>
         <ol class="steps">
-          <li>開啟 <code>chrome://extensions</code>（Edge 為 <code>edge://extensions</code>）。</li>
-          <li>打開右上角「開發人員模式」。</li>
-          <li>選擇「載入未封裝項目」，指定解壓後的 TabWall 資料夾（內含 <code>manifest.json</code>）。</li>
-          <li>到 <code>chrome://extensions/shortcuts</code> 確認四個 Chrome 命令是否已綁定。衝突時請改成你習慣的組合。</li>
+          <li lang="zh-Hant">開啟 <code>chrome://extensions</code>（Edge 為 <code>edge://extensions</code>）。</li>
+          <li lang="en">Open <code>chrome://extensions</code> (or <code>edge://extensions</code> on Edge).</li>
+          <li lang="zh-Hant">打開右上角「開發人員模式」。</li>
+          <li lang="en">Turn on Developer mode.</li>
+          <li lang="zh-Hant">選擇「載入未封裝項目」，指定解壓後的 TabWall 資料夾（內含 <code>manifest.json</code>）。</li>
+          <li lang="en">Choose Load unpacked and select the unzipped TabWall folder (it must contain <code>manifest.json</code>).</li>
+          <li lang="zh-Hant">到 <code>chrome://extensions/shortcuts</code> 確認四個 Chrome 命令是否已綁定。衝突時請改成你習慣的組合。</li>
+          <li lang="en">Check <code>chrome://extensions/shortcuts</code> and bind the four Chrome commands if they are empty or conflicting.</li>
         </ol>
         <div class="callout warn">
-          <p>安裝、重新載入或更新後，若網頁上的浮層或 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 沒反應，請重新整理該分頁。舊頁面可能仍掛著上一版注入腳本。</p>
+          <p lang="zh-Hant">安裝、重新載入或更新後，若網頁上的浮層或 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 沒反應，請重新整理該分頁。舊頁面可能仍掛著上一版注入腳本。</p>
+          <p lang="en">After install, reload, or update, refresh the tab if the overlay or <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> does nothing. The page may still be running an older injected script.</p>
         </div>
       </section>
 
       <section class="chapter" id="start">
-        <h2>五分鐘上手</h2>
+        <h2 lang="zh-Hant">五分鐘上手</h2>
+        <h2 lang="en">Five-minute start</h2>
         <div class="grid-3">
           <article class="card">
             <span class="n">1</span>
-            <h3>存一頁</h3>
-            <p>打開任意網頁，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd>，或點工具列圖示選「儲存目前分頁」。</p>
+            <h3 lang="zh-Hant">存一頁</h3>
+            <h3 lang="en">Park a page</h3>
+            <p lang="zh-Hant">打開任意網頁，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd>，或點工具列圖示選「儲存目前分頁」。</p>
+            <p lang="en">On any page, press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd>, or use the toolbar icon and choose park current tab.</p>
           </article>
           <article class="card">
             <span class="n">2</span>
-            <h3>打開牆</h3>
-            <p>開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>，或在 popup 按「打開 TabWall 面板」。</p>
+            <h3 lang="zh-Hant">打開牆</h3>
+            <h3 lang="en">Open the wall</h3>
+            <p lang="zh-Hant">開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>，或在 popup 按「打開 TabWall 面板」。</p>
+            <p lang="en">A new tab opens TabWall. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>, or click Open TabWall in the popup.</p>
           </article>
           <article class="card">
             <span class="n">3</span>
-            <h3>找回來</h3>
-            <p>點卡片縮圖還原分頁。群組會先問一次。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+            <h3 lang="zh-Hant">找回來</h3>
+            <h3 lang="en">Restore</h3>
+            <p lang="zh-Hant">點卡片縮圖還原分頁。群組會先問一次。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+            <p lang="en">Click a thumbnail to restore. Groups ask first. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> to search and restore without opening the wall.</p>
           </article>
         </div>
-        <p>畫布上的「說明」按鈕可隨時打開精簡版提示。本手冊是完整版。</p>
+        <p lang="zh-Hant">畫布上的「說明」按鈕可隨時打開精簡版提示。本手冊是完整版。</p>
+        <p lang="en">The in-app Help button shows a short version. This page is the full guide.</p>
       </section>
 
       <section class="chapter" id="entries">
-        <h2>三種入口</h2>
+        <h2 lang="zh-Hant">三種入口</h2>
+        <h2 lang="en">Three ways in</h2>
         <div class="grid-3">
           <article class="card">
-            <h3>工具列 popup</h3>
-            <p>點 TabWall 圖示後可分別：</p>
+            <h3 lang="zh-Hant">工具列 popup</h3>
+            <h3 lang="en">Toolbar popup</h3>
+            <p lang="zh-Hant">點 TabWall 圖示後可分別：</p>
+            <p lang="en">Click the TabWall icon to:</p>
             <ul>
-              <li>儲存目前分頁（關閉／不關閉）</li>
-              <li>儲存目前 Tab Group（關閉／不關閉）</li>
-              <li>打開 TabWall 面板</li>
+              <li lang="zh-Hant">儲存目前分頁（關閉／不關閉）</li>
+              <li lang="en">Park the current tab (close or keep)</li>
+              <li lang="zh-Hant">儲存目前 Tab Group（關閉／不關閉）</li>
+              <li lang="en">Park the current Tab Group (close or keep)</li>
+              <li lang="zh-Hant">打開 TabWall 面板</li>
+              <li lang="en">Open the TabWall panel</li>
             </ul>
-            <p>目前分頁不在 Tab Group 時，群組按鈕會停用。</p>
+            <p lang="zh-Hant">目前分頁不在 Tab Group 時，群組按鈕會停用。</p>
+            <p lang="en">Group actions are disabled when the current tab is not in a Tab Group.</p>
           </article>
           <article class="card">
-            <h3>New Tab／獨立頁</h3>
-            <p>新分頁直接顯示空間畫布。受限頁（例如 <code>chrome://</code>）無法注入浮層時，會改開或聚焦獨立 TabWall 分頁。</p>
+            <h3 lang="zh-Hant">New Tab／獨立頁</h3>
+            <h3 lang="en">New Tab / standalone</h3>
+            <p lang="zh-Hant">新分頁直接顯示空間畫布。受限頁（例如 <code>chrome://</code>）無法注入浮層時，會改開或聚焦獨立 TabWall 分頁。</p>
+            <p lang="en">New Tab opens the canvas. Restricted pages such as <code>chrome://</code> cannot host the overlay, so TabWall opens or focuses a standalone tab instead.</p>
           </article>
           <article class="card">
-            <h3>網頁浮層</h3>
-            <p>一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
+            <h3 lang="zh-Hant">網頁浮層</h3>
+            <h3 lang="en">Page overlay</h3>
+            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
+            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. A green check on the icon means this URL is already on the wall (as a card or a group member).</p>
           </article>
         </div>
       </section>
 
       <section class="chapter" id="save">
-        <h2>儲存分頁與群組</h2>
+        <h2 lang="zh-Hant">儲存分頁與群組</h2>
+        <h2 lang="en">Park tabs and groups</h2>
         <table>
           <thead>
-            <tr><th>方式</th><th>結果</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">方式</span><span lang="en">How</span></th>
+              <th><span lang="zh-Hant">結果</span><span lang="en">Result</span></th>
+            </tr>
           </thead>
           <tbody>
             <tr>
               <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd></td>
-              <td>暫存目前分頁（含截圖）。是否關閉分頁，依設定「儲存分頁後的行為」。</td>
+              <td lang="zh-Hant">暫存目前分頁（含截圖）。是否關閉分頁，依設定「儲存分頁後的行為」。</td>
+              <td lang="en">Park the current tab with a screenshot. Whether the tab closes follows After saving a tab.</td>
             </tr>
             <tr>
               <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td>
-              <td>暫存但不關閉。若目前分頁屬於 Tab Group，會存整組；否則只存這一頁。</td>
+              <td lang="zh-Hant">暫存但不關閉。若目前分頁屬於 Tab Group，會存整組；否則只存這一頁。</td>
+              <td lang="en">Park and keep it open. If the tab is in a Tab Group, the whole group is saved; otherwise only this tab.</td>
             </tr>
             <tr>
               <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td>
-              <td>暫存目前 Tab Group。是否關閉，依設定「儲存 Group 後」。</td>
+              <td lang="zh-Hant">暫存目前 Tab Group。是否關閉，依設定「儲存 Group 後」。</td>
+              <td lang="en">Park the current Tab Group. Whether tabs close follows After saving a group.</td>
             </tr>
             <tr>
-              <td>牆上「儲存目前分頁／Group」</td>
-              <td>在 Overlay 可直接存目前頁；New Tab／獨立頁則改走貼上 URL。</td>
+              <td lang="zh-Hant">牆上「儲存目前分頁／Group」</td>
+              <td lang="en">Quick Add on the wall</td>
+              <td lang="zh-Hant">在 Overlay 可直接存目前頁；New Tab／獨立頁則改走貼上 URL。</td>
+              <td lang="en">The overlay parks the current page. New Tab / standalone opens paste-URL instead.</td>
             </tr>
             <tr>
-              <td>「新增卡片」貼上 URL</td>
-              <td>每行一個網址。用 <code>#GROUP:名稱</code> 上下包住多行，會建成群組。</td>
+              <td lang="zh-Hant">「新增卡片」貼上 URL</td>
+              <td lang="en">Add cards by pasting URLs</td>
+              <td lang="zh-Hant">每行一個網址。用 <code>#GROUP:名稱</code> 上下包住多行，會建成群組。</td>
+              <td lang="en">One URL per line. Wrap lines with <code>#GROUP:Name</code> to create a group.</td>
             </tr>
           </tbody>
         </table>
@@ -166,251 +207,519 @@ https://jira.example.com
 https://wiki.example.com
 #GROUP:工作</code></pre>
         <div class="callout">
-          <p>截圖範圍由 Chrome 決定。群組可在設定選擇截「全部成員」「僅目前分頁」或「不截圖（只存結構）」。</p>
+          <p lang="zh-Hant">截圖範圍由 Chrome 決定。群組可在設定選擇截「全部成員」「僅目前分頁」或「不截圖（只存結構）」。</p>
+          <p lang="en">Chrome decides what can be captured. For groups, Settings can capture all members, only the active tab, or structure only.</p>
         </div>
       </section>
 
       <section class="chapter" id="presave">
-        <h2>儲存前編輯與自動規則</h2>
-        <h3>儲存前編輯</h3>
-        <p>預設開啟。儲存<strong>單一分頁</strong>（快捷鍵、popup 的分頁按鈕、Overlay 快速儲存）時，會先跳出面板讓你改 note／tag，確認後才寫入；取消則分頁維持原狀。</p>
-        <p>Group 儲存不受這項影響。可在設定關閉「儲存前先編輯 Note／Tag」。</p>
-        <h3>自動 Note／Tag 規則</h3>
-        <p>設定 → 儲存規則。依 hostname／FQDN 或 page title，用 match、contains、starts with、ends with、regex、not 判斷；每條規則可選 AND／OR。</p>
+        <h2 lang="zh-Hant">儲存前編輯與自動規則</h2>
+        <h2 lang="en">Edit before save and rules</h2>
+        <h3 lang="zh-Hant">儲存前編輯</h3>
+        <h3 lang="en">Edit before saving</h3>
+        <p lang="zh-Hant">預設開啟。儲存<strong>單一分頁</strong>（快捷鍵、popup 的分頁按鈕、Overlay 快速儲存）時，會先跳出面板讓你改 note／tag，確認後才寫入；取消則分頁維持原狀。</p>
+        <p lang="en">On by default. Parking a <strong>single tab</strong> (shortcuts, popup tab buttons, overlay quick-save) opens a panel for note/tags first. Confirm writes it; cancel leaves the tab untouched.</p>
+        <p lang="zh-Hant">Group 儲存不受這項影響。可在設定關閉「儲存前先編輯 Note／Tag」。</p>
+        <p lang="en">Group saves skip this panel. Turn it off in Settings → Edit before saving.</p>
+        <h3 lang="zh-Hant">自動 Note／Tag 規則</h3>
+        <h3 lang="en">Automatic note / tag rules</h3>
+        <p lang="zh-Hant">設定 → 儲存規則。依 hostname／FQDN 或 page title，用 match、contains、starts with、ends with、regex、not 判斷；每條規則可選 AND／OR。</p>
+        <p lang="en">Settings → Save rules. Match hostname / FQDN or page title with match, contains, starts with, ends with, regex, or not. Each rule can use AND or OR.</p>
         <ul>
-          <li>命中後：note 逐行附加並去重，tag 合併並去重。</li>
-          <li>存 Group 時會逐一判斷成員。</li>
-          <li>儲存前編輯面板會預填這些規則的結果，你仍可改。</li>
+          <li lang="zh-Hant">命中後：note 逐行附加並去重，tag 合併並去重。</li>
+          <li lang="en">On a hit: note lines append without duplicates; tags merge without duplicates.</li>
+          <li lang="zh-Hant">存 Group 時會逐一判斷成員。</li>
+          <li lang="en">Group saves evaluate each member separately.</li>
+          <li lang="zh-Hant">儲存前編輯面板會預填這些規則的結果，你仍可改。</li>
+          <li lang="en">The edit-before-save panel is prefilled from matching rules; you can still change it.</li>
         </ul>
         <div class="callout ok">
-          <p>同一瀏覽器工作階段裡，還原過的分頁或群組若再次儲存，會沿用原本的備註與標籤。</p>
+          <p lang="zh-Hant">同一瀏覽器工作階段裡，還原過的分頁或群組若再次儲存，會沿用原本的備註與標籤。</p>
+          <p lang="en">If you restore a tab or group and park it again in the same browser session, the original notes and tags come back.</p>
         </div>
       </section>
 
       <section class="chapter" id="canvas">
-        <h2>空間畫布</h2>
-        <p>預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
+        <h2 lang="zh-Hant">空間畫布</h2>
+        <h2 lang="en">Spatial canvas</h2>
+        <p lang="zh-Hant">預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
+        <p lang="en">The default view is an infinite canvas you can pan and zoom. Card previews are 16:10. At 100% zoom cards look about 10% larger; stored positions stay compatible.</p>
         <table>
           <thead>
-            <tr><th>操作</th><th>結果</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">操作</span><span lang="en">Action</span></th>
+              <th><span lang="zh-Hant">結果</span><span lang="en">Result</span></th>
+            </tr>
           </thead>
           <tbody>
-            <tr><td>左側「選取」＋拖空白處／滾輪</td><td>平移或縮放。滾輪以游標為錨；工具列 −／＋ 與滑桿以畫面中心縮放。</td></tr>
-            <tr><td>滑鼠中鍵拖曳</td><td>平移且不會開始選取。雙擊中鍵重設視角。</td></tr>
-            <tr><td>「框選」</td><td>拉矩形選多張卡片。</td></tr>
-            <tr><td>「連結」</td><td>游標移到卡片會出現四側 <code>+</code>。從任一側拖到另一張；也可點兩張卡片當後備。連線無方向、會保存。</td></tr>
-            <tr><td>拖連線</td><td>前／後三分之一重接端點；中間三分之一彎曲或拉長。雙擊線段重設曲線。</td></tr>
-            <tr><td>「新增 Sticker Note」或點空白畫布</td><td>建立僅存在於畫布的便條，並打開左右分割編輯器。</td></tr>
-            <tr><td>拖曳卡片</td><td>位置自動儲存。拖到另一張的標題／中繼資料區可組成 Stack。</td></tr>
-            <tr><td>拖 minimap 視角框</td><td>平移目前視野；放開後算一次操作。</td></tr>
-            <tr><td>空白處右鍵</td><td>按日期排序、重新對齊、匯出精簡備份、新增 Note。</td></tr>
-            <tr><td>卡片右鍵</td><td>與卡片工具列相同：還原、快照、編輯、複製、固定、刪除（依類型）。</td></tr>
-            <tr><td>「畫布整理」</td><td>依日期、FQDN 或 Group 排序；棋盤或對齊排列（96px 間距，保留卡片尺寸）。</td></tr>
+            <tr>
+              <td lang="zh-Hant">左側「選取」＋拖空白處／滾輪</td>
+              <td lang="en">Select + drag empty canvas / wheel</td>
+              <td lang="zh-Hant">平移或縮放。滾輪以游標為錨；工具列 −／＋ 與滑桿以畫面中心縮放。</td>
+              <td lang="en">Pan or zoom. The wheel zooms around the cursor; − / + and the slider zoom around the viewport center.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">滑鼠中鍵拖曳</td>
+              <td lang="en">Middle-mouse drag</td>
+              <td lang="zh-Hant">平移且不會開始選取。雙擊中鍵重設視角。</td>
+              <td lang="en">Pan without starting a selection. Double-click the middle button to reset the view.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">「框選」</td>
+              <td lang="en">Frame select</td>
+              <td lang="zh-Hant">拉矩形選多張卡片。</td>
+              <td lang="en">Drag a rectangle to select cards.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">「連結」</td>
+              <td lang="en">Link</td>
+              <td lang="zh-Hant">游標移到卡片會出現四側 <code>+</code>。從任一側拖到另一張；也可點兩張卡片當後備。連線無方向、會保存。</td>
+              <td lang="en">Hover a card for four-side <code>+</code> handles, then drag. Clicking two cards still works. Links are undirected and saved.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">拖連線</td>
+              <td lang="en">Drag a connection</td>
+              <td lang="zh-Hant">前／後三分之一重接端點；中間三分之一彎曲或拉長。雙擊線段重設曲線。</td>
+              <td lang="en">The first and last thirds reconnect an endpoint; the middle third bends or lengthens. Double-click resets the curve.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">「新增 Sticker Note」或點空白畫布</td>
+              <td lang="en">Sticker Note tool or empty-canvas click</td>
+              <td lang="zh-Hant">建立僅存在於畫布的便條，並打開左右分割編輯器。</td>
+              <td lang="en">Creates a canvas-only note and opens the split editor.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">拖曳卡片</td>
+              <td lang="en">Drag a card</td>
+              <td lang="zh-Hant">位置自動儲存。拖到另一張的標題／中繼資料區可組成 Stack。</td>
+              <td lang="en">Position saves automatically. Drop onto another card’s title or metadata to make a Stack.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">拖 minimap 視角框</td>
+              <td lang="en">Drag the minimap frame</td>
+              <td lang="zh-Hant">平移目前視野；放開後算一次操作。</td>
+              <td lang="en">Pans the current view; release commits one pan.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">空白處右鍵</td>
+              <td lang="en">Right-click empty canvas</td>
+              <td lang="zh-Hant">按日期排序、重新對齊、匯出精簡備份、新增 Note。</td>
+              <td lang="en">Sort by date, realign, export a lite backup, or add a note.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">卡片右鍵</td>
+              <td lang="en">Right-click a card</td>
+              <td lang="zh-Hant">與卡片工具列相同：還原、快照、編輯、複製、固定、刪除（依類型）。</td>
+              <td lang="en">Same as the card toolbar: restore, snapshot, edit, copy, pin, delete — by kind.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">「畫布整理」</td>
+              <td lang="en">Arrange canvas</td>
+              <td lang="zh-Hant">依日期、FQDN 或 Group 排序；棋盤或對齊排列（96px 間距，保留卡片尺寸）。</td>
+              <td lang="en">Sort by date, FQDN, or Group; Grid or Aligned Rows (96px gap, stored sizes kept).</td>
+            </tr>
           </tbody>
         </table>
-        <p>左側索引可切「全部／未整理／已固定」與各個 Stack。側欄可拖寬或收合。</p>
+        <p lang="zh-Hant">左側索引可切「全部／未整理／已固定」與各個 Stack。側欄可拖寬或收合。</p>
+        <p lang="en">The left index switches All / Unsorted / Pinned and each Stack. The rail can be resized or collapsed.</p>
         <div class="callout">
-          <p>搜尋進行中，命中卡片會暫時排成棋盤。這段期間的拖曳與排列只是預覽，不會寫回正式座標，也不會因拖放建立 Stack。清空搜尋後恢復原布局。</p>
+          <p lang="zh-Hant">搜尋進行中，命中卡片會暫時排成棋盤。這段期間的拖曳與排列只是預覽，不會寫回正式座標，也不會因拖放建立 Stack。清空搜尋後恢復原布局。</p>
+          <p lang="en">During search, hits temporarily snap to a grid. Drags and arrange in that state are preview-only: they do not save positions or create Stacks. Clearing search restores the real layout.</p>
         </div>
       </section>
 
       <section class="chapter" id="cards">
-        <h2>卡片與還原</h2>
+        <h2 lang="zh-Hant">卡片與還原</h2>
+        <h2 lang="en">Cards and restore</h2>
         <ul>
-          <li>點<strong>縮圖</strong>：還原分頁；群組會先確認。</li>
-          <li>點<strong>標題或中繼資料</strong>：複製已存網址（群組則複製成員網址）。</li>
-          <li>點<strong>編輯</strong>：改 note／tags。Note 可點標題進入。</li>
-          <li>點<strong>展開</strong>：看全尺寸快照。沒有全圖時顯示縮圖。快照裡用 <kbd>←</kbd>／<kbd>→</kbd> 切上一張／下一張。</li>
-          <li>點<strong>固定</strong>：只作用於頂層項目。工具列「已固定」是篩選，不改手動順序，也不寫進備份的篩選狀態。</li>
-          <li>點<strong>刪除</strong>：從牆移除。</li>
+          <li lang="zh-Hant">點<strong>縮圖</strong>：還原分頁；群組會先確認。</li>
+          <li lang="en">Click the <strong>thumbnail</strong> to restore. Groups ask first.</li>
+          <li lang="zh-Hant">點<strong>標題或中繼資料</strong>：複製已存網址（群組則複製成員網址）。</li>
+          <li lang="en">Click the <strong>title or metadata</strong> to copy the saved URL (or member URLs for a group).</li>
+          <li lang="zh-Hant">點<strong>編輯</strong>：改 note／tags。Note 可點標題進入。</li>
+          <li lang="en">Click <strong>Edit</strong> for notes/tags. Notes also open from the title.</li>
+          <li lang="zh-Hant">點<strong>展開</strong>：看全尺寸快照。沒有全圖時顯示縮圖。快照裡用 <kbd>←</kbd>／<kbd>→</kbd> 切上一張／下一張。</li>
+          <li lang="en">Click <strong>Expand</strong> for the full snapshot (thumbnail if none). Use <kbd>←</kbd> / <kbd>→</kbd> for previous / next.</li>
+          <li lang="zh-Hant">點<strong>固定</strong>：只作用於頂層項目。工具列「已固定」是篩選，不改手動順序，也不寫進備份的篩選狀態。</li>
+          <li lang="en">Click <strong>Pin</strong> on top-level items. The Pinned filter does not change manual order or backup state.</li>
+          <li lang="zh-Hant">點<strong>刪除</strong>：從牆移除。</li>
+          <li lang="en">Click <strong>Delete</strong> to remove it from the wall.</li>
         </ul>
-        <h3>群組卡片</h3>
-        <p>展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。</p>
+        <h3 lang="zh-Hant">群組卡片</h3>
+        <h3 lang="en">Group cards</h3>
+        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。</p>
+        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore one member or the whole group. Restore can target the current window or a new one. Note members never become browser tabs.</p>
       </section>
 
       <section class="chapter" id="notes">
         <h2>Sticker Note</h2>
-        <p>便條只活在畫布上，用來寫脈絡、貼圖、跟分頁放在一起。可以加入 Stack，<strong>永遠不會還原成瀏覽器分頁</strong>。</p>
+        <p lang="zh-Hant">便條只活在畫布上，用來寫脈絡、貼圖、跟分頁放在一起。可以加入 Stack，<strong>永遠不會還原成瀏覽器分頁</strong>。</p>
+        <p lang="en">Notes live only on the canvas — context, images, next to tabs. They can join Stacks and are <strong>never restored as browser tabs</strong>.</p>
         <ul>
-          <li>標題、標籤、安全 Markdown 預覽。</li>
-          <li>最多 12 張本機圖片。新圖會轉成 WebP（不行就 PNG）；長邊 ≤ 4096px、總像素 ≤ 16MP；原始檔與輸出檔各 ≤ 24 MiB。</li>
-          <li>GIF／SVG 會變成靜態圖。</li>
-          <li>單一 note 附件合計 ≤ 96 MiB；整個擴充功能附件 ≤ 512 MiB。舊附件不會自動遷移，限制套用在新上傳與匯入。</li>
+          <li lang="zh-Hant">標題、標籤、安全 Markdown 預覽。</li>
+          <li lang="en">Title, tags, and a safe Markdown preview.</li>
+          <li lang="zh-Hant">最多 12 張本機圖片。新圖會轉成 WebP（不行就 PNG）；長邊 ≤ 4096px、總像素 ≤ 16MP；原始檔與輸出檔各 ≤ 24 MiB。</li>
+          <li lang="en">Up to 12 local images. New files become WebP (PNG fallback); long edge ≤ 4096px, 16MP max, 24 MiB per source and output file.</li>
+          <li lang="zh-Hant">GIF／SVG 會變成靜態圖。</li>
+          <li lang="en">GIF and SVG become static images.</li>
+          <li lang="zh-Hant">單一 note 附件合計 ≤ 96 MiB；整個擴充功能附件 ≤ 512 MiB。舊附件不會自動遷移，限制套用在新上傳與匯入。</li>
+          <li lang="en">96 MiB attachments per note, 512 MiB across the extension. Existing attachments are not migrated; limits apply to new uploads and imports.</li>
         </ul>
       </section>
 
       <section class="chapter" id="stacks">
-        <h2>Stack 與 Tab Group</h2>
-        <p>兩種「一組東西」不要混為一談：</p>
+        <h2 lang="zh-Hant">Stack 與 Tab Group</h2>
+        <h2 lang="en">Stacks and Tab Groups</h2>
+        <p lang="zh-Hant">兩種「一組東西」不要混為一談：</p>
+        <p lang="en">These are not the same thing:</p>
         <div class="grid-2">
           <article class="card">
             <h3>Chrome Tab Group</h3>
-            <p>瀏覽器原生群組。用 <kbd>⌥</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 或 popup 整組存進牆。還原時重建為真正的 Tab Group。</p>
+            <p lang="zh-Hant">瀏覽器原生群組。用 <kbd>⌥</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> 或 popup 整組存進牆。還原時重建為真正的 Tab Group。</p>
+            <p lang="en">A native browser group. Park it with <kbd>⌥</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> or the popup. Restore recreates a real Tab Group.</p>
           </article>
           <article class="card">
             <h3>Canvas Stack</h3>
-            <p>在牆上把兩張以上卡片疊在一起：多選後合併，或把一張拖到另一張標題區。分頁成員還原成 Tab Group；note 留在畫布。</p>
+            <p lang="zh-Hant">在牆上把兩張以上卡片疊在一起：多選後合併，或把一張拖到另一張標題區。分頁成員還原成 Tab Group；note 留在畫布。</p>
+            <p lang="en">Stack two or more cards on the wall: multi-select and merge, or drop one onto another’s title. Tab members restore as a Tab Group; notes stay on the canvas.</p>
           </article>
         </div>
         <div class="callout warn">
-          <p>TabWall 的存檔<strong>不是</strong> Chrome 書籤列內建的 Save group。兩邊資料不相通。</p>
+          <p lang="zh-Hant">TabWall 的存檔<strong>不是</strong> Chrome 書籤列內建的 Save group。兩邊資料不相通。</p>
+          <p lang="en">TabWall is <strong>not</strong> Chrome’s built-in bookmark Save group. The two stores do not sync.</p>
         </div>
       </section>
 
       <section class="chapter" id="search">
-        <h2>牆上搜尋</h2>
-        <p>在牆上按 <kbd>/</kbd> 聚焦搜尋框。不分大小寫，輸入有短暫延遲；縮圖接近可視範圍才載入。</p>
+        <h2 lang="zh-Hant">牆上搜尋</h2>
+        <h2 lang="en">Wall search</h2>
+        <p lang="zh-Hant">在牆上按 <kbd>/</kbd> 聚焦搜尋框。不分大小寫，輸入有短暫延遲；縮圖接近可視範圍才載入。</p>
+        <p lang="en">Press <kbd>/</kbd> on the wall to focus search. Matching is case-insensitive and debounced. Thumbnails load near the visible area.</p>
         <table>
           <thead>
-            <tr><th>輸入</th><th>意義</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">輸入</span><span lang="en">Input</span></th>
+              <th><span lang="zh-Hant">意義</span><span lang="en">Meaning</span></th>
+            </tr>
           </thead>
           <tbody>
-            <tr><td><code>grafana zabbix</code> 或 <code>&&</code></td><td>且（AND）</td></tr>
-            <tr><td><code>grafana||zabbix</code></td><td>或（OR）</td></tr>
-            <tr><td><kbd>t</kbd>／<kbd>tag</kbd> 再按 Tab</td><td>只搜標籤</td></tr>
-            <tr><td><kbd>n</kbd>／<kbd>note</kbd> 再按 Tab</td><td>只搜備註</td></tr>
-            <tr><td><kbd>g</kbd>／<kbd>group</kbd> 再按 Tab</td><td>只搜群組名稱／成員</td></tr>
-            <tr><td><kbd>d</kbd>／<kbd>domain</kbd> 再按 Tab</td><td>只搜 hostname（獨立分頁與群組成員；不含 Sticker Note）</td></tr>
-            <tr><td><kbd>re</kbd>／<kbd>regex</kbd> 再按 Tab，或工具列 <kbd>.*</kbd></td><td>正規表示式；支援 <code>/pattern/flags</code></td></tr>
-            <tr><td><kbd>all</kbd> 再按 Tab</td><td>回到全欄位</td></tr>
-            <tr><td>空白搜尋時 Backspace／Delete／Esc</td><td>離開目前欄位或 regex 模式</td></tr>
+            <tr>
+              <td><code>grafana zabbix</code> <span lang="zh-Hant">或</span><span lang="en">or</span> <code>&amp;&amp;</code></td>
+              <td><span lang="zh-Hant">且（AND）</span><span lang="en">AND</span></td>
+            </tr>
+            <tr>
+              <td><code>grafana||zabbix</code></td>
+              <td><span lang="zh-Hant">或（OR）</span><span lang="en">OR</span></td>
+            </tr>
+            <tr>
+              <td><kbd>t</kbd> / <kbd>tag</kbd> + Tab</td>
+              <td lang="zh-Hant">只搜標籤</td>
+              <td lang="en">Tags only</td>
+            </tr>
+            <tr>
+              <td><kbd>n</kbd> / <kbd>note</kbd> + Tab</td>
+              <td lang="zh-Hant">只搜備註</td>
+              <td lang="en">Notes only</td>
+            </tr>
+            <tr>
+              <td><kbd>g</kbd> / <kbd>group</kbd> + Tab</td>
+              <td lang="zh-Hant">只搜群組名稱／成員</td>
+              <td lang="en">Group names / members only</td>
+            </tr>
+            <tr>
+              <td><kbd>d</kbd> / <kbd>domain</kbd> + Tab</td>
+              <td lang="zh-Hant">只搜 hostname（獨立分頁與群組成員；不含 Sticker Note）</td>
+              <td lang="en">Hostnames only (standalone tabs and group members, not Sticker Notes)</td>
+            </tr>
+            <tr>
+              <td><kbd>re</kbd> / <kbd>regex</kbd> + Tab, or <kbd>.*</kbd></td>
+              <td lang="zh-Hant">正規表示式；支援 <code>/pattern/flags</code></td>
+              <td lang="en">Regular expressions; <code>/pattern/flags</code> is supported</td>
+            </tr>
+            <tr>
+              <td><kbd>all</kbd> + Tab</td>
+              <td lang="zh-Hant">回到全欄位</td>
+              <td lang="en">Reset field scope</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">空白搜尋時 Backspace／Delete／Esc</td>
+              <td lang="en">Empty search + Backspace / Delete / Esc</td>
+              <td lang="zh-Hant">離開目前欄位或 regex 模式</td>
+              <td lang="en">Leave the current field or regex mode</td>
+            </tr>
           </tbody>
         </table>
-        <h3>Tag 模式</h3>
-        <p>會出現即時建議。可多選 tag。用 <code>&&</code>／<code>||</code> 組合；點建議旁的 <code>||</code> 或按 <kbd>Alt</kbd>+<kbd>Enter</kbd> 以「或」加入。此模式下空白<strong>不是</strong> AND 分隔符，以便 tag 名稱本身含空白。</p>
-        <p>群組命中時，卡片會列出符合的成員分頁與 note。若命中卡片有直接畫布連線，會多顯示一層關聯卡片（較淡；游標移上去或聚焦會恢復）。</p>
+        <h3 lang="zh-Hant">Tag 模式</h3>
+        <h3 lang="en">Tag mode</h3>
+        <p lang="zh-Hant">會出現即時建議。可多選 tag。用 <code>&amp;&amp;</code>／<code>||</code> 組合；點建議旁的 <code>||</code> 或按 <kbd>Alt</kbd>+<kbd>Enter</kbd> 以「或」加入。此模式下空白<strong>不是</strong> AND 分隔符，以便 tag 名稱本身含空白。</p>
+        <p lang="en">A type-ahead list appears. Pick multiple tags. Combine with <code>&amp;&amp;</code> / <code>||</code>; click <code>||</code> on a suggestion or press <kbd>Alt</kbd>+<kbd>Enter</kbd> to insert OR. In tag mode, spaces are <strong>not</strong> AND, so tag names that contain spaces still work.</p>
+        <p lang="zh-Hant">群組命中時，卡片會列出符合的成員分頁與 note。若命中卡片有直接畫布連線，會多顯示一層關聯卡片（較淡；游標移上去或聚焦會恢復）。</p>
+        <p lang="en">When a group matches, the card lists matching member tabs and notes. A direct canvas connection also shows one related card, faded until hover or focus.</p>
       </section>
 
       <section class="chapter" id="quick">
-        <h2>Option+/ 快速搜尋</h2>
-        <p>在<strong>任何一般網頁</strong>（不必打開 TabWall）按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 開啟輕量面板。</p>
+        <h2 lang="zh-Hant">Option+/ 快速搜尋</h2>
+        <h2 lang="en">Option+/ quick search</h2>
+        <p lang="zh-Hant">在<strong>任何一般網頁</strong>（不必打開 TabWall）按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 開啟輕量面板。</p>
+        <p lang="en">On <strong>any normal page</strong> (the wall does not need to be open), press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd>.</p>
         <ul>
-          <li>左欄結果（最多 12 筆），右欄預覽截圖、note、tags、成員。</li>
-          <li>方向鍵移動；<kbd>Enter</kbd> 或雙擊還原分頁／群組。Note 不能還原成分頁。</li>
-          <li>欄位切換與牆上相同：<kbd>tag</kbd>／<kbd>group</kbd>／<kbd>note</kbd>／<kbd>domain</kbd> 再按 Tab；<kbd>all</kbd>+Tab 重設。</li>
-          <li><kbd>Esc</kbd> 關閉。</li>
+          <li lang="zh-Hant">左欄結果（最多 12 筆），右欄預覽截圖、note、tags、成員。</li>
+          <li lang="en">Results on the left (up to 12). Snapshot, note, tags, and members on the right.</li>
+          <li lang="zh-Hant">方向鍵移動；<kbd>Enter</kbd> 或雙擊還原分頁／群組。Note 不能還原成分頁。</li>
+          <li lang="en">Arrow keys move. <kbd>Enter</kbd> or double-click restores a tab or group. Notes cannot restore a tab.</li>
+          <li lang="zh-Hant">欄位切換與牆上相同：<kbd>tag</kbd>／<kbd>group</kbd>／<kbd>note</kbd>／<kbd>domain</kbd> 再按 Tab；<kbd>all</kbd>+Tab 重設。</li>
+          <li lang="en">Same field scopes as the wall: <kbd>tag</kbd> / <kbd>group</kbd> / <kbd>note</kbd> / <kbd>domain</kbd> then Tab; <kbd>all</kbd>+Tab resets.</li>
+          <li><kbd>Esc</kbd> <span lang="zh-Hant">關閉。</span><span lang="en">closes it.</span></li>
         </ul>
         <div class="callout warn">
-          <p>這不是 Chrome command，無法在 <code>chrome://extensions/shortcuts</code> 改鍵。特殊頁無法注入時請改開 TabWall 本體搜尋。</p>
+          <p lang="zh-Hant">這不是 Chrome command，無法在 <code>chrome://extensions/shortcuts</code> 改鍵。特殊頁無法注入時請改開 TabWall 本體搜尋。</p>
+          <p lang="en">This is not a Chrome command, so it cannot be rebound in <code>chrome://extensions/shortcuts</code>. On pages that cannot be injected, search inside TabWall instead.</p>
         </div>
       </section>
 
       <section class="chapter" id="list">
-        <h2>列表、標籤與批次</h2>
-        <h3>列表檢視</h3>
-        <p>標題列可在畫布與列表之間切換。列表是較密、較利於鍵盤與大量瀏覽的 fallback；畫布座標與列表排序互不覆蓋。</p>
-        <p>列表可用「欄數」滑桿（4–10）。窄視窗仍維持桌面版面，必要時水平捲動，沒有手機重排。</p>
+        <h2 lang="zh-Hant">列表、標籤與批次</h2>
+        <h2 lang="en">List, tags, and batch</h2>
+        <h3 lang="zh-Hant">列表檢視</h3>
+        <h3 lang="en">List view</h3>
+        <p lang="zh-Hant">標題列可在畫布與列表之間切換。列表是較密、較利於鍵盤與大量瀏覽的 fallback；畫布座標與列表排序互不覆蓋。</p>
+        <p lang="en">The header switches canvas and list. List is the dense, keyboard-friendly fallback. Canvas positions and list order do not overwrite each other.</p>
+        <p lang="zh-Hant">列表可用「欄數」滑桿（4–10）。窄視窗仍維持桌面版面，必要時水平捲動，沒有手機重排。</p>
+        <p lang="en">List columns are 4–10. Narrow windows keep the desktop layout and scroll horizontally. There is no mobile reflow.</p>
         <h3>Tags</h3>
-        <p>標題列「Tags」開啟管理抽屜：搜尋、新增、重新命名、刪除。刪除 tag 會從所有已存項目移除該標籤。</p>
-        <h3>複選與批次</h3>
-        <p>按「選擇」進入複選。勾選後可批次還原、合併 tags、編輯 note、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
-        <p><kbd>Shift</kbd>／<kbd>Control</kbd> 可在畫布上加選。</p>
+        <p lang="zh-Hant">標題列「Tags」開啟管理抽屜：搜尋、新增、重新命名、刪除。刪除 tag 會從所有已存項目移除該標籤。</p>
+        <p lang="en">Header → Tags opens the manager: search, add, rename, delete. Deleting a tag removes it from every parked item.</p>
+        <h3 lang="zh-Hant">複選與批次</h3>
+        <h3 lang="en">Multi-select and batch</h3>
+        <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原、合併 tags、編輯 note、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
+        <p lang="en">Turn on Select, pick cards, then batch restore, merge tags, edit notes, delete, or export only the selection (lite JSON or full ZIP).</p>
+        <p lang="zh-Hant"><kbd>Shift</kbd>／<kbd>Control</kbd> 可在畫布上加選。</p>
+        <p lang="en">Hold <kbd>Shift</kbd> / <kbd>Control</kbd> to add to the canvas selection.</p>
       </section>
 
       <section class="chapter" id="settings">
-        <h2>設定</h2>
-        <p>牆上按「設定」，或 Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd>、Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd>。變更會自動儲存。</p>
+        <h2 lang="zh-Hant">設定</h2>
+        <h2 lang="en">Settings</h2>
+        <p lang="zh-Hant">牆上按「設定」，或 Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd>、Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd>。變更會自動儲存。</p>
+        <p lang="en">Open Settings on the wall, or press <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> on Mac / <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd> on Windows. Changes save automatically.</p>
         <table>
           <thead>
-            <tr><th>分頁</th><th>內容</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">分頁</span><span lang="en">Section</span></th>
+              <th><span lang="zh-Hant">內容</span><span lang="en">What it covers</span></th>
+            </tr>
           </thead>
           <tbody>
-            <tr><td>一般</td><td>語言、儲存分頁／Group 後是否關閉、儲存前編輯、Group 截圖範圍、還原 Group 到目前視窗或新視窗。</td></tr>
-            <tr><td>儲存規則</td><td>自動 Note／Tag 條件與附加內容。</td></tr>
-            <tr><td>顯示</td><td>主題（淺／深；新安裝預設深色工作台）、視覺效果（安靜／標準／電影感；系統「減少動態效果」會強制安靜）、預設欄數與檢視、開啟時是否聚焦搜尋。</td></tr>
-            <tr><td>整理</td><td>與畫布／列表整理相關的偏好。</td></tr>
-            <tr><td>備份</td><td>手動匯出／還原／附加，以及自動備份。</td></tr>
-            <tr><td>快捷鍵</td><td>只讀顯示 Chrome 綁定；可開啟 Chrome 設定頁。不能在 TabWall 裡錄製熱鍵。</td></tr>
-            <tr><td>診斷</td><td>匯出、匯入、自動備份事件。可複製或清除。</td></tr>
+            <tr>
+              <td lang="zh-Hant">一般</td>
+              <td lang="en">General</td>
+              <td lang="zh-Hant">語言、儲存分頁／Group 後是否關閉、儲存前編輯、Group 截圖範圍、還原 Group 到目前視窗或新視窗。</td>
+              <td lang="en">Language, after-save close behavior, edit before saving, group capture range, restore group to current or new window.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">儲存規則</td>
+              <td lang="en">Save rules</td>
+              <td lang="zh-Hant">自動 Note／Tag 條件與附加內容。</td>
+              <td lang="en">Automatic note / tag conditions and what they append.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">顯示</td>
+              <td lang="en">Display</td>
+              <td lang="zh-Hant">主題（淺／深；新安裝預設深色工作台）、視覺效果（安靜／標準／電影感；系統「減少動態效果」會強制安靜）、預設欄數與檢視、開啟時是否聚焦搜尋。</td>
+              <td lang="en">Theme (light / dark; new installs default dark), motion (Quiet / Standard / Cinematic; OS reduce-motion forces Quiet), default columns and view, focus search on open.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">整理</td>
+              <td lang="en">Organize</td>
+              <td lang="zh-Hant">與畫布／列表整理相關的偏好。</td>
+              <td lang="en">Canvas and list organization preferences.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">備份</td>
+              <td lang="en">Backup</td>
+              <td lang="zh-Hant">手動匯出／還原／附加，以及自動備份。</td>
+              <td lang="en">Manual export / restore / append, plus automatic backups.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">快捷鍵</td>
+              <td lang="en">Shortcuts</td>
+              <td lang="zh-Hant">只讀顯示 Chrome 綁定；可開啟 Chrome 設定頁。不能在 TabWall 裡錄製熱鍵。</td>
+              <td lang="en">Read-only Chrome bindings, with a link to Chrome shortcut settings. TabWall cannot record hotkeys itself.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">診斷</td>
+              <td lang="en">Diagnostics</td>
+              <td lang="zh-Hant">匯出、匯入、自動備份事件。可複製或清除。</td>
+              <td lang="en">Export, import, and auto-backup events. Copy or clear them.</td>
+            </tr>
           </tbody>
         </table>
-        <p>標題列的 Light／Dark 可快速切主題。背景是靜態主題，不支援影片背景或自行匯入影片。</p>
+        <p lang="zh-Hant">標題列的 Light／Dark 可快速切主題。背景是靜態主題，不支援影片背景或自行匯入影片。</p>
+        <p lang="en">The header Light / Dark control toggles theme quickly. Backgrounds are static; video backgrounds and user-imported videos are not supported.</p>
       </section>
 
       <section class="chapter" id="backup">
-        <h2>備份與還原</h2>
+        <h2 lang="zh-Hant">備份與還原</h2>
+        <h2 lang="en">Backup and restore</h2>
         <div class="grid-2">
           <article class="card">
-            <h3>精簡 JSON</h3>
-            <p>保留網址、標題、note、tags、附件 metadata。不含截圖與圖片二進位。檔案小，適合日常與自動備份。</p>
+            <h3 lang="zh-Hant">精簡 JSON</h3>
+            <h3 lang="en">Lite JSON</h3>
+            <p lang="zh-Hant">保留網址、標題、note、tags、附件 metadata。不含截圖與圖片二進位。檔案小，適合日常與自動備份。</p>
+            <p lang="en">Keeps URLs, titles, notes, tags, and attachment metadata. No screenshot or image binaries. Small enough for daily and automatic backups.</p>
           </article>
           <article class="card">
-            <h3>完整 ZIP</h3>
-            <p>另外帶本機圖片。預估超過 256 MiB 會拒絕，請改精簡或分批（多選匯出）。還原預覽可看圖；精簡預覽看文字與成員。</p>
+            <h3 lang="zh-Hant">完整 ZIP</h3>
+            <h3 lang="en">Full ZIP</h3>
+            <p lang="zh-Hant">另外帶本機圖片。預估超過 256 MiB 會拒絕，請改精簡或分批（多選匯出）。還原預覽可看圖；精簡預覽看文字與成員。</p>
+            <p lang="en">Includes local images. Export is refused above about 256 MiB — use lite or export a selection. Full restore previews images; lite previews text and members.</p>
           </article>
         </div>
         <ul>
-          <li><strong>還原（覆蓋）</strong>：取代牆上全部資料，會再確認一次。</li>
-          <li><strong>匯入（附加）</strong>：只新增，不刪現有卡片。選檔後可挑要寫入哪些分頁與群組。</li>
-          <li>檔名使用本機時間與 UTC 時差，例如 <code>2026-08-04T13-00-00+0800</code>。</li>
+          <li lang="zh-Hant"><strong>還原（覆蓋）</strong>：取代牆上全部資料，會再確認一次。</li>
+          <li lang="en"><strong>Restore (replace)</strong> overwrites everything on the wall after a confirm.</li>
+          <li lang="zh-Hant"><strong>匯入（附加）</strong>：只新增，不刪現有卡片。選檔後可挑要寫入哪些分頁與群組。</li>
+          <li lang="en"><strong>Import (append)</strong> only adds cards. After picking a file, choose which tabs and groups to write.</li>
+          <li lang="zh-Hant">檔名使用本機時間與 UTC 時差，例如 <code>2026-08-04T13-00-00+0800</code>。</li>
+          <li lang="en">Filenames use local time and the UTC offset, for example <code>2026-08-04T13-00-00+0800</code>.</li>
         </ul>
-        <h3>自動備份</h3>
-        <p>寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可依排程、或資料變更後備份；保留 1–99 份。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
+        <h3 lang="zh-Hant">自動備份</h3>
+        <h3 lang="en">Automatic backup</h3>
+        <p lang="zh-Hant">寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可依排程、或資料變更後備份；保留 1–99 份。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
+        <p lang="en">Writes into a subfolder of Chrome’s download location (not always <code>Downloads</code> — see <code>chrome://settings/downloads</code>). Run on a schedule and/or after data changes. Keep 1–99 copies. TabWall recognizes its own files and deletes older ones. Nothing is uploaded.</p>
       </section>
 
       <section class="chapter" id="dedupe">
-        <h2>去重複</h2>
-        <p>儲存時若牆上已有<strong>完全相同的 URL</strong>，會詢問：保留兩者、取代舊項、或取消。</p>
-        <p>工具列「更多工具」→「掃描重複」可掃整牆，選擇只留最新、只留最舊、全部保留，再套用刪除。</p>
+        <h2 lang="zh-Hant">去重複</h2>
+        <h2 lang="en">Duplicates</h2>
+        <p lang="zh-Hant">儲存時若牆上已有<strong>完全相同的 URL</strong>，會詢問：保留兩者、取代舊項、或取消。</p>
+        <p lang="en">If the wall already has the <strong>exact same URL</strong>, you choose keep both, replace the old item, or cancel.</p>
+        <p lang="zh-Hant">工具列「更多工具」→「掃描重複」可掃整牆，選擇只留最新、只留最舊、全部保留，再套用刪除。</p>
+        <p lang="en">More tools → Scan duplicates walks the whole wall. Keep newest, oldest, or all, then apply deletions.</p>
       </section>
 
       <section class="chapter" id="privacy">
-        <h2>隱私與資料</h2>
+        <h2 lang="zh-Hant">隱私與資料</h2>
+        <h2 lang="en">Privacy and data</h2>
         <ul>
-          <li>沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。</li>
-          <li>網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
-          <li>縮圖與快照存在本機 IndexedDB。</li>
-          <li>只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
-          <li>解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
+          <li lang="zh-Hant">沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。</li>
+          <li lang="en">There is no TabWall cloud account, and the wall is not uploaded to TabWall servers.</li>
+          <li lang="zh-Hant">網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
+          <li lang="en">URLs, titles, notes, tags, and order live in <code>chrome.storage.local</code>.</li>
+          <li lang="zh-Hant">縮圖與快照存在本機 IndexedDB。</li>
+          <li lang="en">Thumbnails and snapshots live in local IndexedDB.</li>
+          <li lang="zh-Hant">只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
+          <li lang="en">The current tab or group is read only when you act (including Chrome commands).</li>
+          <li lang="zh-Hant">解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
+          <li lang="en">Uninstalling clears extension storage per the browser. Downloaded backup files stay in the download folder until you delete them.</li>
         </ul>
-        <p>完整條款見 <a href="privacy.html">隱私權政策</a>。</p>
+        <p lang="zh-Hant">完整條款見 <a href="privacy.html">隱私權政策</a>。</p>
+        <p lang="en">See the <a href="privacy.html">privacy policy</a> for the full text.</p>
       </section>
 
       <section class="chapter" id="limits">
-        <h2>限制與常見問題</h2>
-        <h3>做不到的事</h3>
+        <h2 lang="zh-Hant">限制與常見問題</h2>
+        <h2 lang="en">Limits and FAQ</h2>
+        <h3 lang="zh-Hant">做不到的事</h3>
+        <h3 lang="en">What it cannot do</h3>
         <ul>
-          <li><code>chrome://</code>、<code>edge://</code>、Chrome Web Store 等受限頁無法截圖或注入浮層。</li>
-          <li>不是 Chrome 書籤、不是同步帳號、不能當跨裝置雲端牆。</li>
-          <li>沒有手機版重排或觸控工具列。</li>
-          <li>Sticker Note 不能還原成分頁；<code>file:</code> 一類 stored-only 項目也不可直接還原。</li>
+          <li lang="zh-Hant"><code>chrome://</code>、<code>edge://</code>、Chrome Web Store 等受限頁無法截圖或注入浮層。</li>
+          <li lang="en"><code>chrome://</code>, <code>edge://</code>, and the Chrome Web Store cannot be captured or injected.</li>
+          <li lang="zh-Hant">不是 Chrome 書籤、不是同步帳號、不能當跨裝置雲端牆。</li>
+          <li lang="en">It is not Chrome bookmarks, not a sync account, and not a cross-device cloud wall.</li>
+          <li lang="zh-Hant">沒有手機版重排或觸控工具列。</li>
+          <li lang="en">There is no mobile reflow or touch toolbar.</li>
+          <li lang="zh-Hant">Sticker Note 不能還原成分頁；<code>file:</code> 一類 stored-only 項目也不可直接還原。</li>
+          <li lang="en">Sticker Notes cannot restore as tabs. Stored-only items such as <code>file:</code> URLs also cannot restore directly.</li>
         </ul>
-        <h3>快捷鍵沒反應</h3>
+        <h3 lang="zh-Hant">快捷鍵沒反應</h3>
+        <h3 lang="en">Shortcuts do nothing</h3>
         <ol>
-          <li>到 <code>chrome://extensions/shortcuts</code> 看四個命令是否「未綁定」或跟別的擴充功能衝突。</li>
-          <li>重新整理目前分頁（更新後舊注入會失效）。</li>
-          <li>牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
+          <li lang="zh-Hant">到 <code>chrome://extensions/shortcuts</code> 看四個命令是否「未綁定」或跟別的擴充功能衝突。</li>
+          <li lang="en">Check <code>chrome://extensions/shortcuts</code> for unbound or conflicting commands.</li>
+          <li lang="zh-Hant">重新整理目前分頁（更新後舊注入會失效）。</li>
+          <li lang="en">Refresh the tab (old injections die after an update).</li>
+          <li lang="zh-Hant">牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
+          <li lang="en">In-wall keys (<kbd>/</kbd>, search modes, <kbd>Esc</kbd>, snapshot arrows) cannot be changed in Chrome settings.</li>
         </ol>
-        <h3>畫布很空或卡片跑很遠</h3>
-        <p>新卡片會靠近既有群配置到下一個不重疊格。可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
+        <h3 lang="zh-Hant">畫布很空或卡片跑很遠</h3>
+        <h3 lang="en">The canvas looks empty or cards are far away</h3>
+        <p lang="zh-Hant">新卡片會靠近既有群配置到下一個不重疊格。可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
+        <p lang="en">New cards land near the existing cluster in the next free cell. Use Arrange canvas, or double-click the middle mouse button to reset the view.</p>
       </section>
 
       <section class="chapter" id="keys">
-        <h2>快捷鍵一覽</h2>
-        <h3>由 Chrome 管理（可改）</h3>
-        <p>預設只在安裝時建議；實際以 <code>chrome://extensions/shortcuts</code> 為準。</p>
+        <h2 lang="zh-Hant">快捷鍵一覽</h2>
+        <h2 lang="en">Shortcuts</h2>
+        <h3 lang="zh-Hant">由 Chrome 管理（可改）</h3>
+        <h3 lang="en">Managed by Chrome (customizable)</h3>
+        <p lang="zh-Hant">預設只在安裝時建議；實際以 <code>chrome://extensions/shortcuts</code> 為準。</p>
+        <p lang="en">Suggested keys apply at install time. The live bindings are whatever <code>chrome://extensions/shortcuts</code> shows.</p>
         <table>
           <thead>
-            <tr><th>預設</th><th>動作</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">預設</span><span lang="en">Default</span></th>
+              <th><span lang="zh-Hant">動作</span><span lang="en">Action</span></th>
+            </tr>
           </thead>
           <tbody>
-            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd></td><td>暫存目前分頁（依儲存後行為）</td></tr>
-            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>暫存目前分頁或 Tab Group，不關閉</td></tr>
-            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>暫存目前 Tab Group（依儲存後行為）</td></tr>
-            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd></td><td>開關空間畫布</td></tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>S</kbd></td>
+              <td lang="zh-Hant">暫存目前分頁（依儲存後行為）</td>
+              <td lang="en">Park the current tab (after-save behavior)</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td>
+              <td lang="zh-Hant">暫存目前分頁或 Tab Group，不關閉</td>
+              <td lang="en">Park the current tab or Tab Group and keep it open</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td>
+              <td lang="zh-Hant">暫存目前 Tab Group（依儲存後行為）</td>
+              <td lang="en">Park the current Tab Group (after-save behavior)</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd></td>
+              <td lang="zh-Hant">開關空間畫布</td>
+              <td lang="en">Toggle the canvas</td>
+            </tr>
           </tbody>
         </table>
-        <h3>畫布內建（不可在 TabWall 自訂）</h3>
+        <h3 lang="zh-Hant">畫布內建（不可在 TabWall 自訂）</h3>
+        <h3 lang="en">Built into the wall (not customizable in TabWall)</h3>
         <table>
           <thead>
-            <tr><th>按鍵</th><th>動作</th></tr>
+            <tr>
+              <th><span lang="zh-Hant">按鍵</span><span lang="en">Key</span></th>
+              <th><span lang="zh-Hant">動作</span><span lang="en">Action</span></th>
+            </tr>
           </thead>
           <tbody>
-            <tr><td><kbd>/</kbd></td><td>聚焦牆上搜尋</td></tr>
-            <tr><td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd></td><td>任何一般頁開啟快速搜尋（不必開牆）</td></tr>
-            <tr><td>Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd>／Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd></td><td>開關設定</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>關上面板或畫布</td></tr>
-            <tr><td><kbd>←</kbd>／<kbd>→</kbd></td><td>快照上一張／下一張</td></tr>
+            <tr>
+              <td><kbd>/</kbd></td>
+              <td lang="zh-Hant">聚焦牆上搜尋</td>
+              <td lang="en">Focus wall search</td>
+            </tr>
+            <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd></td>
+              <td lang="zh-Hant">任何一般頁開啟快速搜尋（不必開牆）</td>
+              <td lang="en">Quick search on any normal page</td>
+            </tr>
+            <tr>
+              <td>Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> / Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd></td>
+              <td lang="zh-Hant">開關設定</td>
+              <td lang="en">Toggle settings</td>
+            </tr>
+            <tr>
+              <td><kbd>Esc</kbd></td>
+              <td lang="zh-Hant">關上面板或畫布</td>
+              <td lang="en">Close panels or the canvas</td>
+            </tr>
+            <tr>
+              <td><kbd>←</kbd> / <kbd>→</kbd></td>
+              <td lang="zh-Hant">快照上一張／下一張</td>
+              <td lang="en">Previous / next snapshot</td>
+            </tr>
           </tbody>
         </table>
       </section>
@@ -418,10 +727,11 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p>對應 TabWall <strong>2.33.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.33.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.33.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
-      <a href="privacy.html">隱私權政策</a> ·
-      <a href="CHANGELOG.html">開發歷程</a> ·
+      <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
+      <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·
       <a href="https://github.com/davislinyd/TabWall">GitHub</a>
     </p>
   </footer>
@@ -449,11 +759,30 @@ https://wiki.example.com
         chapters.forEach(function (section) { io.observe(section); });
       }
 
+      function visibleText(node) {
+        var lang = document.documentElement.getAttribute("data-lang") === "en" ? "en" : "zh-Hant";
+        var parts = [];
+        function walk(el) {
+          if (!el) return;
+          if (el.nodeType === 3) {
+            parts.push(el.nodeValue || "");
+            return;
+          }
+          if (el.nodeType !== 1) return;
+          var itemLang = el.getAttribute("lang");
+          if (itemLang && itemLang !== lang) return;
+          var children = el.childNodes;
+          for (var i = 0; i < children.length; i += 1) walk(children[i]);
+        }
+        walk(node);
+        return parts.join(" ").toLowerCase();
+      }
+
       function filterManual(q) {
         var query = String(q || "").trim().toLowerCase();
         var shown = 0;
         chapters.forEach(function (section) {
-          var hit = !query || section.textContent.toLowerCase().indexOf(query) !== -1;
+          var hit = !query || visibleText(section).indexOf(query) !== -1;
           section.classList.toggle("is-hidden", !hit);
           if (hit) shown += 1;
         });
@@ -465,6 +794,7 @@ https://wiki.example.com
         emptyFind.classList.toggle("show", shown === 0);
       }
       if (find) find.addEventListener("input", function () { filterManual(find.value); });
+      document.addEventListener("tabwall-langchange", function () { filterManual(find ? find.value : ""); });
     })();
   </script>
 </body>
