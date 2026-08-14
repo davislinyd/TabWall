@@ -11,6 +11,10 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.40.2 — 2026-08-15
+
+- 修正 Canvas 搜尋暫態視角造成的重複重繪、forced reflow 與非必要布局同步。
+
 ## 2.40.1 — 2026-08-15
 
 - Canvas 與卡片網格的 hover 卡片放大約 1.30 倍；拖曳、Stack hover、Quiet 與 reduced-motion 優先規則維持不變。

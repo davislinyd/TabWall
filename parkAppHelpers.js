@@ -83,6 +83,7 @@
         layout: env.canvasLayout,
         baseLayout: env.canvasLayout,
         viewport: { ...env.canvasLayout.viewport },
+        viewportPreview: null,
         revision: 0,
         selectedIds: new Set(env.selectedIds),
         interaction: null,
@@ -121,11 +122,15 @@
       if (fullRender && env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) env.renderCanvas();
       else if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) {
         env.updateCanvasTransform();
+        if (action.type === 'VIEWPORT_PREVIEW' || action.type === 'VIEWPORT_PREVIEW_CLEAR') {
+          return;
+        }
         const searchContext = getCanvasSearchContext();
+        const renderLayout = env.canvasSearchLayoutFor(searchContext);
         env.updateCanvasNodePositions(snapshot, searchContext);
         env.updateCanvasNodeSelection();
-        env.renderCanvasConnections(searchContext);
-        env.renderCanvasMinimap(searchContext.items);
+        env.renderCanvasConnections(searchContext, renderLayout);
+        env.renderCanvasMinimap(searchContext.items, renderLayout);
         env.updateBatchBar();
         if (action.type === 'OPERATION_COMMIT' || action.type === 'SYNC_ERROR' || action.type === 'SYNC_FAILED') {
           if (action.operation?.type === 'zoom') env.scheduleCanvasMediaQualityRefresh();
@@ -507,17 +512,23 @@
       const height = env.canvasViewportEl.clientHeight || rect?.height || 0;
       if (!width || !height) return;
       const state = canvasStoreSnapshot();
+      const searchContext = env.getCanvasSearchContext();
+      const layout = env.isCanvasSearchPreviewActive(searchContext)
+        ? env.canvasSearchLayoutFor(searchContext)
+        : state.layout;
       const position = env.canvasDisplayPosition(
-        state.layout.positions?.[id] || env.canvasDefaultPosition(env.allTabs.indexOf(item)),
+        layout.positions?.[id] || env.canvasDefaultPosition(env.allTabs.indexOf(item)),
       );
       const zoom = Math.max(0.25, Number(state.layout.viewport.zoom) || env.DEFAULT_CANVAS_VIEWPORT.zoom);
       const itemWidth = Math.max(1, Number(position.w) || 1);
       const itemHeight = Math.max(1, Number(position.h) || 1);
-      ensureCanvasStore()?.commitViewport({
+      const viewport = {
         x: Number(position.x) + itemWidth / 2 - width / (2 * zoom),
         y: Number(position.y) + itemHeight / 2 - height / (2 * zoom),
         zoom,
-      });
+      };
+      if (env.canvasSearchViewportState) ensureCanvasStore()?.previewViewport(viewport);
+      else ensureCanvasStore()?.commitViewport(viewport);
 
   }
 
@@ -934,13 +945,13 @@
 
   }
 
-  function canvasNodeWorldRect(node) {
+  function canvasNodeWorldRect(node, options = {}) {
     ensureBound('canvasNodeWorldRect');
 
-      const viewportRect = env.canvasViewportEl?.getBoundingClientRect();
+      const viewportRect = options.viewportRect || env.canvasViewportEl?.getBoundingClientRect();
       const nodeRect = node?.getBoundingClientRect();
       if (!viewportRect || !nodeRect) return null;
-      const viewport = canvasStoreSnapshot().layout?.viewport || env.canvasLayout.viewport;
+      const viewport = options.viewport || canvasStoreSnapshot().layout?.viewport || env.canvasLayout.viewport;
       const zoom = viewport.zoom || 1;
       return {
         x: (nodeRect.left - viewportRect.left) / zoom + viewport.x,
@@ -980,14 +991,18 @@
         maxZoom: env.CANVAS_ZOOM_MAX,
       });
       if (!width || !height || !bounds) {
-        ensureCanvasStore()?.commitViewport({ ...env.DEFAULT_CANVAS_VIEWPORT, zoom });
+        const viewport = { ...env.DEFAULT_CANVAS_VIEWPORT, zoom };
+        if (env.canvasSearchViewportState) ensureCanvasStore()?.previewViewport(viewport);
+        else ensureCanvasStore()?.commitViewport(viewport);
         return;
       }
-      ensureCanvasStore()?.commitViewport({
+      const viewport = {
         x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
         y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
         zoom,
-      });
+      };
+      if (env.canvasSearchViewportState) ensureCanvasStore()?.previewViewport(viewport);
+      else ensureCanvasStore()?.commitViewport(viewport);
 
   }
 
@@ -1002,6 +1017,7 @@
         env.suppressCanvasNodeClick(state.id);
       }
       if (state.searchPreview) finishCanvasSearchPointer(state, false);
+      else if (state.searchViewportPreview) ensureCanvasStore()?.previewViewport(state.searchViewportStart, { deferRender: true });
       else ensureCanvasStore()?.cancelPointer();
       env.clearCanvasPointerUi(state.pointerId);
 

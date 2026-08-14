@@ -250,6 +250,7 @@
       baseLayout: initialLayout,
       layout: cloneLayout(initialLayout, initialItems),
       viewport: { ...initialLayout.viewport },
+      viewportPreview: null,
       revision: Math.max(0, Math.floor(Number(options.revision) || 0)),
       selectedIds: new Set(),
       interaction: null,
@@ -265,11 +266,14 @@
     }
 
     function getState() {
+      const layout = cloneNormalizedLayout(state.layout);
+      if (state.viewportPreview) layout.viewport = { ...state.viewportPreview };
       return {
         items: [...state.items],
         baseLayout: cloneNormalizedLayout(state.baseLayout),
-        layout: cloneNormalizedLayout(state.layout),
-        viewport: { ...state.viewport },
+        layout,
+        viewport: { ...layout.viewport },
+        viewportPreview: state.viewportPreview ? { ...state.viewportPreview } : null,
         revision: state.revision,
         selectedIds: new Set(state.selectedIds),
         interaction: state.interaction ? { ...state.interaction } : null,
@@ -402,6 +406,7 @@
       state.baseLayout = normalizeLayout(layout, state.items);
       state.layout = cloneLayout(state.baseLayout, state.items);
       state.viewport = { ...state.layout.viewport };
+      state.viewportPreview = null;
       state.revision = Math.max(0, Math.floor(Number(revision) || 0));
       state.pendingOperations = [];
       state.interaction = null;
@@ -638,6 +643,31 @@
       });
     }
 
+    function previewViewport(viewport, { deferRender = false } = {}) {
+      const current = state.viewportPreview || state.layout.viewport;
+      const next = viewport && typeof viewport === 'object' ? viewport : {};
+      const preview = {
+        x: finite(next.x, -100000, 100000, current.x),
+        y: finite(next.y, -100000, 100000, current.y),
+        zoom: finite(next.zoom, MIN_ZOOM, MAX_ZOOM, current.zoom),
+      };
+      if (
+        preview.x === current.x
+        && preview.y === current.y
+        && preview.zoom === current.zoom
+      ) return false;
+      state.viewportPreview = preview;
+      emit({ type: 'VIEWPORT_PREVIEW', viewport: { ...preview }, deferRender: Boolean(deferRender) });
+      return true;
+    }
+
+    function clearViewportPreview({ deferRender = false } = {}) {
+      if (!state.viewportPreview) return false;
+      state.viewportPreview = null;
+      emit({ type: 'VIEWPORT_PREVIEW_CLEAR', deferRender: Boolean(deferRender) });
+      return true;
+    }
+
     function markSync(status, error = '') {
       setSync(status, error, state.sync.attempt);
       emit({ type: 'SYNC_STATUS', status, error });
@@ -672,6 +702,8 @@
       commitPositions,
       commitConnections,
       commitViewport,
+      previewViewport,
+      clearViewportPreview,
       markSync,
       flush: () => flushPersist(),
       destroy,

@@ -25,7 +25,18 @@
           offset,
         };
       }
-      env.canvasStore?.commitZoom(zoom, anchor);
+      if (env.canvasSearchViewportState) {
+        const nextViewport = anchor?.world && anchor?.offset
+          ? {
+              x: anchor.world.x - anchor.offset.x / zoom,
+              y: anchor.world.y - anchor.offset.y / zoom,
+              zoom,
+            }
+          : { ...state.layout.viewport, zoom };
+        env.ensureCanvasStore()?.previewViewport(nextViewport);
+      } else {
+        env.canvasStore?.commitZoom(zoom, anchor);
+      }
 
   }
 
@@ -34,8 +45,8 @@
 
       if (mode !== 'width' && mode !== 'screen') return false;
       const { width, height } = canvasViewportSize();
-      const items = env.getCanvasVisibleTabs();
       const searchContext = env.getCanvasSearchContext();
+      const items = searchContext.items;
       if (!width || !height || !items.length) return false;
       const layout = env.canvasSearchLayoutFor(searchContext);
       const bounds = env.canvasBoundsForItems(items, layout);
@@ -50,11 +61,13 @@
       const zoom = Math.min(env.CANVAS_ZOOM_MAX, Math.max(env.CANVAS_ZOOM_MIN, requestedZoom));
       const centerX = (bounds.minX + bounds.maxX) / 2;
       const centerY = (bounds.minY + bounds.maxY) / 2;
-      env.ensureCanvasStore()?.commitViewport({
+      const viewport = {
         x: centerX - width / (2 * zoom),
         y: centerY - height / (2 * zoom),
         zoom,
-      });
+      };
+      if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
+      else env.ensureCanvasStore()?.commitViewport(viewport);
       return true;
 
   }
@@ -67,36 +80,35 @@
   }
 
   /** Focus transient search cards while preserving the pre-search viewport. */
-  function syncCanvasSearchViewport() {
+  function syncCanvasSearchViewport(searchContext = env.getCanvasSearchContext()) {
     ensureBound('syncCanvasSearchViewport');
 
-      const searchContext = env.getCanvasSearchContext();
       const active = env.isCanvasSearchPreviewActive(searchContext);
       const saved = env.canvasSearchViewportState;
+      const currentState = env.canvasStoreSnapshot();
       if (!active) {
         if (!saved) return false;
         env.canvasSearchViewportState = null;
-        const current = env.canvasStoreSnapshot().layout?.viewport;
-        if (!sameViewport(current, saved.baseViewport)) {
-          env.ensureCanvasStore()?.commitViewport(saved.baseViewport);
-        }
+        env.ensureCanvasStore()?.clearViewportPreview({ deferRender: true });
         return true;
       }
 
       const key = env.canvasSearchPreviewKey(searchContext);
-      const currentState = env.canvasStoreSnapshot();
       const currentViewport = currentState.layout?.viewport || env.DEFAULT_CANVAS_VIEWPORT;
       const state = saved || {
-        baseViewport: { ...currentViewport },
         searchKey: '',
       };
       if (!saved) env.canvasSearchViewportState = state;
-      if (state.searchKey === key) return false;
+      if (state.searchKey === key && currentState.viewportPreview) return false;
 
       const rect = env.canvasViewportEl?.getBoundingClientRect?.();
       const width = env.canvasViewportEl?.clientWidth || rect?.width || 0;
       const height = env.canvasViewportEl?.clientHeight || rect?.height || 0;
-      if (!width || !height || !searchContext.items.length) return false;
+      state.searchKey = key;
+      if (!width || !height || !searchContext.items.length) {
+        env.ensureCanvasStore()?.clearViewportPreview({ deferRender: true });
+        return true;
+      }
       const layout = env.canvasSearchLayoutFor(searchContext);
       const bounds = env.canvasBoundsForItems(searchContext.items, layout);
       const viewport = env.canvasSearchViewportForBounds(width, height, bounds, {
@@ -106,13 +118,8 @@
       });
       if (!viewport) return false;
 
-      env.canvasSearchViewportState = {
-        baseViewport: state.baseViewport,
-        searchKey: key,
-      };
-      if (!sameViewport(currentViewport, viewport)) {
-        env.ensureCanvasStore()?.commitViewport(viewport);
-      }
+      env.canvasSearchViewportState = state;
+      if (!sameViewport(currentViewport, viewport)) env.ensureCanvasStore()?.previewViewport(viewport, { deferRender: true });
       return true;
 
   }
@@ -233,21 +240,25 @@
           return;
         }
         env.canvasNeedsInitialCenter = false;
-        env.canvasStore?.commitViewport({
+        const viewport = {
           x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
           y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
           zoom,
-        });
+        };
+        if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
+        else env.canvasStore?.commitViewport(viewport);
         return;
       }
       env.canvasNeedsInitialCenter = false;
       const centerX = (Number(state.layout.viewport.x) || 0) + width / (2 * currentZoom);
       const centerY = (Number(state.layout.viewport.y) || 0) + height / (2 * currentZoom);
-      env.canvasStore?.commitViewport({
+      const viewport = {
         x: centerX - width / (2 * zoom),
         y: centerY - height / (2 * zoom),
         zoom,
-      });
+      };
+      if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
+      else env.canvasStore?.commitViewport(viewport);
 
   }
 

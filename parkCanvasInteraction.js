@@ -486,6 +486,11 @@
       }
       const ids = kind === 'node' ? [...env.activeCanvasSelection()] : [];
       const searchPreview = kind === 'node' && env.isCanvasSearchPreviewActive();
+      const searchViewportPreview = kind === 'pan'
+        && Boolean(env.canvasSearchViewportState && env.isCanvasSearchPreviewActive());
+      const searchViewportStart = searchViewportPreview
+        ? { ...env.canvasStoreSnapshot().layout.viewport }
+        : null;
       let searchIds = [];
       let searchStartPositions = {};
       if (searchPreview) {
@@ -496,7 +501,7 @@
         searchStartPositions = Object.fromEntries(
           searchIds.map((selectedId) => [selectedId, { ...renderLayout.positions[selectedId] }])
         );
-      } else {
+      } else if (!searchViewportPreview) {
         env.ensureCanvasStore()?.beginPointer(kind, {
           pointerId: event.pointerId,
           startX: event.clientX,
@@ -515,6 +520,8 @@
         selectionAdditive: Boolean(event.metaKey || event.ctrlKey || event.shiftKey),
         initialSelection: [...env.activeCanvasSelection()],
         searchPreview,
+        searchViewportPreview,
+        searchViewportStart,
         searchIds,
         searchStartPositions,
       };
@@ -550,7 +557,7 @@
       if (!state.moved && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) >= env.DRAG_THRESHOLD) state.moved = true;
       const pointerGeneration = env.canvasInteractionGeneration;
       const finalPoint = env.canvasPointFromEvent(event);
-      const operation = state.searchPreview
+      const operation = state.searchPreview || state.searchViewportPreview
         ? null
         : env.ensureCanvasStore()?.finishPointer({
             commit: state.moved,
@@ -594,8 +601,11 @@
         if (!stacked) env.ensureCanvasStore()?.flush?.();
         updateCanvasNodeSelection();
         env.updateBatchBar();
-      } else if (state.kind === 'pan' && state.moved) {
+      } else if (state.kind === 'pan' && state.moved && !state.searchViewportPreview) {
         env.ensureCanvasStore()?.flush?.();
+      } else if (state.kind === 'pan' && state.moved && state.searchViewportPreview) {
+        const searchContext = env.getCanvasSearchContext();
+        env.renderCanvasMinimap(searchContext.items, env.canvasSearchLayoutFor(searchContext));
       }
 
   }
@@ -677,6 +687,15 @@
       }
       if (state.kind === 'pan') {
         const zoom = env.canvasStoreSnapshot().layout.viewport.zoom || 1;
+        if (state.searchViewportPreview) {
+          const start = state.searchViewportStart || env.canvasStoreSnapshot().layout.viewport;
+          env.ensureCanvasStore()?.previewViewport({
+            x: start.x - dx / zoom,
+            y: start.y - dy / zoom,
+            zoom: start.zoom,
+          }, { deferRender: true });
+          return;
+        }
         env.ensureCanvasStore()?.previewPointer({ dx: -dx / zoom, dy: -dy / zoom, moved: state.moved });
         return;
       }
@@ -735,20 +754,26 @@
       const projection = env.canvasMinimapProjection;
       if (!projection) return;
       const viewport = env.canvasStoreSnapshot().layout.viewport;
+      const searchViewportPreview = Boolean(
+        env.canvasSearchViewportState && env.isCanvasSearchPreviewActive()
+      );
       env.canvasMinimapDragState = {
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         startViewport: { ...viewport },
+        searchViewportPreview,
         projection,
       };
       env.canvasMinimap.classList.add('is-dragging');
       env.canvasMinimapViewport.setPointerCapture?.(event.pointerId);
-      env.ensureCanvasStore()?.beginPointer('pan', {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-      });
+      if (!searchViewportPreview) {
+        env.ensureCanvasStore()?.beginPointer('pan', {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+        });
+      }
       event.preventDefault();
       event.stopPropagation();
 
@@ -761,7 +786,15 @@
       if (!state || state.pointerId !== event.pointerId) return;
       const dx = (event.clientX - state.startX) / Math.max(0.0001, state.projection.scale);
       const dy = (event.clientY - state.startY) / Math.max(0.0001, state.projection.scale);
-      env.ensureCanvasStore()?.previewPointer({ dx, dy, moved: Math.hypot(dx, dy) >= 1 });
+      if (state.searchViewportPreview) {
+        env.ensureCanvasStore()?.previewViewport({
+          x: state.startViewport.x + dx,
+          y: state.startViewport.y + dy,
+          zoom: state.startViewport.zoom,
+        }, { deferRender: true });
+      } else {
+        env.ensureCanvasStore()?.previewPointer({ dx, dy, moved: Math.hypot(dx, dy) >= 1 });
+      }
       event.preventDefault();
 
   }
@@ -772,7 +805,11 @@
       const state = env.canvasMinimapDragState;
       if (!state) return;
       if (event && event.pointerId !== state.pointerId) return;
-      env.ensureCanvasStore()?.finishPointer({ commit });
+      if (state.searchViewportPreview) {
+        if (!commit) env.ensureCanvasStore()?.previewViewport(state.startViewport, { deferRender: true });
+      } else {
+        env.ensureCanvasStore()?.finishPointer({ commit });
+      }
       try {
         env.canvasMinimapViewport?.releasePointerCapture?.(state.pointerId);
       } catch {
@@ -902,7 +939,16 @@
         }
         flushCanvasWheelZoom();
         const zoom = env.canvasStoreSnapshot().layout.viewport.zoom || env.DEFAULT_CANVAS_VIEWPORT.zoom;
-        env.ensureCanvasStore()?.commitPan(dx / zoom, dy / zoom);
+        if (env.canvasSearchViewportState && env.isCanvasSearchPreviewActive()) {
+          const current = env.canvasStoreSnapshot().layout.viewport;
+          env.ensureCanvasStore()?.previewViewport({
+            x: current.x + dx / zoom,
+            y: current.y + dy / zoom,
+            zoom: current.zoom,
+          });
+        } else {
+          env.ensureCanvasStore()?.commitPan(dx / zoom, dy / zoom);
+        }
       }, { passive: false });
       const refreshCanvasGeometry = () => {
         if (env.settings.viewMode !== 'canvas' || env.canvasSessionFallback) return;

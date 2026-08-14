@@ -10,7 +10,7 @@
   function escapeAttr(...args) { return env.escapeAttr(...args); }
   function mediaKeyForMember(...args) { return env.mediaKeyForMember(...args); }
   function mediaKeyForItem(...args) { return env.mediaKeyForItem(...args); }
-  function syncCanvasSearchViewport() { return env.syncCanvasSearchViewport?.(); }
+  function syncCanvasSearchViewport(searchContext) { return env.syncCanvasSearchViewport?.(searchContext); }
 
 
   function createGroupCard(item) {
@@ -363,64 +363,67 @@
   function renderGrid() {
     ensureBound('renderGrid');
 
-      syncCanvasSearchViewport();
-      if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) {
-        env.renderCanvas();
-        return;
-      }
-      env.disconnectCanvasMediaObserver();
       // Fresh match cache for this paint (shared by filter + group hit rows)
       env.SearchQuery.beginSearchMatchCache();
-      const filtered = env.getVisibleTabs();
-      env.updateSavedBadge();
-
-      if (env.allTabs.length === 0) {
-        if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-        env.SearchQuery.clearSearchMatchCache();
-        renderEmpty({ title: env.t('emptyTitle'), body: env.t('emptyBody') });
-        return;
-      }
-      if (filtered.length === 0) {
-        if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-        env.SearchQuery.clearSearchMatchCache();
-        renderEmpty({ title: env.t('noResultsTitle'), body: env.t('noResultsBody') });
-        return;
-      }
-
-      const isList = env.settings.viewMode === 'list' || env.canvasSessionFallback;
-      if (env.gridNodeIsList !== isList) {
-        // Rare full mode switch — cheap fallback, matches the old always-full-rebuild behavior.
-        if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
-        env.gridEl.innerHTML = '';
-        env.gridNodeElements.clear();
-        env.gridNodeIsList = isList;
-      }
-      env.applyCardCols(env.settings.cardCols);
-
-      const visibleIds = new Set(filtered.map((item) => item.id));
-      for (const [id, node] of env.gridNodeElements) {
-        if (!visibleIds.has(id)) env.removeGridNode(id, node);
-      }
-      env.gridEl.querySelector('.empty')?.remove();
-
-      const frag = document.createDocumentFragment();
-      filtered.forEach((item) => {
-        const renderKey = env.gridNodeRenderKey(item, isList);
-        let node = env.gridNodeElements.get(item.id);
-        if (!node || node.dataset.gridRenderKey !== renderKey) {
-          const fresh = isList ? createRow(item) : createCard(item);
-          fresh.dataset.gridRenderKey = renderKey;
-          if (node) node.replaceWith(fresh);
-          node = fresh;
-          env.gridNodeElements.set(item.id, node);
+      try {
+        if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) {
+          const searchContext = env.getCanvasSearchContext();
+          syncCanvasSearchViewport(searchContext);
+          env.renderCanvas(searchContext);
+          return;
         }
-        // Moving an existing node through the fragment preserves DOM order
-        // without recreating it (same pattern as renderCanvas).
-        frag.appendChild(node);
-      });
-      env.gridEl.appendChild(frag);
-      env.updateGridSelectionUi();
-      env.SearchQuery.clearSearchMatchCache();
+        env.syncCanvasSearchViewport?.({ items: [], queryActive: false });
+        env.disconnectCanvasMediaObserver();
+        const filtered = env.getVisibleTabs();
+        env.updateSavedBadge();
+
+        if (env.allTabs.length === 0) {
+          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          renderEmpty({ title: env.t('emptyTitle'), body: env.t('emptyBody') });
+          return;
+        }
+        if (filtered.length === 0) {
+          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          renderEmpty({ title: env.t('noResultsTitle'), body: env.t('noResultsBody') });
+          return;
+        }
+
+        const isList = env.settings.viewMode === 'list' || env.canvasSessionFallback;
+        if (env.gridNodeIsList !== isList) {
+          // Rare full mode switch — cheap fallback, matches the old always-full-rebuild behavior.
+          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          env.gridEl.innerHTML = '';
+          env.gridNodeElements.clear();
+          env.gridNodeIsList = isList;
+        }
+        env.applyCardCols(env.settings.cardCols);
+
+        const visibleIds = new Set(filtered.map((item) => item.id));
+        for (const [id, node] of env.gridNodeElements) {
+          if (!visibleIds.has(id)) env.removeGridNode(id, node);
+        }
+        env.gridEl.querySelector('.empty')?.remove();
+
+        const frag = document.createDocumentFragment();
+        filtered.forEach((item) => {
+          const renderKey = env.gridNodeRenderKey(item, isList);
+          let node = env.gridNodeElements.get(item.id);
+          if (!node || node.dataset.gridRenderKey !== renderKey) {
+            const fresh = isList ? createRow(item) : createCard(item);
+            fresh.dataset.gridRenderKey = renderKey;
+            if (node) node.replaceWith(fresh);
+            node = fresh;
+            env.gridNodeElements.set(item.id, node);
+          }
+          // Moving an existing node through the fragment preserves DOM order
+          // without recreating it (same pattern as renderCanvas).
+          frag.appendChild(node);
+        });
+        env.gridEl.appendChild(frag);
+        env.updateGridSelectionUi();
+      } finally {
+        env.SearchQuery.clearSearchMatchCache();
+      }
 
   }
 

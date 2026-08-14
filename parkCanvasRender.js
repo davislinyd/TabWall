@@ -49,7 +49,7 @@
   function activeCanvasSelection() { return call('activeCanvasSelection') || new Set(); }
   function canvasPositionFor(id, index) { return call('canvasPositionFor', id, index); }
   function canvasStoreSnapshot() { return call('canvasStoreSnapshot'); }
-  function canvasNodeWorldRect(node) { return call('canvasNodeWorldRect', node); }
+  function canvasNodeWorldRect(node, options) { return call('canvasNodeWorldRect', node, options); }
   function getCanvasSearchContext() { return call('getCanvasSearchContext'); }
   function canvasSearchLayoutFor(sc) { return call('canvasSearchLayoutFor', sc); }
   function isCanvasSearchPreviewActive(sc) { return call('isCanvasSearchPreviewActive', sc); }
@@ -231,41 +231,59 @@ function canvasNodeHtml(item) {
     </article>`;
 }
 
-function canvasConnectionDomHandlePoint(id, side) {
+function canvasConnectionDomHandlePoint(id, side, cache = null) {
+  const cacheKey = `${id}:${side}`;
+  if (cache?.handles?.has(cacheKey)) return cache.handles.get(cacheKey);
   const handle = canvasNodeElements.get(id)?.querySelector(`[data-canvas-link-handle="${side}"]`);
-  const viewportRect = getCanvasViewportEl()?.getBoundingClientRect();
+  const viewportRect = cache?.viewportRect || getCanvasViewportEl()?.getBoundingClientRect();
   const handleRect = handle?.getBoundingClientRect();
-  if (!viewportRect || !handleRect) return null;
-  const viewport = canvasStoreSnapshot().layout?.viewport || getCanvasLayout().viewport;
+  if (!viewportRect || !handleRect) {
+    cache?.handles?.set(cacheKey, null);
+    return null;
+  }
+  const viewport = cache?.viewport || canvasStoreSnapshot().layout?.viewport || getCanvasLayout().viewport;
   const zoom = viewport.zoom || 1;
-  return {
+  const point = {
     x: (handleRect.left + handleRect.width / 2 - viewportRect.left) / zoom + viewport.x,
     y: (handleRect.top + handleRect.height / 2 - viewportRect.top) / zoom + viewport.y,
   };
+  cache?.handles?.set(cacheKey, point);
+  return point;
 }
 
-function canvasConnectionHandlePointForId(id, position, side) {
-  return canvasConnectionDomHandlePoint(id, side) || canvasConnectionHandlePoint(position, side);
+function canvasConnectionHandlePointForId(id, position, side, cache = null) {
+  return canvasConnectionDomHandlePoint(id, side, cache) || canvasConnectionHandlePoint(position, side);
 }
 
-function canvasConnectionHandlePointForCursor(rect, point, id = '') {
+function canvasConnectionHandlePointForCursor(rect, point, id = '', cache = null) {
   const side = canvasConnectionSideForPoint(rect, point);
-  return side ? canvasConnectionHandlePointForId(id, rect, side) : null;
+  return side ? canvasConnectionHandlePointForId(id, rect, side, cache) : null;
 }
 
-function canvasConnectionPosition(id) {
+function canvasConnectionPosition(id, cache = null) {
+  if (cache?.positions?.has(id)) return cache.positions.get(id);
   const node = canvasNodeElements.get(id);
-  const measured = node?.isConnected ? canvasNodeWorldRect(node) : null;
-  if (measured && measured.w > 0 && measured.h > 0) return measured;
-  const searchContext = getCanvasSearchContext();
-  const layout = isCanvasSearchPreviewActive(searchContext)
+  const measured = node?.isConnected
+    ? canvasNodeWorldRect(node, {
+        viewportRect: cache?.viewportRect,
+        viewport: cache?.viewport,
+      })
+    : null;
+  if (measured && measured.w > 0 && measured.h > 0) {
+    cache?.positions?.set(id, measured);
+    return measured;
+  }
+  const searchContext = cache ? null : getCanvasSearchContext();
+  const layout = cache?.layout || (isCanvasSearchPreviewActive(searchContext)
     ? canvasSearchLayoutFor(searchContext)
-    : (canvasStoreSnapshot().layout || getCanvasLayout());
+    : (canvasStoreSnapshot().layout || getCanvasLayout()));
   const position = layout?.positions?.[id];
-  return position ? canvasDisplayPosition(position) : null;
+  const result = position ? canvasDisplayPosition(position) : null;
+  cache?.positions?.set(id, result);
+  return result;
 }
 
-function canvasConnectionHandlePoints(source, target, sourceId = '', targetId = '') {
+function canvasConnectionHandlePoints(source, target, sourceId = '', targetId = '', cache = null) {
   if (!source || !target) return null;
   const sourceSide = canvasConnectionSideForVector(
     target.x + target.w / 2 - (source.x + source.w / 2),
@@ -280,12 +298,12 @@ function canvasConnectionHandlePoints(source, target, sourceId = '', targetId = 
         ? 'top'
         : 'bottom';
   return {
-    source: canvasConnectionHandlePointForId(sourceId, source, sourceSide),
-    target: canvasConnectionHandlePointForId(targetId, target, targetSide),
+    source: canvasConnectionHandlePointForId(sourceId, source, sourceSide, cache),
+    target: canvasConnectionHandlePointForId(targetId, target, targetSide, cache),
   };
 }
 
-function renderCanvasConnectionDraft() {
+function renderCanvasConnectionDraft(renderCache = null) {
   const state = getCanvasConnectionDragState();
   if (!getCanvasConnectionsEl() || !state || state.kind === 'curve') {
     if (getCanvasConnectionDraftEl()) {
@@ -303,10 +321,10 @@ function renderCanvasConnectionDraft() {
     const targetId = state.kind === 'handle'
       ? state.targetId
       : state.movingEndpoint === 'targetId' ? state.targetId : state.fixedId;
-    const source = canvasConnectionPosition(sourceId);
-    const target = canvasConnectionPosition(targetId);
+    const source = canvasConnectionPosition(sourceId, renderCache);
+    const target = canvasConnectionPosition(targetId, renderCache);
     const points = source && target
-      ? canvasConnectionHandlePoints(source, target, sourceId, targetId)
+      ? canvasConnectionHandlePoints(source, target, sourceId, targetId, renderCache)
       : null;
     sourcePoint = points?.source;
     targetPoint = points?.target;
@@ -314,7 +332,7 @@ function renderCanvasConnectionDraft() {
     sourcePoint = state.startPoint;
     targetPoint = state.currentPoint;
   } else {
-    const fixed = canvasConnectionPosition(state.fixedId);
+    const fixed = canvasConnectionPosition(state.fixedId, renderCache);
     if (!fixed) {
       if (getCanvasConnectionDraftEl()) {
         getCanvasConnectionDraftEl().remove();
@@ -324,9 +342,9 @@ function renderCanvasConnectionDraft() {
     }
     sourcePoint = state.movingEndpoint === 'sourceId'
       ? state.currentPoint
-      : canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId);
+      : canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId, renderCache);
     targetPoint = state.movingEndpoint === 'sourceId'
-      ? canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId)
+      ? canvasConnectionHandlePointForCursor(fixed, state.currentPoint, state.fixedId, renderCache)
       : state.currentPoint;
   }
   const d = canvasConnectionPathD(sourcePoint, targetPoint);
@@ -354,21 +372,31 @@ function canvasConnectionRenderOffset(connection, connectionId) {
   return connection?.curveOffset;
 }
 
-function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
+function renderCanvasConnections(searchContext = getCanvasSearchContext(), renderLayout = null) {
   if (!getCanvasConnectionsEl()) return;
   const zones = ['source', 'curve', 'target'];
   const visibleIds = new Set(searchContext.items.map((item) => item.id));
   const layout = canvasStoreSnapshot().layout || getCanvasLayout();
+  const displayLayout = renderLayout || (isCanvasSearchPreviewActive(searchContext)
+    ? canvasSearchLayoutFor(searchContext)
+    : layout);
+  const renderCache = {
+    positions: new Map(),
+    handles: new Map(),
+    viewportRect: getCanvasViewportEl()?.getBoundingClientRect?.() || null,
+    viewport: displayLayout.viewport || layout.viewport,
+    layout: displayLayout,
+  };
   const connections = layout.connections || [];
   const connectionIds = new Set(connections.map((connection) => canvasConnectionId(connection.sourceId, connection.targetId)));
   if (getSelectedCanvasConnectionId() && !connectionIds.has(getSelectedCanvasConnectionId())) setSelectedCanvasConnectionId('');
   const seenIds = new Set();
   for (const connection of connections) {
     if (!visibleIds.has(connection.sourceId) || !visibleIds.has(connection.targetId)) continue;
-    const source = canvasConnectionPosition(connection.sourceId);
-    const target = canvasConnectionPosition(connection.targetId);
+    const source = canvasConnectionPosition(connection.sourceId, renderCache);
+    const target = canvasConnectionPosition(connection.targetId, renderCache);
     if (!source || !target) continue;
-    const points = canvasConnectionHandlePoints(source, target, connection.sourceId, connection.targetId);
+    const points = canvasConnectionHandlePoints(source, target, connection.sourceId, connection.targetId, renderCache);
     if (!points) continue;
     const id = canvasConnectionId(connection.sourceId, connection.targetId);
     const geometry = canvasConnectionCurveGeometry(
@@ -451,7 +479,7 @@ function renderCanvasConnections(searchContext = getCanvasSearchContext()) {
     canvasConnectionElements.delete(id);
   }
 
-  renderCanvasConnectionDraft();
+  renderCanvasConnectionDraft(renderCache);
 }
 
 function updateCanvasNodePositions(snapshot = canvasStoreSnapshot(), searchContext = getCanvasSearchContext()) {
@@ -585,7 +613,7 @@ function canvasNodeRenderKey(item) {
     notes: item.kind === 'group'
       ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
       : undefined,
-    query: getQuery(),
+    query: item.kind === 'group' ? getQuery() : '',
     locale: getSettings().locale,
   });
 }
@@ -605,7 +633,6 @@ function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item)) {
       call('requestUnlockItem', item);
     });
   });
-  node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
   node.querySelectorAll('img.favicon').forEach((img) => wireFavicon(img.parentElement));
   return node;
 }
@@ -624,10 +651,9 @@ function removeCanvasNode(id, node) {
   canvasNodeElements.delete(id);
 }
 
-function renderCanvas() {
+function renderCanvas(searchContext = getCanvasSearchContext()) {
   if (!getCanvasNodesEl()) return;
   ensureCanvasStore();
-  const searchContext = getCanvasSearchContext();
   const renderLayout = canvasSearchLayoutFor(searchContext);
   const filtered = searchContext.items;
   const visibleIds = new Set(filtered.map((item) => item.id));
@@ -652,14 +678,15 @@ function renderCanvas() {
       empty.querySelector('span').textContent = t(getAllTabs().length ? 'noResultsBody' : 'emptyBody');
     }
     updateCanvasTransform();
-    renderCanvasConnections(searchContext);
-    renderCanvasMinimap(filtered);
+    renderCanvasConnections(searchContext, renderLayout);
+    renderCanvasMinimap(filtered, renderLayout);
     updateBatchBar();
     return;
   }
   empty?.remove();
 
   const fragment = document.createDocumentFragment();
+  const changedNodes = [];
   filtered.forEach((item, index) => {
     let node = canvasNodeElements.get(item.id);
     const renderKey = canvasNodeRenderKey(item);
@@ -668,6 +695,7 @@ function renderCanvas() {
       if (node) node.replaceWith(replacement);
       node = replacement;
       canvasNodeElements.set(item.id, node);
+      changedNodes.push(node);
     }
     const position = canvasDisplayPosition(renderLayout.positions[item.id] || canvasDefaultPosition(index));
     node.dataset.id = item.id;
@@ -692,16 +720,17 @@ function renderCanvas() {
     fragment.appendChild(node);
   });
   getCanvasNodesEl().appendChild(fragment);
+  changedNodes.forEach((node) => {
+    node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
+  });
   filtered.forEach((item) => {
     if (item.kind !== 'note') return;
     const node = canvasNodeElements.get(item.id);
     if (node) wireStickerAttachmentImages(node, item);
   });
   updateCanvasTransform();
-  updateCanvasNodePositions(canvasStoreSnapshot(), searchContext);
   updateCanvasNodeSelection();
-  renderCanvasConnections(searchContext);
-  getCanvasNodesEl().querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
+  renderCanvasConnections(searchContext, renderLayout);
   renderCanvasMinimap(filtered, renderLayout);
   updateBatchBar();
 }

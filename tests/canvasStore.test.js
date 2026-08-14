@@ -47,6 +47,32 @@ test('canvas store keeps pointer preview transient and commits semantic pan', ()
   assert.equal(state.pendingOperations.length, 1);
 });
 
+test('viewport preview stays transient and clear restores the persistent viewport', async () => {
+  const api = loadStore();
+  let calls = 0;
+  const store = api.createCanvasStore({
+    items: [ITEM],
+    sendPatch: async () => {
+      calls += 1;
+      return { ok: true, revision: 1 };
+    },
+  });
+  const persistentViewport = { ...store.getState().layout.viewport };
+
+  assert.equal(store.previewViewport({ x: 50, y: 60, zoom: 1.5 }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.viewport)), { x: 50, y: 60, zoom: 1.5 });
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().viewportPreview)), { x: 50, y: 60, zoom: 1.5 });
+  assert.equal(store.getState().pendingOperations.length, 0);
+  assert.equal(store.getState().revision, 0);
+  await store.flush();
+  assert.equal(calls, 0);
+
+  assert.equal(store.clearViewportPreview(), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.viewport)), persistentViewport);
+  assert.equal(store.getState().viewportPreview, null);
+  assert.equal(store.getState().pendingOperations.length, 0);
+});
+
 test('canvas wheel pan coalesces consecutive pending deltas', () => {
   const api = loadStore();
   const store = api.createCanvasStore({ items: [ITEM] });

@@ -535,7 +535,7 @@ CanvasRender.bind({
   activeCanvasSelection: () => activeCanvasSelection(),
   canvasPositionFor: (id, index) => canvasPositionFor(id, index),
   canvasStoreSnapshot: () => canvasStoreSnapshot(),
-  canvasNodeWorldRect: (node) => canvasNodeWorldRect(node),
+  canvasNodeWorldRect: (node, options) => canvasNodeWorldRect(node, options),
   getCanvasSearchContext: () => getCanvasSearchContext(),
   canvasSearchLayoutFor: (sc) => canvasSearchLayoutFor(sc),
   isCanvasSearchPreviewActive: (sc) => isCanvasSearchPreviewActive(sc),
@@ -1199,7 +1199,7 @@ let pinnedOnly = false;
 let canvasIndexFilter = 'all';
 /** @type {{ key: string, revision: number, positions: Record<string, any>, mode: 'grid'|'align' } | null} */
 let canvasSearchPreview = null;
-/** @type {{ baseViewport: { x: number, y: number, zoom: number }, searchKey: string } | null} */
+/** @type {{ searchKey: string } | null} */
 let canvasSearchViewportState = null;
 let settingsSection = 'general';
 let selectMode = false;
@@ -2992,11 +2992,13 @@ function setCanvasSelection(ids, additive = false) {
 
 function canvasSelectNode(...args) { return AppHelpers.canvasSelectNode(...args); }
 
-function refreshCanvasSearchPreview(items = getCanvasVisibleTabs()) {
-  updateCanvasNodePositions();
+function refreshCanvasSearchPreview(items = null) {
+  const searchContext = getCanvasSearchContext();
+  const renderLayout = canvasSearchLayoutFor(searchContext);
+  updateCanvasNodePositions(canvasStoreSnapshot(), searchContext);
   updateCanvasNodeSelection();
-  renderCanvasConnections();
-  renderCanvasMinimap(items);
+  renderCanvasConnections(searchContext, renderLayout);
+  renderCanvasMinimap(items || searchContext.items, renderLayout);
   updateBatchBar();
 }
 

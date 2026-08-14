@@ -736,13 +736,13 @@ test('Canvas display geometry and connection endpoints use the four side handles
   assert.match(CANVAS_GEOM_SOURCE, /Math\.abs\(dx\) >= Math\.abs\(dy\)/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePoints\(source, target,/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePoints\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionDomHandlePoint\(id, side\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionDomHandlePoint\(id, side, cache = null\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionDomHandlePoint\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side, cache = null\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForId\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /const measured = node\?\.isConnected \? canvasNodeWorldRect\(node\) : null/);
+  assert.match(CANVAS_RENDER_SOURCE, /const measured = node\?\.isConnected[\s\S]*?canvasNodeWorldRect\(node, \{/);
   assert.doesNotMatch(PARK_SOURCE, /function canvasConnectionEdgePoints\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId, renderCache\)/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForCursor\(rect, point/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForCursor\(/);
   assert.match(CANVAS_RENDER_SOURCE, /const gapX = CanvasGeom\(\)\.CANVAS_DEFAULT_CARD_GAP/);
@@ -758,20 +758,26 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(PARK_BEHAVIOR_FLAT, /let canvasSearchPreview = null/);
   assert.match(CANVAS_GEOM_SOURCE, /CANVAS_SEARCH_ZOOM_MAX = 1\.8/);
   assert.match(CANVAS_GEOM_SOURCE, /function canvasSearchViewportForBounds\(viewportWidth, viewportHeight, bounds/);
-  assert.match(CANVAS_CHROME_SOURCE, /function syncCanvasSearchViewport\(\)/);
-  assert.match(CANVAS_CHROME_SOURCE, /baseViewport/);
+  assert.match(CANVAS_CHROME_SOURCE, /function syncCanvasSearchViewport\(searchContext = env\.getCanvasSearchContext\(\)\)/);
+  assert.match(STORE_SOURCE, /function previewViewport\(viewport/);
+  assert.match(STORE_SOURCE, /function clearViewportPreview\(/);
   assert.match(CANVAS_CHROME_SOURCE, /canvasSearchViewportForBounds\(width, height, bounds/);
-  assert.match(CANVAS_CHROME_SOURCE, /commitViewport\(saved\.baseViewport\)/);
-  assert.match(LIST_UI_SOURCE, /syncCanvasSearchViewport\(\);/);
+  assert.match(CANVAS_CHROME_SOURCE, /clearViewportPreview\(\{ deferRender: true \}\)/);
+  const searchSyncSource = extractFnSource(CANVAS_CHROME_SOURCE, 'syncCanvasSearchViewport');
+  assert.doesNotMatch(searchSyncSource, /commitViewport/);
+  assert.match(LIST_UI_SOURCE, /syncCanvasSearchViewport\(searchContext\);/);
   assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /if \(!isCanvasSearchPreviewActive\(searchContext\)\) \{[\s\S]*?canvasSearchPreview = null/);
 
-  const renderSource = CANVAS_RENDER_SOURCE.match(/function renderCanvas\(\)[\s\S]*?\n\}/)?.[0] || '';
+  const renderSource = extractFnSource(CANVAS_RENDER_SOURCE, 'renderCanvas');
   assert.match(renderSource, /const renderLayout = canvasSearchLayoutFor\(searchContext\)/);
   assert.match(renderSource, /renderLayout\.positions\[item\.id\]/);
   assert.match(renderSource, /renderCanvasMinimap\(filtered, renderLayout\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /query: item\.kind === 'group' \? getQuery\(\) : ''/);
+  assert.doesNotMatch(renderSource, /getCanvasNodesEl\(\)\.querySelectorAll\('img\[data-canvas-media="true"\]'/);
+  assert.doesNotMatch(renderSource, /updateCanvasNodePositions\(canvasStoreSnapshot\(\), searchContext\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvas\(/);
 
   const arrangeSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'arrangeCanvas');
@@ -785,11 +791,13 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(moveSource, /moveCanvasSearchPreview\(/);
   const pointerSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'beginCanvasPointer');
   assert.match(pointerSource, /const searchPreview = kind === 'node' && isCanvasSearchPreviewActive\(\)/);
+  assert.match(pointerSource, /const searchViewportPreview = kind === 'pan'/);
   assert.match(pointerSource, /if \(searchPreview\)[\s\S]*?searchStartPositions/);
 
   const endPointerSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'endCanvasPointer');
-  assert.match(endPointerSource, /const operation = state\.searchPreview\s*\? null/);
+  assert.match(endPointerSource, /const operation = state\.searchPreview \|\| state\.searchViewportPreview/);
   assert.match(endPointerSource, /if \(state\.searchPreview\) finishCanvasSearchPointer\(state, state\.moved\)/);
+  assert.match(endPointerSource, /state\.searchPreview \|\| state\.searchViewportPreview/);
   const transientEndBranch = endPointerSource.match(/if \(state\.searchPreview\) \{[\s\S]*?return;/)?.[0] || '';
   assert.doesNotMatch(transientEndBranch, /STACK_ITEMS|commitPositions|flush/);
 });
@@ -879,10 +887,11 @@ test('Canvas fit actions use visible card bounds and preserve the viewport schem
   const boundsSource = CANVAS_GEOM_SOURCE.match(/function canvasBoundsForItems\(items, layout\)[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(boundsSource, /canvasDisplayPosition\(layout\.positions\?\.\[item\.id\] \|\| canvasDefaultPosition\(index\)\)/);
   const fitSource = extractFnSource(PARK_BEHAVIOR_FLAT, 'canvasFitViewport');
-  assert.match(fitSource, /const items = getCanvasVisibleTabs\(\)/);
+  assert.match(fitSource, /const searchContext = getCanvasSearchContext\(\);[\s\S]*?const items = searchContext\.items/);
   assert.match(fitSource, /const widthZoom = availableWidth \/ contentWidth/);
   assert.match(fitSource, /const requestedZoom = mode === 'width' \? widthZoom : Math\.min\(widthZoom, heightZoom\)/);
-  assert.match(fitSource, /ensureCanvasStore\(\)\?\.commitViewport\(\{/);
+  assert.match(fitSource, /if \(canvasSearchViewportState\) ensureCanvasStore\(\)\?\.previewViewport\(viewport\)/);
+  assert.match(fitSource, /else ensureCanvasStore\(\)\?\.commitViewport\(viewport\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /if \(action === 'reset'\) resetCanvasView\(\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /if \(canvasZoomMenu && !canvasZoomMenu\.hidden\)/);
 });
