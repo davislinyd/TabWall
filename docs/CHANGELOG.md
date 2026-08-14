@@ -11,6 +11,11 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.38.1 — 2026-08-14
+
+- 說明面板新增 GitHub repository 與 GitHub Pages 使用說明連結。
+- 修正 Tag 管理面板的名稱、數量與操作欄位對齊。
+
 ## 2.38.0 — 2026-08-14
 
 - **卡片上鎖（可選密碼）**：支援分頁卡、Tab Group、圖片卡、Sticker Note 與 Group 成員獨立上鎖；上鎖後自動隱藏縮圖、快照與圖片附件，還原分頁與備註編輯不受阻。解鎖只存於記憶體 session，關閉分頁自動重新上鎖。支援免密碼點擊解鎖或 SHA-256 加鹽密碼保護。

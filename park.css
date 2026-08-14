@@ -791,6 +791,14 @@ select#sortBy {
   color: var(--text);
 }
 
+.help-section a {
+  color: var(--accent);
+}
+
+.help-section a:hover {
+  text-decoration: underline;
+}
+
 .float-drag {
   display: flex;
   align-items: center;
@@ -3894,15 +3902,22 @@ main {
 }
 
 .tag-chip-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
   width: 100%;
   min-height: 44px;
-  justify-content: space-between;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
   color: var(--text);
   padding: 10px 0;
+}
+
+.tag-chip-card .count,
+.tag-chip-card .chip-btn {
+  justify-self: start;
 }
 
 .tag-chip-card .count,

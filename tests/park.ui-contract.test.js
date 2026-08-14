@@ -372,6 +372,14 @@ test('Help panel documents how to measure disk usage', () => {
   assert.match(I18N_SOURCE, /navigator\.storage\.estimate\(\)/);
 });
 
+test('Help panel exposes project links and tag manager uses fixed columns', () => {
+  assert.match(HTML_MARKUP, /href="https:\/\/github\.com\/davislinyd\/TabWall"[^>]*data-i18n="helpGithubRepo"/);
+  assert.match(HTML_MARKUP, /href="https:\/\/davislinyd\.github\.io\/TabWall\/"[^>]*data-i18n="helpGithubPages"/);
+  assert.match(I18N_SOURCE, /helpGithubRepo: 'GitHub Repo'/);
+  assert.match(I18N_SOURCE, /helpGithubPages: 'GitHub Pages 使用說明'/);
+  assert.match(CSS_SOURCE, /\.tag-chip-card\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\) auto;/);
+});
+
 test('Help panel is centered; cards have newsprint; Option+/ is documented', () => {
   assert.match(CSS_SOURCE, /#helpBox\.open\s*\{[\s\S]*?transform:\s*translate\(-50%, -50%\) !important;/);
   assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
@@ -856,4 +864,3 @@ test('All scripts and stylesheets loaded in park.html are in manifest web_access
   assert.ok(accessible.has('park.html'));
   assert.ok(accessible.has('park.css'));
 });
-

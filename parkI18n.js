@@ -438,6 +438,9 @@ const I18N = {
       '在網址列開 chrome://settings/content/all，搜尋 chrome-extension://（擴充 ID 見 chrome://extensions），即可看到 Storage used。',
     helpStorageEstimate:
       '更精準：在 TabWall 按 ⌥⌘I 開 Console，執行 navigator.storage.estimate()，看 usage（不要看 quota）。',
+    helpLinksTitle: '專案連結',
+    helpGithubRepo: 'GitHub Repo',
+    helpGithubPages: 'GitHub Pages 使用說明',
     helpLimitsTitle: '限制',
     helpLimitsBody:
       'chrome:// 等特殊頁無法截圖或注入。TabWall 的存檔不是 Chrome 書籤列內建的 Save group。',
@@ -899,6 +902,9 @@ const I18N = {
       'Open chrome://settings/content/all, search for chrome-extension:// (the ID is on chrome://extensions), and read Storage used.',
     helpStorageEstimate:
       'More precise: on TabWall, open the Console with ⌥⌘I and run navigator.storage.estimate(); read usage, not quota.',
+    helpLinksTitle: 'Project links',
+    helpGithubRepo: 'GitHub repository',
+    helpGithubPages: 'GitHub Pages user guide',
     helpLimitsTitle: 'Limits',
     helpLimitsBody:
       'chrome:// pages cannot be captured or injected into. TabWall storage is not Chrome’s built-in Save group.',
