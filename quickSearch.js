@@ -14,6 +14,8 @@
     g: 'group',
     note: 'note',
     n: 'note',
+    nn: 'reminder',
+    noti: 'reminder',
     domain: 'domain',
     d: 'domain',
     all: 'all',
@@ -25,7 +27,7 @@
   }
 
   function normalizeScope(scope) {
-    if (scope === 'tag' || scope === 'group' || scope === 'note' || scope === 'domain' || scope === 'all') {
+    if (scope === 'tag' || scope === 'group' || scope === 'note' || scope === 'reminder' || scope === 'domain' || scope === 'all') {
       return scope;
     }
     return resolveScopeToken(scope) || 'all';
@@ -36,13 +38,14 @@
     const next = normalizeScope(scope);
     if (next === 'group') return item.kind === 'group';
     if (next === 'note') return item.kind === 'note';
+    if (next === 'reminder') return Boolean(item.reminder);
     if (next === 'domain') return item.kind === 'tab' || item.kind === 'group';
     return true;
   }
 
   function haystackScope(scope) {
     const next = normalizeScope(scope);
-    if (next === 'domain' || next === 'note' || next === 'group') return next;
+    if (next === 'domain' || next === 'note' || next === 'reminder' || next === 'group') return next;
     return 'all';
   }
 
@@ -85,7 +88,7 @@
       const lower = q.toLowerCase();
       return list
         .filter((item) => {
-          const hay = [item.title, item.displayTitle, item.url, item.note, item.markdown, ...(item.tags || [])].join(' ').toLowerCase();
+          const hay = [item.title, item.displayTitle, item.url, item.note, item.markdown, item.reminder?.message, ...(item.tags || [])].join(' ').toLowerCase();
           return hay.includes(lower);
         })
         .slice(0, MAX_RESULTS);
@@ -176,11 +179,12 @@
 
   const COPY = {
     zh: {
-      placeholder: '搜尋…  tag / group / note / domain + Tab',
+      placeholder: '搜尋…  tag / group / note / nn / noti / domain + Tab',
       empty: '沒有符合的結果',
       label: 'TabWall 搜尋',
       group: '群組',
       note: '便利貼',
+      reminder: '提醒',
       tag: 'tag',
       domain: '網域',
       noSnap: '無快照',
@@ -189,14 +193,16 @@
       phTag: '搜尋 tag…  && 且、|| 或',
       phGroup: '搜尋群組名稱或成員…',
       phNote: '搜尋便利貼…',
+      phReminder: '搜尋提醒文字或卡片…',
       phDomain: '搜尋網域…',
     },
     en: {
-      placeholder: 'Search…  tag / group / note / domain + Tab',
+      placeholder: 'Search…  tag / group / note / nn / noti / domain + Tab',
       empty: 'No matching results',
       label: 'TabWall search',
       group: 'Group',
       note: 'Note',
+      reminder: 'Reminder',
       tag: 'tag',
       domain: 'Domain',
       noSnap: 'No snapshot',
@@ -205,6 +211,7 @@
       phTag: 'Search tags…  && AND, || OR',
       phGroup: 'Search group name or members…',
       phNote: 'Search notes…',
+      phReminder: 'Search reminder text or cards…',
       phDomain: 'Search domains…',
     },
   };
@@ -276,6 +283,7 @@
       if (scope === 'tag') return text.phTag;
       if (scope === 'group') return text.phGroup;
       if (scope === 'note') return text.phNote;
+      if (scope === 'reminder') return text.phReminder;
       if (scope === 'domain') return text.phDomain;
       return text.placeholder;
     }
@@ -296,6 +304,7 @@
     }
 
     function rowLabel(item) {
+      if (scope === 'reminder') return item.reminder?.message || copy().reminder;
       if (item.kind === 'group') {
         const n = (item.tabs || []).length;
         return n ? `${copy().group} · ${n}` : copy().group;

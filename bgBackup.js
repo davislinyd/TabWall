@@ -1495,14 +1495,24 @@ function isOwnParkPageUrl(url) {
   return url === base || url.startsWith(`${base}?`);
 }
 
-async function openStandaloneParkTab() {
-  const url = getParkPageUrl(STANDALONE_SURFACE);
+async function openStandaloneParkTab({ focusReminderId = '' } = {}) {
+  const baseUrl = getParkPageUrl(STANDALONE_SURFACE);
+  const url = focusReminderId
+    ? `${baseUrl}&focusReminder=${encodeURIComponent(String(focusReminderId))}`
+    : baseUrl;
   try {
-    const matches = await chrome.tabs.query({ url });
+    let matches = await chrome.tabs.query({ url: baseUrl });
+    if ((!matches || !matches.length) && focusReminderId) {
+      try {
+        matches = await chrome.tabs.query({ url: `${baseUrl}*` });
+      } catch {
+        matches = [];
+      }
+    }
     const existing = (matches || []).find((tab) => tab?.id != null);
     if (existing) {
       try {
-        await chrome.tabs.update(existing.id, { active: true });
+        await chrome.tabs.update(existing.id, { active: true, ...(focusReminderId ? { url } : {}) });
         if (existing.windowId != null && chrome.windows?.update) {
           try {
             await chrome.windows.update(existing.windowId, { focused: true });
@@ -1631,4 +1641,3 @@ async function captureTabBlobs(windowId, tabId, { tiny = false } = {}) {
     return { thumbBlob: null, snapBlob: null };
   }
 }
-

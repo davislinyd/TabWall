@@ -70,21 +70,27 @@ test('quick search ranks recent restorable items and reuses SearchQuery', () => 
   assert.deepEqual(hits.map((item) => item.id).sort(), ['grp', 'note', 'old']);
 });
 
-test('quick search scopes match tag / group / note / domain', () => {
+test('quick search scopes match tag / group / note / reminder / domain', () => {
   const SQ = loadSearchQuery();
   const QS = loadQuickSearch(SQ);
   assert.equal(QS.resolveScopeToken('t'), 'tag');
   assert.equal(QS.resolveScopeToken('tag'), 'tag');
+  assert.equal(QS.resolveScopeToken('nn'), 'reminder');
+  assert.equal(QS.resolveScopeToken('noti'), 'reminder');
   assert.equal(QS.resolveScopeToken('tab'), '');
   const items = [
     { kind: 'tab', id: 't1', title: 'Alpha', url: 'https://work.example/', tags: ['work'], savedAt: 1 },
     { kind: 'tab', id: 't2', title: 'Beta', url: 'https://other.test/', tags: ['play'], savedAt: 2 },
     { kind: 'note', id: 'n1', title: 'Memo', markdown: 'remember', tags: ['work'], savedAt: 3 },
     { kind: 'group', id: 'g1', title: 'Stack', tags: [], tabs: [{ title: 'Mem', url: 'https://work.example/m', tags: ['ops'] }], savedAt: 4 },
+    { kind: 'tab', id: 'r1', title: 'Reminder card', url: 'https://reminder.example/', reminder: { message: 'buy milk' }, savedAt: 5 },
   ];
   assert.deepEqual(QS.rankItems(items, 'work', SQ, 'tag').map((item) => item.id).sort(), ['n1', 't1']);
   assert.deepEqual(QS.rankItems(items, '', SQ, 'group').map((item) => item.id), ['g1']);
   assert.deepEqual(QS.rankItems(items, 'memo', SQ, 'note').map((item) => item.id), ['n1']);
+  assert.deepEqual(QS.rankItems(items, '', SQ, 'nn').map((item) => item.id), ['r1']);
+  assert.deepEqual(QS.rankItems(items, 'milk', SQ, 'noti').map((item) => item.id), ['r1']);
+  assert.deepEqual(QS.rankItems(items, 'reminder.example', SQ, 'reminder').map((item) => item.id), ['r1']);
   assert.deepEqual(QS.rankItems(items, 'work.example', SQ, 'domain').map((item) => item.id).sort(), ['g1', 't1']);
 });
 

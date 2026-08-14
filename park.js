@@ -97,6 +97,7 @@ const CanvasIx = self.TabWallCanvasInteraction;
 const CanvasChrome = self.TabWallCanvasChrome;
 const ListUi = self.TabWallListUi;
 const WorkspaceUi = self.TabWallWorkspaceUi;
+const ReminderUi = self.TabWallReminderUi;
 const AppHelpers = self.TabWallAppHelpers;
 const ParkHistory = self.TabWallHistory;
 
@@ -251,6 +252,10 @@ const helpBtn = document.getElementById('helpBtn');
 const helpBox = document.getElementById('helpBox');
 const helpDrag = document.getElementById('helpDrag');
 const helpCloseX = document.getElementById('helpCloseX');
+const remindersBtn = document.getElementById('remindersBtn');
+const remindersBox = document.getElementById('remindersBox');
+const remindersDrag = document.getElementById('remindersDrag');
+const reminderCount = document.getElementById('reminderCount');
 const conflictModal = document.getElementById('conflictModal');
 const conflictIncomingTitle = document.getElementById('conflictIncomingTitle');
 const conflictIncomingUrl = document.getElementById('conflictIncomingUrl');
@@ -699,6 +704,7 @@ function bindPanelModules() {
     "closeCanvasZoomMenu": () => closeCanvasZoomMenu,
     "closeImportPickBox": () => closeImportPickBox,
     "closeQuickMenus": () => closeQuickMenus,
+    "closeRemindersBox": () => closeRemindersBox,
     "closeSettingsBox": () => closeSettingsBox,
     "closeStickerNoteEditor": () => closeStickerNoteEditor,
     "collectImageFiles": () => collectImageFiles,
@@ -756,6 +762,7 @@ function bindPanelModules() {
     "exportLiteBackup": () => exportLiteBackup,
     "fetchMediaUrl": () => fetchMediaUrl,
     "findStackTargetAt": () => findStackTargetAt,
+    "focusItem": () => focusItem,
     "finishCanvasSearchPointer": () => finishCanvasSearchPointer,
     "flipCards": () => flipCards,
     "floatBackdrop": () => floatBackdrop,
@@ -778,6 +785,10 @@ function bindPanelModules() {
     "hashLockPassword": () => hashLockPassword,
     "helpBox": () => helpBox,
     "helpBtn": () => helpBtn,
+    "remindersBox": () => remindersBox,
+    "remindersBtn": () => remindersBtn,
+    "remindersDrag": () => remindersDrag,
+    "reminderCount": () => reminderCount,
     "iconSvg": () => iconSvg,
     "importPickBox": () => importPickBox,
     "importPickCount": () => importPickCount,
@@ -846,6 +857,7 @@ function bindPanelModules() {
     "openDedupeBtn": () => openDedupeBtn,
     "openBatchEdit": () => openBatchEdit,
     "openEditBox": () => openEditBox,
+    "openReminderEditor": () => openReminderEditor,
     "openLightbox": () => openLightbox,
     "openManualAddPanel": () => openManualAddPanel,
     "openMembersBox": () => openMembersBox,
@@ -1069,10 +1081,12 @@ function bindPanelModules() {
   CanvasChrome.bind(env);
   ListUi.bind(env);
   WorkspaceUi.bind(env);
+  ReminderUi?.bind?.(env);
   AppHelpers.bind(env);
   ParkHistory?.bind?.(env);
 }
 bindPanelModules();
+ReminderUi?.init?.();
 
 // Search match/compile lives in parkSearchQuery.js (bind getters to page state).
 SearchQuery.bind({
@@ -1922,6 +1936,34 @@ function renderCanvasStackIndex(...args) { return AppHelpers.renderCanvasStackIn
 
 function focusCanvasItem(...args) { return AppHelpers.focusCanvasItem(...args); }
 
+function focusItem(id) {
+  const itemId = String(id || '');
+  if (!itemId) return;
+  query = '';
+  searchScope = 'all';
+  if (searchEl) searchEl.value = '';
+  pinnedOnly = false;
+  canvasIndexFilter = 'all';
+  syncPinnedFilterUi();
+  syncSearchScopeUi();
+  syncCanvasIndexUi();
+  renderGrid();
+  requestAnimationFrame(() => {
+    if (settings.viewMode === 'canvas' && !canvasSessionFallback) {
+      focusCanvasItem(itemId);
+      const node = [...canvasNodeElements.values()].find((candidate) => candidate.dataset.id === itemId);
+      node?.classList.add('reminder-focus');
+      setTimeout(() => node?.classList.remove('reminder-focus'), 1600);
+      return;
+    }
+    const node = [...gridNodeElements.values()].find((candidate) => candidate.dataset.id === itemId);
+    if (!node) return;
+    node.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    node.classList.add('reminder-focus');
+    setTimeout(() => node.classList.remove('reminder-focus'), 1600);
+  });
+}
+
 function setCanvasIndexFilter(filter, focusId = '') {
   canvasIndexFilter = String(filter || 'all');
   syncCanvasIndexUi();
@@ -2357,6 +2399,10 @@ editTagDraft.addEventListener('keydown', (e) => {
 function placeEditBoxCentered(...args) { return WorkspaceUi.placeEditBoxCentered(...args); }
 
 function openEditBox(...args) { return WorkspaceUi.openEditBox(...args); }
+
+function openReminderEditor(...args) { return ReminderUi?.openReminderEditor?.(...args); }
+
+function closeRemindersBox(...args) { return ReminderUi?.closeRemindersBox?.(...args); }
 
 function openBatchEdit(...args) { return WorkspaceUi.openBatchEdit(...args); }
 
@@ -3117,7 +3163,11 @@ function renderGrid(...args) { return ListUi.renderGrid(...args); }
 
 let loadListTimer = null;
 
-async function loadList(...args) { return await WorkspaceUi.loadList(...args); }
+async function loadList(...args) {
+  const result = await WorkspaceUi.loadList(...args);
+  ReminderUi?.refresh?.();
+  return result;
+}
 
 function scheduleLoadList(...args) { return AppHelpers.scheduleLoadList(...args); }
 
@@ -3166,6 +3216,7 @@ initSettingsUi()
     if (Media?.openDb) Media.openDb().catch(() => {});
     try {
       await loadList();
+      ReminderUi?.handleFocusFromUrl?.();
     } catch (err) {
       if (loadStatusEl) loadStatusEl.textContent = t('loadFailed');
       uiLog('error', 'load', 'loadList failed', err?.message || err);

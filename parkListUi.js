@@ -42,6 +42,7 @@
           <div class="card-actions">
             <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
             <button type="button" class="icon-btn lg members-btn" title="${escapeAttr(t('expandGroup'))}">${iconSvg('members')}<span>${escapeHtml(t('expandGroup'))}</span></button>
+            <button type="button" class="icon-btn lg reminder-btn ${item.reminder ? 'active' : ''}" title="${escapeAttr(t('reminderAction'))}">${iconSvg('reminder')}<span>${escapeHtml(t('reminderAction'))}</span></button>
           </div>
           <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
@@ -53,6 +54,7 @@
             <span class="color-dot" style="background:${color}"></span>
             <div class="title" title="${escapeAttr(title)}">
               ${escapeHtml(title)}
+              ${item.reminder ? `<span class="reminder-badge" title="${escapeAttr(t('reminderActive'))}">${iconSvg('reminder')}</span>` : ''}
               ${storedOnlyCount ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))} ×${storedOnlyCount}</span>` : ''}
             </div>
           </div>
@@ -89,7 +91,7 @@
         env.togglePinned(item);
       });
       card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-        if (e.target.closest('.card-actions, .delete-btn, .members-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
+        if (e.target.closest('.card-actions, .delete-btn, .members-btn, .reminder-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
         if (env.dragState?.active) return;
         if (env.selectMode || env.isMultiSelectModifier(e)) {
           env.handleCardSelectClick(item.id, e);
@@ -105,6 +107,10 @@
       card.querySelector('.edit-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         env.openEditBox(item);
+      });
+      card.querySelector('.reminder-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        env.openReminderEditor(item);
       });
       card.querySelector('.delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -152,6 +158,7 @@
           <div class="card-actions">
             <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
             <button type="button" class="icon-btn lg expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}<span>${escapeHtml(t('expand'))}</span></button>
+            <button type="button" class="icon-btn lg reminder-btn ${item.reminder ? 'active' : ''}" title="${escapeAttr(t('reminderAction'))}" aria-label="${escapeAttr(t('reminderAction'))}">${iconSvg('reminder')}<span>${escapeHtml(t('reminderAction'))}</span></button>
           </div>
           <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
@@ -166,6 +173,7 @@
             }
             <div class="title" title="${escapeAttr(title)}">
               ${escapeHtml(title)}
+              ${item.reminder ? `<span class="reminder-badge" title="${escapeAttr(t('reminderActive'))}">${iconSvg('reminder')}</span>` : ''}
               ${storedOnly ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}</span>` : ''}
             </div>
           </div>
@@ -199,6 +207,11 @@
         if (env.selectMode) return;
         env.openEditBox(item);
       });
+      card.querySelector('.reminder-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (env.selectMode) return;
+        env.openReminderEditor(item);
+      });
       card.querySelector('.lock-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         if (env.selectMode) return;
@@ -216,7 +229,7 @@
       });
       if (!isImage) bindMetaCopy(card.querySelector('.meta'), item);
       card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
-        if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
+        if (e.target.closest('.card-actions, .delete-btn, .expand-btn, .edit-btn, .reminder-btn, .pin-btn, .lock-btn, .card-check, .media-lock-overlay')) return;
         if (env.dragState?.active) return;
         if (env.selectMode || env.isMultiSelectModifier(e)) {
           env.handleCardSelectClick(item.id, e);
@@ -266,6 +279,7 @@
           <div class="title copy-hit" title="${escapeAttr(title)}">
             ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
             ${escapeHtml(title)}
+            ${item.reminder ? `<span class="reminder-badge" title="${escapeAttr(t('reminderActive'))}">${iconSvg('reminder')}</span>` : ''}
             ${storedOnlyCount ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
           </div>
           ${originalTitleHtml(item)}
@@ -284,6 +298,7 @@
           <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
           <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
           <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
+          <button type="button" class="icon-btn reminder-btn ${item.reminder ? 'active' : ''}" title="${escapeAttr(t('reminderAction'))}" aria-label="${escapeAttr(t('reminderAction'))}">${iconSvg('reminder')}</button>
           ${
             isGroup || isNote
               ? ''
@@ -324,6 +339,10 @@
       row.querySelector('.edit-btn').addEventListener('click', () => {
         if (isNote) env.openStickerNoteEditor(item);
         else env.openEditBox(item);
+      });
+      row.querySelector('.reminder-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        env.openReminderEditor(item);
       });
       row.querySelector('.lock-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -579,6 +598,7 @@
         snapshot: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle><path d="M8 5 9.2 3h5.6L16 5"></path>',
         close: '<path d="m6 6 12 12M18 6 6 18"></path>',
         note: '<path d="M5 4h14v16H5z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>',
+        reminder: '<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path>',
       };
       return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${paths[name] || ''}</svg>`;
 

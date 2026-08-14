@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.38.1",
+  "version": "2.39.0",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -10,6 +10,7 @@
     "tabs",
     "tabGroups",
     "alarms",
+    "notifications",
     "downloads"
   ],
   "host_permissions": [
@@ -70,6 +71,7 @@
         "parkCanvasChrome.js",
         "parkListUi.js",
         "parkWorkspaceUi.js",
+        "parkReminderUi.js",
         "parkAppHelpers.js",
         "parkHistory.js"
       ],

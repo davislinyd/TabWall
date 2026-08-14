@@ -6866,4 +6866,238 @@ body.has-wallpaper .canvas-viewport {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Card reminders */
+#remindersBox {
+  display: none;
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 96;
+  width: min(560px, 100vw);
+  max-height: none;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--panel-raised);
+  box-shadow: var(--edit-shadow);
+  transform: translateX(102%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.22s ease, visibility 0.22s ease;
+}
+
+#remindersBox.open {
+  display: flex;
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+#remindersBox .float-drag {
+  min-height: 68px;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  cursor: default;
+}
+
+#remindersBox .float-drag h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+#remindersBox .float-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 28px 28px;
+}
+
+.reminder-panel-hint,
+.reminder-form-hint {
+  margin: 0 0 12px;
+}
+
+.reminder-empty {
+  padding: 28px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.reminder-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.reminder-row-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reminder-row-main:hover,
+.reminder-row-main:focus-visible {
+  background: var(--panel-hover);
+}
+
+.reminder-row-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.reminder-row-icon svg,
+.reminder-badge svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+}
+
+.reminder-row-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reminder-row-copy strong,
+.reminder-row-copy span,
+.reminder-row-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-row-copy strong {
+  font-size: 13px;
+}
+
+.reminder-row-copy span,
+.reminder-row-copy small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.reminder-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reminder-row-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.reminder-row-actions svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+}
+
+.reminder-mode,
+.reminder-interval-fields,
+.reminder-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reminder-mode {
+  margin: 12px 0 16px;
+}
+
+.reminder-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.reminder-field,
+.reminder-interval-fields label {
+  display: flex;
+  flex: 1 1 180px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reminder-interval-fields {
+  align-items: flex-end;
+}
+
+.reminder-interval-fields label:last-child {
+  flex-basis: 130px;
+}
+
+#reminderEditorTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+#reminderMessage {
+  min-height: 84px;
+  resize: vertical;
+}
+
+#reminderEditorStatus {
+  min-height: 18px;
+  margin: 4px 0 8px;
+}
+
+#reminderEditorStatus.error {
+  color: var(--danger, #ef4444);
+}
+
+.reminder-form-actions {
+  justify-content: flex-end;
+}
+
+.reminder-badge {
+  display: inline-flex;
+  margin-left: 5px;
+  vertical-align: -3px;
+  color: var(--accent);
+}
+
+.header-count {
+  min-width: 16px;
+  margin-left: 4px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--panel);
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.reminder-focus {
+  animation: tabwall-reminder-focus 1.6s ease-out;
+}
+
+@keyframes tabwall-reminder-focus {
+  0%, 100% { box-shadow: var(--shadow); }
+  20%, 60% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 70%, transparent), var(--shadow); }
+}
  

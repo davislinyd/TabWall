@@ -127,6 +127,10 @@
             </svg>
             <span id="viewModeLabel">列表</span>
           </button>
+          <button type="button" class="btn header-text-btn" id="remindersBtn" data-i18n-title="reminders" data-i18n-aria="reminders" title="提醒" aria-label="提醒">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+            <span data-i18n="reminders">提醒</span><span id="reminderCount" class="header-count" hidden></span>
+          </button>
           <button type="button" class="btn header-text-btn" id="tagsBtn" data-i18n-title="tagsManage" data-i18n-aria="tagsManage" title="Tags" aria-label="Tags"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path><path d="M8 9h8M8 12h5"></path></svg><span data-i18n="tagsManage">Tags</span></button>
           <button type="button" class="btn header-text-btn" id="settingsBtn" data-i18n-title="settings" data-i18n-aria="settings" title="設定" aria-label="設定"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="settings">設定</span></button>
           <button type="button" class="btn header-text-btn" id="themeBtn" data-i18n-title="themeToggle" data-i18n-aria="themeToggle" title="切換主題" aria-label="切換主題">Light</button>
@@ -791,6 +795,55 @@
       </div>
     </div>
 
+    <div id="remindersBox" aria-hidden="true">
+      <div class="float-drag" id="remindersDrag">
+        <h2 data-i18n="remindersTitle">提醒</h2>
+        <button type="button" class="btn icon-close" id="remindersCloseX" data-i18n-title="close" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div class="float-body" id="remindersBody">
+        <div id="remindersListView">
+          <p class="hint reminder-panel-hint" data-i18n="remindersHint">查看所有仍在排程中的卡片提醒。</p>
+          <div id="remindersList"></div>
+        </div>
+        <div id="reminderEditorView" hidden>
+          <h3 id="reminderEditorTitle">—</h3>
+          <div class="reminder-mode" role="group" aria-label="提醒類型">
+            <label><input type="radio" id="reminderModeOnce" name="reminderMode" value="once" checked /><span data-i18n="reminderOnce">一次性</span></label>
+            <label><input type="radio" id="reminderModeInterval" name="reminderMode" value="interval" /><span data-i18n="reminderInterval">Interval</span></label>
+          </div>
+          <label class="reminder-field">
+            <span data-i18n="reminderStartTime">開始時間</span>
+            <input id="reminderAt" type="datetime-local" />
+          </label>
+          <div id="reminderIntervalFields" class="reminder-interval-fields" hidden>
+            <label>
+              <span data-i18n="reminderIntervalValue">間隔</span>
+              <input id="reminderIntervalValue" type="number" min="1" step="1" value="1" />
+            </label>
+            <label>
+              <span data-i18n="reminderIntervalUnit">單位</span>
+              <select id="reminderIntervalUnit">
+                <option value="minute" data-i18n="reminderMinutes">分鐘</option>
+                <option value="hour" data-i18n="reminderHours">小時</option>
+                <option value="day" data-i18n="reminderDays">天</option>
+              </select>
+            </label>
+          </div>
+          <label class="reminder-field">
+            <span data-i18n="reminderMessage">通知文字</span>
+            <textarea id="reminderMessage" rows="4" data-i18n-placeholder="reminderMessagePh" placeholder="留空則使用卡片標題"></textarea>
+          </label>
+          <p class="hint reminder-form-hint" data-i18n="reminderMessageHint">通知文字可留空，發送時會使用卡片標題。</p>
+          <p id="reminderEditorStatus" class="hint" role="status" aria-live="polite"></p>
+          <div class="reminder-form-actions">
+            <button type="button" class="btn" id="reminderBackBtn" data-i18n="cancel">取消</button>
+            <button type="button" class="btn danger" id="reminderClearBtn" data-i18n="reminderClear">移除提醒</button>
+            <button type="button" class="btn primary" id="reminderSaveBtn" data-i18n="save">儲存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="dedupeBox" aria-hidden="true">
       <div class="float-drag" id="dedupeDrag">
         <h2 data-i18n="dedupeScanTitle">去重複</h2>
@@ -1001,6 +1054,7 @@
     <script src="parkCanvasChrome.js"></script>
     <script src="parkListUi.js"></script>
     <script src="parkWorkspaceUi.js"></script>
+    <script src="parkReminderUi.js"></script>
     <script src="parkAppHelpers.js"></script>
     <script src="parkHistory.js"></script>
     <script src="park.js"></script>

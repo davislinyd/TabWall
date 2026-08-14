@@ -4,7 +4,7 @@
  */
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
-importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js');
+importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
@@ -157,7 +157,17 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   } else if (alarm.name === AUTO_BACKUP_ONCHANGE_ALARM) {
     autoBackupAlarmPending = false;
     enqueueMutation(() => runAutoBackup({ reason: 'onchange' })).catch(() => {});
+  } else if (String(alarm?.name || '').startsWith(REMINDER_ALARM_PREFIX)) {
+    enqueueMutation(() => handleReminderAlarm(alarm)).catch((err) => {
+      console.warn('[TabWall] reminder alarm failed:', err);
+    });
   }
+});
+
+chrome.notifications?.onClicked?.addListener?.((notificationId) => {
+  handleReminderNotificationClick(notificationId).catch((err) => {
+    console.warn('[TabWall] reminder notification click failed:', err);
+  });
 });
 
 chrome.tabs.onActivated?.addListener?.(({ tabId }) => {
@@ -199,6 +209,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (changes[STORAGE_ITEMS] || changes[STORAGE_TABS]) {
     tasks.push(refreshActiveTabBadge());
+    if (changes[STORAGE_ITEMS] && typeof syncReminderAlarmsForItems === 'function') {
+      tasks.push(syncReminderAlarmsForItems().catch((err) => {
+        console.warn('[TabWall] reminder storage sync failed:', err);
+      }));
+    }
   }
   return Promise.all(tasks).catch(() => {});
 });
@@ -207,12 +222,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onInstalled.addListener(() => {
   return Promise.all([
     getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    syncReminderAlarmsForItems(),
     refreshActiveTabBadge(),
   ]).catch(() => {});
 });
 chrome.runtime.onStartup?.addListener?.(() => {
   return Promise.all([
     getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    syncReminderAlarmsForItems(),
     refreshActiveTabBadge(),
   ]).catch(() => {});
 });
@@ -665,7 +682,7 @@ async function updateNote(noteId, patch = {}, groupId = '') {
     kind: 'note',
     id: current.id,
     attachments: Array.isArray(patch.attachments) ? patch.attachments : current.attachments,
-  });
+  }, { allowReminder: location.groupIndex == null });
   const validationError = validateNoteMutation(nextNote);
   if (validationError) return { ok: false, error: validationError };
   let writtenKeys = new Set();
@@ -1247,6 +1264,21 @@ function replaceListKeepingOrder(list, removeIds, insertAtId, insertItem) {
   return next;
 }
 
+function stackReminderPatch(target, source) {
+  const reminder = target?.reminder || source?.reminder;
+  return reminder ? { reminder } : {};
+}
+
+function withoutReminder(item) {
+  if (!item || typeof item !== 'object' || !Object.prototype.hasOwnProperty.call(item, 'reminder')) return item;
+  const { reminder, ...rest } = item;
+  return rest;
+}
+
+function hasStackReminderConflict(items) {
+  return (items || []).filter((item) => normalizeReminder(item?.reminder)).length > 1;
+}
+
 /**
  * Stack source onto target (iOS-folder style).
  * tab+tab → new group; tab+group / group+tab → add tab; group+group → merge into target.
@@ -1259,6 +1291,9 @@ async function stackItems(sourceId, targetId, options = {}) {
   const source = list.find((i) => i.id === sourceId);
   const target = list.find((i) => i.id === targetId);
   if (!source || !target) return { ok: false, error: 'not_found' };
+  if (hasStackReminderConflict([source, target])) {
+    return { ok: false, error: 'reminder_conflict' };
+  }
   const canvasBefore = await getCanvasLayout();
 
   const srcGroup = source.kind === 'group';
@@ -1295,9 +1330,9 @@ async function stackItems(sourceId, targetId, options = {}) {
       const tabs = [];
       const notes = [];
       if (target.kind === 'tab') tabs.push(await tabItemToMember(target, groupId, tabs.length, mediaState));
-      else if (target.kind === 'note') notes.push(target);
+      else if (target.kind === 'note') notes.push(withoutReminder(target));
       if (source.kind === 'tab') tabs.push(await tabItemToMember(source, groupId, tabs.length, mediaState));
-      else if (source.kind === 'note') notes.push(source);
+      else if (source.kind === 'note') notes.push(withoutReminder(source));
       const group = {
         kind: 'group',
         id: groupId,
@@ -1310,6 +1345,7 @@ async function stackItems(sourceId, targetId, options = {}) {
         savedAt: Date.now(),
         tabs,
         notes,
+        ...stackReminderPatch(target, source),
       };
       const next = replaceListKeepingOrder(list, [sourceId, targetId], targetId, group);
       const undoToken = await finalize(next, groupId, [targetId, sourceId], [sourceId, targetId]);
@@ -1322,11 +1358,13 @@ async function stackItems(sourceId, targetId, options = {}) {
       const updated = source.kind === 'note'
         ? {
             ...target,
-            notes: [...(target.notes || []), source],
+            notes: [...(target.notes || []), withoutReminder(source)],
             savedAt: Date.now(),
+            ...stackReminderPatch(target, source),
           }
         : {
             ...target,
+            ...stackReminderPatch(target, source),
             tabs: [
               ...(target.tabs || []),
               await tabItemToMember(source, target.id, (target.tabs || []).length, mediaState),
@@ -1346,11 +1384,13 @@ async function stackItems(sourceId, targetId, options = {}) {
       const updated = target.kind === 'note'
         ? {
             ...source,
-            notes: [...(source.notes || []), target],
+            notes: [...(source.notes || []), withoutReminder(target)],
             savedAt: Date.now(),
+            ...stackReminderPatch(source, target),
           }
         : {
             ...source,
+            ...stackReminderPatch(source, target),
             tabs: [
               ...(source.tabs || []),
               await tabItemToMember(target, source.id, (source.tabs || []).length, mediaState),
@@ -1368,8 +1408,9 @@ async function stackItems(sourceId, targetId, options = {}) {
       const extra = await rekeyGroupMembers(source, target.id, (target.tabs || []).length, mediaState);
       const updated = {
         ...target,
+        ...stackReminderPatch(target, source),
         tabs: [...(target.tabs || []), ...extra],
-        notes: [...(target.notes || []), ...(source.notes || [])],
+        notes: [...(target.notes || []), ...(source.notes || []).map(withoutReminder)],
         savedAt: Date.now(),
       };
       const next = list
@@ -1397,6 +1438,9 @@ async function createStack(ids, title = '') {
   const initial = await getParkedItems();
   if (uniqueIds.some((id) => !initial.some((item) => item.id === id))) {
     return { ok: false, error: 'not_found' };
+  }
+  if (hasStackReminderConflict(uniqueIds.map((id) => initial.find((item) => item.id === id)))) {
+    return { ok: false, error: 'reminder_conflict' };
   }
   const initialLayout = await getCanvasLayout();
   const mediaState = { created: new Set() };
@@ -1429,14 +1473,15 @@ async function createStack(ids, title = '') {
         const tabs = [];
         const notes = [];
         if (target.kind === 'tab') tabs.push(await tabItemToMember(target, groupId, tabs.length, mediaState));
-        else if (target.kind === 'note') notes.push(target);
+        else if (target.kind === 'note') notes.push(withoutReminder(target));
         if (source.kind === 'tab') tabs.push(await tabItemToMember(source, groupId, tabs.length, mediaState));
-        else if (source.kind === 'note') notes.push(source);
+        else if (source.kind === 'note') notes.push(withoutReminder(source));
         const group = {
           kind: 'group', id: groupId, title: target.title || source.title || '', color: 'grey',
           collapsed: false, pinned: false, note: '', tags: [], savedAt: Date.now(),
           tabs,
           notes,
+          ...stackReminderPatch(target, source),
         };
         next = replaceListKeepingOrder(list, [source.id, target.id], target.id, group);
         anchors = [target.id, source.id];
@@ -1445,9 +1490,10 @@ async function createStack(ids, title = '') {
         groupId = target.id;
         markObsolete(source);
         const updated = source.kind === 'note'
-          ? { ...target, notes: [...(target.notes || []), source], savedAt: Date.now() }
+          ? { ...target, ...stackReminderPatch(target, source), notes: [...(target.notes || []), withoutReminder(source)], savedAt: Date.now() }
           : {
               ...target,
+              ...stackReminderPatch(target, source),
               tabs: [
                 ...(target.tabs || []),
                 await tabItemToMember(source, groupId, (target.tabs || []).length, mediaState),
@@ -1461,9 +1507,10 @@ async function createStack(ids, title = '') {
         groupId = source.id;
         markObsolete(target);
         const updated = target.kind === 'note'
-          ? { ...source, notes: [...(source.notes || []), target], savedAt: Date.now() }
+          ? { ...source, ...stackReminderPatch(source, target), notes: [...(source.notes || []), withoutReminder(target)], savedAt: Date.now() }
           : {
               ...source,
+              ...stackReminderPatch(source, target),
               tabs: [
                 ...(source.tabs || []),
                 await tabItemToMember(target, groupId, (source.tabs || []).length, mediaState),
@@ -1479,8 +1526,9 @@ async function createStack(ids, title = '') {
         const extra = await rekeyGroupMembers(source, groupId, (target.tabs || []).length, mediaState);
         const updated = {
           ...target,
+          ...stackReminderPatch(target, source),
           tabs: [...(target.tabs || []), ...extra],
-          notes: [...(target.notes || []), ...(source.notes || [])],
+          notes: [...(target.notes || []), ...(source.notes || []).map(withoutReminder)],
           savedAt: Date.now(),
         };
         next = list.map((item) => (item.id === target.id ? updated : item)).filter((item) => item.id !== source.id);
@@ -1741,6 +1789,8 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'RESOLVE_SAVE_CONFLICT',
   'RESOLVE_PRESAVE_EDIT',
   'APPLY_DEDUPE',
+  'SET_REMINDER',
+  'CLEAR_REMINDER',
 ]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1758,6 +1808,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return getAttachmentUsage(message.noteId || '', message.groupId || '');
       case 'GET_CANVAS_LAYOUT':
         return { ok: true, ...(await getCanvasLayoutRecord()) };
+      case 'GET_REMINDERS':
+        return { ok: true, items: await listReminderItems() };
+      case 'SET_REMINDER':
+        return setReminder(message.id, message.reminder);
+      case 'CLEAR_REMINDER':
+        return clearReminder(message.id);
       case 'RESTORE_TAB':
         return restoreTab(message.id);
       case 'RESTORE_GROUP':
@@ -2028,6 +2084,12 @@ if (globalThis.__TABWALL_TEST__) {
     toggleParkOnActiveTab,
     openParkOnActiveTab,
     openStandaloneParkTab,
+    listReminderItems,
+    syncReminderAlarmsForItems,
+    setReminder,
+    clearReminder,
+    handleReminderAlarm,
+    handleReminderNotificationClick,
     handleCommandAction,
   };
 }

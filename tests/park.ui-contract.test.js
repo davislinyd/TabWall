@@ -12,6 +12,7 @@ const CANVAS_IX_SOURCE = fs.readFileSync(new URL('../parkCanvasInteraction.js', 
 const CANVAS_CHROME_SOURCE = fs.readFileSync(new URL('../parkCanvasChrome.js', import.meta.url), 'utf8');
 const LIST_UI_SOURCE = fs.readFileSync(new URL('../parkListUi.js', import.meta.url), 'utf8');
 const WORKSPACE_UI_SOURCE = fs.readFileSync(new URL('../parkWorkspaceUi.js', import.meta.url), 'utf8');
+const REMINDER_UI_SOURCE = fs.readFileSync(new URL('../parkReminderUi.js', import.meta.url), 'utf8');
 const APP_HELPERS_SOURCE = fs.readFileSync(new URL('../parkAppHelpers.js', import.meta.url), 'utf8');
 const I18N_SOURCE = fs.readFileSync(new URL('../parkI18n.js', import.meta.url), 'utf8');
 const SETTINGS_UI_SOURCE = fs.readFileSync(new URL('../parkSettingsUi.js', import.meta.url), 'utf8');
@@ -29,6 +30,7 @@ const PARK_BEHAVIOR_SOURCE = [
   typeof CANVAS_CHROME_SOURCE !== 'undefined' ? CANVAS_CHROME_SOURCE : '',
   typeof LIST_UI_SOURCE !== 'undefined' ? LIST_UI_SOURCE : '',
   typeof WORKSPACE_UI_SOURCE !== 'undefined' ? WORKSPACE_UI_SOURCE : '',
+  typeof REMINDER_UI_SOURCE !== 'undefined' ? REMINDER_UI_SOURCE : '',
   typeof APP_HELPERS_SOURCE !== 'undefined' ? APP_HELPERS_SOURCE : '',
   typeof CANVAS_RENDER_SOURCE !== 'undefined' ? CANVAS_RENDER_SOURCE : '',
   typeof CANVAS_GEOM_SOURCE !== 'undefined' ? CANVAS_GEOM_SOURCE : '',
@@ -174,11 +176,31 @@ test('Top bar exposes Canvas organization and manual add popovers', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /#quickAddWrap, #moreToolsMenu, #moreToolsBtn, #canvasOrganizeWrap, #manualAddWrap/);
 });
 
-test('Search field scopes include domain mode via d/domain + Tab', () => {
+test('Card reminders expose the shared panel, editor, and card actions', () => {
+  for (const id of [
+    'remindersBtn', 'reminderCount', 'remindersBox', 'remindersList', 'reminderModeOnce',
+    'reminderModeInterval', 'reminderAt', 'reminderIntervalValue', 'reminderIntervalUnit',
+    'reminderMessage', 'reminderSaveBtn', 'reminderClearBtn',
+  ]) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  assert.match(HTML_MARKUP, /parkReminderUi\.js/);
+  assert.match(PARK_SOURCE, /TabWallReminderUi/);
+  assert.match(REMINDER_UI_SOURCE, /SET_REMINDER/);
+  assert.match(REMINDER_UI_SOURCE, /CLEAR_REMINDER/);
+  assert.match(LIST_UI_SOURCE, /reminder-btn/);
+  assert.match(CANVAS_RENDER_SOURCE, /action: 'reminder'/);
+  assert.match(CANVAS_IX_SOURCE, /action === 'reminder'/);
+  assert.match(CSS_SOURCE, /#remindersBox/);
+});
+
+test('Search field scopes include reminder and domain modes via Tab', () => {
   // Search UI (tokens / Tab scope) lives in parkSearchUi.js (v2.29.3+)
   assert.match(SEARCH_UI_SOURCE, /d:\s*'domain'/);
   assert.match(SEARCH_UI_SOURCE, /domain:\s*'domain'/);
-  assert.match(SEARCH_UI_SOURCE, /token === 'tag' \|\| token === 'note' \|\| token === 'group' \|\| token === 'domain' \|\| token === 'all'/);
+  assert.match(SEARCH_UI_SOURCE, /token === 'tag' \|\| token === 'note' \|\| token === 'reminder' \|\| token === 'group' \|\| token === 'domain' \|\| token === 'all'/);
+  assert.match(SEARCH_UI_SOURCE, /nn:\s*'reminder'/);
+  assert.match(SEARCH_UI_SOURCE, /noti:\s*'reminder'/);
   assert.match(SEARCH_UI_SOURCE, /scope === 'domain'/);
   assert.match(PARK_BEHAVIOR_FLAT, /searchPhDomain/);
   assert.match(PARK_BEHAVIOR_FLAT, /searchPhDomainRegex/);
@@ -385,7 +407,7 @@ test('Help panel is centered; cards have newsprint; Option+/ is documented', () 
   assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
   assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
   assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
-  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／domain \+ Tab 切換欄位'/);
+  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／nn／noti／domain \+ Tab 切換欄位'/);
 });
 
 test('Undo shortcut is documented and wired for stack plus connections', () => {

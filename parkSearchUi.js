@@ -28,6 +28,8 @@
     tag: 'tag',
     n: 'note',
     note: 'note',
+    nn: 'reminder',
+    noti: 'reminder',
     g: 'group',
     group: 'group',
     d: 'domain',
@@ -107,6 +109,7 @@
     const scope = getSearchScope();
     if (scope === 'tag') return re ? t('searchPhTagRegex') : t('searchPhTag');
     if (scope === 'note') return re ? t('searchPhNoteRegex') : t('searchPhNote');
+    if (scope === 'reminder') return t('searchPhReminder');
     if (scope === 'group') return re ? t('searchPhGroupRegex') : t('searchPhGroup');
     if (scope === 'domain') return re ? t('searchPhDomainRegex') : t('searchPhDomain');
     return re ? t('searchRegexPh') : t('searchPh');
@@ -114,7 +117,7 @@
 
   function syncSearchScopeUi() {
     const scope = getSearchScope();
-    const scoped = scope === 'tag' || scope === 'note' || scope === 'group' || scope === 'domain';
+    const scoped = scope === 'tag' || scope === 'note' || scope === 'reminder' || scope === 'group' || scope === 'domain';
     const wrap = searchWrap();
     const chip = searchScopeChip();
     const input = searchEl();
@@ -436,7 +439,7 @@
   }
 
   async function applySearchTabToken(token) {
-    if (token === 'tag' || token === 'note' || token === 'group' || token === 'domain' || token === 'all') {
+    if (token === 'tag' || token === 'note' || token === 'reminder' || token === 'group' || token === 'domain' || token === 'all') {
       setSearchScope(token === 'all' ? 'all' : token);
       clearSearchInputKeepFocus();
       syncSearchScopeUi();

@@ -1532,7 +1532,7 @@
     ensureBound('setupFloatDrag');
 
       if (!handle || !box) return;
-      if (box.matches('#settingsBox, #tagsBox, #helpBox, #dedupeBox')) return;
+      if (box.matches('#settingsBox, #tagsBox, #helpBox, #dedupeBox, #remindersBox')) return;
       let dragging = false;
       let startX = 0;
       let startY = 0;
@@ -1580,6 +1580,7 @@
         env.membersBox.classList.contains('open') ||
         (env.stickerNoteBox && env.stickerNoteBox.classList.contains('open')) ||
         (env.dedupeBox && env.dedupeBox.classList.contains('open')) ||
+        (env.remindersBox && env.remindersBox.classList.contains('open')) ||
         (env.importPickBox && env.importPickBox.classList.contains('open')) ||
         (env.canvasStackDialog && env.canvasStackDialog.classList.contains('open'))
       );
@@ -1610,6 +1611,7 @@
       if (except !== 'members') closeMembersBox();
       if (except !== 'stickerNote') env.closeStickerNoteEditor();
       if (except !== 'dedupe') closeDedupeBox(false);
+      if (except !== 'reminders') env.closeRemindersBox?.();
       if (except !== 'importPick') env.closeImportPickBox(false);
       if (except !== 'canvasStack') env.closeCanvasStackDialog();
       syncFloatBackdrop();

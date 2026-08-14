@@ -328,6 +328,48 @@ test('backup keeps optional top-level pinned state and accepts legacy omission',
   assert.equal(Build.validateBackup(legacyBackup).ok, true);
 });
 
+test('backup preserves valid top-level reminders and rejects nested reminder scope', async () => {
+  const reminder = {
+    mode: 'interval',
+    message: 'Review this card',
+    nextAt: Date.now() + 3600000,
+    intervalMinutes: 60,
+  };
+  const onceReminder = {
+    mode: 'once',
+    message: reminder.message,
+    nextAt: reminder.nextAt,
+  };
+  const backup = sampleBackup([
+    { ...sampleItem(), reminder },
+    { ...sampleNote({ attachment: false }), reminder: onceReminder },
+  ]);
+  assert.equal(Build.validateBackup(backup).ok, true);
+
+  const lite = Build.buildLiteBlob(backup);
+  const liteMetadata = JSON.parse(await lite.blob.text());
+  assert.deepEqual(liteMetadata.parkedItems[0].reminder, reminder);
+  assert.deepEqual(liteMetadata.parkedItems[1].reminder, onceReminder);
+
+  const group = {
+    kind: 'group',
+    id: ITEM_ID,
+    title: 'Group',
+    color: 'grey',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [],
+    notes: [{ ...sampleNote({ attachment: false }), reminder }],
+  };
+  assert.equal(Build.validateBackup(sampleBackup([{ ...group, reminder }])).ok, false);
+  assert.equal(
+    Build.validateBackup(sampleBackup([{ ...group, reminder: undefined }])).error,
+    'invalid_reminder_scope'
+  );
+});
+
 test('backup preserves optional canvas layout and validates its bounds', async () => {
   const backup = sampleBackup([sampleItem(), sampleItem({ id: SECOND_ID, image: false })]);
   backup.canvasLayout = {

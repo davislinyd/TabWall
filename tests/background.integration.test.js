@@ -8,7 +8,7 @@ const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.ur
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js'].map((name) => [
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -50,6 +50,8 @@ function createRuntime() {
   const removedDownloads = [];
   const removedTabs = [];
   const badgeCalls = [];
+  const alarmStore = new Map();
+  const notificationCalls = [];
   const testSetTimeout = setTimeout;
   const testClearTimeout = clearTimeout;
   const chrome = {
@@ -86,7 +88,24 @@ function createRuntime() {
     },
     alarms: {
       onAlarm: event(),
-      async create() {},
+      async create(name, info) {
+        alarmStore.set(name, { name, ...info });
+      },
+      async clear(name) {
+        return alarmStore.delete(name);
+      },
+      async getAll() {
+        return [...alarmStore.values()];
+      },
+    },
+    notifications: {
+      onClicked: event(),
+      create(id, options, callback) {
+        notificationCalls.push({ id, options });
+        if (runtime.failNotificationCreate) return Promise.reject(new Error('notification_create_failed'));
+        callback?.(id);
+        return Promise.resolve(id);
+      },
       async clear() {},
     },
     runtime: {
@@ -201,6 +220,8 @@ function createRuntime() {
     updatedTabs: [],
     updatedWindows: [],
     badgeCalls,
+    alarmStore,
+    notificationCalls,
     parkTabs: [],
     currentTab: null,
     downloadItems: [],
@@ -209,6 +230,7 @@ function createRuntime() {
     groupMeta: null,
     failSendMessage: false,
     failExecuteScript: false,
+    failNotificationCreate: false,
   };
 
   const mediaApi = {
@@ -366,6 +388,8 @@ function createRuntime() {
     removedDownloads,
     removedTabs,
     badgeCalls,
+    alarmStore,
+    notificationCalls,
     ready,
   };
 }
@@ -425,13 +449,13 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.38.0');
+  assert.equal(MANIFEST.version, '2.39.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
   assert.match(BACKGROUND_SOURCE, /bgUndo\.js/);
-  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js'\)/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
@@ -1107,6 +1131,134 @@ function dispatchMessage(runtime, message, sender = {}) {
     listener(message, sender, resolve);
   });
 }
+
+test('card reminders create, list, clear, and sync one-shot alarms', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  const reminder = {
+    mode: 'once',
+    message: 'Review this card',
+    nextAt: Date.now() + 60000,
+  };
+
+  const set = await dispatchMessage(runtime, { type: 'SET_REMINDER', id: ITEM_ID, reminder });
+  assert.equal(set.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(set.item.reminder)), reminder);
+  assert.ok(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`));
+
+  const listed = await dispatchMessage(runtime, { type: 'GET_REMINDERS' });
+  assert.equal(listed.ok, true);
+  assert.deepEqual(listed.items.map((item) => item.id), [ITEM_ID]);
+  assert.deepEqual(JSON.parse(JSON.stringify(listed.items[0].reminder)), reminder);
+
+  const cleared = await dispatchMessage(runtime, { type: 'CLEAR_REMINDER', id: ITEM_ID });
+  assert.equal(cleared.ok, true);
+  assert.equal((await runtime.api.getParkedItems())[0].reminder, undefined);
+  assert.equal(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`), false);
+});
+
+test('one-shot reminder notification clears the reminder and interval reschedules from send time', async () => {
+  const onceRuntime = createRuntime();
+  await onceRuntime.ready;
+  await onceRuntime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    reminder: { mode: 'once', message: '', nextAt: Date.now() - 1000 },
+  }]);
+  const onceResult = await onceRuntime.api.handleReminderAlarm({ name: `tabwall-reminder:${ITEM_ID}` });
+  assert.equal(onceResult.ok, true);
+  assert.equal(onceRuntime.notificationCalls[0].options.message, ITEM_ID);
+  assert.equal((await onceRuntime.api.getParkedItems())[0].reminder, undefined);
+  assert.equal(onceRuntime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`), false);
+
+  const intervalRuntime = createRuntime();
+  await intervalRuntime.ready;
+  await intervalRuntime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    reminder: { mode: 'interval', message: 'Ping', nextAt: Date.now() - 1000, intervalMinutes: 5 },
+  }]);
+  const before = Date.now();
+  const intervalResult = await intervalRuntime.api.handleReminderAlarm({ name: `tabwall-reminder:${ITEM_ID}` });
+  const stored = (await intervalRuntime.api.getParkedItems())[0];
+  assert.equal(intervalResult.ok, true);
+  assert.equal(stored.reminder.message, 'Ping');
+  assert.ok(stored.reminder.nextAt >= before + 5 * 60 * 1000);
+  assert.ok(intervalRuntime.alarmStore.get(`tabwall-reminder:${ITEM_ID}`).when >= stored.reminder.nextAt);
+});
+
+test('notification failure preserves reminder metadata and reports an error result', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.failNotificationCreate = true;
+  const reminder = { mode: 'once', message: 'Keep me', nextAt: Date.now() - 1000 };
+  await runtime.api.setParkedItems([{ ...tab(ITEM_ID), reminder }]);
+
+  const result = await runtime.api.handleReminderAlarm({ name: `tabwall-reminder:${ITEM_ID}` });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /notification_create_failed/);
+  assert.deepEqual(JSON.parse(JSON.stringify((await runtime.api.getParkedItems())[0].reminder)), reminder);
+});
+
+test('reminder startup sync removes orphan alarms and notification click opens focused standalone TabWall', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    reminder: { mode: 'once', message: 'Open me', nextAt: Date.now() + 60000 },
+  }]);
+  runtime.alarmStore.set('tabwall-reminder:orphan', { name: 'tabwall-reminder:orphan', when: Date.now() + 60000 });
+
+  const startup = runtime.chrome.runtime.onStartup.listeners[0];
+  await startup();
+  assert.equal(runtime.alarmStore.has('tabwall-reminder:orphan'), false);
+  assert.equal(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`), true);
+
+  const clicked = await runtime.api.handleReminderNotificationClick(`tabwall-reminder:${ITEM_ID}`);
+  assert.equal(clicked, true);
+  assert.match(runtime.runtime.createdTabs[0].url, /surface=standalone&focusReminder=/);
+  assert.match(runtime.runtime.createdTabs[0].url, new RegExp(ITEM_ID));
+});
+
+test('reminder import syncs alarms and Stack blocks conflicts or transfers the sole reminder', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const reminder = { mode: 'once', message: 'Imported', nextAt: Date.now() + 60000 };
+  const imported = await runtime.api.importBackup({
+    format: 'tabwall-backup',
+    version: runtime.Build.FORMAT_VERSION,
+    media: 'none',
+    parkedItems: [{ ...tab(ITEM_ID), reminder }],
+    parkedTabs: [],
+    settings: {},
+    tagCatalog: [],
+  }, { mode: 'replace' });
+  assert.equal(imported.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify((await runtime.api.getParkedItems())[0].reminder)), reminder);
+  assert.ok(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`));
+
+  const conflictRuntime = createRuntime();
+  await conflictRuntime.ready;
+  await conflictRuntime.api.setParkedItems([
+    { ...tab(ITEM_ID), reminder },
+    { ...tab(SOURCE_ID), reminder: { ...reminder, message: 'Second' } },
+  ]);
+  const conflict = await conflictRuntime.api.stackItems(ITEM_ID, SOURCE_ID);
+  assert.equal(conflict.ok, false);
+  assert.equal(conflict.error, 'reminder_conflict');
+  assert.deepEqual((await conflictRuntime.api.getParkedItems()).map((item) => item.id), [ITEM_ID, SOURCE_ID]);
+
+  const transferRuntime = createRuntime();
+  await transferRuntime.ready;
+  await transferRuntime.api.setParkedItems([
+    { ...tab(ITEM_ID), reminder },
+    tab(SOURCE_ID),
+  ]);
+  const transfer = await transferRuntime.api.stackItems(ITEM_ID, SOURCE_ID);
+  assert.equal(transfer.ok, true);
+  const group = (await transferRuntime.api.getParkedItems())[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(group.reminder)), reminder);
+  assert.equal(group.tabs.every((member) => member.reminder == null), true);
+});
 
 test('BATCH_UPDATE_ITEMS appends unique note lines and merges tags', async () => {
   const runtime = createRuntime();

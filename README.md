@@ -39,11 +39,12 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | Plain search | `||` means OR; spaces and `&&` mean AND |
 | `t` or `tag` + Tab | Search tags only |
 | `n` or `note` + Tab | Search notes only |
+| `nn` or `noti` + Tab | Search reminders only |
 | `g` or `group` + Tab | Search groups only |
 | `d` or `domain` + Tab | Search domains only (standalone tabs and group member tabs) |
 | `re` or `regex` + Tab | Enable regular-expression search |
 | `all` + Tab | Reset the search field scope |
-| Empty search + Backspace, Delete, or Esc | Leave tag, note, group, domain, or regular-expression mode |
+| Empty search + Backspace, Delete, or Esc | Leave tag, note, reminder, group, domain, or regular-expression mode |
 | `.*` in the toolbar | Toggle regular-expression search; `/pattern/flags` is supported |
 | `Esc` | Close panels or the TabWall wall |
 | `⌘Z` / `Ctrl+Z` | Undo last accidental stack or connection |
@@ -86,7 +87,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 - Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
-- Field scope: use `tag`, `note`, `group`, or `domain` followed by Tab. Domain mode matches hostnames on standalone tabs and group member tabs only (not Sticker Notes).
+- Field scope: use `tag`, `note`, `nn` / `noti`, `group`, or `domain` followed by Tab. Reminder mode matches reminder text, card titles, and URLs; domain mode matches hostnames on standalone tabs and group member tabs only (not Sticker Notes).
 - Tag mode (`tag` + Tab) shows a type-ahead suggestion dropdown: pick multiple tags, and combine them with `&&` (AND) or `||` (OR) — click a suggestion's `||` button or press Alt+Enter to insert OR. Unlike plain search, whitespace inside a tag-mode query is *not* an AND separator (so a tag name that itself contains a space keeps working) — only `&&` and `||` are operators.
 - When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
@@ -99,6 +100,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - Park and restore groups, with member notes and tags.
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
 - **Custom display titles:** assign a custom display title to cards in the edit box. The card prominently displays the custom title while retaining the original title as a subtitle. Plain search and Option+/ search match both display and original titles.
+- **Card reminders:** set one-time or interval reminders on top-level tabs, groups, image cards, and Sticker Notes. Reminders use browser notifications, are included in backups, and can be reviewed from the bell panel; blank notification text falls back to the card title.
 - **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. New images are normalized to WebP (PNG fallback), capped at 4096px on the long edge, 16MP, and 24 MiB per source/output file; GIF and SVG become static images. Notes can join Stacks but are never restored as browser tabs.
 - Multi-selection and batch operations.
 - **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible. Right-click the empty canvas or a card for a custom context menu.
@@ -194,11 +196,12 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 一般搜尋 | `||` 表示或；空格與 `&&` 表示且 |
 | `t` 或 `tag` 加 Tab | 只搜尋標籤 |
 | `n` 或 `note` 加 Tab | 只搜尋備註 |
+| `nn` 或 `noti` 加 Tab | 只搜尋提醒 |
 | `g` 或 `group` 加 Tab | 只搜尋群組 |
 | `d` 或 `domain` 加 Tab | 只搜尋網域（獨立分頁與群組成員分頁） |
 | `re` 或 `regex` 加 Tab | 啟用正規表示式搜尋 |
 | `all` 加 Tab | 重設搜尋欄位範圍 |
-| 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、群組、網域或正規表示式模式 |
+| 空白搜尋加 Backspace、Delete 或 Esc | 離開標籤、備註、提醒、群組、網域或正規表示式模式 |
 | 工具列中的 `.*` | 開關正規表示式搜尋，支援 `/pattern/flags` |
 | `Esc` | 關閉面板或空間畫布 |
 | `⌘Z`／`Ctrl+Z` | 復原誤 Stack 或連線 |
@@ -240,7 +243,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 - 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。
-- 欄位範圍：輸入 `tag`、`note`、`group` 或 `domain` 後按 Tab。Domain 模式只比對 hostname，適用獨立分頁與群組成員分頁，不含 Sticker Note。
+- 欄位範圍：輸入 `tag`、`note`、`nn`／`noti`、`group` 或 `domain` 後按 Tab。提醒模式會比對提醒文字、卡片標題與網址；Domain 模式只比對 hostname，適用獨立分頁與群組成員分頁，不含 Sticker Note。
 - Tag 模式（輸入 `tag` 後按 Tab）會顯示即時下拉建議，可多選 tag 並以 `&&`（且）／`||`（或）組合；點擊建議旁的 `||` 按鈕或按 Alt+Enter 可直接以「或」加入。與一般搜尋不同，tag 模式下空白鍵**不會**被當作且的分隔符（保留給包含空白的 tag 名稱本身），只有 `&&`／`||` 才是運算子。
 - 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
@@ -253,6 +256,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 暫存與還原群組，支援成員備註與標籤。
 - **卡片上鎖：** 可將分頁、群組、圖片卡、Sticker Note 或成員上鎖，以鎖頭遮罩隱藏縮圖與快照。解鎖狀態僅存在本次工作階段，重開分頁自動再鎖。支援 SHA-256 加鹽密碼保護或免密碼點擊解鎖；還原分頁不需解鎖。
 - **自訂顯示標題：** 在編輯盒中設定「顯示標題」，卡片主標題顯示自訂名稱，下方以小字保留原始標題；搜尋引擎與 Option+/ 全域搜尋同時支援搜尋顯示標題與原始標題。
+- **卡片提醒：** 可在頂層分頁、群組、圖片卡與 Sticker Note 設定一次性或 Interval 提醒，透過 browser notification 通知；提醒會包含在備份中，也可從頂端鈴鐺面板查詢。通知文字留空時會使用卡片標題。
 - **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件。新圖片會自動正規化為 WebP（不可用時退回 PNG），長邊上限 4096px、總像素 16MP，原始檔與儲存檔各不得超過 24 MiB；GIF／SVG 會靜態化。note 可加入 Stack，但不會還原成瀏覽器分頁。
 - 多選與批次操作。
 - **空間畫布：** 支援自由排列、平移、縮放、框選、吸附格線、可拖曳 minimap 視角、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。空白畫布或卡片可右鍵開啟自訂選單。

@@ -85,6 +85,15 @@
   }
 
   function itemHaystack(item, scope = ctx.getSearchScope()) {
+    if (scope === 'reminder') {
+      if (!item?.reminder) return '';
+      return [
+        item.reminder.message || '',
+        item.title || '',
+        item.displayTitle || '',
+        item.url || '',
+      ].join(' ');
+    }
     if (scope === 'domain') {
       // Hostname only: standalone tabs + group member tabs (not notes).
       if (item.kind === 'note') return '';
@@ -371,6 +380,7 @@
       // Empty query: scoped modes still restrict card kinds
       if (scope === 'group') return item?.kind === 'group';
       if (scope === 'domain') return item?.kind === 'tab' || item?.kind === 'group';
+      if (scope === 'reminder') return Boolean(item?.reminder);
       return true;
     }
     if (scope === 'group') {

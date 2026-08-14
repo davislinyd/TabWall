@@ -26,6 +26,7 @@ zip -r "$OUT_ZIP" \
   bgBackup.js \
   bgRestore.js \
   bgUndo.js \
+  bgReminders.js \
   content.js \
   quickSearch.js \
   mediaDb.js \
@@ -51,6 +52,7 @@ zip -r "$OUT_ZIP" \
   parkCanvasChrome.js \
   parkListUi.js \
   parkWorkspaceUi.js \
+  parkReminderUi.js \
   parkAppHelpers.js \
   parkHistory.js \
   park.js \

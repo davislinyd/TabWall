@@ -144,6 +144,7 @@ function canvasNodeActionEntries(item) {
       { action: 'restore', label: t('restoreGroup'), icon: 'restore' },
       { action: 'members', label: t('expandGroup'), icon: 'members' },
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'reminder', label: t('reminderAction'), icon: 'reminder' },
       lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
@@ -152,6 +153,7 @@ function canvasNodeActionEntries(item) {
   if (item.kind === 'note') {
     return [
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'reminder', label: t('reminderAction'), icon: 'reminder' },
       lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
@@ -161,6 +163,7 @@ function canvasNodeActionEntries(item) {
     return [
       { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
       { action: 'edit', label: t('edit'), icon: 'edit' },
+      { action: 'reminder', label: t('reminderAction'), icon: 'reminder' },
       lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
@@ -170,6 +173,7 @@ function canvasNodeActionEntries(item) {
     { action: 'restore', label: t('restore'), icon: 'restore' },
     { action: 'snapshot', label: t('canvasSnapshot'), icon: 'snapshot' },
     { action: 'edit', label: t('edit'), icon: 'edit' },
+    { action: 'reminder', label: t('reminderAction'), icon: 'reminder' },
     { action: 'copy', label: t('copyLink'), icon: 'copy' },
     lockEntry,
     { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
@@ -212,7 +216,7 @@ function canvasNodeHtml(item) {
         <div class="canvas-node-title">
           ${item.kind === 'group' ? `<span class="color-dot" style="background:${escapeAttr(groupColor)}"></span>` : ''}
           ${item.kind === 'tab' && item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : ''}
-          <span>${escapeHtml(title)}</span>${pin}
+          <span>${escapeHtml(title)}</span>${item.reminder ? `<span class="reminder-badge" title="${escapeAttr(t('reminderActive'))}">${iconSvg('reminder')}</span>` : ''}${pin}
         </div>
         ${(() => {
           const original = call('itemOriginalTitle', item);
@@ -561,6 +565,7 @@ function canvasNodeRenderKey(item) {
     tags: item.tags,
     pinned: item.pinned,
     savedAt: item.savedAt,
+    reminder: item.reminder || null,
     favIconUrl: item.favIconUrl,
     markdown: item.kind === 'note' ? item.markdown : undefined,
     attachments: item.kind === 'note'

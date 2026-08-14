@@ -6,11 +6,33 @@
 // ── original background.js L152-312 ──
 // ─── Normalize meta (no inline media) ──────────────────────────────
 
+const REMINDER_MIN_INTERVAL_MINUTES = 1;
+
+function normalizeReminder(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const mode = raw.mode === 'interval' ? 'interval' : raw.mode === 'once' ? 'once' : '';
+  const nextAt = Number(raw.nextAt);
+  if (!mode || !Number.isFinite(nextAt) || nextAt <= 0) return null;
+  const message = safeText(raw.message, DATA_LIMITS.MAX_NOTE_LENGTH);
+  if (mode === 'interval') {
+    const intervalMinutes = Number(raw.intervalMinutes);
+    if (!Number.isInteger(intervalMinutes) || intervalMinutes < REMINDER_MIN_INTERVAL_MINUTES) return null;
+    return { mode, message, nextAt, intervalMinutes };
+  }
+  return { mode, message, nextAt };
+}
+
+function storedReminder(item) {
+  const reminder = normalizeReminder(item?.reminder);
+  return reminder ? { reminder } : {};
+}
+
 function normalizeTabItem(raw) {
   raw = raw && typeof raw === 'object' ? raw : {};
   const hasInlineThumb = typeof raw.thumbnail === 'string' && raw.thumbnail.startsWith('data:');
   const hasInlineSnap = typeof raw.snapshot === 'string' && raw.snapshot.startsWith('data:');
   const tags = normalizeTags(raw.tags);
+  const reminder = normalizeReminder(raw.reminder);
   const item = {
     kind: 'tab',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
@@ -27,12 +49,14 @@ function normalizeTabItem(raw) {
     thumbnail: hasInlineThumb ? raw.thumbnail : '',
     snapshot: hasInlineSnap ? raw.snapshot : '',
     ...(raw.cardSource === 'image' ? { cardSource: 'image' } : {}),
+    ...(reminder ? { reminder } : {}),
   };
   return withTitleLockFields(item, raw);
 }
 
 function normalizeGroupItem(raw) {
   raw = raw && typeof raw === 'object' ? raw : {};
+  const reminder = normalizeReminder(raw.reminder);
   const tabs = Array.isArray(raw.tabs)
     ? raw.tabs.map((m, i) => {
         m = m && typeof m === 'object' ? m : {};
@@ -55,7 +79,7 @@ function normalizeGroupItem(raw) {
         }, m);
       })
     : [];
-  const normalizeNote = (value) => normalizeNoteItem(value);
+  const normalizeNote = (value) => normalizeNoteItem(value, { allowReminder: false });
   return withTitleLockFields({
     kind: 'group',
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
@@ -70,11 +94,13 @@ function normalizeGroupItem(raw) {
     savedAt: safeTimestamp(raw.savedAt),
     tabs,
     notes: Array.isArray(raw.notes) ? raw.notes.map(normalizeNote).filter(Boolean) : [],
+    ...(reminder ? { reminder } : {}),
   }, raw);
 }
 
-function normalizeNoteItem(raw) {
+function normalizeNoteItem(raw, { allowReminder = true } = {}) {
   raw = raw && typeof raw === 'object' ? raw : {};
+  const reminder = allowReminder ? normalizeReminder(raw.reminder) : null;
   const attachments = Array.isArray(raw.attachments)
     ? raw.attachments.slice(0, Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12).map((value) => {
         value = value && typeof value === 'object' ? value : {};
@@ -109,6 +135,7 @@ function normalizeNoteItem(raw) {
     ...(raw.__stageItemId ? { __stageItemId: raw.__stageItemId } : {}),
     ...(raw.__stageGroupId ? { __stageGroupId: raw.__stageGroupId } : {}),
     ...(raw.__stageNoteId ? { __stageNoteId: raw.__stageNoteId } : {}),
+    ...(reminder ? { reminder } : {}),
   }, raw);
 }
 
@@ -252,7 +279,7 @@ function normalizeItem(raw) {
 }
 
 /** Strip any residual data URLs before persisting meta */
-function toStoredMeta(item) {
+function toStoredMeta(item, { includeReminder = true } = {}) {
   if (item.kind === 'group') {
     return {
       kind: 'group',
@@ -278,8 +305,9 @@ function toStoredMeta(item) {
         ...(m.cardSource === 'image' ? { cardSource: 'image' } : {}),
         ...storedTitleLockFields(m),
       })),
-      notes: (item.notes || []).map((note) => toStoredMeta(note)),
+      notes: (item.notes || []).map((note) => toStoredMeta(note, { includeReminder: false })),
       ...storedTitleLockFields(item),
+      ...(includeReminder ? storedReminder(item) : {}),
     };
   }
   if (item.kind === 'note') {
@@ -302,6 +330,7 @@ function toStoredMeta(item) {
         hasData: Boolean(attachment.hasData),
       })),
       ...storedTitleLockFields(item),
+      ...(includeReminder ? storedReminder(item) : {}),
     };
   }
   return {
@@ -318,6 +347,7 @@ function toStoredMeta(item) {
     hasSnap: Boolean(item.hasSnap),
     ...(item.cardSource === 'image' ? { cardSource: 'image' } : {}),
     ...storedTitleLockFields(item),
+    ...(includeReminder ? storedReminder(item) : {}),
   };
 }
 
@@ -418,4 +448,3 @@ async function ensureMediaMigration() {
   });
   return migrationPromise;
 }
-

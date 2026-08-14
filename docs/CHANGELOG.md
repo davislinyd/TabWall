@@ -11,6 +11,15 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.39.0 — 2026-08-14
+
+- 卡片提醒：頂層分頁、Tab Group、圖片卡與 Sticker Note 可各自設定一次性或 Interval 提醒；可指定本機日期時間、分鐘／小時／天間隔與通知文字。空白文字會使用卡片標題。
+- 使用 chrome.alarms 排程與 browser notification 發送；一次性提醒成功發送後自動清除，Interval 會依實際發送時間重排下一次提醒。通知點擊會開啟或聚焦 TabWall 並定位卡片。
+- Header 新增提醒查詢面板，依下一次觸發時間列出所有有效提醒；卡片、列表列與 Canvas 節點新增提醒操作與狀態標記。群組成員不支援提醒。
+- 搜尋新增 nn／noti + Tab 的 Reminder scope；空查詢列出所有有效提醒，文字比對提醒內容、卡片標題與 URL；n／note 維持 Note scope。
+- 提醒欄位納入 lite JSON 與 full ZIP 備份。Stack 若選取超過一個提醒會阻止操作；只有一個時轉移至新的 Stack 卡片。
+- Manifest 新增 notifications permission；提醒儲存失敗或通知 API 失敗時保留資料並記錄錯誤。
+
 ## 2.38.1 — 2026-08-14
 
 - 說明面板新增 GitHub repository 與 GitHub Pages 使用說明連結。

@@ -1199,6 +1199,7 @@
         if (item.kind === 'note') env.openStickerNoteEditor(item);
         else env.openEditBox(item);
       }
+      else if (action === 'reminder') env.openReminderEditor(item);
       else if (action === 'lock' || action === 'unlock' || action === 'relock') await env.toggleCardLock?.(item);
       else if (action === 'pin') await env.togglePinned(item);
       else if (action === 'delete') await env.deleteItem(item.id);

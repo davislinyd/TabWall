@@ -956,6 +956,22 @@
     );
   }
 
+  function validateReminder(value) {
+    if (value == null) return '';
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return 'invalid_reminder';
+    if (value.mode !== 'once' && value.mode !== 'interval') return 'invalid_reminder_mode';
+    if (!validateString(value.message, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_reminder_message';
+    if (!Number.isFinite(value.nextAt) || value.nextAt <= 0) return 'invalid_reminder_time';
+    if (value.mode === 'interval') {
+      if (!Number.isInteger(value.intervalMinutes) || value.intervalMinutes < 1) {
+        return 'invalid_reminder_interval';
+      }
+    } else if (value.intervalMinutes != null) {
+      return 'invalid_reminder_interval';
+    }
+    return '';
+  }
+
   function validateTitleLockFields(item) {
     if (item.displayTitle != null && !validateString(item.displayTitle, LIMITS.MAX_TITLE_LENGTH)) {
       return 'invalid_display_title';
@@ -1033,7 +1049,8 @@
     memberSet,
     attachmentIds,
     media,
-    mediaMimes
+    mediaMimes,
+    allowReminder = false
   ) {
     if (!note || typeof note !== 'object' || note.kind !== 'note' || !isUuid(note.id)
       || idSet.has(note.id) || memberSet.has(note.id)) {
@@ -1044,6 +1061,11 @@
     if (!validateString(note.title, LIMITS.MAX_TITLE_LENGTH)) return 'invalid_title';
     const titleLockError = validateTitleLockFields(note);
     if (titleLockError) return titleLockError;
+    if (!allowReminder && note.reminder != null) return 'invalid_reminder_scope';
+    if (allowReminder) {
+      const reminderError = validateReminder(note.reminder);
+      if (reminderError) return reminderError;
+    }
     if (!validateString(note.markdown, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_markdown';
     if (!validateTags(note.tags)) return 'invalid_tags';
     if (note.pinned != null && typeof note.pinned !== 'boolean') return 'invalid_pinned';
@@ -1105,6 +1127,7 @@
     }
     idSet.add(tab.id);
     memberSet.add(tab.id);
+    if (tab.reminder != null) return 'invalid_reminder_scope';
     if (tab.cardSource === 'image') {
       if (tab.url) return 'invalid_url';
     } else if (classifyUrl(tab.url, { allowStoredOnly: allowStoredOnlyUrls }) === 'invalid') {
@@ -1227,7 +1250,8 @@
             new Set(),
             attachmentIds,
             media,
-            mediaMimes
+            mediaMimes,
+            true
           );
           if (error) return validationError(error, item.id);
           continue;
@@ -1235,6 +1259,8 @@
         if (!validateString(item.note, LIMITS.MAX_NOTE_LENGTH)) return validationError('invalid_note');
         if (!validateTags(item.tags)) return validationError('invalid_tags');
         if (!validateString(item.title, LIMITS.MAX_TITLE_LENGTH)) return validationError('invalid_title');
+        const reminderError = validateReminder(item.reminder);
+        if (reminderError) return validationError(reminderError, item.id);
         const titleLockError = validateTitleLockFields(item);
         if (titleLockError) return validationError(titleLockError, item.id);
         if (!validateImageField(item.thumbnail, media, mediaMimes) || !validateImageField(item.snapshot, media, mediaMimes)) {

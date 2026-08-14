@@ -311,6 +311,13 @@ async function commitItemsAndCanvas(items, layout, options = {}) {
   if (options.settings && typeof options.settings === 'object') payload[SETTINGS_KEY] = options.settings;
   await chrome.storage.local.set(payload);
   parkedUrlIndex = buildParkedUrlIndex(stored); // `stored` is already normalized — no extra I/O
+  if (typeof syncReminderAlarmsForItems === 'function') {
+    try {
+      await syncReminderAlarmsForItems(stored);
+    } catch (err) {
+      console.warn('[TabWall] reminder alarm sync failed:', err);
+    }
+  }
   await markAutoBackupDirty();
   return { items: stored, layout: normalized, revision };
 }
@@ -396,4 +403,3 @@ function mergeAppendedCanvasLayout(baseLayout, incomingLayout, incomingItems, al
   );
   return next;
 }
-

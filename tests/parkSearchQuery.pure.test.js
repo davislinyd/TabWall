@@ -89,3 +89,42 @@ test('TabWallSearchQuery tag expression and domain scope + invalid regex boundar
   assert.equal(compiled.re, null);
   assert.equal(SQ.matchesQuery(domainHit, query), false);
 });
+
+test('TabWallSearchQuery reminder scope supports empty, text, title, and URL matches', () => {
+  const SQ = loadSearchQuery();
+  let query = '';
+  SQ.bind({
+    getSearchScope: () => 'reminder',
+    getSearchRegex: () => false,
+    getQuery: () => query,
+  });
+  const active = {
+    kind: 'tab',
+    title: 'Read proposal',
+    url: 'https://example.test/proposal',
+    reminder: { mode: 'once', message: 'Review the launch plan', nextAt: Date.now() + 60000 },
+  };
+  const inactive = {
+    kind: 'tab',
+    title: 'No reminder',
+    url: 'https://example.test/proposal',
+  };
+
+  SQ.compileSearchQuery(query);
+  assert.equal(SQ.matchesQuery(active, query), true);
+  assert.equal(SQ.matchesQuery(inactive, query), false);
+
+  for (const value of ['launch', 'proposal', 'example.test']) {
+    query = value;
+    SQ.compileSearchQuery(query);
+    assert.equal(SQ.matchesQuery(active, query), true, value);
+    assert.equal(SQ.matchesQuery(inactive, query), false, value);
+  }
+
+  query = 'launch';
+  SQ.bind({ getSearchScope: () => 'note' });
+  SQ.compileSearchQuery(query);
+  const note = { kind: 'note', title: 'A note', markdown: 'launch', reminder: active.reminder };
+  assert.equal(SQ.matchesQuery(note, query), true);
+  assert.equal(SQ.matchesQuery(note, 'Review'), false);
+});

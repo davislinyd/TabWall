@@ -14,6 +14,7 @@ permalink: /privacy.html
 
 TabWall parks browser tabs and Tab Groups as a visual photo wall **on your device**.  
 We do **not** operate a TabWall backend that receives your browsing data. Parked URLs, titles, notes, tags, and screenshots stay in **your browser’s local storage**.
+Reminder schedules and notification text also stay in your browser’s local storage and are used only to deliver local browser notifications.
 
 ## Data the extension processes
 
@@ -21,6 +22,7 @@ When you use TabWall, it may process:
 
 | Data | Purpose | Where stored |
 |------|---------|----------------|
+| Reminder mode, next trigger time, interval, and notification text | Schedule local browser notifications for cards | Local extension storage on your device |
 | Tab / group URLs, titles, display titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
 | Notes and tags you enter | Search and organize parked items | `chrome.storage.local` |
 | Card lock status and optional password hashes | Card privacy (salted SHA-256 hash) | `chrome.storage.local` |
@@ -40,17 +42,21 @@ TabWall does **not**:
 - Sell or rent your data
 - Use your parked content for advertising
 - Require an account to use the extension
+- Send reminder text, card metadata, or notification history to a server
 
 ## Permissions (why they are needed)
 
 | Permission | Why |
 |------------|-----|
+| `notifications` | Display optional local browser notifications for reminders |
 | `tabs`, `tabGroups` | Read tab/group info to park and restore; recreate Tab Groups on restore |
 | `scripting` | Inject a lightweight script so the photo-wall overlay works on normal web pages |
 | Host access (`<all_urls>` / broad site access) | Allow the overlay on general websites and capture the visible tab when you park (subject to browser limits on special pages such as `chrome://`) |
 | `storage`, `unlimitedStorage` | Save many parked items and screenshot blobs locally |
-| `alarms` | Schedule optional automatic local backups |
+| `alarms` | Schedule optional automatic local backups and card reminders |
 | `downloads` | Write optional automatic backups into a subfolder of your browser download directory; the absolute path is known after each download completes |
+
+The alarms permission schedules both optional automatic backups and card reminders. Reminder notifications are delivered by the browser on this device.
 
 ## Local backups you export
 
@@ -83,9 +89,11 @@ For privacy questions about TabWall, contact the publisher through the [project�
 **最後更新日期：** 2026-08-14
 
 TabWall 將分頁與 Tab Group 暫存為本機照片牆。  
+提醒的模式、下一次觸發時間、間隔與通知文字也只保存在您的瀏覽器本機，用來排程本機通知。
 **不會**把您的網址、備註、標籤、截圖或自訂背景上傳到 TabWall 自有伺服器（本產品不提供此類後端）。資料保存在**您的瀏覽器本機**（`chrome.storage` 與 IndexedDB）。
 
 僅在您操作（含 Chrome 快捷鍵命令）時讀取目前分頁／群組以截圖與儲存。
+提醒通知由瀏覽器本機排程與發送，不會把提醒內容傳到 TabWall 伺服器。
 您匯出的備份檔僅在本機產生；請自行妥善保管。  
 若啟用**自動備份**，TabWall 會查詢 Chrome 的 Downloads history 以辨識自己建立的備份，並依您設定的保留數量刪除舊的 TabWall 備份；備份會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。
 解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。

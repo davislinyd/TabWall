@@ -1048,6 +1048,7 @@
         tags: item.tags,
         pinned: item.pinned,
         savedAt: item.savedAt,
+        reminder: item.reminder || null,
         favIconUrl: item.favIconUrl,
         markdown: item.kind === 'note' ? item.markdown : undefined,
         attachments: item.kind === 'note'
