@@ -12,6 +12,7 @@
   const CANVAS_DEFAULT_CARD_GAP = 128;
   const CANVAS_DEFAULT_VISIBLE_COLUMNS = 6;
   const CANVAS_CONNECTION_MAX_CURVE_OFFSET = 2000;
+  const CANVAS_SEARCH_ZOOM_MAX = 1.8;
   const CANVAS_WHEEL_ZOOM_SENSITIVITY = 0.0015;
   const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = 0.006;
   const CANVAS_WHEEL_ZOOM_FRAME_LIMIT = 120;
@@ -249,6 +250,35 @@
     return Math.min(maxZoom, Math.max(minZoom, available / contentWidth));
   }
 
+  /** Compute a centered viewport for transient canvas search results. */
+  function canvasSearchViewportForBounds(viewportWidth, viewportHeight, bounds, options = {}) {
+    const width = Number(viewportWidth) || 0;
+    const height = Number(viewportHeight) || 0;
+    if (!(width > 0) || !(height > 0) || !bounds || typeof bounds !== 'object') return null;
+    const minX = Number(bounds.minX);
+    const minY = Number(bounds.minY);
+    const maxX = Number(bounds.maxX);
+    const maxY = Number(bounds.maxY);
+    if (![minX, minY, maxX, maxY].every(Number.isFinite) || maxX <= minX || maxY <= minY) return null;
+
+    const padding = Number.isFinite(Number(options.padding)) ? Number(options.padding) : 24;
+    const minZoom = Number.isFinite(Number(options.minZoom)) ? Number(options.minZoom) : 0.25;
+    const maxZoom = Number.isFinite(Number(options.maxZoom)) ? Number(options.maxZoom) : CANVAS_SEARCH_ZOOM_MAX;
+    const contentWidth = Math.max(1, maxX - minX);
+    const contentHeight = Math.max(1, maxY - minY);
+    const availableWidth = Math.max(1, width - padding * 2);
+    const availableHeight = Math.max(1, height - padding * 2);
+    const requestedZoom = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
+    const zoom = Math.min(maxZoom, Math.max(minZoom, requestedZoom));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    return {
+      x: centerX - width / (2 * zoom),
+      y: centerY - height / (2 * zoom),
+      zoom,
+    };
+  }
+
   global.TabWallCanvasGeometry = {
     CANVAS_NODE_DISPLAY_SCALE,
     CANVAS_NODE_DEFAULT_WIDTH,
@@ -256,6 +286,7 @@
     CANVAS_DEFAULT_CARD_GAP,
     CANVAS_DEFAULT_VISIBLE_COLUMNS,
     CANVAS_CONNECTION_MAX_CURVE_OFFSET,
+    CANVAS_SEARCH_ZOOM_MAX,
     CANVAS_WHEEL_ZOOM_SENSITIVITY,
     CANVAS_TRACKPAD_ZOOM_SENSITIVITY,
     CANVAS_WHEEL_ZOOM_FRAME_LIMIT,
@@ -278,5 +309,6 @@
     canvasWheelZoomFactor,
     canvasWheelZoomSensitivity,
     canvasZoomToFitCardColumns,
+    canvasSearchViewportForBounds,
   };
 })(typeof self !== 'undefined' ? self : globalThis);

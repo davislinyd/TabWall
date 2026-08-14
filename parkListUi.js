@@ -10,6 +10,7 @@
   function escapeAttr(...args) { return env.escapeAttr(...args); }
   function mediaKeyForMember(...args) { return env.mediaKeyForMember(...args); }
   function mediaKeyForItem(...args) { return env.mediaKeyForItem(...args); }
+  function syncCanvasSearchViewport() { return env.syncCanvasSearchViewport?.(); }
 
 
   function createGroupCard(item) {
@@ -362,6 +363,7 @@
   function renderGrid() {
     ensureBound('renderGrid');
 
+      syncCanvasSearchViewport();
       if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) {
         env.renderCanvas();
         return;

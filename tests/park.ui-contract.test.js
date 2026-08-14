@@ -509,6 +509,10 @@ test('Standard visual fx is gated by fxLevel and data-fx', () => {
   assert.match(CANVAS_IX_SOURCE, /function syncCanvasNodeDragFx\(/);
   assert.match(CANVAS_IX_SOURCE, /function updateCanvasNodeTilt\(/);
   assert.match(CANVAS_CHROME_SOURCE, /--fx-grid-x/);
+  assert.match(CSS_SOURCE, /#grid\.cards \.card:hover\s*\{[\s\S]*?transform: translateY\(-2px\) scale\(1\.30\)/);
+  assert.match(CSS_SOURCE, /\.canvas-node:hover\s*\{[\s\S]*?transform: translateY\(-2px\) scale\(1\.30\)/);
+  assert.match(CSS_SOURCE, /\.card\.dragging:hover\s*\{[\s\S]*?transform: scale\(1\.03\)/);
+  assert.match(CSS_SOURCE, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(I18N_SOURCE, /fxTitle:/);
   assert.match(I18N_SOURCE, /fxQuiet:/);
   assert.match(I18N_SOURCE, /fxStandard:/);
@@ -752,6 +756,13 @@ test('Canvas display geometry and connection endpoints use the four side handles
 
 test('Canvas search results use a transient grid layout without persisting positions', () => {
   assert.match(PARK_BEHAVIOR_FLAT, /let canvasSearchPreview = null/);
+  assert.match(CANVAS_GEOM_SOURCE, /CANVAS_SEARCH_ZOOM_MAX = 1\.8/);
+  assert.match(CANVAS_GEOM_SOURCE, /function canvasSearchViewportForBounds\(viewportWidth, viewportHeight, bounds/);
+  assert.match(CANVAS_CHROME_SOURCE, /function syncCanvasSearchViewport\(\)/);
+  assert.match(CANVAS_CHROME_SOURCE, /baseViewport/);
+  assert.match(CANVAS_CHROME_SOURCE, /canvasSearchViewportForBounds\(width, height, bounds/);
+  assert.match(CANVAS_CHROME_SOURCE, /commitViewport\(saved\.baseViewport\)/);
+  assert.match(LIST_UI_SOURCE, /syncCanvasSearchViewport\(\);/);
   assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);

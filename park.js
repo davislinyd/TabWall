@@ -142,12 +142,14 @@ const CANVAS_NODE_DEFAULT_WIDTH = CanvasGeom.CANVAS_NODE_DEFAULT_WIDTH;
 const CANVAS_NODE_DEFAULT_HEIGHT = CanvasGeom.CANVAS_NODE_DEFAULT_HEIGHT;
 const CANVAS_DEFAULT_CARD_GAP = CanvasGeom.CANVAS_DEFAULT_CARD_GAP;
 const CANVAS_CONNECTION_MAX_CURVE_OFFSET = CanvasGeom.CANVAS_CONNECTION_MAX_CURVE_OFFSET;
+const CANVAS_SEARCH_ZOOM_MAX = CanvasGeom.CANVAS_SEARCH_ZOOM_MAX;
 const CANVAS_WHEEL_ZOOM_SENSITIVITY = CanvasGeom.CANVAS_WHEEL_ZOOM_SENSITIVITY;
 const CANVAS_TRACKPAD_ZOOM_SENSITIVITY = CanvasGeom.CANVAS_TRACKPAD_ZOOM_SENSITIVITY;
 const CANVAS_WHEEL_ZOOM_FRAME_LIMIT = CanvasGeom.CANVAS_WHEEL_ZOOM_FRAME_LIMIT;
 const canvasDefaultPosition = CanvasGeom.canvasDefaultPosition;
 const canvasDisplayPosition = CanvasGeom.canvasDisplayPosition;
 const canvasBoundsForItems = CanvasGeom.canvasBoundsForItems;
+const canvasSearchViewportForBounds = CanvasGeom.canvasSearchViewportForBounds;
 const canvasConnectionId = CanvasGeom.canvasConnectionId;
 const canvasConnectionSideForVector = CanvasGeom.canvasConnectionSideForVector;
 const canvasConnectionSideForPoint = CanvasGeom.canvasConnectionSideForPoint;
@@ -630,6 +632,7 @@ function bindPanelModules() {
     "CANVAS_RAIL_COLLAPSED_WIDTH": () => CANVAS_RAIL_COLLAPSED_WIDTH,
     "CANVAS_RAIL_KEYBOARD_STEP": () => CANVAS_RAIL_KEYBOARD_STEP,
     "CANVAS_RAIL_MAX_WIDTH": () => CANVAS_RAIL_MAX_WIDTH,
+    "CANVAS_SEARCH_ZOOM_MAX": () => CANVAS_SEARCH_ZOOM_MAX,
     "CANVAS_WHEEL_ZOOM_FRAME_LIMIT": () => CANVAS_WHEEL_ZOOM_FRAME_LIMIT,
     "CANVAS_WHEEL_ZOOM_SENSITIVITY": () => CANVAS_WHEEL_ZOOM_SENSITIVITY,
     "CANVAS_ZOOM_MAX": () => CANVAS_ZOOM_MAX,
@@ -638,6 +641,7 @@ function bindPanelModules() {
     "canvasAction": () => canvasAction,
     "canvasAddNoteBtn": () => canvasAddNoteBtn,
     "canvasBoundsForItems": () => canvasBoundsForItems,
+    "canvasSearchViewportForBounds": () => canvasSearchViewportForBounds,
     "canvasConnectionClickSuppressUntil": () => canvasConnectionClickSuppressUntil,
     "canvasConnectionHandlePointForId": () => canvasConnectionHandlePointForId,
     "canvasConnectionId": () => canvasConnectionId,
@@ -668,6 +672,7 @@ function bindPanelModules() {
     "canvasSearchLayoutFor": () => canvasSearchLayoutFor,
     "canvasSearchPreviewKey": () => canvasSearchPreviewKey,
     "canvasSearchPreviewSelectedIds": () => canvasSearchPreviewSelectedIds,
+    "syncCanvasSearchViewport": () => syncCanvasSearchViewport,
     "canvasSelectionEl": () => canvasSelectionEl,
     "canvasSelectNode": () => canvasSelectNode,
     "canvasStackCancel": () => canvasStackCancel,
@@ -1023,6 +1028,7 @@ function bindPanelModules() {
     "canvasRailResizeFrame": { get: () => canvasRailResizeFrame, set: (v) => { canvasRailResizeFrame = v; } },
     "canvasRailResizeState": { get: () => canvasRailResizeState, set: (v) => { canvasRailResizeState = v; } },
     "canvasSearchPreview": { get: () => canvasSearchPreview, set: (v) => { canvasSearchPreview = v; } },
+    "canvasSearchViewportState": { get: () => canvasSearchViewportState, set: (v) => { canvasSearchViewportState = v; } },
     "canvasSessionFallback": { get: () => canvasSessionFallback, set: (v) => { canvasSessionFallback = v; } },
     "canvasSnapToGrid": { get: () => canvasSnapToGrid, set: (v) => { canvasSnapToGrid = v; } },
     "canvasSpacePressed": { get: () => canvasSpacePressed, set: (v) => { canvasSpacePressed = v; } },
@@ -1193,6 +1199,8 @@ let pinnedOnly = false;
 let canvasIndexFilter = 'all';
 /** @type {{ key: string, revision: number, positions: Record<string, any>, mode: 'grid'|'align' } | null} */
 let canvasSearchPreview = null;
+/** @type {{ baseViewport: { x: number, y: number, zoom: number }, searchKey: string } | null} */
+let canvasSearchViewportState = null;
 let settingsSection = 'general';
 let selectMode = false;
 /** @type {Set<string>} */
@@ -2870,6 +2878,8 @@ function setCanvasZoom(...args) { return CanvasChrome.setCanvasZoom(...args); }
 function canvasViewportSize(...args) { return CanvasChrome.canvasViewportSize(...args); }
 
 function canvasFitViewport(...args) { return CanvasChrome.canvasFitViewport(...args); }
+
+function syncCanvasSearchViewport(...args) { return CanvasChrome.syncCanvasSearchViewport(...args); }
 
 function closeCanvasZoomMenu(...args) { return CanvasChrome.closeCanvasZoomMenu(...args); }
 

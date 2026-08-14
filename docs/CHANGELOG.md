@@ -11,6 +11,16 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.40.1 — 2026-08-15
+
+- Canvas 與卡片網格的 hover 卡片放大約 1.30 倍；拖曳、Stack hover、Quiet 與 reduced-motion 優先規則維持不變。
+- GitHub Pages 使用者手冊同步說明新的卡片 hover 與 Canvas 搜尋視角行為。
+
+## 2.40.0 — 2026-08-15
+
+- Canvas 搜尋結果與直接關聯卡片會暫時重排、置中並自動調整視角；結果多時依寬高 fitting，結果少時放大但受 1.8 倍上限限制。
+- 搜尋預覽位置不寫入永久布局；清除搜尋、離開 Canvas 或 fallback 時還原搜尋前視角。
+
 ## 2.39.0 — 2026-08-14
 
 - 卡片提醒：頂層分頁、Tab Group、圖片卡與 Sticker Note 可各自設定一次性或 Interval 提醒；可指定本機日期時間、分鐘／小時／天間隔與通知文字。空白文字會使用卡片標題。

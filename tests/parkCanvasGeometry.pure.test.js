@@ -67,3 +67,38 @@ test('canvasZoomToFitCardColumns fits six default cards in the viewport width', 
   assert.equal(G.canvasZoomToFitCardColumns(400, { padding, minZoom: 0.25, maxZoom: 2 }), 0.25);
   assert.equal(G.canvasZoomToFitCardColumns(20000, { padding, minZoom: 0.25, maxZoom: 2 }), 2);
 });
+
+test('canvasSearchViewportForBounds caps sparse results and centers them', () => {
+  const G = loadGeom();
+  const viewport = G.canvasSearchViewportForBounds(1200, 800, {
+    minX: 100,
+    minY: 200,
+    maxX: 342,
+    maxY: 387,
+  }, { padding: 24, minZoom: 0.25, maxZoom: G.CANVAS_SEARCH_ZOOM_MAX });
+  assert.ok(viewport);
+  assert.equal(viewport.zoom, G.CANVAS_SEARCH_ZOOM_MAX);
+  assert.equal(viewport.x, 221 - 1200 / (2 * G.CANVAS_SEARCH_ZOOM_MAX));
+  assert.equal(viewport.y, 293.5 - 800 / (2 * G.CANVAS_SEARCH_ZOOM_MAX));
+});
+
+test('canvasSearchViewportForBounds fits dense results to both viewport axes', () => {
+  const G = loadGeom();
+  const bounds = { minX: 0, minY: 0, maxX: 1800, maxY: 1200 };
+  const viewport = G.canvasSearchViewportForBounds(1200, 800, bounds, {
+    padding: 24,
+    minZoom: 0.25,
+    maxZoom: G.CANVAS_SEARCH_ZOOM_MAX,
+  });
+  assert.ok(viewport);
+  assert.equal(viewport.zoom, Math.min((1200 - 48) / 1800, (800 - 48) / 1200));
+  assert.equal(viewport.x, 900 - 1200 / (2 * viewport.zoom));
+  assert.equal(viewport.y, 600 - 800 / (2 * viewport.zoom));
+});
+
+test('canvasSearchViewportForBounds rejects empty or invalid bounds', () => {
+  const G = loadGeom();
+  assert.equal(G.canvasSearchViewportForBounds(1200, 800, null), null);
+  assert.equal(G.canvasSearchViewportForBounds(1200, 800, { minX: 1, minY: 1, maxX: 1, maxY: 2 }), null);
+  assert.equal(G.canvasSearchViewportForBounds(0, 800, { minX: 0, minY: 0, maxX: 10, maxY: 10 }), null);
+});

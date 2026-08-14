@@ -6587,8 +6587,27 @@ html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node {
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
+html:is([data-fx='standard'], [data-fx='cinematic']) #grid.cards .card:hover {
+  transform: translateY(-2px) scale(1.30);
+  z-index: 5;
+  box-shadow: var(--fx-depth-1);
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) #grid.cards .card.stack-hover,
+html:is([data-fx='standard'], [data-fx='cinematic']) #grid.cards .card.stack-hover:hover {
+  transform: scale(1.06);
+  z-index: 6;
+}
+
+html:is([data-fx='standard'], [data-fx='cinematic']) #grid.cards .card.dragging,
+html:is([data-fx='standard'], [data-fx='cinematic']) #grid.cards .card.dragging:hover {
+  transform: scale(1.03);
+  z-index: 80;
+}
+
 html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.30);
+  z-index: 100 !important;
   box-shadow: var(--fx-depth-1);
 }
 
@@ -6597,7 +6616,7 @@ html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.selected {
 }
 
 html:is([data-fx='standard'], [data-fx='cinematic']) .canvas-node.selected:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.30);
   box-shadow: var(--fx-glow), var(--fx-depth-1);
 }
 
@@ -6679,19 +6698,23 @@ html[data-fx='cinematic'] .canvas-viewport {
 }
 
 html[data-fx='cinematic'] .canvas-node.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px) scale(1.30);
 }
 
 html[data-fx='cinematic'] .canvas-node.selected.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-2px) scale(1.30);
 }
 
 html[data-fx='cinematic'] .canvas-node.canvas-note:not(.dragging):not(.is-tilting) {
   transform: rotate(-1.2deg);
 }
 
+html[data-fx='cinematic'] .canvas-node.canvas-note:not(.dragging):not(.is-tilting):hover {
+  transform: rotate(-1.2deg) scale(1.30);
+}
+
 html[data-fx='cinematic'] .canvas-node.canvas-note.is-tilting {
-  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) rotate(-1.2deg) translateY(-2px);
+  transform: perspective(800px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) rotate(-1.2deg) translateY(-2px) scale(1.30);
 }
 
 html[data-fx='cinematic'] .canvas-node.canvas-note::before {

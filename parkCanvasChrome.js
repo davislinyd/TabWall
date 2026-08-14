@@ -59,6 +59,64 @@
 
   }
 
+  function sameViewport(left, right) {
+    return left && right
+      && Math.abs((Number(left.x) || 0) - (Number(right.x) || 0)) < 0.001
+      && Math.abs((Number(left.y) || 0) - (Number(right.y) || 0)) < 0.001
+      && Math.abs((Number(left.zoom) || 0) - (Number(right.zoom) || 0)) < 0.001;
+  }
+
+  /** Focus transient search cards while preserving the pre-search viewport. */
+  function syncCanvasSearchViewport() {
+    ensureBound('syncCanvasSearchViewport');
+
+      const searchContext = env.getCanvasSearchContext();
+      const active = env.isCanvasSearchPreviewActive(searchContext);
+      const saved = env.canvasSearchViewportState;
+      if (!active) {
+        if (!saved) return false;
+        env.canvasSearchViewportState = null;
+        const current = env.canvasStoreSnapshot().layout?.viewport;
+        if (!sameViewport(current, saved.baseViewport)) {
+          env.ensureCanvasStore()?.commitViewport(saved.baseViewport);
+        }
+        return true;
+      }
+
+      const key = env.canvasSearchPreviewKey(searchContext);
+      const currentState = env.canvasStoreSnapshot();
+      const currentViewport = currentState.layout?.viewport || env.DEFAULT_CANVAS_VIEWPORT;
+      const state = saved || {
+        baseViewport: { ...currentViewport },
+        searchKey: '',
+      };
+      if (!saved) env.canvasSearchViewportState = state;
+      if (state.searchKey === key) return false;
+
+      const rect = env.canvasViewportEl?.getBoundingClientRect?.();
+      const width = env.canvasViewportEl?.clientWidth || rect?.width || 0;
+      const height = env.canvasViewportEl?.clientHeight || rect?.height || 0;
+      if (!width || !height || !searchContext.items.length) return false;
+      const layout = env.canvasSearchLayoutFor(searchContext);
+      const bounds = env.canvasBoundsForItems(searchContext.items, layout);
+      const viewport = env.canvasSearchViewportForBounds(width, height, bounds, {
+        padding: env.CANVAS_FIT_PADDING,
+        minZoom: env.CANVAS_ZOOM_MIN,
+        maxZoom: env.CANVAS_SEARCH_ZOOM_MAX,
+      });
+      if (!viewport) return false;
+
+      env.canvasSearchViewportState = {
+        baseViewport: state.baseViewport,
+        searchKey: key,
+      };
+      if (!sameViewport(currentViewport, viewport)) {
+        env.ensureCanvasStore()?.commitViewport(viewport);
+      }
+      return true;
+
+  }
+
   function canvasPointFromEvent(event) {
     ensureBound('canvasPointFromEvent');
 
@@ -601,5 +659,5 @@
 
   }
 
-  global.TabWallCanvasChrome = { bind, setCanvasZoom, canvasFitViewport, canvasPointFromEvent, updateCanvasTransform, canvasViewportSize, closeCanvasZoomMenu, toggleCanvasZoomMenu, applyCanvasZoomAction, centerCanvasInitialView, scheduleInitialCanvasCenter, canvasRailResizeDraft, scheduleCanvasRailResizePreview, flushCanvasRailResizePreview, updateCanvasRailResize, endCanvasRailResize, handleCanvasRailKeydown, cancelCanvasRailResize, initCanvasRailResize, openCanvasStackDialog, closeCanvasStackDialog, createCanvasStackFromSelection, canvasAction, canvasBlankContextMenuEntries, renderCanvasContextMenuItems, openCanvasContextMenu, closeCanvasContextMenu, handleCanvasContextMenuAction };
+  global.TabWallCanvasChrome = { bind, setCanvasZoom, canvasFitViewport, syncCanvasSearchViewport, canvasPointFromEvent, updateCanvasTransform, canvasViewportSize, closeCanvasZoomMenu, toggleCanvasZoomMenu, applyCanvasZoomAction, centerCanvasInitialView, scheduleInitialCanvasCenter, canvasRailResizeDraft, scheduleCanvasRailResizePreview, flushCanvasRailResizePreview, updateCanvasRailResize, endCanvasRailResize, handleCanvasRailKeydown, cancelCanvasRailResize, initCanvasRailResize, openCanvasStackDialog, closeCanvasStackDialog, createCanvasStackFromSelection, canvasAction, canvasBlankContextMenuEntries, renderCanvasContextMenuItems, openCanvasContextMenu, closeCanvasContextMenu, handleCanvasContextMenuAction };
 })(typeof self !== 'undefined' ? self : globalThis);

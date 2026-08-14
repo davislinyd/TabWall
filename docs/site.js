@@ -7,9 +7,9 @@
   var COPY = {
     zh: {
       title: "TabWall 使用者說明",
-      description: "TabWall 2.38.0 使用者說明：儲存分頁與 Tab Group、空間畫布、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。",
+      description: "TabWall 2.40.1 使用者說明：儲存分頁與 Tab Group、空間畫布、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。",
       skip: "跳到本文",
-      brand: "使用者說明 · v2.38.0",
+      brand: "使用者說明 · v2.40.1",
       find: "搜尋手冊…",
       empty: "手冊中沒有符合的段落。試試「上鎖」「自訂標題」「備份」「硬碟」「搜尋」或「快捷鍵」。",
       toc: "目錄",
@@ -19,9 +19,9 @@
     },
     en: {
       title: "TabWall User Guide",
-      description: "TabWall 2.38.0 user guide: park tabs and Tab Groups, spatial canvas, card lock, display titles, image cards, custom background, search, backup, disk usage, and privacy.",
+      description: "TabWall 2.40.1 user guide: park tabs and Tab Groups, spatial canvas, card lock, display titles, image cards, custom background, search, backup, disk usage, and privacy.",
       skip: "Skip to content",
-      brand: "User guide · v2.38.0",
+      brand: "User guide · v2.40.1",
       find: "Search the guide…",
       empty: "No matching section. Try “lock”, “title”, “backup”, “disk”, “search”, or “shortcut”.",
       toc: "Contents",
