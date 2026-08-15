@@ -4,7 +4,7 @@
  */
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
-importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js');
+importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
@@ -85,6 +85,7 @@ const DEFAULT_SETTINGS = {
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
   preSaveEdit: true,
+  ai: { ...(self.TabWallAi?.DEFAULT_AI_SETTINGS || {}) },
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
   autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
 };
@@ -1732,6 +1733,10 @@ async function handleCommandAction(action) {
     if (!beginAction('toggle-park')) return { ok: false, error: 'debounced' };
     return toggleParkOnActiveTab();
   }
+  if (action === 'open-ai') {
+    if (!beginAction('open-ai')) return { ok: false, error: 'debounced' };
+    return openAiPanelOnActiveTab();
+  }
   return { ok: false, error: 'unknown_action' };
 }
 
@@ -1933,6 +1938,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case 'PATCH_SETTINGS':
         return patchSettings(message.partial);
+      case 'AI_HEALTH':
+        return self.TabWallAi?.health
+          ? self.TabWallAi.health(message)
+          : { ok: false, error: 'ai_unavailable' };
+      case 'GET_AI_SETTINGS': {
+        const settings = await getSettings();
+        const ai = self.TabWallAi?.normalizeAiSettings
+          ? self.TabWallAi.normalizeAiSettings(settings.ai)
+          : settings.ai || {};
+        return { ok: true, ai };
+      }
+      case 'OPEN_AI_PANEL_ACTIVE':
+        return openAiPanelOnActiveTab();
       case 'AUTO_BACKUP_SHOW_FOLDER': {
         try {
           if (chrome.downloads?.showDefaultFolder) {
@@ -2083,6 +2101,7 @@ if (globalThis.__TABWALL_TEST__) {
     restoreGroupMember,
     toggleParkOnActiveTab,
     openParkOnActiveTab,
+    openAiPanelOnActiveTab,
     openStandaloneParkTab,
     listReminderItems,
     syncReminderAlarmsForItems,

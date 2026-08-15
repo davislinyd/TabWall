@@ -377,9 +377,11 @@ test('Top-level actions are consolidated in the header', () => {
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
-  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park']) {
+  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
+  assert.match(I18N_SOURCE, /helpShortcutAi: '一般分頁開啟 AI 面板/);
+  assert.match(I18N_SOURCE, /helpShortcutAi: 'Open the AI panel/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });
@@ -407,7 +409,7 @@ test('Help panel is centered; cards have newsprint; Option+/ is documented', () 
   assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
   assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
   assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
-  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／nn／noti／domain \+ Tab 切換欄位'/);
+  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／nn／noti／domain \+ Tab 切換欄位；ai \+ Tab 開啟 AI'/);
 });
 
 test('Undo shortcut is documented and wired for stack plus connections', () => {

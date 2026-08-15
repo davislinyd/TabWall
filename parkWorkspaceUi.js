@@ -1574,6 +1574,7 @@
       return (
         env.settingsBox.classList.contains('open') ||
         env.tagsBox.classList.contains('open') ||
+        (env.aiBox && env.aiBox.classList.contains('open')) ||
         env.helpBox.classList.contains('open') ||
         env.editBox.classList.contains('open') ||
         (env.unlockBox && env.unlockBox.classList.contains('open')) ||
@@ -1605,6 +1606,7 @@
 
       if (except !== 'settings') env.closeSettingsBox(false);
       if (except !== 'tags') closeTagsBox(false);
+      if (except !== 'ai') env.closeAiBox?.(false);
       if (except !== 'help') closeHelpBox(false);
       if (except !== 'edit') closeEditBox();
       if (except !== 'unlock') closeUnlockDialog();

@@ -36,6 +36,7 @@
     domain: 'domain',
     re: 'regex',
     regex: 'regex',
+    ai: 'ai',
     a: 'all',
     all: 'all',
   };
@@ -439,6 +440,12 @@
   }
 
   async function applySearchTabToken(token) {
+    if (token === 'ai') {
+      clearSearchInputKeepFocus();
+      refilterSearchIfNeeded();
+      if (typeof ctx.openAiBox === 'function') ctx.openAiBox();
+      return;
+    }
     if (token === 'tag' || token === 'note' || token === 'reminder' || token === 'group' || token === 'domain' || token === 'all') {
       setSearchScope(token === 'all' ? 'all' : token);
       clearSearchInputKeepFocus();

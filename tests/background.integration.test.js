@@ -8,7 +8,7 @@ const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.ur
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js'].map((name) => [
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -449,17 +449,18 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.40.1');
+  assert.equal(MANIFEST.version, '2.43.3');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
   assert.match(BACKGROUND_SOURCE, /bgUndo\.js/);
-  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js'\)/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js', 'bgAi\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(Object.keys(MANIFEST.commands || {}).length, 4);
+  assert.equal(Object.keys(MANIFEST.commands || {}).length, 5);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
-  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js']);
+  assert.equal(MANIFEST.commands?.['open-ai']?.suggested_key, undefined);
+  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js']);
 });
 
 test('action badge matches standalone tabs and group members by exact URL', async () => {
@@ -1123,6 +1124,39 @@ test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
   assert.equal(updated.ok, true);
   assert.equal(updated.settings.canvasRailWidth, 240);
   assert.equal(updated.settings.canvasRailCollapsed, true);
+});
+
+test('GET_AI_SETTINGS returns normalized AI settings without bridge token data', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    ai: {
+      enabled: true,
+      baseUrl: 'http://localhost:8000/v1/',
+      model: 'local-model',
+      bridgeUrl: 'https://remote.example/bridge',
+    },
+  };
+  const result = await dispatchMessage(runtime, { type: 'GET_AI_SETTINGS' });
+  assert.equal(result.ok, true);
+  assert.equal(result.ai.enabled, true);
+  assert.equal(result.ai.baseUrl, 'http://localhost:8000/v1');
+  assert.equal(result.ai.bridgeUrl, 'http://127.0.0.1:8787');
+  assert.equal(result.ai.contextSize, 8192);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.ai, 'bridgeToken'), false);
+});
+
+test('PATCH_SETTINGS persists a normalized AI context size', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const updated = await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: { ai: { enabled: true, contextSize: 16384 } },
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(updated.settings.ai.contextSize, 16384);
+  const result = await dispatchMessage(runtime, { type: 'GET_AI_SETTINGS' });
+  assert.equal(result.ai.contextSize, 16384);
 });
 
 function dispatchMessage(runtime, message, sender = {}) {
@@ -2156,6 +2190,25 @@ test('toggle-park command uses the same restricted-page fallback', async () => {
   assert.equal(result.ok, true);
   assert.equal(result.mode, 'standalone');
   assert.equal(runtime.runtime.createdTabs[0].url, 'chrome-extension://test/park.html?surface=standalone');
+});
+
+test('open-ai command opens the external panel on normal pages and notifies on restricted pages', async () => {
+  const normal = createRuntime();
+  await normal.ready;
+  normal.runtime.activeTabs = [{ id: 121, windowId: 1, url: 'https://ai-panel.example/' }];
+  const opened = await normal.api.handleCommandAction('open-ai');
+  assert.equal(opened.ok, true);
+  assert.equal(opened.mode, 'panel');
+  assert.equal(opened.tabId, 121);
+
+  const restricted = createRuntime();
+  await restricted.ready;
+  restricted.runtime.activeTabs = [{ id: 122, windowId: 1, url: 'chrome://extensions/' }];
+  const rejected = await restricted.api.handleCommandAction('open-ai');
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.mode, 'restricted');
+  assert.equal(restricted.runtime.notificationCalls.length, 1);
+  assert.match(restricted.runtime.notificationCalls[0].options.message, /Chrome 限制/);
 });
 
 test('replace import removes stale media for an ID with no incoming image', async () => {

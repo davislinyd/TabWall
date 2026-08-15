@@ -54,6 +54,15 @@ const DEFAULT_SETTINGS = {
   preSaveEdit: true,
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
+  ai: {
+    enabled: false,
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: '',
+    bridgeUrl: 'http://127.0.0.1:8787',
+    timeoutMs: 120000,
+    contextSize: 8192,
+    allowedBridgeTools: [],
+  },
   viewMode: 'canvas',
   sortBy: 'newest',
   theme: 'dark',
@@ -100,6 +109,7 @@ const WorkspaceUi = self.TabWallWorkspaceUi;
 const ReminderUi = self.TabWallReminderUi;
 const AppHelpers = self.TabWallAppHelpers;
 const ParkHistory = self.TabWallHistory;
+const AiUi = self.TabWallAiUi;
 
 function classifyStoredUrl(...args) { return AppHelpers.classifyStoredUrl(...args); }
 
@@ -250,6 +260,28 @@ const tagsBtn = document.getElementById('tagsBtn');
 const tagsBox = document.getElementById('tagsBox');
 const tagsDrag = document.getElementById('tagsDrag');
 const tagsCloseX = document.getElementById('tagsCloseX');
+const aiBtn = document.getElementById('aiBtn');
+const aiBox = document.getElementById('aiBox');
+const aiDrag = document.getElementById('aiDrag');
+const aiCloseX = document.getElementById('aiCloseX');
+const aiStatus = document.getElementById('aiStatus');
+const aiContextStatus = document.getElementById('aiContextStatus');
+const aiSources = document.getElementById('aiSources');
+const aiMessages = document.getElementById('aiMessages');
+const aiToolConfirm = document.getElementById('aiToolConfirm');
+const aiInput = document.getElementById('aiInput');
+const aiSendBtn = document.getElementById('aiSendBtn');
+const aiStopBtn = document.getElementById('aiStopBtn');
+const aiClearBtn = document.getElementById('aiClearBtn');
+const aiBridgeToken = document.getElementById('aiBridgeToken');
+const aiTestConnectionBtn = document.getElementById('aiTestConnectionBtn');
+const aiConnectionStatus = document.getElementById('aiConnectionStatus');
+const settingsAiEnabled = document.getElementById('settingsAiEnabled');
+const settingsAiBaseUrl = document.getElementById('settingsAiBaseUrl');
+const settingsAiModel = document.getElementById('settingsAiModel');
+const settingsAiBridgeUrl = document.getElementById('settingsAiBridgeUrl');
+const settingsAiContextSize = document.getElementById('settingsAiContextSize');
+const settingsAiAllowedTools = document.getElementById('settingsAiAllowedTools');
 const helpBtn = document.getElementById('helpBtn');
 const helpBox = document.getElementById('helpBox');
 const helpDrag = document.getElementById('helpDrag');
@@ -704,6 +736,7 @@ function bindPanelModules() {
     "clearCanvasPointerUi": () => clearCanvasPointerUi,
     "clearStackHover": () => clearStackHover,
     "closeAllFloatsExcept": () => closeAllFloatsExcept,
+    "closeAiBox": () => closeAiBox,
     "closeCanvasContextMenu": () => closeCanvasContextMenu,
     "closeCanvasStackDialog": () => closeCanvasStackDialog,
     "closeCanvasZoomMenu": () => closeCanvasZoomMenu,
@@ -790,6 +823,22 @@ function bindPanelModules() {
     "hashLockPassword": () => hashLockPassword,
     "helpBox": () => helpBox,
     "helpBtn": () => helpBtn,
+    "aiBox": () => aiBox,
+    "aiBtn": () => aiBtn,
+    "aiBridgeToken": () => aiBridgeToken,
+    "aiClearBtn": () => aiClearBtn,
+    "aiCloseX": () => aiCloseX,
+    "aiConnectionStatus": () => aiConnectionStatus,
+    "aiContextStatus": () => aiContextStatus,
+    "aiDrag": () => aiDrag,
+    "aiInput": () => aiInput,
+    "aiMessages": () => aiMessages,
+    "aiSources": () => aiSources,
+    "aiSendBtn": () => aiSendBtn,
+    "aiStatus": () => aiStatus,
+    "aiStopBtn": () => aiStopBtn,
+    "aiTestConnectionBtn": () => aiTestConnectionBtn,
+    "aiToolConfirm": () => aiToolConfirm,
     "remindersBox": () => remindersBox,
     "remindersBtn": () => remindersBtn,
     "remindersDrag": () => remindersDrag,
@@ -806,6 +855,7 @@ function bindPanelModules() {
     "importPreviewUrl": () => importPreviewUrl,
     "imageCardFile": () => imageCardFile,
     "initDedupeUi": () => initDedupeUi,
+    "initAiUi": () => initAiUi,
     "initQuickCaptureUi": () => initQuickCaptureUi,
     "isCanvasContextMenuOpen": () => isCanvasContextMenuOpen,
     "isCanvasSearchPreviewActive": () => isCanvasSearchPreviewActive,
@@ -935,6 +985,12 @@ function bindPanelModules() {
     "settingsColsValue": () => settingsColsValue,
     "settingsDoneBtn": () => settingsDoneBtn,
     "settingsEl": () => settingsEl,
+    "settingsAiAllowedTools": () => settingsAiAllowedTools,
+    "settingsAiBaseUrl": () => settingsAiBaseUrl,
+    "settingsAiBridgeUrl": () => settingsAiBridgeUrl,
+    "settingsAiContextSize": () => settingsAiContextSize,
+    "settingsAiEnabled": () => settingsAiEnabled,
+    "settingsAiModel": () => settingsAiModel,
     "settingsNav": () => settingsNav,
     "settingsPreSaveEdit": () => settingsPreSaveEdit,
     "settingsSaveStatus": () => settingsSaveStatus,
@@ -960,12 +1016,14 @@ function bindPanelModules() {
     "stickerNoteLockPasswordConfirm": () => stickerNoteLockPasswordConfirm,
     "suppressCanvasNodeClick": () => suppressCanvasNodeClick,
     "syncAutoBackupUi": () => syncAutoBackupUi,
+    "syncAiSettingsUi": () => syncAiSettingsUi,
     "syncCanvasOrganizeUi": () => syncCanvasOrganizeUi,
     "syncFloatBackdrop": () => syncFloatBackdrop,
     "syncQuickCaptureAvailability": () => syncQuickCaptureAvailability,
     "syncSearchRegexUi": () => syncSearchRegexUi,
     "syncSearchScopeUi": () => syncSearchScopeUi,
     "syncSettingsUi": () => syncSettingsUi,
+    "setupFloatDrag": () => setupFloatDrag,
     "t": () => t,
     "tagAddInput": () => tagAddInput,
     "tagManageList": () => tagManageList,
@@ -1090,6 +1148,7 @@ function bindPanelModules() {
   ReminderUi?.bind?.(env);
   AppHelpers.bind(env);
   ParkHistory?.bind?.(env);
+  AiUi?.bind?.(env);
 }
 bindPanelModules();
 ReminderUi?.init?.();
@@ -1124,6 +1183,7 @@ SearchUi.bind({
   resetCompiledSearch: () => SearchQuery.resetCompiledSearch(),
   renderGrid: () => renderGrid(),
   saveSettings: (partial) => saveSettings(partial),
+  openAiBox: () => openAiBox(),
 });
 SearchUi.init();
 function syncSearchRegexUi() {
@@ -1553,6 +1613,10 @@ function initChromeShortcutsUi(...args) { return SettingsUi.initChromeShortcutsU
 
 async function initSettingsUi(...args) { return await SettingsUi.initSettingsUi(...args); }
 
+function initAiUi(...args) { return AiUi?.init?.(...args); }
+
+function syncAiSettingsUi(...args) { return AiUi?.syncSettingsUi?.(...args); }
+
 function formatSavedAt(...args) { return ListUi.formatSavedAt(...args); }
 
 function appendDedupeThumb(...args) { return WorkspaceUi.appendDedupeThumb(...args); }
@@ -1631,6 +1695,10 @@ function openHelpBox(...args) { return WorkspaceUi.openHelpBox(...args); }
 
 function closeHelpBox(...args) { return WorkspaceUi.closeHelpBox(...args); }
 
+function openAiBox(...args) { return AiUi?.openAiBox?.(...args); }
+
+function closeAiBox(...args) { return AiUi?.closeAiBox?.(...args); }
+
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   if (settingsBox.classList.contains('open')) closeSettingsBox();
@@ -1655,6 +1723,8 @@ helpBtn.addEventListener('click', (e) => {
 helpCloseX.addEventListener('click', () => closeHelpBox());
 setupFloatDrag(helpDrag, helpBox);
 
+setupFloatDrag(aiDrag, aiBox);
+
 floatBackdrop.addEventListener('click', () => {
   if (canvasStackDialog?.classList.contains('open')) {
     closeCanvasStackDialog();
@@ -1672,6 +1742,10 @@ floatBackdrop.addEventListener('click', () => {
   if (membersBox.classList.contains('open')) {
     closeMembersBox();
     syncFloatBackdrop();
+    return;
+  }
+  if (aiBox?.classList.contains('open')) {
+    closeAiBox();
     return;
   }
   if (dedupeBox?.classList.contains('open')) {
@@ -1811,6 +1885,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (importPickBox?.classList.contains('open')) {
       closeImportPickBox();
+      return;
+    }
+    if (aiBox?.classList.contains('open')) {
+      closeAiBox();
       return;
     }
     if (helpBox.classList.contains('open')) {
@@ -3208,6 +3286,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
       ...(settings.autoBackup || {}),
     });
     settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
+    settings.ai = SettingsUi.normalizeAiSettings
+      ? SettingsUi.normalizeAiSettings(settings.ai)
+      : { ...DEFAULT_SETTINGS.ai, ...(settings.ai || {}) };
     if (Wallpaper?.normalizeWallpaper) {
       settings.wallpaper = Wallpaper.normalizeWallpaper(settings.wallpaper);
     }
