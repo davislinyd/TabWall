@@ -389,9 +389,10 @@
 
   }
 
-  function getCanvasSearchContext() {
+  function getCanvasSearchContext(options = {}) {
     ensureBound('getCanvasSearchContext');
 
+      const includeGroupMatches = options?.includeGroupMatches === true;
       const queryActive = Boolean(String(env.query || '').trim());
       const directItems = env.getVisibleTabs().filter(env.canvasItemPassesIndexFilter);
       const directIds = new Set(directItems.map((item) => item.id));
@@ -417,11 +418,24 @@
             env.normalizeSortBy(env.settings.sortBy)
           )
         : [];
+      const items = [...directItems, ...relatedItems];
+      const groupMatches = new Map();
+      for (const item of items) {
+        if (includeGroupMatches && queryActive && item.kind === 'group') {
+          groupMatches.set(item.id, env.getGroupSearchMatch(item, env.query));
+        }
+      }
       return {
-        items: [...directItems, ...relatedItems],
+        items,
         directIds,
         relatedIds: new Set(relatedItems.map((item) => item.id)),
         queryActive,
+        searchKey: JSON.stringify({
+          query: env.query,
+          scope: env.searchScope,
+          regex: Boolean(env.settings.searchRegex),
+        }),
+        groupMatches,
       };
 
   }
@@ -458,7 +472,7 @@
 
   }
 
-  function syncCanvasIndexUi() {
+  function syncCanvasIndexUi(searchContext = null) {
     ensureBound('syncCanvasIndexUi');
 
       const allButton = document.getElementById('canvasAllBtn');
@@ -475,7 +489,7 @@
             : allButton;
       active?.classList.add('active');
       const count = document.querySelector('[data-canvas-count]');
-      if (count) count.textContent = String(env.getCanvasVisibleTabs().length);
+      if (count) count.textContent = String((searchContext?.items || env.getCanvasVisibleTabs()).length);
 
   }
 
@@ -1085,7 +1099,6 @@
         notes: item.kind === 'group'
           ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
           : undefined,
-        query: env.query,
         locale: env.settings.locale,
       });
 

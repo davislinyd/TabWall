@@ -367,7 +367,7 @@
       env.SearchQuery.beginSearchMatchCache();
       try {
         if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) {
-          const searchContext = env.getCanvasSearchContext();
+          const searchContext = env.getCanvasSearchContext({ includeGroupMatches: true });
           syncCanvasSearchViewport(searchContext);
           env.renderCanvas(searchContext);
           return;
@@ -415,6 +415,7 @@
             node = fresh;
             env.gridNodeElements.set(item.id, node);
           }
+          if (item.kind === 'group') appendGroupSearchHits(node, item);
           // Moving an existing node through the fragment preserves DOM order
           // without recreating it (same pattern as renderCanvas).
           frag.appendChild(node);
@@ -454,12 +455,21 @@
 
   }
 
-  function appendGroupSearchHits(parentEl, group) {
+  function appendGroupSearchHits(parentEl, group, match = null, searchKey = '') {
     ensureBound('appendGroupSearchHits');
 
-      if (!env.query || !parentEl || group?.kind !== 'group') return;
+      if (!parentEl || group?.kind !== 'group') return;
+      const currentKey = searchKey || JSON.stringify({
+        query: env.query,
+        scope: env.searchScope,
+        regex: Boolean(env.settings.searchRegex),
+      });
+      if (parentEl.dataset.searchHitsKey === currentKey) return;
+      parentEl.dataset.searchHitsKey = currentKey;
+      parentEl.querySelector('.search-hits')?.remove();
+      if (!env.query) return;
 
-      const { hits, metaHit } = env.getGroupSearchMatch(group, env.query);
+      const { hits, metaHit } = match || env.getGroupSearchMatch(group, env.query);
       if (!hits.length && !metaHit) return;
 
       const box = document.createElement('div');

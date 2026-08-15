@@ -94,7 +94,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
 - In Canvas, search results and related cards temporarily arrange around the center and adjust the viewport: dense results fit the available width and height, while sparse results zoom in without letting one card fill the screen. Pan, zoom, fit, reset, and minimap gestures remain preview-only during search. Clearing search restores the previous viewport; preview positions are never persisted.
-- Search input is debounced, and thumbnails load near the visible area.
+- Search input is debounced; dense Canvas results render in batches so rapid typing is not blocked by one large repaint, and thumbnails load near the visible area.
 
 ### Features
 
@@ -253,7 +253,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
 - 在 Canvas 中，搜尋結果與關聯卡片會暫時排在畫面中央並調整視角：結果多時依寬高填滿可視範圍，結果少時放大但不讓單一卡片佔滿畫面。搜尋期間的平移、縮放、適合畫面、重設與 minimap 手勢也只會預覽，不會寫入永久視角。清除搜尋會還原搜尋前視角；預覽位置不會永久保存。
-- 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
+- 搜尋輸入採用延遲處理；Canvas 命中卡片過多時會分批繪製，快速輸入不會被單次重繪卡住；縮圖會在接近可視範圍時載入。
 
 ### 功能
 

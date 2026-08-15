@@ -11,6 +11,10 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.40.3 — 2026-08-15
+
+- 改善大量命中時的 Canvas 搜尋輸入：重用搜尋結果與 group 命中區塊，連線繪製避開搜尋期間的 DOM layout 量測，Canvas node 分幀更新並取消過期 render，快速輸入不再被單次重繪卡住。
+
 ## 2.40.2 — 2026-08-15
 
 - 修正 Canvas 搜尋暫態視角造成的重複重繪、forced reflow 與非必要布局同步。

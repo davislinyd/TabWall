@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.40.2 使用者說明：儲存分頁與 Tab Group、空間畫布、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。" />
+  <meta name="description" content="TabWall 2.40.3 使用者說明：儲存分頁與 Tab Group、空間畫布、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份、硬碟用量與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.40.2</span>
+      <span>使用者說明 · v2.40.3</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -68,7 +68,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.40.2</span><span lang="en">Version 2.40.2</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.40.3</span><span lang="en">Version 2.40.3</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -457,8 +457,8 @@ https://wiki.example.com
       <section class="chapter" id="search">
         <h2 lang="zh-Hant">牆上搜尋</h2>
         <h2 lang="en">Wall search</h2>
-        <p lang="zh-Hant">在牆上按 <kbd>/</kbd> 聚焦搜尋框。不分大小寫，輸入有短暫延遲；縮圖接近可視範圍才載入。</p>
-        <p lang="en">Press <kbd>/</kbd> on the wall to focus search. Matching is case-insensitive and debounced. Thumbnails load near the visible area.</p>
+        <p lang="zh-Hant">在牆上按 <kbd>/</kbd> 聚焦搜尋框。不分大小寫，輸入有短暫延遲；大量命中時 Canvas 會分幀更新，快速輸入不會被單次重繪卡住；縮圖接近可視範圍才載入。</p>
+        <p lang="en">Press <kbd>/</kbd> on the wall to focus search. Matching is case-insensitive and debounced; dense Canvas results update in batches so rapid typing is not blocked by one large repaint. Thumbnails load near the visible area.</p>
         <table>
           <thead>
             <tr>
@@ -854,8 +854,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.40.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.40.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.40.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.40.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

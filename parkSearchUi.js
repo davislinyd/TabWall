@@ -20,7 +20,7 @@
   const TAG_SUGGEST_LIMIT = 12;
 
   let searchRenderTimer = null;
-  const SEARCH_RENDER_DEBOUNCE_MS = 120;
+  const SEARCH_RENDER_DEBOUNCE_MS = 200;
   let listenersBound = false;
 
   const SEARCH_TAB_TOKENS = {

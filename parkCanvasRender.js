@@ -14,6 +14,9 @@
   let canvasConnectionElements = null;
   let canvasMinimapElements = null;
   let canvasNodeClickSuppressUntil = null;
+  let canvasRenderGeneration = 0;
+  let canvasRenderFrameCancel = null;
+  let canvasLastRenderWasSearch = false;
 
   function bind(next) {
     if (!next || typeof next !== 'object') return;
@@ -55,14 +58,14 @@
   function isCanvasSearchPreviewActive(sc) { return call('isCanvasSearchPreviewActive', sc); }
   function ensureCanvasStore() { return call('ensureCanvasStore'); }
   function updateSavedBadge() { return call('updateSavedBadge'); }
-  function syncCanvasIndexUi() { return call('syncCanvasIndexUi'); }
+  function syncCanvasIndexUi(searchContext) { return call('syncCanvasIndexUi', searchContext); }
   function updateBatchBar() { return call('updateBatchBar'); }
   function updateCanvasTransform() { return call('updateCanvasTransform'); }
   function updateCanvasNodeSelection() { return call('updateCanvasNodeSelection'); }
   function wireCanvasNodeActions(node) { return call('wireCanvasNodeActions', node); }
   function wireCanvasMedia(img) { return call('wireCanvasMedia', img); }
   function wireFavicon(el) { return call('wireFavicon', el); }
-  function appendGroupSearchHits(node, item) { return call('appendGroupSearchHits', node, item); }
+  function appendGroupSearchHits(node, item, match, searchKey) { return call('appendGroupSearchHits', node, item, match, searchKey); }
   function wireStickerAttachmentImages(root, note) { return call('wireStickerAttachmentImages', root, note); }
   function cancelCanvasNodeClick(id) { return call('cancelCanvasNodeClick', id); }
   function wireCanvasConnectionPath(path, connection, connectionId, zone) {
@@ -234,6 +237,10 @@ function canvasNodeHtml(item) {
 function canvasConnectionDomHandlePoint(id, side, cache = null) {
   const cacheKey = `${id}:${side}`;
   if (cache?.handles?.has(cacheKey)) return cache.handles.get(cacheKey);
+  if (cache?.useLayoutPositions) {
+    cache?.handles?.set(cacheKey, null);
+    return null;
+  }
   const handle = canvasNodeElements.get(id)?.querySelector(`[data-canvas-link-handle="${side}"]`);
   const viewportRect = cache?.viewportRect || getCanvasViewportEl()?.getBoundingClientRect();
   const handleRect = handle?.getBoundingClientRect();
@@ -263,7 +270,7 @@ function canvasConnectionHandlePointForCursor(rect, point, id = '', cache = null
 function canvasConnectionPosition(id, cache = null) {
   if (cache?.positions?.has(id)) return cache.positions.get(id);
   const node = canvasNodeElements.get(id);
-  const measured = node?.isConnected
+  const measured = !cache?.useLayoutPositions && node?.isConnected
     ? canvasNodeWorldRect(node, {
         viewportRect: cache?.viewportRect,
         viewport: cache?.viewport,
@@ -380,10 +387,12 @@ function renderCanvasConnections(searchContext = getCanvasSearchContext(), rende
   const displayLayout = renderLayout || (isCanvasSearchPreviewActive(searchContext)
     ? canvasSearchLayoutFor(searchContext)
     : layout);
+  const useLayoutPositions = isCanvasSearchPreviewActive(searchContext);
   const renderCache = {
     positions: new Map(),
     handles: new Map(),
-    viewportRect: getCanvasViewportEl()?.getBoundingClientRect?.() || null,
+    useLayoutPositions,
+    viewportRect: useLayoutPositions ? null : getCanvasViewportEl()?.getBoundingClientRect?.() || null,
     viewport: displayLayout.viewport || layout.viewport,
     layout: displayLayout,
   };
@@ -503,13 +512,13 @@ function renderCanvasMinimap(items, renderLayout = null) {
   const map = getCanvasMinimap().querySelector('.canvas-minimap-world');
   if (!map) return;
   const frame = getCanvasMinimapViewport() || map.querySelector('.canvas-minimap-viewport');
-  const mapRect = map.getBoundingClientRect?.();
-  const mapWidth = map.clientWidth || mapRect?.width || 0;
-  const mapHeight = map.clientHeight || mapRect?.height || 0;
+  const mapWidth = map.clientWidth || map.getBoundingClientRect?.().width || 0;
+  const mapHeight = map.clientHeight || map.getBoundingClientRect?.().height || 0;
   const layout = renderLayout || canvasSearchLayoutFor();
   const zoom = Math.max(0.25, Number(layout.viewport?.zoom) || DEFAULT_CANVAS_VIEWPORT.zoom);
-  const viewportWidth = Math.max(1, getCanvasViewportEl()?.clientWidth || getCanvasViewportEl()?.getBoundingClientRect?.().width || mapWidth);
-  const viewportHeight = Math.max(1, getCanvasViewportEl()?.clientHeight || getCanvasViewportEl()?.getBoundingClientRect?.().height || mapHeight);
+  const viewportEl = getCanvasViewportEl();
+  const viewportWidth = Math.max(1, viewportEl?.clientWidth || viewportEl?.getBoundingClientRect?.().width || mapWidth);
+  const viewportHeight = Math.max(1, viewportEl?.clientHeight || viewportEl?.getBoundingClientRect?.().height || mapHeight);
   const nodeRects = (Array.isArray(items) ? items : []).map((item, index) => {
     const position = canvasDisplayPosition(layout.positions?.[item.id] || canvasDefaultPosition(index));
     return {
@@ -613,16 +622,32 @@ function canvasNodeRenderKey(item) {
     notes: item.kind === 'group'
       ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
       : undefined,
-    query: item.kind === 'group' ? getQuery() : '',
     locale: getSettings().locale,
   });
 }
 
-function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item)) {
+function canvasSearchHitKey(searchContext = null) {
+  return searchContext?.searchKey || JSON.stringify({
+    query: getQuery(),
+    scope: get('searchScope', 'all'),
+    regex: Boolean(getSettings().searchRegex),
+  });
+}
+
+function syncCanvasGroupSearchHits(node, item, searchContext = null) {
+  if (!node || item?.kind !== 'group') return;
+  const searchKey = canvasSearchHitKey(searchContext);
+  if (node.dataset.searchHitsKey === searchKey) return;
+  appendGroupSearchHits(node, item, searchContext?.groupMatches?.get(item.id) || null, searchKey);
+}
+
+function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item), searchContext = null) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = canvasNodeHtml(item);
   const node = wrapper.firstElementChild;
-  if (item.kind === 'group') appendGroupSearchHits(node, item);
+  if (item.kind === 'group') {
+    appendGroupSearchHits(node, item, searchContext?.groupMatches?.get(item.id) || null, canvasSearchHitKey(searchContext));
+  }
   node.dataset.canvasRenderKey = renderKey;
   wireCanvasNodeActions(node);
   node.querySelectorAll('[data-unlock-id]').forEach((button) => {
@@ -651,14 +676,63 @@ function removeCanvasNode(id, node) {
   canvasNodeElements.delete(id);
 }
 
+const CANVAS_SEARCH_RENDER_BATCH_SIZE = 12;
+const CANVAS_SEARCH_RENDER_YIELD_MIN = 32;
+
+function cancelCanvasRenderFrame() {
+  canvasRenderFrameCancel?.();
+  canvasRenderFrameCancel = null;
+}
+
+function waitForCanvasRenderFrame() {
+  return new Promise((resolve) => {
+    const useRaf = typeof global.requestAnimationFrame === 'function';
+    let settled = false;
+    const finish = (active) => {
+      if (settled) return;
+      settled = true;
+      if (canvasRenderFrameCancel === cancel) canvasRenderFrameCancel = null;
+      resolve(active);
+    };
+    const frameId = useRaf
+      ? global.requestAnimationFrame(() => finish(true))
+      : global.setTimeout(() => finish(true), 0);
+    const cancel = () => {
+      if (useRaf) global.cancelAnimationFrame?.(frameId);
+      else global.clearTimeout?.(frameId);
+      finish(false);
+    };
+    canvasRenderFrameCancel = cancel;
+  });
+}
+
+function setCanvasNodePosition(node, position) {
+  const style = node.style;
+  const left = `${position.x}px`;
+  const top = `${position.y}px`;
+  const width = `${position.w}px`;
+  const minHeight = `${position.h}px`;
+  const zIndex = String(Math.round(position.z || 0));
+  if (style.left !== left) style.left = left;
+  if (style.top !== top) style.top = top;
+  if (style.width !== width) style.width = width;
+  if (style.minHeight !== minHeight) style.minHeight = minHeight;
+  if (style.zIndex !== zIndex) style.zIndex = zIndex;
+}
+
 function renderCanvas(searchContext = getCanvasSearchContext()) {
   if (!getCanvasNodesEl()) return;
+  const generation = ++canvasRenderGeneration;
+  cancelCanvasRenderFrame();
   ensureCanvasStore();
   const renderLayout = canvasSearchLayoutFor(searchContext);
   const filtered = searchContext.items;
   const visibleIds = new Set(filtered.map((item) => item.id));
+  const shouldYield = filtered.length >= CANVAS_SEARCH_RENDER_YIELD_MIN
+    && (searchContext.queryActive || canvasLastRenderWasSearch);
+  canvasLastRenderWasSearch = searchContext.queryActive;
   updateSavedBadge();
-  syncCanvasIndexUi();
+  syncCanvasIndexUi(searchContext);
   if (getCanvasDropZone()) getCanvasDropZone().hidden = activeCanvasSelection().size < 2;
 
   for (const [id, node] of canvasNodeElements) {
@@ -685,18 +759,19 @@ function renderCanvas(searchContext = getCanvasSearchContext()) {
   }
   empty?.remove();
 
-  const fragment = document.createDocumentFragment();
-  const changedNodes = [];
-  filtered.forEach((item, index) => {
+  const renderNode = (item, index, fragment, mediaNodes) => {
     let node = canvasNodeElements.get(item.id);
     const renderKey = canvasNodeRenderKey(item);
     if (!node || node.dataset.canvasRenderKey !== renderKey) {
-      const replacement = createCanvasNodeElement(item, renderKey);
+      const replacement = createCanvasNodeElement(item, renderKey, searchContext);
       if (node) node.replaceWith(replacement);
       node = replacement;
       canvasNodeElements.set(item.id, node);
-      changedNodes.push(node);
+      node.dataset.canvasMediaPending = 'true';
+    } else {
+      syncCanvasGroupSearchHits(node, item, searchContext);
     }
+    if (node.dataset.canvasMediaPending === 'true') mediaNodes.push(node);
     const position = canvasDisplayPosition(renderLayout.positions[item.id] || canvasDefaultPosition(index));
     node.dataset.id = item.id;
     node.dataset.kind = item.kind;
@@ -710,29 +785,50 @@ function renderCanvas(searchContext = getCanvasSearchContext()) {
       node.classList.add('just-saved');
       global.setTimeout(() => node.classList.remove('just-saved'), 500);
     }
-    node.style.left = `${position.x}px`;
-    node.style.top = `${position.y}px`;
-    node.style.width = `${position.w}px`;
-    node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
+    setCanvasNodePosition(node, position);
     // Moving an existing node through the fragment keeps DOM order without
     // recreating its listeners, focus target, or media loader state.
     fragment.appendChild(node);
-  });
-  getCanvasNodesEl().appendChild(fragment);
-  changedNodes.forEach((node) => {
-    node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
-  });
-  filtered.forEach((item) => {
-    if (item.kind !== 'note') return;
-    const node = canvasNodeElements.get(item.id);
-    if (node) wireStickerAttachmentImages(node, item);
-  });
-  updateCanvasTransform();
-  updateCanvasNodeSelection();
-  renderCanvasConnections(searchContext, renderLayout);
-  renderCanvasMinimap(filtered, renderLayout);
-  updateBatchBar();
+  };
+
+  const finish = () => {
+    if (generation !== canvasRenderGeneration) return false;
+    filtered.forEach((item) => {
+      if (item.kind !== 'note') return;
+      const node = canvasNodeElements.get(item.id);
+      if (node) wireStickerAttachmentImages(node, item);
+    });
+    updateCanvasTransform();
+    updateCanvasNodeSelection();
+    renderCanvasConnections(searchContext, renderLayout);
+    renderCanvasMinimap(filtered, renderLayout);
+    updateBatchBar();
+    return true;
+  };
+
+  const renderChunk = (start) => {
+    if (generation !== canvasRenderGeneration) return Promise.resolve(false);
+    const fragment = document.createDocumentFragment();
+    const mediaNodes = [];
+    const end = shouldYield
+      ? Math.min(filtered.length, start + CANVAS_SEARCH_RENDER_BATCH_SIZE)
+      : filtered.length;
+    for (let index = start; index < end; index++) renderNode(filtered[index], index, fragment, mediaNodes);
+    getCanvasNodesEl().appendChild(fragment);
+    mediaNodes.forEach((node) => {
+      node.querySelectorAll('img[data-canvas-media="true"]').forEach(wireCanvasMedia);
+      delete node.dataset.canvasMediaPending;
+    });
+    if (end >= filtered.length) {
+      finish();
+      return Promise.resolve(true);
+    }
+    return waitForCanvasRenderFrame().then((active) => (
+      active && generation === canvasRenderGeneration ? renderChunk(end) : false
+    ));
+  };
+
+  return renderChunk(0);
 }
 
 function canvasWorldViewportCenter() {

@@ -740,7 +740,8 @@ test('Canvas display geometry and connection endpoints use the four side handles
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionDomHandlePoint\(/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side, cache = null\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForId\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /const measured = node\?\.isConnected[\s\S]*?canvasNodeWorldRect\(node, \{/);
+  assert.match(CANVAS_RENDER_SOURCE, /const measured = !cache\?\.useLayoutPositions && node\?\.isConnected[\s\S]*?canvasNodeWorldRect\(node, \{/);
+  assert.match(CANVAS_RENDER_SOURCE, /if \(cache\?\.useLayoutPositions\)/);
   assert.doesNotMatch(PARK_SOURCE, /function canvasConnectionEdgePoints\(/);
   assert.match(CANVAS_RENDER_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId, renderCache\)/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForCursor\(rect, point/);
@@ -765,7 +766,14 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(CANVAS_CHROME_SOURCE, /clearViewportPreview\(\{ deferRender: true \}\)/);
   const searchSyncSource = extractFnSource(CANVAS_CHROME_SOURCE, 'syncCanvasSearchViewport');
   assert.doesNotMatch(searchSyncSource, /commitViewport/);
+  assert.match(LIST_UI_SOURCE, /getCanvasSearchContext\(\{ includeGroupMatches: true \}\)/);
   assert.match(LIST_UI_SOURCE, /syncCanvasSearchViewport\(searchContext\);/);
+  assert.match(PARK_SOURCE, /getCanvasSearchContext: \(\.\.\.args\) => getCanvasSearchContext\(\.\.\.args\)/);
+  assert.match(APP_HELPERS_SOURCE, /const groupMatches = new Map\(\)/);
+  assert.match(APP_HELPERS_SOURCE, /searchKey: JSON\.stringify/);
+  const gridKeySource = extractFnSource(APP_HELPERS_SOURCE, 'gridNodeRenderKey');
+  assert.doesNotMatch(gridKeySource, /query: env\.query/);
+  assert.match(LIST_UI_SOURCE, /appendGroupSearchHits\(node, item\);/);
   assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
@@ -775,7 +783,12 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(renderSource, /const renderLayout = canvasSearchLayoutFor\(searchContext\)/);
   assert.match(renderSource, /renderLayout\.positions\[item\.id\]/);
   assert.match(renderSource, /renderCanvasMinimap\(filtered, renderLayout\)/);
-  assert.match(CANVAS_RENDER_SOURCE, /query: item\.kind === 'group' \? getQuery\(\) : ''/);
+  assert.doesNotMatch(CANVAS_RENDER_SOURCE, /query: item\.kind === 'group' \? getQuery\(\) : ''/);
+  assert.match(CANVAS_RENDER_SOURCE, /function syncCanvasGroupSearchHits\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /const useLayoutPositions = isCanvasSearchPreviewActive\(searchContext\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /const CANVAS_SEARCH_RENDER_BATCH_SIZE = 12/);
+  assert.match(renderSource, /syncCanvasIndexUi\(searchContext\)/);
+  assert.match(renderSource, /waitForCanvasRenderFrame\(\)/);
   assert.doesNotMatch(renderSource, /getCanvasNodesEl\(\)\.querySelectorAll\('img\[data-canvas-media="true"\]'/);
   assert.doesNotMatch(renderSource, /updateCanvasNodePositions\(canvasStoreSnapshot\(\), searchContext\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvas\(/);

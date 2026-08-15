@@ -536,7 +536,7 @@ CanvasRender.bind({
   canvasPositionFor: (id, index) => canvasPositionFor(id, index),
   canvasStoreSnapshot: () => canvasStoreSnapshot(),
   canvasNodeWorldRect: (node, options) => canvasNodeWorldRect(node, options),
-  getCanvasSearchContext: () => getCanvasSearchContext(),
+  getCanvasSearchContext: (...args) => getCanvasSearchContext(...args),
   canvasSearchLayoutFor: (sc) => canvasSearchLayoutFor(sc),
   isCanvasSearchPreviewActive: (sc) => isCanvasSearchPreviewActive(sc),
   ensureCanvasStore: () => ensureCanvasStore(),
