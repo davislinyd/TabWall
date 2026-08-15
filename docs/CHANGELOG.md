@@ -11,6 +11,49 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.43.11 — 2026-08-16
+
+- 將 TabWall overlay content shell 加入一般頁面的靜態 content script，降低 Edge 動態注入失敗造成 `Option+O` 與 popup 無反應的情況。
+- 背景端現在驗證 overlay action response；若內容腳本回報錯誤，會走既有 standalone fallback，不再顯示假成功。
+- 重新產生 `dist/TabWall-2.43.11.zip`。
+
+## 2.43.10 — 2026-08-16
+
+- 修正 Edge 保留舊的 `open-ai` 快捷鍵綁定時，`Option+A` 第二次無法收合外部 AI 面板；command 現在與頁面快捷鍵一致採 toggle 行為。
+- 修正 extension reload 後舊的 content-script marker 使 popup「打開 TabWall 面板」無法重新注入 overlay 的問題；content shell 現在會清理可辨識的舊 runtime instance。
+- 重新產生 `dist/TabWall-2.43.10.zip`。
+
+## 2.43.9 — 2026-08-16
+
+- 修正 Edge `Option+A`／`Option+O` 快捷鍵互斥：`Option+O` 改由單一瀏覽器 command 處理，移除 content-script fallback 與重複 toggle 去重競爭。
+- TabWall overlay 內的 `Option+A` 現在會聚焦內建 AI；overlay 關閉後恢復原頁面焦點，外部 AI agent 會在 overlay 下繼續執行。
+- 更新 Chrome／Edge 快捷鍵說明與測試；重新產生 `dist/TabWall-2.43.9.zip`。
+
+## 2.43.8 — 2026-08-16
+
+- 修正 Edge／Chromium `Option+O` 與原生 extension command 的競爭：先讓瀏覽器 command 完成，只有畫布狀態未改變時才在 keyup fallback 一次，避免快捷鍵無效或雙重切換。
+- 新增 native-command/fallback 狀態判斷測試；重新產生 `dist/TabWall-2.43.8.zip`。
+
+## 2.43.7 — 2026-08-16
+
+- 修正 Edge／Chromium 工具列 popup 開啟 TabWall 時的目標分頁選擇：popup 現在明確傳遞所屬視窗的目前分頁，避免背景端切換到另一個最後聚焦的分頁。
+- 新增 popup 目標分頁測試；重新產生 `dist/TabWall-2.43.7.zip`。
+
+## 2.43.6 — 2026-08-16
+
+- 修正 Edge／Chromium 外部頁面 `Option+O` 送出的切換訊息：背景端現在以 `sender.tab` 為目標，不會因另一個最後聚焦的 TabWall 分頁而切換錯誤分頁。
+- 新增測試覆蓋來源分頁優先邏輯；重新產生 `dist/TabWall-2.43.6.zip`。
+
+## 2.43.5 — 2026-08-16
+
+- 修正 Edge／Chromium 在受限頁面使用 `Option+O` 或 popup「打開 TabWall 面板」時，standalone fallback 可能因 URL query 查找失敗而無法開啟。
+- 背景操作改以 `lastFocusedWindow` 優先取得目前真正聚焦的分頁；重新產生 `dist/TabWall-2.43.5.zip`。
+
+## 2.43.4 — 2026-08-16
+
+- 修正 Option+O 在部分 Chrome／macOS 環境未觸發 TabWall overlay 的問題；一般頁面新增 content-script fallback，並與 Chrome command 共用去重鎖，避免重複開關。
+- 重新產生 `dist/TabWall-2.43.4.zip`。
+
 ## 2.43.3 — 2026-08-16
 
 - 新增本機 AI agent：可連線 OpenAI-compatible `llama-server`，優先分析開啟 AI 面板的目前分頁，也能搜尋／讀取開啟與已儲存的分頁 context。

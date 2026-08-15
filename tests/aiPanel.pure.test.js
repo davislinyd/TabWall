@@ -27,7 +27,7 @@ function loadPanel() {
   return sandbox.TabWallAiPanel;
 }
 
-test('Option+A uses physical KeyA and ignores other modifiers', () => {
+test('Option+A uses the shared physical-key predicate and ignores unsafe states', () => {
   const panel = loadPanel();
   assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyA' }), true);
   assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyA', key: 'å' }), true);
@@ -35,7 +35,17 @@ test('Option+A uses physical KeyA and ignores other modifiers', () => {
   assert.equal(panel.isAiPanelHotkey({ altKey: true, metaKey: true, code: 'KeyA' }), false);
   assert.equal(panel.isAiPanelHotkey({ altKey: true, ctrlKey: true, code: 'KeyA' }), false);
   assert.equal(panel.isAiPanelHotkey({ altKey: true, shiftKey: true, code: 'KeyA' }), false);
+  assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyA', repeat: true }), false);
+  assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyA', isComposing: true }), false);
+  assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyA', keyCode: 229 }), false);
   assert.equal(panel.isAiPanelHotkey({ altKey: true, code: 'KeyB' }), false);
+});
+
+test('external AI panel does not implement an Option+O fallback', () => {
+  const source = fs.readFileSync(new URL('../aiPanel.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /TOGGLE_PARK_ACTIVE/);
+  assert.doesNotMatch(source, /KeyO/);
+  assert.doesNotMatch(source, /addEventListener\('keyup'/);
 });
 
 test('AI shortcut leaves editable page controls alone', () => {
@@ -102,6 +112,8 @@ test('external panel source uses the shared AI port and session-only bridge toke
   assert.match(source, /GET_AI_SETTINGS/);
   assert.match(source, /AI_PANEL_PING/);
   assert.match(source, /OPEN_AI_PANEL/);
+  assert.doesNotMatch(source, /TOGGLE_PARK_ACTIVE/);
+  assert.match(core, /isOptionLetterHotkey/);
   assert.match(core, /name: 'tabwall-ai'/);
   assert.match(source, /type = 'password'/);
   assert.match(source, /bridgeToken = null/);
@@ -117,6 +129,8 @@ test('external panel source uses the shared AI port and session-only bridge toke
   assert.match(source, /event\.repeat/);
   assert.match(source, /isDoubleEscapePress/);
   assert.match(source, /setExpanded\(false\)/);
+  assert.match(source, /if \(event\.type === 'keydown' && isAiPanelHotkey\(event\)\) \{[\s\S]*?togglePanel\(\);[\s\S]*?return;/);
+  assert.doesNotMatch(source, /maybeFallbackTogglePark/);
   assert.match(source, /heightResizeHandle/);
   assert.match(source, /resize-height/);
   assert.match(source, /height: layout\.height/);

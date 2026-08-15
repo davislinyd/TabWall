@@ -94,6 +94,9 @@ const AUTO_BACKUP_ALARM = 'tabwall-auto-backup-schedule';
 const AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
 const PARK_PAGE_PATH = 'park.html';
 const STANDALONE_SURFACE = 'standalone';
+const SHORTCUTS_PAGE_URL = /Edg\//i.test(String(globalThis.navigator?.userAgent || ''))
+  ? 'edge://extensions/shortcuts'
+  : 'chrome://extensions/shortcuts';
 
 let autoBackupRunning = false;
 
@@ -1734,8 +1737,7 @@ async function handleCommandAction(action) {
     return toggleParkOnActiveTab();
   }
   if (action === 'open-ai') {
-    if (!beginAction('open-ai')) return { ok: false, error: 'debounced' };
-    return openAiPanelOnActiveTab();
+    return toggleAiPanelOnActiveTab();
   }
   return { ok: false, error: 'unknown_action' };
 }
@@ -1878,7 +1880,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'SAVE_ACTIVE_GROUP':
         return saveActiveGroup({ afterSaveGroup: message.afterSaveGroup });
       case 'OPEN_PARK_ACTIVE':
-        return openParkOnActiveTab();
+        return openParkOnActiveTab(message.targetTabId);
       case 'GET_TAGS':
         return { ok: true, tags: await getTagsWithCounts() };
       case 'ADD_TAG':
@@ -1973,7 +1975,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'GET_COMMANDS':
         return getCommandsStatus();
       case 'OPEN_SHORTCUTS_PAGE':
-        await chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+        await chrome.tabs.create({ url: SHORTCUTS_PAGE_URL });
         return { ok: true };
       case 'GET_PENDING_CONFLICT': {
         const pending = await getPendingConflict();
@@ -2102,6 +2104,7 @@ if (globalThis.__TABWALL_TEST__) {
     toggleParkOnActiveTab,
     openParkOnActiveTab,
     openAiPanelOnActiveTab,
+    toggleAiPanelOnActiveTab,
     openStandaloneParkTab,
     listReminderItems,
     syncReminderAlarmsForItems,

@@ -116,13 +116,11 @@
   }
 
   function isAiPanelHotkey(event) {
+    const shared = global.TabWallAiCore?.isOptionLetterHotkey;
+    if (typeof shared === 'function') return shared(event, 'KeyA');
     return Boolean(
-      event &&
-      event.altKey &&
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.shiftKey &&
-      event.code === 'KeyA'
+      event && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
+      event.code === 'KeyA' && !event.repeat && !event.isComposing && event.keyCode !== 229
     );
   }
 
@@ -333,7 +331,7 @@
       style.textContent = `
         :host { all: initial; color-scheme: light; }
         *, *::before, *::after { box-sizing: border-box; }
-        .layer { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif; color: #2e2b27; }
+        .layer { position: fixed; inset: 0; z-index: 2147483646; pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif; color: #2e2b27; }
         .panel { position: fixed; display: flex; flex-direction: column; min-width: ${MIN_WIDTH}px; height: ${DEFAULT_HEIGHT}px; max-height: calc(100dvh - 32px); overflow: hidden; border: 1px solid rgba(46, 43, 39, .24); border-radius: 6px; background: #f6f1e6; box-shadow: 0 18px 42px rgba(16, 17, 16, .3); pointer-events: auto; }
         .panel[hidden], .fab[hidden] { display: none; }
         .header { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 10px 8px 14px; border-bottom: 1px solid rgba(46, 43, 39, .14); cursor: grab; user-select: none; touch-action: none; }
@@ -678,6 +676,12 @@
 
     function isolatePanelKeyboard(event) {
       if (!isAiPanelKeyboardEvent(event, host)) return;
+      if (event.type === 'keydown' && isAiPanelHotkey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePanel();
+        return;
+      }
       const path = eventPath(event);
       const input = panel?.querySelector('#tabwall-ai-input');
       if (event.type === 'keydown' && input && path.includes(input)) {

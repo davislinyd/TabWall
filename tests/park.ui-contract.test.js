@@ -380,8 +380,8 @@ test('Chrome shortcut settings expose the tab-or-group keep command', () => {
   for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
-  assert.match(I18N_SOURCE, /helpShortcutAi: '一般分頁開啟 AI 面板/);
-  assert.match(I18N_SOURCE, /helpShortcutAi: 'Open the AI panel/);
+  assert.match(I18N_SOURCE, /helpShortcutAi: '一般分頁開啟外部 AI/);
+  assert.match(I18N_SOURCE, /helpShortcutAi: 'Open external AI/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });

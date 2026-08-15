@@ -23,6 +23,20 @@
       .slice(0, max);
   }
 
+  function isOptionLetterHotkey(event, code) {
+    return Boolean(
+      event &&
+      event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      event.code === code &&
+      !event.repeat &&
+      !event.isComposing &&
+      event.keyCode !== 229
+    );
+  }
+
   const MAX_MARKDOWN_LENGTH = 24000;
 
   function isSafeAiUrl(value) {
@@ -637,6 +651,7 @@
 
   global.TabWallAiCore = {
     DEFAULT_SETTINGS,
+    isOptionLetterHotkey,
     isSafeAiUrl,
     parseSafeMarkdown,
     renderSafeMarkdown,

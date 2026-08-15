@@ -13,6 +13,22 @@
     if (!env || !core) throw new Error(`TabWallAiUi.${name} used before bind()`);
   }
 
+  function isEditableTarget(target) {
+    const element = target?.nodeType === 1 ? target : target?.parentElement;
+    if (!element) return false;
+    const tag = String(element.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable === true;
+  }
+
+  function isAiPanelHotkey(event) {
+    const shared = global.TabWallAiCore?.isOptionLetterHotkey;
+    if (typeof shared === 'function') return shared(event, 'KeyA');
+    return Boolean(
+      event && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
+      event.code === 'KeyA' && !event.repeat && !event.isComposing && event.keyCode !== 229
+    );
+  }
+
   function showUiOnly() {
     if (!env?.aiBox) return;
     env.aiBox.classList.add('open');
@@ -128,6 +144,14 @@
     env.settingsAiAllowedTools.value = settings.allowedBridgeTools.join(', ');
   }
 
+  function handleAiShortcut(event) {
+    if (!isAiPanelHotkey(event)) return;
+    if (isEditableTarget(event.target) && event.target !== env?.aiInput) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openAiBox();
+  }
+
   function init() {
     ensureBound('init');
     if (initialized) return;
@@ -145,6 +169,7 @@
         .forEach((input) => input.addEventListener(eventName, () => persistAiSettings().catch(() => {})));
     });
     env.setupFloatDrag?.(env.aiDrag, env.aiBox);
+    global.document?.addEventListener('keydown', handleAiShortcut, true);
     core.init();
     syncSettingsUi();
   }
@@ -156,5 +181,7 @@
     closeAiBox,
     syncSettingsUi,
     parseAllowedTools,
+    isAiPanelHotkey,
+    handleAiShortcut,
   };
 })(typeof self !== 'undefined' ? self : globalThis);

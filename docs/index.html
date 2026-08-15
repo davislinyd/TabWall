@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.43.3 使用者說明：儲存分頁與 Tab Group、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.43.11 使用者說明：儲存分頁與 Tab Group、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.43.3</span>
+      <span>使用者說明 · v2.43.11</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -69,7 +69,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.43.3</span><span lang="en">Version 2.43.3</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.43.11</span><span lang="en">Version 2.43.11</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -89,8 +89,8 @@
           <li lang="en">Turn on Developer mode.</li>
           <li lang="zh-Hant">選擇「載入未封裝項目」，指定解壓後的 TabWall 資料夾（內含 <code>manifest.json</code>）。</li>
           <li lang="en">Choose Load unpacked and select the unzipped TabWall folder (it must contain <code>manifest.json</code>).</li>
-          <li lang="zh-Hant">到 <code>chrome://extensions/shortcuts</code> 確認四個有預設鍵的 Chrome 命令；需要時再手動綁定沒有預設鍵的 <code>open-ai</code>。衝突時請改成你習慣的組合。</li>
-          <li lang="en">Check <code>chrome://extensions/shortcuts</code> for the four commands with suggested keys; bind the optional <code>open-ai</code> command manually when needed.</li>
+          <li lang="zh-Hant">到 <code>edge://extensions/shortcuts</code>（Chrome 為 <code>chrome://extensions/shortcuts</code>）確認四個有預設鍵的命令；需要時再手動綁定沒有預設鍵的 <code>open-ai</code>。衝突時請改成你習慣的組合。</li>
+          <li lang="en">On Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for the four commands with suggested keys; bind the optional <code>open-ai</code> command manually when needed.</li>
         </ol>
         <div class="callout warn">
           <p lang="zh-Hant">安裝、重新載入或更新後，若網頁上的浮層或 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 沒反應，請重新整理該分頁。舊頁面可能仍掛著上一版注入腳本。</p>
@@ -544,8 +544,8 @@ https://wiki.example.com
           <li><kbd>Esc</kbd> <span lang="zh-Hant">關閉。</span><span lang="en">closes it.</span></li>
         </ul>
         <div class="callout warn">
-          <p lang="zh-Hant">這不是 Chrome command，無法在 <code>chrome://extensions/shortcuts</code> 改鍵。特殊頁無法注入時請改開 TabWall 本體搜尋。</p>
-          <p lang="en">This is not a Chrome command, so it cannot be rebound in <code>chrome://extensions/shortcuts</code>. On pages that cannot be injected, search inside TabWall instead.</p>
+          <p lang="zh-Hant">這不是瀏覽器 command，無法在快捷鍵設定頁改鍵。特殊頁無法注入時請改開 TabWall 本體搜尋。</p>
+          <p lang="en">This is not a browser command, so it cannot be rebound in shortcut settings. On pages that cannot be injected, search inside TabWall instead.</p>
         </div>
       </section>
 
@@ -570,16 +570,16 @@ https://wiki.example.com
             <h3 lang="zh-Hant">外部面板與安全</h3>
             <h3 lang="en">Panel and safety</h3>
             <ul>
-              <li lang="zh-Hant">一般網頁按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>A</kbd> 開啟，不必進入 TabWall；面板支援 streaming Markdown、來源分頁與工具確認。</li>
-              <li lang="en">Press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>A</kbd> on a normal page; the wall does not need to be open. The panel supports streaming Markdown, sources, and tool confirmations.</li>
+              <li lang="zh-Hant">一般網頁按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>A</kbd> 開啟外部面板；TabWall overlay 或 standalone 頁面中，Option+A 會聚焦內建 AI。</li>
+              <li lang="en">Press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>A</kbd> on a normal page to open the external panel; inside the TabWall overlay or standalone page, Option+A focuses built-in AI.</li>
               <li lang="zh-Hant">Bridge 是選用功能，只呼叫 allowlist 內的本機工具；第三方 API key 留在 bridge，寫入或外部資料揭露需要逐次確認，token 只存在目前 session。</li>
               <li lang="en">The bridge is optional and only calls allowlisted local tools. Third-party API keys stay in the bridge; writes and external data disclosure require confirmation, and the token is session-only.</li>
               <li lang="zh-Hant">輸入框 500ms 內連按兩次非 IME <kbd>Escape</kbd> 可最小化；agent 會繼續執行。底部把手可調整面板高度，浮動 AI icon 為原尺寸 60%。</li>
               <li lang="en">Two non-IME <kbd>Escape</kbd> presses within 500ms minimize the panel while the agent continues. Resize the height from the bottom handle; the floating AI icon is 60% of its previous size.</li>
             </ul>
             <div class="callout warn">
-              <p lang="zh-Hant">受限頁面無法注入 content script；若要使用 Chrome command，請在 <code>chrome://extensions/shortcuts</code> 手動綁定沒有預設鍵的 <code>open-ai</code>。</p>
-              <p lang="en">Restricted pages cannot receive the content script. Bind the no-default-key <code>open-ai</code> Chrome command manually in <code>chrome://extensions/shortcuts</code> when needed.</p>
+              <p lang="zh-Hant">受限頁面無法注入 content script；若要使用瀏覽器 command，Edge 請在 <code>edge://extensions/shortcuts</code>、Chrome 請在 <code>chrome://extensions/shortcuts</code> 手動綁定沒有預設鍵的 <code>open-ai</code>。</p>
+              <p lang="en">Restricted pages cannot receive the content script. Bind the no-default-key <code>open-ai</code> browser command manually in Edge at <code>edge://extensions/shortcuts</code> or in Chrome at <code>chrome://extensions/shortcuts</code>.</p>
             </div>
           </article>
         </div>
@@ -789,8 +789,8 @@ https://wiki.example.com
         <h3 lang="zh-Hant">快捷鍵沒反應</h3>
         <h3 lang="en">Shortcuts do nothing</h3>
         <ol>
-          <li lang="zh-Hant">到 <code>chrome://extensions/shortcuts</code> 看四個預設命令是否「未綁定」或跟別的擴充功能衝突；需要時可另外綁定 <code>open-ai</code>。</li>
-          <li lang="en">Check <code>chrome://extensions/shortcuts</code> for unbound or conflicting default commands; bind <code>open-ai</code> separately when needed.</li>
+          <li lang="zh-Hant">Edge 到 <code>edge://extensions/shortcuts</code>（Chrome 到 <code>chrome://extensions/shortcuts</code>）看四個預設命令是否「未綁定」或跟別的擴充功能衝突；需要時可另外綁定 <code>open-ai</code>。</li>
+          <li lang="en">In Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for unbound or conflicting default commands; bind <code>open-ai</code> separately when needed.</li>
           <li lang="zh-Hant">重新整理目前分頁（更新後舊注入會失效）。</li>
           <li lang="en">Refresh the tab (old injections die after an update).</li>
           <li lang="zh-Hant">牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、<kbd>⌘</kbd>+<kbd>Z</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
@@ -807,8 +807,8 @@ https://wiki.example.com
         <h2 lang="en">Shortcuts</h2>
         <h3 lang="zh-Hant">由 Chrome 管理（可改）</h3>
         <h3 lang="en">Managed by Chrome (customizable)</h3>
-        <p lang="zh-Hant">預設只在安裝時建議；實際以 <code>chrome://extensions/shortcuts</code> 為準。</p>
-        <p lang="en">Suggested keys apply at install time. The live bindings are whatever <code>chrome://extensions/shortcuts</code> shows.</p>
+        <p lang="zh-Hant">預設只在安裝時建議；Edge 實際以 <code>edge://extensions/shortcuts</code>、Chrome 實際以 <code>chrome://extensions/shortcuts</code> 為準。</p>
+        <p lang="en">Suggested keys apply at install time. In Edge use <code>edge://extensions/shortcuts</code>; in Chrome use <code>chrome://extensions/shortcuts</code>.</p>
         <table>
           <thead>
             <tr>
@@ -901,8 +901,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.43.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.43.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.43.11</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.43.11</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

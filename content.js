@@ -4,8 +4,21 @@
  */
 
 (() => {
-  if (window.__tabWallInjected) return;
-  window.__tabWallInjected = true;
+  const INJECTED_MARKER = '__tabWallInjected';
+  const runtimeIdentity = (() => {
+    try {
+      const version = chrome.runtime.getManifest?.()?.version || '';
+      return `${chrome.runtime.id || ''}@${version}`;
+    } catch {
+      return '';
+    }
+  })();
+  const previousInstance = window[INJECTED_MARKER];
+  try {
+    if (previousInstance?.active === true) previousInstance.dispose?.();
+  } catch {
+    // A stale content-script instance may belong to a reloaded extension.
+  }
 
   const ROOT_ID = 'tabwall-root';
   const EXTENSION_ORIGIN = new URL(chrome.runtime.getURL('park.html')).origin;
@@ -13,6 +26,7 @@
   let rootEl = null;
   let shadow = null;
   let messageHandler = null;
+  let runtimeMessageHandler = null;
   let keyHandler = null;
   let iframeEl = null;
   /** @type {object|null} */
@@ -20,6 +34,22 @@
   /** @type {object|null} */
   let pendingPreSave = null;
   let iframeReady = false;
+  let previousActiveElement = null;
+
+  function restorePreviousFocus() {
+    const target = previousActiveElement;
+    previousActiveElement = null;
+    if (!target || typeof target.focus !== 'function') return;
+    try {
+      target.focus({ preventScroll: true });
+    } catch {
+      try {
+        target.focus();
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   function destroy() {
     if (pendingConflict) {
@@ -54,6 +84,22 @@
     iframeReady = false;
     pendingConflict = null;
     pendingPreSave = null;
+    restorePreviousFocus();
+  }
+
+  function dispose() {
+    destroy();
+    if (runtimeMessageHandler) {
+      try {
+        chrome.runtime.onMessage.removeListener(runtimeMessageHandler);
+      } catch {
+        // ignore stale extension contexts
+      }
+      runtimeMessageHandler = null;
+    }
+    if (window[INJECTED_MARKER]?.dispose === dispose) {
+      delete window[INJECTED_MARKER];
+    }
   }
 
   function focusParkSearch() {
@@ -163,6 +209,7 @@
 
   function open() {
     if (isOpen) return;
+    previousActiveElement = document.activeElement;
     isOpen = true;
     iframeReady = false;
 
@@ -177,7 +224,7 @@
       .shell {
         position: fixed;
         inset: 0;
-        z-index: 2147483646;
+        z-index: 2147483647;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -316,7 +363,7 @@
     else open();
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  runtimeMessageHandler = (message, _sender, sendResponse) => {
     if (message?.type === 'PING') {
       sendResponse({ ok: true });
       return false;
@@ -363,5 +410,11 @@
       return false;
     }
     return false;
-  });
+  };
+  chrome.runtime.onMessage.addListener(runtimeMessageHandler);
+  window[INJECTED_MARKER] = {
+    active: true,
+    runtimeIdentity,
+    dispose,
+  };
 })();

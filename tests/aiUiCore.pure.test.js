@@ -47,6 +47,24 @@ function tags(node) {
   return [node.tagName, ...(node.children || []).flatMap(tags)];
 }
 
+test('Option letter hotkeys use the physical key and reject modifiers, IME, and repeat', () => {
+  const core = loadCore();
+  assert.equal(core.isOptionLetterHotkey({ altKey: true, code: 'KeyA' }, 'KeyA'), true);
+  assert.equal(core.isOptionLetterHotkey({ altKey: true, code: 'KeyA', key: 'å' }, 'KeyA'), true);
+  for (const event of [
+    { altKey: false, code: 'KeyA' },
+    { altKey: true, metaKey: true, code: 'KeyA' },
+    { altKey: true, ctrlKey: true, code: 'KeyA' },
+    { altKey: true, shiftKey: true, code: 'KeyA' },
+    { altKey: true, code: 'KeyA', repeat: true },
+    { altKey: true, code: 'KeyA', isComposing: true },
+    { altKey: true, code: 'KeyA', keyCode: 229 },
+    { altKey: true, code: 'KeyB' },
+  ]) {
+    assert.equal(core.isOptionLetterHotkey(event, 'KeyA'), false);
+  }
+});
+
 test('safe Markdown parser creates readable blocks and inline nodes', () => {
   const core = loadCore();
   const blocks = core.parseSafeMarkdown([

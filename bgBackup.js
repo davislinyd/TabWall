@@ -1483,6 +1483,12 @@ async function flashBadge(text, color = '#ef4444', ms = 2000) {
 }
 
 async function getActiveTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tabs[0]) return tabs[0];
+  } catch {
+    // Fall through for older Chromium implementations.
+  }
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   return tabs[0] || null;
 }
@@ -1504,13 +1510,20 @@ async function openStandaloneParkTab({ focusReminderId = '' } = {}) {
     ? `${baseUrl}&focusReminder=${encodeURIComponent(String(focusReminderId))}`
     : baseUrl;
   try {
-    let matches = await chrome.tabs.query({ url: baseUrl });
-    if ((!matches || !matches.length) && focusReminderId) {
-      try {
-        matches = await chrome.tabs.query({ url: `${baseUrl}*` });
-      } catch {
-        matches = [];
-      }
+    // tabs.query({ url }) accepts match patterns, not arbitrary URLs with a
+    // query string. Query all tabs and compare the extension URL directly so
+    // restricted-page fallbacks can still create or focus the standalone UI.
+    let matches = [];
+    try {
+      const tabs = await chrome.tabs.query({ windowType: 'normal' });
+      matches = (tabs || []).filter((tab) => {
+        const candidate = typeof tab?.url === 'string' ? tab.url : '';
+        return focusReminderId
+          ? candidate === baseUrl || candidate.startsWith(`${baseUrl}&`)
+          : candidate === baseUrl;
+      });
+    } catch {
+      // Reuse is best-effort; still try to create the standalone page.
     }
     const existing = (matches || []).find((tab) => tab?.id != null);
     if (existing) {
@@ -1635,14 +1648,32 @@ async function openAiPanelOnActiveTab() {
   }
 }
 
+async function toggleAiPanelOnActiveTab() {
+  const tab = await getActiveTab();
+  if (!tab?.id) return notifyAiPanelUnavailable(tab, 'no_active_tab');
+  if (isRestrictedUrl(tab.url)) return notifyAiPanelUnavailable(tab, 'restricted_page');
+  if (!await ensureAiPanelContentScript(tab.id)) return notifyAiPanelUnavailable(tab, 'inject_failed');
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_AI_PANEL' });
+    if (response?.ok === false) return notifyAiPanelUnavailable(tab, 'open_failed');
+    return { ok: true, mode: 'panel', tabId: tab.id, open: response?.open };
+  } catch (err) {
+    console.warn('[TabWall] toggle AI panel failed:', err);
+    return notifyAiPanelUnavailable(tab, 'open_failed');
+  }
+}
+
 async function sendToTab(tabId, message) {
   const ok = await ensureContentScript(tabId);
   if (!ok) throw new Error('inject_failed');
-  return chrome.tabs.sendMessage(tabId, message);
+  const response = await chrome.tabs.sendMessage(tabId, message);
+  if (response?.ok === false) {
+    throw new Error(response.error || 'content_action_failed');
+  }
+  return response;
 }
 
-async function toggleParkOnActiveTab() {
-  const tab = await getActiveTab();
+async function toggleParkOnTab(tab) {
   if (tab?.url && isOwnParkPageUrl(tab.url)) {
     return { ok: true, mode: 'already-open', tabId: tab.id ?? null };
   }
@@ -1658,8 +1689,20 @@ async function toggleParkOnActiveTab() {
   }
 }
 
-async function openParkOnActiveTab() {
-  const tab = await getActiveTab();
+async function toggleParkOnActiveTab() {
+  return toggleParkOnTab(await getActiveTab());
+}
+
+async function getTabById(tabId) {
+  if (tabId == null) return null;
+  try {
+    return await chrome.tabs.get(tabId);
+  } catch {
+    return null;
+  }
+}
+
+async function openParkOnTabTarget(tab) {
   if (tab?.url && isOwnParkPageUrl(tab.url)) {
     return { ok: true, mode: 'already-open', tabId: tab.id ?? null };
   }
@@ -1670,6 +1713,13 @@ async function openParkOnActiveTab() {
     return { ok: true, mode: 'overlay', tabId: tab.id };
   }
   return openStandaloneParkTab();
+}
+
+async function openParkOnActiveTab(targetTabId = null) {
+  const tab = targetTabId == null
+    ? await getActiveTab()
+    : await getTabById(targetTabId);
+  return openParkOnTabTarget(tab || await getActiveTab());
 }
 
 async function openParkOnTab(tabId, extraMessage = null) {

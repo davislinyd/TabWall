@@ -140,7 +140,14 @@ async function openPark() {
   busy = true;
   setStatus(text('opening'), 'busy');
   syncButtonState();
-  const result = await sendMessage({ type: 'OPEN_PARK_ACTIVE' });
+  let targetTabId = null;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    targetTabId = tabs[0]?.id ?? null;
+  } catch {
+    // The background page can still use its active-tab fallback.
+  }
+  const result = await sendMessage({ type: 'OPEN_PARK_ACTIVE', targetTabId });
   if (result.ok) {
     window.close();
     return;

@@ -8,7 +8,7 @@ const POPUP_SOURCE = fs.readFileSync(new URL('../popup.js', import.meta.url), 'u
 
 test('extension action opens the TabWall popup', () => {
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(MANIFEST.version, '2.43.3');
+  assert.equal(MANIFEST.version, '2.43.11');
   assert.match(POPUP_HTML, /<script src="popup\.js"><\/script>/);
 });
 
@@ -22,7 +22,8 @@ test('popup exposes separate tab and group save actions plus panel opening', () 
   assert.match(POPUP_SOURCE, /type: 'SAVE_ACTIVE_TAB', afterSave: 'close'/);
   assert.match(POPUP_SOURCE, /type: 'SAVE_ACTIVE_GROUP', afterSaveGroup: 'keep'/);
   assert.match(POPUP_SOURCE, /type: 'SAVE_ACTIVE_GROUP', afterSaveGroup: 'close'/);
-  assert.match(POPUP_SOURCE, /type: 'OPEN_PARK_ACTIVE'/);
+  assert.match(POPUP_SOURCE, /type: 'OPEN_PARK_ACTIVE', targetTabId/);
+  assert.match(POPUP_SOURCE, /chrome\.tabs\.query\(\{ active: true, currentWindow: true \}\)/);
   assert.match(POPUP_SOURCE, /for \(const button of groupActionButtons\)/);
   assert.match(POPUP_SOURCE, /button\.disabled = busy \|\| !currentTabInGroup/);
 });

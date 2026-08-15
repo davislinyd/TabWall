@@ -21,6 +21,9 @@ function createElement(tagName) {
     addEventListener(type, listener) {
       listeners.set(type, listener);
     },
+    removeEventListener(type, listener) {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
     append(...nodes) {
       nodes.forEach((node) => {
         node.parentNode = this;
@@ -30,6 +33,9 @@ function createElement(tagName) {
     appendChild(node) {
       this.append(node);
       return node;
+    },
+    focus() {
+      this.focused = true;
     },
     attachShadow() {
       const shadow = createElement('shadow-root');
@@ -57,16 +63,22 @@ function createElement(tagName) {
   return element;
 }
 
-function createContentRuntime() {
+function createContentRuntime({ marker = false } = {}) {
   const windowListeners = new Map();
   const documentListeners = new Map();
   const frameQueue = [];
   const root = createElement('html');
   const runtimeListeners = [];
   const sentMessages = [];
+  const focusCalls = [];
+  const previousFocus = {
+    focus(options) {
+      focusCalls.push(options);
+    },
+  };
   let saveResponse = null;
   const windowObject = {
-    __tabWallInjected: false,
+    __tabWallInjected: marker,
     parent: {},
     setTimeout(callback) {
       callback();
@@ -79,14 +91,21 @@ function createContentRuntime() {
     addEventListener(type, listener) {
       windowListeners.set(type, listener);
     },
+    removeEventListener(type, listener) {
+      if (windowListeners.get(type) === listener) windowListeners.delete(type);
+    },
     dispatch(type, event = {}) {
       windowListeners.get(type)?.(event);
     },
   };
   const documentObject = {
     documentElement: root,
+    activeElement: previousFocus,
     addEventListener(type, listener) {
       documentListeners.set(type, listener);
+    },
+    removeEventListener(type, listener) {
+      if (documentListeners.get(type) === listener) documentListeners.delete(type);
     },
     createElement,
   };
@@ -121,6 +140,7 @@ function createContentRuntime() {
     document: documentObject,
     window: windowObject,
     frameQueue,
+    focusCalls,
     runtimeListeners,
     sentMessages,
     get root() {
@@ -154,6 +174,26 @@ test('overlay CSS is 98% panel with backdrop blur', () => {
   assert.match(SOURCE, /-webkit-backdrop-filter:\s*blur\(/);
   assert.match(SOURCE, /\.panel\s*\{[^}]*width:\s*98%/);
   assert.match(SOURCE, /\.panel\s*\{[^}]*height:\s*98%/);
+  assert.match(SOURCE, /\.shell\s*\{[^}]*z-index:\s*2147483647/);
+  assert.match(SOURCE, /previousActiveElement/);
+});
+
+test('closing the overlay restores the page element that had focus', () => {
+  const runtime = createContentRuntime();
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.ok(runtime.root);
+
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.equal(runtime.focusCalls.length, 1);
+  assert.equal(runtime.focusCalls[0].preventScroll, true);
+  assert.equal(runtime.root, undefined);
+});
+
+test('content shell replaces a stale reload marker instead of skipping injection', () => {
+  const runtime = createContentRuntime({ marker: true });
+  assert.equal(runtime.runtimeListeners.length, 1);
+  assert.equal(runtime.window.__tabWallInjected.active, true);
+  assert.equal(typeof runtime.window.__tabWallInjected.dispose, 'function');
 });
 
 test('overlay quick save hides TabWall before capture and restores it after response', async () => {

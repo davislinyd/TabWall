@@ -16,9 +16,9 @@ test('AI panel exposes local endpoint, bridge, sources, and confirmation control
   assert.match(html, /id="aiBridgeToken"/);
   assert.match(html, /id="aiBridgeToken"[^>]*autocomplete="new-password"/);
   assert.match(html, /data-settings-section="ai"/);
-  assert.equal(manifest.version, '2.43.3');
+  assert.equal(manifest.version, '2.43.11');
   assert.ok(manifest.web_accessible_resources[0].resources.includes('parkAiUi.js'));
-  assert.deepEqual(manifest.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js']);
+  assert.deepEqual(manifest.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js']);
 });
 
 test('AI UI renders model and tool data as text', () => {
@@ -51,6 +51,7 @@ test('AI message classes and scrollbar surfaces match both panel implementations
 test('AI waiting state animates and search ai token opens the AI panel', () => {
   const ui = read('aiUiCore.js');
   const external = read('aiPanel.js');
+  const internal = read('parkAiUi.js');
   const searchUi = read('parkSearchUi.js');
   const css = read('park.css');
   assert.match(ui, /t\('aiWorking'\)/);
@@ -58,6 +59,10 @@ test('AI waiting state animates and search ai token opens the AI panel', () => {
   assert.match(external, /tabwall-external-ai-dots/);
   assert.match(searchUi, /ai: 'ai'/);
   assert.match(searchUi, /ctx\.openAiBox\(\)/);
+  assert.match(internal, /isOptionLetterHotkey/);
+  assert.match(internal, /handleAiShortcut/);
+  assert.match(internal, /addEventListener\('keydown', handleAiShortcut, true\)/);
+  assert.match(internal, /openAiBox\(\)/);
   assert.match(css, /tabwall-ai-waiting-dots/);
 });
 

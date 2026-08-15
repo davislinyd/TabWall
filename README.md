@@ -38,11 +38,11 @@ In TabWall Settings → AI:
 - Set `contextSize` to the same value as llama-server `-c` (default `8192`). TabWall trims large page and tool results before sending them and reserves output space; it does not change the server configuration.
 - The bridge is optional. It exposes only registered local tools, keeps third-party API keys in the bridge, and requires confirmation before writes or external data disclosure. The bridge token is session-only.
 
-On a normal page, press `Option/Alt+A` to open the external AI panel without opening TabWall. It prioritizes the current page, can search/read open and saved tab context, and shows sources and tool confirmations. The panel supports streaming Markdown replies, bottom-edge height resizing, and two non-IME `Escape` presses within 500ms to minimize while the agent continues running. Bind the `open-ai` Chrome command manually in `chrome://extensions/shortcuts` if you need an explicit command for restricted pages.
+On a normal page, press `Option/Alt+A` to open the external AI panel without opening TabWall. Inside the TabWall overlay or standalone page, the same shortcut focuses the built-in AI. It prioritizes the current page, can search/read open and saved tab context, and shows sources and tool confirmations. The panel supports streaming Markdown replies, bottom-edge height resizing, and two non-IME `Escape` presses within 500ms to minimize while the agent continues running. Bind the `open-ai` browser command manually in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) if you need an explicit command for restricted pages.
 
 ### Shortcuts
 
-Chrome command defaults are declared in `manifest.json` and managed in `chrome://extensions/shortcuts`.
+Browser command defaults are declared in `manifest.json` and managed in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`).
 
 | Shortcut | Action |
 |----------|--------|
@@ -50,7 +50,7 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `Option/Alt+Shift+S` | Park the current tab or Tab Group and keep it open |
 | `Option/Alt+Shift+G` | Park the current Tab Group (uses the configured after-save behavior) |
 | `Option/Alt+O` | Toggle the TabWall canvas |
-| `Option/Alt+A` | Open the local AI panel on a normal page (content-script shortcut) |
+| `Option/Alt+A` | Open external AI on a normal page; focus built-in AI inside TabWall (content-script shortcut) |
 | `/` | Focus search |
 | `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
 | Plain search | `||` means OR; spaces and `&&` mean AND |
@@ -152,7 +152,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 1. Open `chrome://extensions` and enable Developer mode.
 2. Choose Load unpacked and select this folder.
 3. After code changes, use Chrome's Reload action for the extension.
-4. If a command is unbound or conflicts with another command, open `chrome://extensions/shortcuts` and assign a different combination.
+4. If a command is unbound or conflicts with another command, open Edge's `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) and assign a different combination.
 
 #### Sharing with others
 
@@ -246,7 +246,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前四項是有安裝時建議鍵的 Chrome commands；另有沒有預設鍵的 `open-ai` command，可在需要時手動綁定。`Option/Alt+A` 由一般網頁的 content script 處理，不是 Chrome command。既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定，請在 Chrome 快捷鍵設定頁管理；TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+前四項是有安裝時建議鍵的瀏覽器 commands；另有沒有預設鍵的 `open-ai` command，可在需要時手動綁定。`Option/Alt+A` 由一般網頁的 content script 處理，不是瀏覽器 command。既有 Edge／Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定，請在 Edge 的 `edge://extensions/shortcuts`（Chrome 的 `chrome://extensions/shortcuts`）管理；TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
 
 點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
@@ -326,10 +326,10 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 #### 從此儲存庫安裝
 
-1. 開啟 `chrome://extensions`，啟用開發人員模式。
+1. 開啟 Edge 的 `edge://extensions`（Chrome 的 `chrome://extensions`），啟用開發人員模式。
 2. 選擇「載入未封裝項目」，指定此資料夾。
 3. 程式變更後，使用 Chrome 擴充功能卡片上的「重新載入」。
-4. 若命令未綁定或與其他命令衝突，開啟 `chrome://extensions/shortcuts` 並指定其他組合鍵。
+4. 若命令未綁定或與其他命令衝突，開啟 Edge 的 `edge://extensions/shortcuts`（Chrome 的 `chrome://extensions/shortcuts`）並指定其他組合鍵。
 
 #### 分享給其他人
 

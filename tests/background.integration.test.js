@@ -130,10 +130,14 @@ function createRuntime() {
       onActivated: event(),
       onUpdated: event(),
       async query(queryInfo = {}) {
+        if (queryInfo.active && queryInfo.lastFocusedWindow) {
+          return runtime.lastFocusedTabs ?? runtime.activeTabs;
+        }
         if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
         if (queryInfo.url) {
           return runtime.parkTabs.filter((tab) => tab.url === queryInfo.url);
         }
+        if (queryInfo.windowType === 'normal') return runtime.parkTabs;
         if (queryInfo.groupId != null) return runtime.groupTabs;
         return [];
       },
@@ -166,7 +170,8 @@ function createRuntime() {
           status: 'complete',
         };
       },
-      async sendMessage() {
+      async sendMessage(tabId, message) {
+        runtime.tabMessages.push({ tabId, message });
         if (runtime.failSendMessage) throw new Error('send_message_failed');
       },
       async captureVisibleTab() { return ''; },
@@ -217,11 +222,13 @@ function createRuntime() {
     failWindowCreate: false,
     nextTabId: 100,
     createdTabs: [],
+    lastFocusedTabs: null,
     updatedTabs: [],
     updatedWindows: [],
     badgeCalls,
     alarmStore,
     notificationCalls,
+    tabMessages: [],
     parkTabs: [],
     currentTab: null,
     downloadItems: [],
@@ -449,7 +456,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.43.3');
+  assert.equal(MANIFEST.version, '2.43.11');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -460,7 +467,7 @@ test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 5);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
   assert.equal(MANIFEST.commands?.['open-ai']?.suggested_key, undefined);
-  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js']);
+  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js']);
 });
 
 test('action badge matches standalone tabs and group members by exact URL', async () => {
@@ -1112,6 +1119,22 @@ test('open panel action opens overlay, standalone fallback, or reuses TabWall', 
   assert.equal(existing.ok, true);
   assert.equal(existing.mode, 'already-open');
   assert.equal(existing.tabId, 803);
+});
+
+test('popup panel opening targets the requested tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 816, windowId: 1, url: 'https://popup-tab.example/' }];
+  runtime.runtime.lastFocusedTabs = [{ id: 815, windowId: 2, url: 'https://other-window.example/' }];
+
+  const result = await dispatchMessage(runtime, {
+    type: 'OPEN_PARK_ACTIVE',
+    targetTabId: 816,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'overlay');
+  assert.equal(result.tabId, 816);
 });
 
 test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
@@ -2112,6 +2135,19 @@ test('toggle keeps the overlay path for regular HTTPS tabs', async () => {
   assert.equal(runtime.runtime.createdTabs.length, 0);
 });
 
+test('active-tab actions prefer the last focused Edge window', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [];
+  runtime.runtime.lastFocusedTabs = [{ id: 14, windowId: 2, url: 'https://last-focused.example/' }];
+
+  const result = await runtime.api.handleCommandAction('toggle-park');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'overlay');
+  assert.equal(result.tabId, 14);
+});
+
 test('toggle opens a standalone page for restricted tabs', async () => {
   const runtime = createRuntime();
   await runtime.ready;
@@ -2192,7 +2228,29 @@ test('toggle-park command uses the same restricted-page fallback', async () => {
   assert.equal(runtime.runtime.createdTabs[0].url, 'chrome-extension://test/park.html?surface=standalone');
 });
 
-test('open-ai command opens the external panel on normal pages and notifies on restricted pages', async () => {
+test('native Option+O command uses one toggle path and debounce guard', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.activeTabs = [{ id: 13, windowId: 1, url: 'https://toggle-command.example/' }];
+
+  const first = await runtime.api.handleCommandAction('toggle-park');
+  assert.equal(first.ok, true);
+  assert.equal(first.mode, 'overlay');
+
+  const duplicate = await runtime.api.handleCommandAction('toggle-park');
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.error, 'debounced');
+});
+
+test('background no longer exposes a content-script Option+O action message', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const result = await dispatchMessage(runtime, { type: 'TOGGLE_PARK_ACTIVE' });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'unknown_type');
+});
+
+test('open-ai command toggles the external panel on normal pages and notifies on restricted pages', async () => {
   const normal = createRuntime();
   await normal.ready;
   normal.runtime.activeTabs = [{ id: 121, windowId: 1, url: 'https://ai-panel.example/' }];
@@ -2200,6 +2258,11 @@ test('open-ai command opens the external panel on normal pages and notifies on r
   assert.equal(opened.ok, true);
   assert.equal(opened.mode, 'panel');
   assert.equal(opened.tabId, 121);
+  assert.equal(normal.runtime.tabMessages.at(-1).tabId, 121);
+  assert.equal(normal.runtime.tabMessages.at(-1).message.type, 'TOGGLE_AI_PANEL');
+  const closed = await normal.api.handleCommandAction('open-ai');
+  assert.equal(closed.ok, true);
+  assert.equal(normal.runtime.tabMessages.filter(({ message }) => message.type === 'TOGGLE_AI_PANEL').length, 2);
 
   const restricted = createRuntime();
   await restricted.ready;
