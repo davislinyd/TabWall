@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.43.11 使用者說明：儲存分頁與 Tab Group、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.44.0 使用者說明：儲存分頁與 Tab Group、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.43.11</span>
+      <span>使用者說明 · v2.44.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -69,7 +69,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.43.11</span><span lang="en">Version 2.43.11</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.44.0</span><span lang="en">Version 2.44.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -254,6 +254,8 @@ https://wiki.example.com
         <h2 lang="en">Spatial canvas</h2>
         <p lang="zh-Hant">預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
         <p lang="en">The default view is an infinite canvas you can pan and zoom. Card previews are 16:10. At 100% zoom cards look about 10% larger; stored positions stay compatible.</p>
+        <p lang="zh-Hant">畫布視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。</p>
+        <p lang="en">The canvas viewport and zoom persist when switching between list and canvas or reopening TabWall; automatic centering runs only on first use.</p>
         <p lang="zh-Hant">滑鼠移到畫布或卡片網格的卡片上時，卡片會放大約 1.30 倍；拖曳與 Stack hover 會保留操作優先順序。Quiet／作業系統 reduced-motion 設定會抑制這個效果。</p>
         <p lang="en">Hovering a card on the Canvas or in the card grid enlarges it to about 1.30×. Dragging and Stack hover keep interaction priority. Quiet and OS reduced-motion settings suppress the effect.</p>
         <table>
@@ -281,6 +283,12 @@ https://wiki.example.com
               <td lang="en">Frame select</td>
               <td lang="zh-Hant">拉矩形選多張卡片。</td>
               <td lang="en">Drag a rectangle to select cards.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">點擊 minimap 空白處或卡片</td>
+              <td lang="en">Click the minimap background or a card</td>
+              <td lang="zh-Hant">以該世界座標置中畫布並保留目前縮放；搜尋預覽只會暫時套用。</td>
+              <td lang="en">Center the canvas on that world point while keeping the current zoom; search previews remain transient.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">「連結」</td>
@@ -669,8 +677,8 @@ https://wiki.example.com
       <section class="chapter" id="wallpaper">
         <h2 lang="zh-Hant">自訂背景</h2>
         <h2 lang="en">Custom background</h2>
-        <p lang="zh-Hant">設定 → 顯示 → 背景。上傳一張靜態圖片；與 Sticker Note 附件相同會壓縮並正規化（WebP，必要時 PNG）。不支援影片。</p>
-        <p lang="en">Settings → Display → Background. Upload one static image. It is compressed and normalized like a Sticker Note attachment (WebP, PNG fallback). Video is not supported.</p>
+        <p lang="zh-Hant">設定 → 顯示 → 背景。上傳一張靜態圖片；與 Sticker Note 附件相同會壓縮並正規化（WebP，必要時 PNG）。背景啟用時會隱藏 Canvas 定位點，移除後恢復原本網格。不支援影片。</p>
+        <p lang="en">Settings → Display → Background. Upload one static image. It is compressed and normalized like a Sticker Note attachment (WebP, PNG fallback). The Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Video is not supported.</p>
         <ul>
           <li lang="zh-Hant"><strong>符合方式：</strong>置中、符合寬度、符合高度、原始大小。</li>
           <li lang="en"><strong>Fit:</strong> center, fit to width, fit to height, or original size.</li>
@@ -901,8 +909,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.43.11</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.43.11</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.44.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.44.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

@@ -406,7 +406,10 @@
     if (mode !== 'list' && mode !== 'canvas') mode = 'canvas';
     const isList = mode === 'list';
     const isCanvas = mode === 'canvas';
-    if (!isCanvas) env.canvasSearchPreview = null;
+    if (!isCanvas) {
+      env.canvasSearchPreview = null;
+      env.ensureCanvasStore()?.flush?.().catch?.(() => {});
+    }
     env.gridEl.classList.toggle('cards', !isList);
     env.gridEl.classList.toggle('list', isList);
     syncViewModeButton(mode);

@@ -172,6 +172,7 @@ const canvasConnectionCurveSegments = CanvasGeom.canvasConnectionCurveSegments;
 const canvasConnectionPathD = CanvasGeom.canvasConnectionPathD;
 const canvasConnectionHandlePoint = CanvasGeom.canvasConnectionHandlePoint;
 const canvasMinimapProjectionFor = CanvasGeom.canvasMinimapProjectionFor;
+const canvasMinimapViewportForPoint = CanvasGeom.canvasMinimapViewportForPoint;
 const canvasWheelZoomFactor = CanvasGeom.canvasWheelZoomFactor;
 const canvasWheelZoomSensitivity = CanvasGeom.canvasWheelZoomSensitivity;
 const canvasZoomToFitCardColumns = CanvasGeom.canvasZoomToFitCardColumns;
@@ -688,6 +689,7 @@ function bindPanelModules() {
     "canvasItemById": () => canvasItemById,
     "canvasItemPassesIndexFilter": () => canvasItemPassesIndexFilter,
     "canvasMinimap": () => canvasMinimap,
+    "canvasMinimapViewportForPoint": () => canvasMinimapViewportForPoint,
     "canvasMinimapViewport": () => canvasMinimapViewport,
     "canvasMoveSelected": () => canvasMoveSelected,
     "canvasNodeActionEntries": () => canvasNodeActionEntries,

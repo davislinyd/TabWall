@@ -152,6 +152,19 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
 
+test('Canvas wallpaper, camera restore, and minimap click-to-locate contracts are wired', () => {
+  assert.match(CSS_SOURCE, /body\.has-wallpaper \.canvas-viewport[\s\S]*?background-image:\s*none;/);
+  assert.match(CANVAS_CHROME_SOURCE, /const shouldRun = Boolean\(env\.canvasNeedsInitialCenter\);/);
+  assert.doesNotMatch(CANVAS_CHROME_SOURCE, /isUnsetCanvasZoom/);
+  assert.match(SETTINGS_UI_SOURCE, /env\.ensureCanvasStore\(\)\?\.flush\?\.\(\)\.catch\?\./);
+  assert.match(CANVAS_IX_SOURCE, /function handleCanvasMinimapPointerDown\(event\)/);
+  assert.match(CANVAS_IX_SOURCE, /canvasMinimapViewportForPoint/);
+  assert.match(CANVAS_IX_SOURCE, /canvasMinimap\?\.addEventListener\('pointerdown', handleCanvasMinimapPointerDown\)/);
+  assert.match(CANVAS_IX_SOURCE, /function beginCanvasMinimapDrag\(event\)/);
+  assert.match(HTML_SOURCE, /aria-label="點選或拖曳以平移畫布"/);
+  assert.match(I18N_SOURCE, /canvasMinimapViewport: '點選或拖曳以平移畫布'/);
+});
+
 test('Top bar exposes Canvas organization and manual add popovers', () => {
   for (const id of ['canvasOrganizeWrap', 'canvasOrganizeBtn', 'canvasOrganizePanel', 'manualAddWrap', 'manualAddTopBtn', 'manualAddPanel']) {
     assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
