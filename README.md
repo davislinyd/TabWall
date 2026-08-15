@@ -24,6 +24,22 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
 
+### Local AI agent
+
+TabWall can run a local OpenAI-compatible agent through `llama-server`; page data stays in the extension flow unless you explicitly enable a local bridge tool that sends data elsewhere. A typical server starts with a context window that matches TabWall:
+
+```bash
+llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8000
+```
+
+In TabWall Settings → AI:
+
+- Enable local AI and use `http://127.0.0.1:8000/v1` as the endpoint.
+- Set `contextSize` to the same value as llama-server `-c` (default `8192`). TabWall trims large page and tool results before sending them and reserves output space; it does not change the server configuration.
+- The bridge is optional. It exposes only registered local tools, keeps third-party API keys in the bridge, and requires confirmation before writes or external data disclosure. The bridge token is session-only.
+
+On a normal page, press `Option/Alt+A` to open the external AI panel without opening TabWall. It prioritizes the current page, can search/read open and saved tab context, and shows sources and tool confirmations. The panel supports streaming Markdown replies, bottom-edge height resizing, and two non-IME `Escape` presses within 500ms to minimize while the agent continues running. Bind the `open-ai` Chrome command manually in `chrome://extensions/shortcuts` if you need an explicit command for restricted pages.
+
 ### Shortcuts
 
 Chrome command defaults are declared in `manifest.json` and managed in `chrome://extensions/shortcuts`.
@@ -34,6 +50,7 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `Option/Alt+Shift+S` | Park the current tab or Tab Group and keep it open |
 | `Option/Alt+Shift+G` | Park the current Tab Group (uses the configured after-save behavior) |
 | `Option/Alt+O` | Toggle the TabWall canvas |
+| `Option/Alt+A` | Open the local AI panel on a normal page (content-script shortcut) |
 | `/` | Focus search |
 | `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
 | Plain search | `||` means OR; spaces and `&&` mean AND |
@@ -51,7 +68,7 @@ Chrome command defaults are declared in `manifest.json` and managed in `chrome:/
 | `⌘⇧Z` / `Ctrl+⇧Z` / `Ctrl+Y` | Redo stack or connection |
 | `←` / `→` | Show the previous or next snapshot |
 
-The first four actions are Chrome commands. Their `suggested_key` values provide install-time defaults. Existing Chrome assignments, shortcut conflicts, and platform rules can leave a command unbound. Manage the commands in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
+The first four actions are Chrome commands with install-time suggested keys. `open-ai` is an additional Chrome command without a default key; bind it manually when needed. `Option/Alt+A` is handled by the page content script and is not a Chrome command. Existing Chrome assignments, shortcut conflicts, and platform rules can leave commands unbound. Manage them in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
 
 Clicking the extension icon opens an action menu for saving the current tab or Tab Group with or without closing it, or opening the TabWall panel. Group actions are disabled when the current tab is not in a Tab Group.
 
@@ -94,11 +111,12 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - When a group matches, the card lists matching member tabs and notes.
 - When a search hit has a direct Canvas connection, the connected card is also shown one level deep with reduced opacity; hover or focus restores its full appearance.
 - In Canvas, search results and related cards temporarily arrange around the center and adjust the viewport: dense results fit the available width and height, while sparse results zoom in without letting one card fill the screen. Pan, zoom, fit, reset, and minimap gestures remain preview-only during search. Clearing search restores the previous viewport; preview positions are never persisted.
-- Search input is debounced, and thumbnails load near the visible area.
+- Search input is debounced; dense Canvas results render in batches so rapid typing is not blocked by one large repaint, and thumbnails load near the visible area.
 
 ### Features
 
 - **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page.
+- **Local AI agent:** connect the external panel to a loopback `llama-server` endpoint, analyze the current page or saved tab metadata, and optionally call allowlisted local bridge tools. Context is automatically budgeted to the configured `contextSize`; no cloud endpoint is used by default.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
@@ -184,6 +202,22 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
 
+### 本機 AI agent
+
+TabWall 可透過本機 `llama-server` 使用 OpenAI-compatible agent；除非你明確啟用會把資料送出的本機 bridge tool，分頁資料都留在 extension 的本機流程。啟動 server 時，請讓 context window 與 TabWall 設定一致：
+
+```bash
+llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8000
+```
+
+在 TabWall「設定 → AI」：
+
+- 啟用本機 AI，endpoint 使用 `http://127.0.0.1:8000/v1`。
+- `contextSize` 必須與 llama-server 的 `-c` 相同，預設為 `8192`。TabWall 會在送出前裁切過大的分頁與工具結果並保留輸出空間，但不會替你修改 server 設定。
+- Bridge 是選用功能，只提供已登記的本機工具；第三方 API key 只存於 bridge，寫入或外部資料揭露需要確認。Bridge token 只存在目前面板 session。
+
+在一般網頁按 `Option/Alt+A` 可直接開啟外部 AI 面板，不必先進入 TabWall。面板會優先分析目前分頁，也能搜尋／讀取開啟與已儲存的分頁 context，並顯示來源與工具確認。面板支援 streaming Markdown、底部高度拖曳，以及 500ms 內連按兩次非 IME `Escape` 最小化；agent 會繼續執行。若要在受限頁面使用 Chrome command，請到 `chrome://extensions/shortcuts` 手動綁定沒有預設鍵的 `open-ai`。
+
 ### 快捷鍵
 
 Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions/shortcuts` 管理。
@@ -194,6 +228,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `Option/Alt+Shift+S` | 暫存目前分頁或目前 Tab Group 但不關閉 |
 | `Option/Alt+Shift+G` | 暫存目前 Tab Group（依「儲存後行為」設定） |
 | `Option/Alt+O` | 開關 TabWall 空間畫布 |
+| `Option/Alt+A` | 在一般網頁開啟本機 AI 面板（content script 快捷鍵） |
 | `/` | 聚焦搜尋框 |
 | Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉畫布設定 |
 | 一般搜尋 | `||` 表示或；空格與 `&&` 表示且 |
@@ -211,7 +246,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前四項是 Chrome commands。其 `suggested_key` 只提供安裝時的預設值；既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定。請在 Chrome 快捷鍵設定頁管理，TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+前四項是有安裝時建議鍵的 Chrome commands；另有沒有預設鍵的 `open-ai` command，可在需要時手動綁定。`Option/Alt+A` 由一般網頁的 content script 處理，不是 Chrome command。既有 Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定，請在 Chrome 快捷鍵設定頁管理；TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
 
 點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
@@ -253,11 +288,12 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - 群組命中時，卡片會列出符合條件的成員分頁與 note。
 - 搜尋命中卡片若有直接 Canvas 連線，會額外顯示一層關聯卡片；關聯卡片以低透明度呈現，hover 或 focus 時恢復完整樣式。
 - 在 Canvas 中，搜尋結果與關聯卡片會暫時排在畫面中央並調整視角：結果多時依寬高填滿可視範圍，結果少時放大但不讓單一卡片佔滿畫面。搜尋期間的平移、縮放、適合畫面、重設與 minimap 手勢也只會預覽，不會寫入永久視角。清除搜尋會還原搜尋前視角；預覽位置不會永久保存。
-- 搜尋輸入採用延遲處理，縮圖會在接近可視範圍時載入。
+- 搜尋輸入採用延遲處理；Canvas 命中卡片過多時會分批繪製，快速輸入不會被單次重繪卡住；縮圖會在接近可視範圍時載入。
 
 ### 功能
 
 - **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。
+- **本機 AI agent：** 外部 AI 面板可連線 loopback `llama-server`，分析目前分頁或已儲存分頁 metadata，並選擇性呼叫 allowlist 內的本機 bridge tools。系統會依 `contextSize` 自動控管 context，預設不連線雲端 endpoint。
 - **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。
 - **卡片上鎖：** 可將分頁、群組、圖片卡、Sticker Note 或成員上鎖，以鎖頭遮罩隱藏縮圖與快照。解鎖狀態僅存在本次工作階段，重開分頁自動再鎖。支援 SHA-256 加鹽密碼保護或免密碼點擊解鎖；還原分頁不需解鎖。

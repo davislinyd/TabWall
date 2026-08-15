@@ -11,6 +11,19 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.43.3 — 2026-08-16
+
+- 新增本機 AI agent：可連線 OpenAI-compatible `llama-server`，優先分析開啟 AI 面板的目前分頁，也能搜尋／讀取開啟與已儲存的分頁 context。
+- 外部網頁 AI 面板支援 Option/Alt+A、streaming Markdown、來源分頁、工具確認、IME 鍵盤隔離，以及 llama.cpp context 超限時的自動裁切與一次重試。
+- AI 設定新增 `contextSize`（預設 `8192`，需與 llama-server `-c` 對齊）；bridge 為選用功能，只允許登記工具，token 僅存在目前 session。
+- AI 面板可從底部拖曳調整高度並保存；輸入框 500ms 內連按兩次非 IME `Escape` 可最小化，浮動 AI icon 縮小為原尺寸 60%。
+- 新增 `open-ai` 無預設鍵的 Chrome command，受限頁面可在 `chrome://extensions/shortcuts` 手動綁定；重新產生 `dist/TabWall-2.43.3.zip`。
+- README 與 GitHub Pages 使用者手冊同步補上本機 AI、快捷鍵、contextSize 與 bridge 安全說明。
+
+## 2.40.3 — 2026-08-15
+
+- 改善大量命中時的 Canvas 搜尋輸入：重用搜尋結果與 group 命中區塊，連線繪製避開搜尋期間的 DOM layout 量測，Canvas node 分幀更新並取消過期 render，快速輸入不再被單次重繪卡住。
+
 ## 2.40.2 — 2026-08-15
 
 - 修正 Canvas 搜尋暫態視角造成的重複重繪、forced reflow 與非必要布局同步。

@@ -132,6 +132,7 @@
             <span data-i18n="reminders">提醒</span><span id="reminderCount" class="header-count" hidden></span>
           </button>
           <button type="button" class="btn header-text-btn" id="tagsBtn" data-i18n-title="tagsManage" data-i18n-aria="tagsManage" title="Tags" aria-label="Tags"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path><path d="M8 9h8M8 12h5"></path></svg><span data-i18n="tagsManage">Tags</span></button>
+          <button type="button" class="btn header-text-btn" id="aiBtn" data-i18n-title="aiTitle" data-i18n-aria="aiTitle" title="AI" aria-label="AI"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M7 8.5A5.5 5.5 0 0 1 12 5a5.5 5.5 0 0 1 5 3.5A4.5 4.5 0 0 1 16 17H8a4.5 4.5 0 0 1-1-8.5Z"></path><path d="M9 12h.01M15 12h.01M10 15c1.2 1 2.8 1 4 0"></path></svg><span data-i18n="aiTitle">AI</span></button>
           <button type="button" class="btn header-text-btn" id="settingsBtn" data-i18n-title="settings" data-i18n-aria="settings" title="設定" aria-label="設定"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span data-i18n="settings">設定</span></button>
           <button type="button" class="btn header-text-btn" id="themeBtn" data-i18n-title="themeToggle" data-i18n-aria="themeToggle" title="切換主題" aria-label="切換主題">Light</button>
           <button type="button" class="btn header-text-btn" id="helpBtn" data-i18n-title="help" data-i18n-aria="help" title="說明" aria-label="說明"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.7 9a2.4 2.4 0 1 1 3.9 1.8c-1.1.8-1.6 1.2-1.6 2.7M12 17h.01"></path></svg><span data-i18n="help">說明</span></button>
@@ -277,6 +278,29 @@
 
     <div id="floatBackdrop" class="float-backdrop" aria-hidden="true"></div>
 
+    <div id="aiBox" aria-hidden="true">
+      <div class="float-drag" id="aiDrag">
+        <h2 data-i18n="aiTitle">AI</h2>
+        <button type="button" class="btn icon-close" id="aiCloseX" data-i18n-title="close" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div class="ai-toolbar">
+        <span id="aiStatus" role="status" aria-live="polite" data-i18n="aiReady">就緒</span>
+        <span id="aiContextStatus" class="ai-context-status" data-i18n="aiContextReady">尚未建立 context</span>
+        <button type="button" class="btn" id="aiStopBtn" data-i18n="aiStop">停止</button>
+        <button type="button" class="btn" id="aiClearBtn" data-i18n="aiClear">清除</button>
+      </div>
+      <div id="aiSources" class="ai-sources" hidden></div>
+      <div id="aiMessages" class="ai-messages" role="log" aria-live="polite" aria-label="AI messages"></div>
+      <div id="aiToolConfirm" class="ai-tool-confirm" hidden></div>
+      <div class="ai-composer">
+        <textarea id="aiInput" class="settings-textarea" rows="3" data-i18n-placeholder="aiInputPh" placeholder="問問你的分頁…"></textarea>
+        <div class="ai-composer-actions">
+          <span class="hint" data-i18n="aiPrivacyHint">模型在本機執行；外部 bridge 呼叫仍可能離開本機。</span>
+          <button type="button" class="btn primary" id="aiSendBtn" data-i18n="aiSend">送出</button>
+        </div>
+      </div>
+    </div>
+
     <div id="tagsBox" aria-hidden="true">
       <div class="float-drag" id="tagsDrag">
         <h2 data-i18n="tagsManageTitle">Tag 管理</h2>
@@ -318,6 +342,7 @@
           <button type="button" class="settings-nav-btn" data-settings-section="canvas" data-i18n="settingsCanvas">畫布</button>
           <button type="button" class="settings-nav-btn" data-settings-section="display" data-i18n="settingsDisplay">顯示</button>
           <button type="button" class="settings-nav-btn" data-settings-section="backup" data-i18n="settingsBackup">備份</button>
+          <button type="button" class="settings-nav-btn" data-settings-section="ai" data-i18n="settingsAi">AI</button>
           <button type="button" class="settings-nav-btn" data-settings-section="shortcuts" data-i18n="settingsShortcuts">快捷鍵</button>
           <button type="button" class="settings-nav-btn" data-settings-section="diagnostic" data-i18n="settingsDiagnostic">診斷</button>
         </nav>
@@ -361,6 +386,38 @@
           <div class="radios">
             <label><input type="radio" name="restoreGroupIn" value="currentWindow" /> <span data-i18n="restoreCurrentWindow">目前視窗</span></label>
             <label><input type="radio" name="restoreGroupIn" value="newWindow" /> <span data-i18n="restoreNewWindow">新視窗</span></label>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="ai">
+          <h2 data-i18n="aiSettingsTitle">本機 AI</h2>
+          <p class="hint" data-i18n="aiSettingsHint">使用本機 llama.cpp。分頁內容只在你送出問題後按需讀取；寫入操作逐次確認。</p>
+          <div class="settings-row">
+            <label class="inline">
+              <input type="checkbox" id="settingsAiEnabled" />
+              <span data-i18n="aiEnable">啟用本機 AI Agent</span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <label class="inline" for="settingsAiBaseUrl"><span data-i18n="aiEndpoint">llama.cpp endpoint</span><input id="settingsAiBaseUrl" class="settings-input" type="url" autocomplete="off" spellcheck="false" /></label>
+          </div>
+          <div class="settings-row">
+            <label class="inline" for="settingsAiModel"><span data-i18n="aiModel">Model（空白使用第一個）</span><input id="settingsAiModel" class="settings-input" type="text" autocomplete="off" spellcheck="false" /></label>
+          </div>
+          <div class="settings-row">
+            <label class="inline" for="settingsAiBridgeUrl"><span data-i18n="aiBridgeUrl">Local bridge URL</span><input id="settingsAiBridgeUrl" class="settings-input" type="url" autocomplete="off" spellcheck="false" /></label>
+          </div>
+          <div class="settings-row">
+            <label class="inline" for="settingsAiContextSize"><span data-i18n="aiContextSize">Context window（需與 llama-server -c 一致）</span><input id="settingsAiContextSize" class="settings-input" type="number" min="2048" max="131072" step="256" inputmode="numeric" autocomplete="off" spellcheck="false" /></label>
+          </div>
+          <div class="settings-row">
+            <label class="inline" for="aiBridgeToken"><span data-i18n="aiBridgeToken">Bridge session token</span><input id="aiBridgeToken" class="settings-input" type="password" autocomplete="new-password" data-1p-ignore="true" data-lpignore="true" data-bwignore="true" spellcheck="false" /></label>
+          </div>
+          <div class="settings-row">
+            <label for="settingsAiAllowedTools" class="settings-stack-label"><span data-i18n="aiAllowedTools">允許的 bridge tools（空白=全部）</span><textarea id="settingsAiAllowedTools" class="settings-textarea" rows="2" autocomplete="off" spellcheck="false"></textarea></label>
+          </div>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <button type="button" class="btn primary" id="aiTestConnectionBtn" data-i18n="aiTestConnection">測試連線</button>
+            <span id="aiConnectionStatus" class="hint" role="status" aria-live="polite"></span>
           </div>
         </div>
         <div class="settings-block" data-settings-section="automation">
@@ -494,6 +551,10 @@
           <div class="shortcut-row" data-action="toggle-park">
             <span class="shortcut-label" data-i18n="helpShortcutWall">開關 TabWall 空間畫布</span>
             <span class="chrome-bind" data-chrome-cmd="toggle-park"></span>
+          </div>
+          <div class="shortcut-row" data-action="open-ai">
+            <span class="shortcut-label" data-i18n="helpShortcutAi">一般分頁開啟 AI 面板（Option+A）</span>
+            <span class="chrome-bind" data-chrome-cmd="open-ai"></span>
           </div>
           <div class="shortcut-row" data-action="quick-search">
             <span class="shortcut-label" data-i18n="helpShortcutQuickSearch">在任何分頁搜尋已存項目（不必開啟 TabWall）</span>
@@ -680,6 +741,7 @@
               <kbd>⌥</kbd>+<kbd>/</kbd> —
               <span data-i18n="helpShortcutQuickSearch">在任何分頁搜尋已存項目（不必開啟 TabWall）</span>
             </li>
+            <li><kbd>⌥</kbd>+<kbd>A</kbd> — <span data-i18n="helpShortcutAi">在一般分頁開啟 AI 面板</span></li>
             <li>
               <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> —
               <span data-i18n="helpShortcutSettings">開啟／關閉設定（⌥⌘S）</span>
@@ -1057,6 +1119,8 @@
     <script src="parkReminderUi.js"></script>
     <script src="parkAppHelpers.js"></script>
     <script src="parkHistory.js"></script>
+    <script src="aiUiCore.js"></script>
+    <script src="parkAiUi.js"></script>
     <script src="park.js"></script>
   </body>
 </html>

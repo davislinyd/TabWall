@@ -27,8 +27,11 @@ zip -r "$OUT_ZIP" \
   bgRestore.js \
   bgUndo.js \
   bgReminders.js \
+  bgAi.js \
   content.js \
   quickSearch.js \
+  aiUiCore.js \
+  aiPanel.js \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \
@@ -55,6 +58,7 @@ zip -r "$OUT_ZIP" \
   parkReminderUi.js \
   parkAppHelpers.js \
   parkHistory.js \
+  parkAiUi.js \
   park.js \
   icons/icon16.png \
   icons/icon48.png \

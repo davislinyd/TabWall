@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.40.2",
+  "version": "2.43.3",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -14,7 +14,9 @@
     "downloads"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
@@ -25,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["parkSearchQuery.js", "quickSearch.js"],
+      "js": ["parkSearchQuery.js", "quickSearch.js", "aiUiCore.js", "aiPanel.js"],
       "run_at": "document_idle"
     }
   ],
@@ -73,7 +75,9 @@
         "parkWorkspaceUi.js",
         "parkReminderUi.js",
         "parkAppHelpers.js",
-        "parkHistory.js"
+        "parkHistory.js",
+        "aiUiCore.js",
+        "parkAiUi.js"
       ],
       "matches": [
         "<all_urls>"
@@ -108,6 +112,9 @@
         "mac": "Alt+O"
       },
       "description": "Toggle TabWall overlay"
+    },
+    "open-ai": {
+      "description": "Open TabWall AI panel"
     }
   }
 }

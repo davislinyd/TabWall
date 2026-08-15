@@ -248,6 +248,9 @@ function normalizeSettings(raw) {
     ...(merged.autoBackup || {}),
   });
   merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
+  if (self.TabWallAi?.normalizeAiSettings) {
+    merged.ai = self.TabWallAi.normalizeAiSettings(merged.ai);
+  }
   merged.preSaveEdit = merged.preSaveEdit !== false;
   merged.wallpaper = normalizeWallpaper(merged.wallpaper);
   return merged;
@@ -1575,6 +1578,60 @@ async function ensureContentScript(tabId) {
   } catch (err) {
     console.warn('[TabWall] inject content failed:', err);
     return false;
+  }
+}
+
+async function ensureAiPanelContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'AI_PANEL_PING' });
+    return true;
+  } catch {
+    // The static content script is not present on tabs that existed before
+    // the extension loaded; inject the small AI surface on demand.
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['aiUiCore.js', 'aiPanel.js'],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[TabWall] inject AI panel failed:', err);
+    return false;
+  }
+}
+
+async function notifyAiPanelUnavailable(tab, error = 'restricted_page') {
+  const title = 'TabWall AI';
+  const message = error === 'restricted_page'
+    ? '目前頁面受 Chrome 限制，無法注入 AI 面板。請切換到一般網頁。'
+    : '無法在目前頁面開啟 AI 面板。';
+  try {
+    if (chrome.notifications?.create) {
+      await chrome.notifications.create(`tabwall-ai-${Date.now()}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title,
+        message,
+      });
+    }
+  } catch (notificationError) {
+    console.warn('[TabWall] AI panel notification failed:', notificationError);
+  }
+  return { ok: false, mode: error === 'restricted_page' ? 'restricted' : 'unavailable', error, tabId: tab?.id ?? null };
+}
+
+async function openAiPanelOnActiveTab() {
+  const tab = await getActiveTab();
+  if (!tab?.id) return notifyAiPanelUnavailable(tab, 'no_active_tab');
+  if (isRestrictedUrl(tab.url)) return notifyAiPanelUnavailable(tab, 'restricted_page');
+  if (!await ensureAiPanelContentScript(tab.id)) return notifyAiPanelUnavailable(tab, 'inject_failed');
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: 'OPEN_AI_PANEL' });
+    return { ok: true, mode: 'panel', tabId: tab.id };
+  } catch (err) {
+    console.warn('[TabWall] open AI panel failed:', err);
+    return notifyAiPanelUnavailable(tab, 'open_failed');
   }
 }
 

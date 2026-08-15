@@ -377,9 +377,11 @@ test('Top-level actions are consolidated in the header', () => {
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
-  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park']) {
+  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
+  assert.match(I18N_SOURCE, /helpShortcutAi: '一般分頁開啟 AI 面板/);
+  assert.match(I18N_SOURCE, /helpShortcutAi: 'Open the AI panel/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: '儲存目前分頁／Tab Group（不關閉）'/);
   assert.match(PARK_BEHAVIOR_FLAT, /helpShortcutSaveKeep: 'Park current tab or Tab Group \(keep open\)'/);
 });
@@ -407,7 +409,7 @@ test('Help panel is centered; cards have newsprint; Option+/ is documented', () 
   assert.match(WORKBENCH_CSS, /#grid\.cards \.card:not\(\.image-card\),[\s\S]*?\.canvas-node:not\(\.canvas-note\):not\(\.canvas-image\)[\s\S]*?feTurbulence/);
   assert.match(HTML_SOURCE, /<script src="quickSearch\.js"><\/script>/);
   assert.match(HTML_SOURCE, /data-i18n="helpShortcutQuickSearch"/);
-  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／nn／noti／domain \+ Tab 切換欄位'/);
+  assert.match(I18N_SOURCE, /helpShortcutQuickSearch: '在任何分頁搜尋已存項目（不必開啟 TabWall）。tag／group／note／nn／noti／domain \+ Tab 切換欄位；ai \+ Tab 開啟 AI'/);
 });
 
 test('Undo shortcut is documented and wired for stack plus connections', () => {
@@ -740,7 +742,8 @@ test('Canvas display geometry and connection endpoints use the four side handles
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionDomHandlePoint\(/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForId\(id, position, side, cache = null\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasConnectionHandlePointForId\(/);
-  assert.match(CANVAS_RENDER_SOURCE, /const measured = node\?\.isConnected[\s\S]*?canvasNodeWorldRect\(node, \{/);
+  assert.match(CANVAS_RENDER_SOURCE, /const measured = !cache\?\.useLayoutPositions && node\?\.isConnected[\s\S]*?canvasNodeWorldRect\(node, \{/);
+  assert.match(CANVAS_RENDER_SOURCE, /if \(cache\?\.useLayoutPositions\)/);
   assert.doesNotMatch(PARK_SOURCE, /function canvasConnectionEdgePoints\(/);
   assert.match(CANVAS_RENDER_SOURCE, /canvasConnectionHandlePoints\(source, target, connection\.sourceId, connection\.targetId, renderCache\)/);
   assert.match(CANVAS_RENDER_SOURCE, /function canvasConnectionHandlePointForCursor\(rect, point/);
@@ -765,7 +768,14 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(CANVAS_CHROME_SOURCE, /clearViewportPreview\(\{ deferRender: true \}\)/);
   const searchSyncSource = extractFnSource(CANVAS_CHROME_SOURCE, 'syncCanvasSearchViewport');
   assert.doesNotMatch(searchSyncSource, /commitViewport/);
+  assert.match(LIST_UI_SOURCE, /getCanvasSearchContext\(\{ includeGroupMatches: true \}\)/);
   assert.match(LIST_UI_SOURCE, /syncCanvasSearchViewport\(searchContext\);/);
+  assert.match(PARK_SOURCE, /getCanvasSearchContext: \(\.\.\.args\) => getCanvasSearchContext\(\.\.\.args\)/);
+  assert.match(APP_HELPERS_SOURCE, /const groupMatches = new Map\(\)/);
+  assert.match(APP_HELPERS_SOURCE, /searchKey: JSON\.stringify/);
+  const gridKeySource = extractFnSource(APP_HELPERS_SOURCE, 'gridNodeRenderKey');
+  assert.doesNotMatch(gridKeySource, /query: env\.query/);
+  assert.match(LIST_UI_SOURCE, /appendGroupSearchHits\(node, item\);/);
   assert.match(PARK_BEHAVIOR_FLAT, /function isCanvasSearchPreviewActive\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function canvasSearchLayoutFor\(searchContext = getCanvasSearchContext\(\)\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /positions: arrangeCanvasGrid\(searchContext\.items, layout\)/);
@@ -775,7 +785,12 @@ test('Canvas search results use a transient grid layout without persisting posit
   assert.match(renderSource, /const renderLayout = canvasSearchLayoutFor\(searchContext\)/);
   assert.match(renderSource, /renderLayout\.positions\[item\.id\]/);
   assert.match(renderSource, /renderCanvasMinimap\(filtered, renderLayout\)/);
-  assert.match(CANVAS_RENDER_SOURCE, /query: item\.kind === 'group' \? getQuery\(\) : ''/);
+  assert.doesNotMatch(CANVAS_RENDER_SOURCE, /query: item\.kind === 'group' \? getQuery\(\) : ''/);
+  assert.match(CANVAS_RENDER_SOURCE, /function syncCanvasGroupSearchHits\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /const useLayoutPositions = isCanvasSearchPreviewActive\(searchContext\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /const CANVAS_SEARCH_RENDER_BATCH_SIZE = 12/);
+  assert.match(renderSource, /syncCanvasIndexUi\(searchContext\)/);
+  assert.match(renderSource, /waitForCanvasRenderFrame\(\)/);
   assert.doesNotMatch(renderSource, /getCanvasNodesEl\(\)\.querySelectorAll\('img\[data-canvas-media="true"\]'/);
   assert.doesNotMatch(renderSource, /updateCanvasNodePositions\(canvasStoreSnapshot\(\), searchContext\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /function renderCanvas\(/);

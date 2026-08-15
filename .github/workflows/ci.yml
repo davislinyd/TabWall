@@ -18,6 +18,10 @@ jobs:
           node --check backupBuild.js
           node --check content.js
           node --check mediaDb.js
+          node --check bgAi.js
+          node --check aiUiCore.js
+          node --check aiPanel.js
+          node --check parkAiUi.js
           node --check park.js
           node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'))"
       - name: Unit and integration tests
@@ -28,8 +32,50 @@ jobs:
           version=$(node -p "require('./manifest.json').version")
           test -f "dist/TabWall-${version}.zip"
           expected=$(printf '%s\n' \
-            manifest.json background.js content.js mediaDb.js backupBuild.js \
-            park.html park.js icons/icon16.png icons/icon48.png icons/icon128.png | sort)
+            manifest.json \
+            background.js \
+            bgNormalize.js \
+            bgLayout.js \
+            bgBackup.js \
+            bgRestore.js \
+            bgUndo.js \
+            bgReminders.js \
+            bgAi.js \
+            content.js \
+            quickSearch.js \
+            aiUiCore.js \
+            aiPanel.js \
+            mediaDb.js \
+            backupBuild.js \
+            noteMedia.js \
+            vendor/libheif-bundle.js \
+            parkWallpaper.js \
+            canvasStore.js \
+            parkCanvasGeometry.js \
+            parkCanvasRender.js \
+            parkStickerUi.js \
+            parkImportExport.js \
+            parkSettingsUi.js \
+            parkSearchQuery.js \
+            parkSearchUi.js \
+            parkMediaUi.js \
+            popup.html \
+            popup.js \
+            park.html \
+            park.css \
+            parkI18n.js \
+            parkCanvasInteraction.js \
+            parkCanvasChrome.js \
+            parkListUi.js \
+            parkWorkspaceUi.js \
+            parkReminderUi.js \
+            parkAppHelpers.js \
+            parkHistory.js \
+            parkAiUi.js \
+            park.js \
+            icons/icon16.png \
+            icons/icon48.png \
+            icons/icon128.png | sort)
           actual=$(unzip -Z1 "dist/TabWall-${version}.zip" | sort)
           test "$expected" = "$actual"
       - name: Diff check

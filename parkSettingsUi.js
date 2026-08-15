@@ -18,6 +18,50 @@
     if (!env) throw new Error('TabWallSettingsUi.' + name + ' used before bind()');
   }
 
+  const DEFAULT_AI_SETTINGS = {
+    enabled: false,
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: '',
+    bridgeUrl: 'http://127.0.0.1:8787',
+    timeoutMs: 120000,
+    contextSize: 8192,
+    allowedBridgeTools: [],
+  };
+
+  function normalizeAiUrl(value, fallback) {
+    try {
+      const url = new URL(String(value || ''));
+      const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+      if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '::1'].includes(host)) return fallback;
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    } catch {
+      return fallback;
+    }
+  }
+
+  function normalizeAiSettings(raw) {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const allowed = Array.isArray(source.allowedBridgeTools)
+      ? [...new Set(source.allowedBridgeTools
+        .map((name) => String(name ?? '').replace(/[\u0000-\u001f]/g, '').trim())
+        .filter((name) => /^[A-Za-z0-9_-]{1,64}$/.test(name))
+      )].slice(0, 100)
+      : [];
+    return {
+      enabled: source.enabled === true,
+      baseUrl: normalizeAiUrl(source.baseUrl, DEFAULT_AI_SETTINGS.baseUrl),
+      model: String(source.model ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 200).trim(),
+      bridgeUrl: normalizeAiUrl(source.bridgeUrl, DEFAULT_AI_SETTINGS.bridgeUrl),
+      timeoutMs: env.clampInt(source.timeoutMs, 10000, 180000, DEFAULT_AI_SETTINGS.timeoutMs),
+      contextSize: env.clampInt(source.contextSize, 2048, 131072, DEFAULT_AI_SETTINGS.contextSize),
+      allowedBridgeTools: allowed,
+    };
+  }
+
   function newAutoSaveMetadataRuleId() {
     ensureBound('newAutoSaveMetadataRuleId');
 
@@ -212,6 +256,7 @@
       ...(merged.autoBackup || {}),
     });
     merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
+    merged.ai = normalizeAiSettings(merged.ai);
     merged.canvasSnap = merged.canvasSnap !== false;
     merged.fxLevel = normalizeFxLevel(merged.fxLevel);
     merged.wallpaper = env.Wallpaper
@@ -246,6 +291,9 @@
     }
     if (patch.autoSaveMetadata) {
       patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);
+    }
+    if (patch.ai) {
+      patch.ai = normalizeAiSettings({ ...env.settings.ai, ...patch.ai });
     }
     if (patch.wallpaper && env.Wallpaper) {
       patch.wallpaper = env.Wallpaper.normalizeWallpaper(patch.wallpaper);
@@ -476,6 +524,7 @@
     syncAutoSaveMetadataUi();
       
     env.applyI18n();
+    env.syncAiSettingsUi?.();
     refreshChromeCommandLabels();
     env.syncSearchRegexUi();
       
@@ -1063,6 +1112,7 @@
     initChromeShortcutsUi();
     env.initDedupeUi();
     env.initQuickCaptureUi();
+    env.initAiUi?.();
     initSettingsSections();
       
     if (env.settings.openWithSearchFocus) {
@@ -1083,7 +1133,7 @@
   function applySettingsSection(section = 'general') {
     ensureBound('applySettingsSection');
 
-    const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'shortcuts', 'diagnostic']);
+    const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'ai', 'shortcuts', 'diagnostic']);
     env.settingsSection = allowed.has(section) ? section : 'general';
     env.settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
       block.hidden = block.dataset.settingsSection !== env.settingsSection;
@@ -1139,6 +1189,7 @@
     normalizeAutoSaveMetadataCondition,
     normalizeAutoSaveMetadataRule,
     normalizeAutoSaveMetadata,
+    normalizeAiSettings,
     newAutoSaveMetadataRule,
     sanitizeSubfolder,
     normalizeIntervalUnit,
