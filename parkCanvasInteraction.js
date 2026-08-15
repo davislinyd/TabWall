@@ -779,6 +779,42 @@
 
   }
 
+  function handleCanvasMinimapPointerDown(event) {
+    ensureBound('handleCanvasMinimapPointerDown');
+
+      if (event.button !== 0 || !event.isPrimary || env.canvasMinimapDragState) return;
+      if (event.target.closest?.('button, .canvas-minimap-viewport')) return;
+      const map = env.canvasMinimap?.querySelector?.('.canvas-minimap-world');
+      const rect = map?.getBoundingClientRect?.();
+      if (!map || !rect) return;
+      env.renderCanvasMinimap(env.getCanvasVisibleTabs());
+      const projection = env.canvasMinimapProjection;
+      if (!projection) return;
+      const state = env.canvasStoreSnapshot();
+      const { width, height } = env.canvasViewportSize();
+      const viewport = env.canvasMinimapViewportForPoint(
+        projection,
+        { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        width,
+        height,
+        state.layout?.viewport?.zoom,
+      );
+      if (!viewport) return;
+      const searchViewportPreview = Boolean(
+        env.canvasSearchViewportState && env.isCanvasSearchPreviewActive()
+      );
+      if (searchViewportPreview) {
+        env.ensureCanvasStore()?.previewViewport(viewport);
+      } else {
+        env.ensureCanvasStore()?.commitViewport(viewport);
+        env.ensureCanvasStore()?.flush?.();
+      }
+      env.renderCanvasMinimap(env.getCanvasVisibleTabs());
+      event.preventDefault();
+      event.stopPropagation();
+
+  }
+
   function updateCanvasMinimapDrag(event) {
     ensureBound('updateCanvasMinimapDrag');
 
@@ -910,6 +946,7 @@
         env.cancelCanvasPointer();
         cancelCanvasConnectionDrag();
       });
+      env.canvasMinimap?.addEventListener('pointerdown', handleCanvasMinimapPointerDown);
       env.canvasMinimapViewport?.addEventListener('pointerdown', beginCanvasMinimapDrag);
       window.addEventListener('pointermove', updateCanvasMinimapDrag, true);
       window.addEventListener('pointermove', updateCanvasConnectionDrag, true);
@@ -1274,5 +1311,5 @@
 
   }
 
-  global.TabWallCanvasInteraction = { bind, beginCanvasConnectionDrag, updateCanvasConnectionDrag, commitCanvasConnectionDrag, endCanvasConnectionDrag, cancelCanvasConnectionDrag, resetCanvasConnectionCurve, selectCanvasConnection, clearCanvasConnectionSelection, deleteCanvasConnection, handleCanvasConnectionNodeClick, handleCanvasConnectionClick, handleCanvasConnectionDoubleClick, setCanvasConnectionZoneHover, detectCanvasConnectionDoublePointerDown, wireCanvasConnectionPath, wireCanvasLinkHandles, wireCanvasNodeActions, updateCanvasNodeSelection, beginCanvasPointer, updateCanvasPointer, endCanvasPointer, applyCanvasPointer, handleCanvasMiddleClick, beginCanvasMinimapDrag, updateCanvasMinimapDrag, endCanvasMinimapDrag, initCanvasInteractions, normalizeCanvasWheelDelta, scheduleCanvasWheelZoom, flushCanvasWheelZoom, canvasConnectionDragTarget, suppressCanvasNodeClick, scheduleCanvasNodePreview, cancelCanvasNodeClick, runCanvasNodeAction, isCanvasControlTarget, isCanvasWheelControlTarget };
+  global.TabWallCanvasInteraction = { bind, beginCanvasConnectionDrag, updateCanvasConnectionDrag, commitCanvasConnectionDrag, endCanvasConnectionDrag, cancelCanvasConnectionDrag, resetCanvasConnectionCurve, selectCanvasConnection, clearCanvasConnectionSelection, deleteCanvasConnection, handleCanvasConnectionNodeClick, handleCanvasConnectionClick, handleCanvasConnectionDoubleClick, setCanvasConnectionZoneHover, detectCanvasConnectionDoublePointerDown, wireCanvasConnectionPath, wireCanvasLinkHandles, wireCanvasNodeActions, updateCanvasNodeSelection, beginCanvasPointer, updateCanvasPointer, endCanvasPointer, applyCanvasPointer, handleCanvasMiddleClick, beginCanvasMinimapDrag, handleCanvasMinimapPointerDown, updateCanvasMinimapDrag, endCanvasMinimapDrag, initCanvasInteractions, normalizeCanvasWheelDelta, scheduleCanvasWheelZoom, flushCanvasWheelZoom, canvasConnectionDragTarget, suppressCanvasNodeClick, scheduleCanvasNodePreview, cancelCanvasNodeClick, runCanvasNodeAction, isCanvasControlTarget, isCanvasWheelControlTarget };
 })(typeof self !== 'undefined' ? self : globalThis);

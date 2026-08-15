@@ -11,6 +11,14 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.44.0 — 2026-08-16
+
+- 自訂背景啟用時隱藏 Canvas 定位點；移除背景後恢復原本網格。
+- Canvas 進入時沿用上次離開前的 viewport；只有首次使用才會自動置中，離開 Canvas 前會同步尚未保存的 camera 操作。
+- Minimap 空白處或卡片現在可直接左鍵點擊定位，維持目前 zoom；原有 minimap 視角框拖曳保留，搜尋預覽中的定位仍是暫態操作。
+- README 與 GitHub Pages 使用者手冊同步補上 Canvas 背景、視角保存與 minimap 定位說明。
+- 重新產生 `dist/TabWall-2.44.0.zip`。
+
 ## 2.43.11 — 2026-08-16
 
 - 將 TabWall overlay content shell 加入一般頁面的靜態 content script，降低 Edge 動態注入失敗造成 `Option+O` 與 popup 無反應的情況。

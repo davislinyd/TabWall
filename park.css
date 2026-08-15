@@ -4739,6 +4739,7 @@ html[data-theme='dark'] .canvas-node {
   background: var(--panel);
   box-shadow: var(--shadow);
   touch-action: none;
+  cursor: crosshair;
 }
 
 .canvas-minimap-world {
@@ -6847,6 +6848,7 @@ body.has-wallpaper,
 body.has-wallpaper .canvas-view,
 body.has-wallpaper .canvas-viewport {
   background-color: transparent;
+  background-image: none;
 }
 
 .wallpaper-picker {

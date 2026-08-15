@@ -226,6 +226,31 @@
     };
   }
 
+  function canvasMinimapViewportForPoint(projection, point, viewportWidth, viewportHeight, zoom) {
+    if (!projection || typeof projection !== 'object') return null;
+    const scale = Number(projection.scale);
+    const mapWidth = Number(projection.mapWidth);
+    const mapHeight = Number(projection.mapHeight);
+    const offsetX = Number(projection.offsetX);
+    const offsetY = Number(projection.offsetY);
+    const mapX = Number(point?.x);
+    const mapY = Number(point?.y);
+    const width = Number(viewportWidth);
+    const height = Number(viewportHeight);
+    const currentZoom = Number(zoom);
+    if (![scale, mapWidth, mapHeight, offsetX, offsetY, mapX, mapY, width, height, currentZoom].every(Number.isFinite)) return null;
+    if (scale <= 0 || mapWidth <= 0 || mapHeight <= 0 || width <= 0 || height <= 0 || currentZoom <= 0) return null;
+    const clampedX = Math.max(0, Math.min(mapWidth, mapX));
+    const clampedY = Math.max(0, Math.min(mapHeight, mapY));
+    const worldX = (clampedX - offsetX) / scale;
+    const worldY = (clampedY - offsetY) / scale;
+    return {
+      x: worldX - width / (2 * currentZoom),
+      y: worldY - height / (2 * currentZoom),
+      zoom: currentZoom,
+    };
+  }
+
   function canvasWheelZoomFactor(deltaY, sensitivity = CANVAS_WHEEL_ZOOM_SENSITIVITY) {
     const bounded = Math.max(-CANVAS_WHEEL_ZOOM_FRAME_LIMIT, Math.min(CANVAS_WHEEL_ZOOM_FRAME_LIMIT, Number(deltaY) || 0));
     return Math.exp(-bounded * sensitivity);
@@ -306,6 +331,7 @@
     canvasConnectionPathD,
     canvasConnectionHandlePoint,
     canvasMinimapProjectionFor,
+    canvasMinimapViewportForPoint,
     canvasWheelZoomFactor,
     canvasWheelZoomSensitivity,
     canvasZoomToFitCardColumns,

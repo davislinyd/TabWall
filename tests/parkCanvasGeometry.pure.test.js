@@ -102,3 +102,17 @@ test('canvasSearchViewportForBounds rejects empty or invalid bounds', () => {
   assert.equal(G.canvasSearchViewportForBounds(1200, 800, { minX: 1, minY: 1, maxX: 1, maxY: 2 }), null);
   assert.equal(G.canvasSearchViewportForBounds(0, 800, { minX: 0, minY: 0, maxX: 10, maxY: 10 }), null);
 });
+
+test('canvasMinimapViewportForPoint centers the clicked world coordinate at the current zoom', () => {
+  const G = loadGeom();
+  const viewport = G.canvasMinimapViewportForPoint({
+    mapWidth: 200,
+    mapHeight: 120,
+    scale: 0.5,
+    offsetX: 10,
+    offsetY: 20,
+  }, { x: 60, y: 70 }, 1000, 800, 1.25);
+  assert.equal(viewport.x, -300);
+  assert.equal(viewport.y, -220);
+  assert.equal(viewport.zoom, 1.25);
+});

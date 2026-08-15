@@ -198,13 +198,6 @@
 
   }
 
-  function isUnsetCanvasZoom(zoom) {
-    const fallback = Number(env.DEFAULT_CANVAS_VIEWPORT.zoom);
-    const current = Number(zoom);
-    const value = Number.isFinite(current) ? current : fallback;
-    return Math.abs(value - fallback) < 0.001;
-  }
-
   function canvasSixCardZoom(viewportWidth) {
     return env.canvasZoomToFitCardColumns(viewportWidth, {
       padding: env.CANVAS_FIT_PADDING,
@@ -217,6 +210,7 @@
     ensureBound('centerCanvasInitialView');
 
       if (env.settings.viewMode !== 'canvas' || env.canvasSessionFallback || !env.canvasViewportEl) return;
+      if (!env.canvasNeedsInitialCenter) return;
       const width = env.canvasViewportEl.clientWidth || env.canvasViewportEl.getBoundingClientRect?.().width || 0;
       const height = env.canvasViewportEl.clientHeight || env.canvasViewportEl.getBoundingClientRect?.().height || 0;
       if (!width || !height) return;
@@ -225,36 +219,20 @@
         env.canvasNeedsInitialCenter = false;
         return;
       }
-      const currentZoom = Number(state.layout.viewport.zoom) || env.DEFAULT_CANVAS_VIEWPORT.zoom;
-      const shouldFitSix = env.canvasNeedsInitialCenter || isUnsetCanvasZoom(currentZoom);
-      if (!shouldFitSix) return;
       const zoom = canvasSixCardZoom(width);
-      if (env.canvasNeedsInitialCenter) {
-        if (!env.allTabs.length) {
-          env.canvasNeedsInitialCenter = false;
-          return;
-        }
-        const bounds = env.canvasBoundsForItems(env.allTabs, state.layout);
-        if (!bounds) {
-          env.canvasNeedsInitialCenter = false;
-          return;
-        }
+      if (!env.allTabs.length) {
         env.canvasNeedsInitialCenter = false;
-        const viewport = {
-          x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
-          y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
-          zoom,
-        };
-        if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
-        else env.canvasStore?.commitViewport(viewport);
+        return;
+      }
+      const bounds = env.canvasBoundsForItems(env.allTabs, state.layout);
+      if (!bounds) {
+        env.canvasNeedsInitialCenter = false;
         return;
       }
       env.canvasNeedsInitialCenter = false;
-      const centerX = (Number(state.layout.viewport.x) || 0) + width / (2 * currentZoom);
-      const centerY = (Number(state.layout.viewport.y) || 0) + height / (2 * currentZoom);
       const viewport = {
-        x: centerX - width / (2 * zoom),
-        y: centerY - height / (2 * zoom),
+        x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
+        y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
         zoom,
       };
       if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
@@ -265,9 +243,7 @@
   function scheduleInitialCanvasCenter() {
     ensureBound('scheduleInitialCanvasCenter');
 
-      const state = env.canvasStoreSnapshot?.();
-      const shouldRun = env.canvasNeedsInitialCenter
-        || isUnsetCanvasZoom(state?.layout?.viewport?.zoom);
+      const shouldRun = Boolean(env.canvasNeedsInitialCenter);
       if (!shouldRun || env.canvasInitialCenterRaf) return;
       const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
       env.canvasInitialCenterRaf = schedule(() => {
