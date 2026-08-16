@@ -378,12 +378,12 @@
         env.updateSavedBadge();
 
         if (env.allTabs.length === 0) {
-          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          env.disconnectThumbObserver?.();
           renderEmpty({ title: env.t('emptyTitle'), body: env.t('emptyBody') });
           return;
         }
         if (filtered.length === 0) {
-          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          env.disconnectThumbObserver?.();
           renderEmpty({ title: env.t('noResultsTitle'), body: env.t('noResultsBody') });
           return;
         }
@@ -391,7 +391,7 @@
         const isList = env.settings.viewMode === 'list' || env.canvasSessionFallback;
         if (env.gridNodeIsList !== isList) {
           // Rare full mode switch — cheap fallback, matches the old always-full-rebuild behavior.
-          if (thumbObserver) { try { thumbObserver.disconnect(); } catch { /* ignore */ } }
+          env.disconnectThumbObserver?.();
           env.gridEl.innerHTML = '';
           env.gridNodeElements.clear();
           env.gridNodeIsList = isList;

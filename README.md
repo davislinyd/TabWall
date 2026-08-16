@@ -101,7 +101,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 
 Canvas and grid cards enlarge to about `1.30×` while hovered. Dragging and Stack hover states keep their interaction priority, and Quiet / reduced-motion settings continue to suppress the visual effect. Canvas viewport position and zoom persist when switching between list and canvas or reopening TabWall; the automatic centering runs only on first use.
 
-List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering.
+List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering. If a canvas layout read is temporarily unavailable, loaded parked items still render in list view and remain usable until Canvas is available again.
 
 ### Search
 
@@ -279,7 +279,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 畫布與卡片網格中的卡片在 hover 時會放大約 `1.30×`。拖曳與 Stack hover 會保留操作優先順序；Quiet／作業系統 reduced-motion 設定仍會抑制視覺效果。Canvas 視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。
 
-列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。
+列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。若 Canvas layout 暫時無法讀取，已載入的 parked items 仍會在列表顯示並可繼續使用，恢復後可再切回畫布。
 
 ### 搜尋
 

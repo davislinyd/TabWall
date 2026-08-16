@@ -11,6 +11,14 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.44.2 — 2026-08-16
+
+- 修正 Edge／Chromium 在畫布切換到列表時，列表模組仍引用已拆出的全域 thumbnail observer，造成 `thumbObserver is not defined` 與空白畫面。
+- 模式切換現在只在 `viewMode` 成功保存後套用，避免儲存失敗時 DOM 與設定狀態不一致。
+- parked items 視為必要資料、Canvas layout 視為可降級資料；layout 暫時不可用時列表仍會顯示已載入內容，重新載入失敗也會保留既有資料與畫面。
+- README 與 GitHub Pages 使用者手冊同步補上列表 fallback 與 Edge 重新載入說明。
+- 重新產生 `dist/TabWall-2.44.2.zip`。
+
 ## 2.44.0 — 2026-08-16
 
 - 自訂背景啟用時隱藏 Canvas 定位點；移除背景後恢復原本網格。

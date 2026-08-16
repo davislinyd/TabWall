@@ -939,56 +939,95 @@
   async function loadList() {
     ensureBound('loadList');
 
+    const previousItems = env.allTabs;
+    const previousCanvasSessionFallback = env.canvasSessionFallback;
+    const previousCanvasNeedsInitialCenter = env.canvasNeedsInitialCenter;
+    const renderExistingListSafely = () => {
+      if (!Array.isArray(env.allTabs) || env.allTabs.length === 0) return;
+      if (env.settings.viewMode === 'canvas' && !env.canvasSessionFallback) return;
+      try {
+        env.renderGrid();
+      } catch (err) {
+        env.uiLog('warn', 'load', 'existing items render failed', err?.message || err);
+      }
+    };
+
     try {
       const generation = ++env.canvasLoadGeneration;
-      const [res, layoutRes] = await Promise.all([
+      const [itemsResult, layoutResult] = await Promise.allSettled([
         env.sendMessage({ type: 'GET_PARKED_ITEMS' }),
         env.sendMessage({ type: 'GET_CANVAS_LAYOUT' }),
       ]);
       if (generation !== env.canvasLoadGeneration) return false;
+
+      const res = itemsResult.status === 'fulfilled' ? itemsResult.value : null;
+      const layoutRes = layoutResult.status === 'fulfilled' ? layoutResult.value : null;
+      const itemsError = itemsResult.status === 'rejected'
+        ? itemsResult.reason?.message || String(itemsResult.reason)
+        : res?.error || 'invalid_response';
       if (!res?.ok || (!Array.isArray(res.items) && !Array.isArray(res.tabs))) {
         if (env.loadStatusEl) env.loadStatusEl.textContent = env.t('loadFailed');
-        env.uiLog('error', 'load', 'parked items unavailable', res?.error || 'invalid_response');
-        if (env.settings.viewMode === 'canvas') {
-          env.canvasSessionFallback = true;
-          env.applyViewMode('list');
-          env.renderGrid();
-        }
+        env.uiLog('error', 'load', 'parked items unavailable', itemsError);
+        renderExistingListSafely();
         return false;
       }
-      if (env.loadStatusEl) env.loadStatusEl.textContent = '';
       const raw =
         Array.isArray(res.items)
           ? res.items
           : Array.isArray(res.tabs)
             ? res.tabs
             : [];
-      env.allTabs = env.normalizeParkedList(raw);
+      const nextItems = env.normalizeParkedList(raw);
+      if (!Array.isArray(nextItems)) throw new Error('invalid_normalized_items');
       env.markTagSuggestIndexDirty();
-      env.pruneAttachmentUrlCache(env.allTabs);
-      if (!layoutRes?.ok && env.settings.viewMode === 'canvas') {
-        env.ensureCanvasStore()?.setItems(env.allTabs);
-        env.canvasNeedsInitialCenter = false;
+      env.pruneAttachmentUrlCache(nextItems);
+      env.allTabs = nextItems;
+      if (env.loadStatusEl) env.loadStatusEl.textContent = '';
+
+      const layoutAvailable = Boolean(layoutRes?.ok);
+      const shouldFallbackCanvas = !layoutAvailable && env.settings.viewMode === 'canvas';
+      if (shouldFallbackCanvas) {
+        // Keep pending CanvasStore operations while making the list the safe
+        // presentation when the optional remote layout is unavailable.
         env.canvasSessionFallback = true;
+        env.canvasNeedsInitialCenter = false;
+      }
+
+      let layoutSyncError = null;
+      try {
+        const store = env.ensureCanvasStore();
+        const current = store?.getState?.();
+        if (store && (current?.pendingOperations?.length || current?.interaction)) {
+          env.canvasNeedsInitialCenter = false;
+          store.setItems(env.allTabs);
+          if (layoutAvailable) store.applyRemote(layoutRes.layout, layoutRes.revision);
+        } else if (store) {
+          store.hydrate(
+            env.allTabs,
+            layoutAvailable ? layoutRes.layout : env.canvasLayout,
+            layoutAvailable ? layoutRes.revision : current?.revision || 0,
+          );
+          env.canvasNeedsInitialCenter = Boolean(layoutAvailable && layoutRes.needsInitialCenter);
+        }
+      } catch (err) {
+        layoutSyncError = err;
+        env.uiLog('warn', 'canvas', 'layout sync failed', err?.message || err);
+      }
+
+      if ((shouldFallbackCanvas || layoutSyncError) && env.settings.viewMode === 'canvas') {
+        env.canvasSessionFallback = true;
+        env.canvasNeedsInitialCenter = false;
         env.applyViewMode('list');
         env.renderGrid();
-        env.uiLog('error', 'canvas', 'layout unavailable', layoutRes?.error || 'invalid_response');
+        env.uiLog(
+          'warn',
+          'canvas',
+          'layout unavailable',
+          layoutRes?.error || (layoutResult.status === 'rejected' ? layoutResult.reason?.message : null) || 'invalid_response',
+        );
         return false;
       }
-      const store = env.ensureCanvasStore();
-      const current = store?.getState?.();
-      if (current?.pendingOperations?.length || current?.interaction) {
-        env.canvasNeedsInitialCenter = false;
-        store.setItems(env.allTabs);
-        if (layoutRes?.ok) store.applyRemote(layoutRes.layout, layoutRes.revision);
-      } else {
-        store.hydrate(
-          env.allTabs,
-          layoutRes?.ok ? layoutRes.layout : env.canvasLayout,
-          layoutRes?.ok ? layoutRes.revision : current?.revision || 0,
-        );
-        env.canvasNeedsInitialCenter = Boolean(layoutRes?.ok && layoutRes.needsInitialCenter);
-      }
+
       env.canvasSessionFallback = false;
       env.applyViewMode(env.settings.viewMode);
       env.renderCanvasStackIndex();
@@ -996,8 +1035,12 @@
       env.scheduleInitialCanvasCenter();
       return true;
     } catch (err) {
+      env.allTabs = previousItems;
+      env.canvasSessionFallback = previousCanvasSessionFallback;
+      env.canvasNeedsInitialCenter = previousCanvasNeedsInitialCenter;
       if (env.loadStatusEl) env.loadStatusEl.textContent = env.t('loadFailed');
       env.uiLog('error', 'load', 'loadList failed', err?.message || err);
+      renderExistingListSafely();
       return false;
     }
   }
