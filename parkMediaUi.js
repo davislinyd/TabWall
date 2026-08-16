@@ -233,6 +233,14 @@
     return thumbObserver;
   }
 
+  function disconnectThumbObserver() {
+    thumbObserver?.disconnect?.();
+  }
+
+  function unobserveThumb(img) {
+    getThumbObserver()?.unobserve?.(img);
+  }
+
   function getCanvasMediaObserver() {
     if (canvasMediaObserver) return canvasMediaObserver;
     const viewport = canvasViewportEl();
@@ -568,9 +576,11 @@
     snapCache,
     cacheSnap,
     fetchMediaUrl,
+    disconnectThumbObserver,
     wireCanvasMedia,
     observeThumb,
     observeStickerAttachment,
+    unobserveThumb,
     disconnectCanvasMediaObserver,
     pruneAttachmentUrlCache,
     refreshCanvasMediaQuality,

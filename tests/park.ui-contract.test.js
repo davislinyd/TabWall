@@ -152,6 +152,28 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
 
+test('view mode changes apply only after settings persistence succeeds', () => {
+  const toggleStart = PARK_SOURCE.indexOf("viewModeBtn?.addEventListener('click'");
+  assert.ok(toggleStart >= 0, 'view mode toggle present');
+  const toggleEnd = PARK_SOURCE.indexOf("pinnedOnlyBtn?.addEventListener", toggleStart);
+  assert.ok(toggleEnd > toggleStart, 'view mode toggle boundary present');
+  const toggleSource = PARK_SOURCE.slice(toggleStart, toggleEnd);
+  assert.match(toggleSource, /const savedSettings = await saveSettings\(\{ viewMode: nextMode \}\);/);
+  assert.match(toggleSource, /if \(savedSettings\?\.viewMode !== nextMode\) return;/);
+  assert.ok(
+    toggleSource.indexOf('savedSettings?.viewMode') < toggleSource.indexOf('applyViewMode(nextMode)'),
+    'DOM mode must be applied after the persisted mode is confirmed',
+  );
+});
+
+test('list rendering uses the extracted media observer instead of a stale global', () => {
+  assert.match(MEDIA_UI_SOURCE, /function disconnectThumbObserver\(\)/);
+  assert.match(MEDIA_UI_SOURCE, /function unobserveThumb\(img\)/);
+  assert.match(LIST_UI_SOURCE, /env\.disconnectThumbObserver\?\.\(\)/);
+  assert.doesNotMatch(LIST_UI_SOURCE, /\bthumbObserver\b/);
+  assert.doesNotMatch(PARK_SOURCE, /thumbObserver\?\.unobserve/);
+});
+
 test('Canvas wallpaper, camera restore, and minimap click-to-locate contracts are wired', () => {
   assert.match(CSS_SOURCE, /body\.has-wallpaper \.canvas-viewport[\s\S]*?background-image:\s*none;/);
   assert.match(CANVAS_CHROME_SOURCE, /const shouldRun = Boolean\(env\.canvasNeedsInitialCenter\);/);

@@ -538,6 +538,8 @@ const cacheSnap = MediaUi.cacheSnap;
 const fetchMediaUrl = MediaUi.fetchMediaUrl;
 const wireCanvasMedia = MediaUi.wireCanvasMedia;
 const observeThumb = MediaUi.observeThumb;
+const disconnectThumbObserver = MediaUi.disconnectThumbObserver;
+const unobserveThumb = MediaUi.unobserveThumb;
 const observeStickerAttachment = MediaUi.observeStickerAttachment;
 const disconnectCanvasMediaObserver = MediaUi.disconnectCanvasMediaObserver;
 const pruneAttachmentUrlCache = MediaUi.pruneAttachmentUrlCache;
@@ -780,6 +782,7 @@ function bindPanelModules() {
     "diagLogStatus": () => diagLogStatus,
     "diagLogText": () => diagLogText,
     "disconnectCanvasMediaObserver": () => disconnectCanvasMediaObserver,
+    "disconnectThumbObserver": () => disconnectThumbObserver,
     "domainOf": () => domainOf,
     "DRAG_THRESHOLD": () => DRAG_THRESHOLD,
     "collectLockPatchFromFields": () => collectLockPatchFromFields,
@@ -1777,8 +1780,9 @@ themeBtn.addEventListener('click', async () => {
 
 viewModeBtn?.addEventListener('click', async () => {
   const nextMode = settings.viewMode === 'canvas' ? 'list' : 'canvas';
+  const savedSettings = await saveSettings({ viewMode: nextMode });
+  if (savedSettings?.viewMode !== nextMode) return;
   if (nextMode === 'canvas') canvasSessionFallback = false;
-  await saveSettings({ viewMode: nextMode });
   applyViewMode(nextMode);
   renderGrid();
 });
@@ -3236,7 +3240,7 @@ function gridNodeRenderKey(...args) { return AppHelpers.gridNodeRenderKey(...arg
 
 function removeGridNode(id, node) {
   node?.querySelectorAll('img.lazy-thumb').forEach((img) => {
-    thumbObserver?.unobserve?.(img);
+    unobserveThumb(img);
   });
   node?.remove();
   gridNodeElements.delete(id);
@@ -3257,7 +3261,11 @@ let loadListTimer = null;
 
 async function loadList(...args) {
   const result = await WorkspaceUi.loadList(...args);
-  ReminderUi?.refresh?.();
+  try {
+    ReminderUi?.refresh?.();
+  } catch (err) {
+    uiLog('warn', 'reminders', 'refresh failed', err?.message || err);
+  }
   return result;
 }
 
