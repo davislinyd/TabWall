@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.4 — 2026-08-17
+
+- 上下邊緣的繪圖工具列維持水平排列；只有水平空間不足時才改用垂直排列。
+- 工具列目前選取的繪圖工具提供更明確的高亮、邊框與陰影狀態。
+- 重新產生 `dist/TabWall-2.46.4.zip`。
+
 ## 2.46.3 — 2026-08-17
 
 - 繪圖 canvas 與宿主 overlay 明確保持透明，且只在 Pen／標註工具啟用時接收 pointer input，避免進入繪圖模式遮住頁面或無法繪圖。

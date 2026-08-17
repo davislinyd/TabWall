@@ -11,7 +11,6 @@
   const HIT_PAD = 8;
   const FAB_SIZE = 40;
   const CHROME_GAP = 8;
-  const CHROME_EDGE_THRESHOLD = 64;
   const FALLBACK_TOOLBAR_WIDTH = 560;
   const FALLBACK_TOOLBAR_HEIGHT = 48;
   const COLORS = ['#c97858', '#1f2937', '#dc2626', '#2563eb', '#16a34a', '#eab308'];
@@ -320,7 +319,6 @@
     horizontalWidth = panelWidth,
     panelHeight = FALLBACK_TOOLBAR_HEIGHT,
     gap = CHROME_GAP,
-    edgeThreshold = CHROME_EDGE_THRESHOLD,
   } = {}) {
     const width = Math.max(Number(viewportWidth) || 0, iconSize + gap * 2);
     const height = Math.max(Number(viewportHeight) || 0, iconSize + gap * 2);
@@ -350,14 +348,12 @@
     const rightAvailable = width - anchor.x - gap;
     const fitsLeft = fitWidth <= leftAvailable;
     const fitsRight = fitWidth <= rightAvailable;
-    const nearTop = anchor.y <= gap + edgeThreshold;
-    const nearBottom = anchor.y + iconSize >= height - gap - edgeThreshold;
     const side = fitsLeft && fitsRight
       ? (leftAvailable > rightAvailable ? 'left' : 'right')
       : fitsLeft
         ? 'left'
         : 'right';
-    const needsVertical = (!fitsLeft && !fitsRight) || nearTop || nearBottom;
+    const needsVertical = !fitsLeft && !fitsRight;
 
     if (!needsVertical) {
       const left = side === 'left' ? anchor.x + iconSize - toolbarWidth : anchor.x;
@@ -1293,7 +1289,13 @@
         opacity: 1;
         background: #2a2d2b;
       }
-      button[aria-pressed="true"] { background: #c97858; color: #fff8f3; opacity: 1; }
+      .bar .tools > button[data-tool][aria-pressed="true"] {
+        background: #c97858;
+        color: #fff8f3;
+        opacity: 1;
+        border: 1px solid rgba(255,255,255,.65);
+        box-shadow: 0 0 0 2px rgba(201,120,88,.3), 0 3px 8px rgba(0,0,0,.2);
+      }
       .swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #fff3; padding: 0; }
       .chrome-handle {
         width: ${FAB_SIZE}px;

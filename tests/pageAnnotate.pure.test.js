@@ -104,7 +104,7 @@ test('chrome layout opens away from the nearest horizontal edge', () => {
   assert.equal(leftEdge.left, 8);
 });
 
-test('chrome layout switches to vertical when horizontal space is insufficient or near a vertical edge', () => {
+test('chrome layout switches to vertical only when horizontal space is insufficient', () => {
   const Ink = loadInk();
   const narrow = Ink.resolveChromeLayout({
     anchorX: 200,
@@ -127,8 +127,8 @@ test('chrome layout switches to vertical when horizontal space is insufficient o
     panelWidth: 360,
     panelHeight: 260,
   });
-  assert.equal(top.orientation, 'vertical');
-  assert.equal(top.verticalDirection, 'down');
+  assert.equal(top.orientation, 'horizontal');
+  assert.equal(top.verticalDirection, '');
 
   const bottom = Ink.resolveChromeLayout({
     anchorX: 500,
@@ -138,8 +138,8 @@ test('chrome layout switches to vertical when horizontal space is insufficient o
     panelWidth: 360,
     panelHeight: 260,
   });
-  assert.equal(bottom.orientation, 'vertical');
-  assert.equal(bottom.verticalDirection, 'up');
+  assert.equal(bottom.orientation, 'horizontal');
+  assert.equal(bottom.verticalDirection, '');
 });
 
 test('chrome anchor remains inside the viewport', () => {
@@ -165,6 +165,12 @@ test('canvas overlay stays transparent and only captures drawing input', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /mix-blend-mode: normal;/);
   assert.match(PAGE_ANNOTATE_SOURCE, /pointer-events: none;/);
   assert.match(PAGE_ANNOTATE_SOURCE, /canvas\.style\.pointerEvents = capturing\(\) \? 'auto' : 'none';/);
+});
+
+test('selected drawing tool has an explicit high-contrast state', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /button\.setAttribute\('aria-pressed', button\.dataset\.tool === tool \? 'true' : 'false'\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\.bar \.tools > button\[data-tool\]\[aria-pressed="true"\]/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /box-shadow: 0 0 0 2px rgba\(201,120,88,.3\)/);
 });
 
 test('default drawing icon anchor is right inset and vertically centered', () => {
