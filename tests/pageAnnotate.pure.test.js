@@ -159,6 +159,20 @@ test('toolbar contract has one collapsed icon and no collapse control', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /data-act="hide"/);
 });
 
+test('canvas overlay stays transparent and only captures drawing input', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /:host \{ all: initial; background: transparent !important; \}/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /background: transparent !important;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /mix-blend-mode: normal;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pointer-events: none;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /canvas\.style\.pointerEvents = capturing\(\) \? 'auto' : 'none';/);
+});
+
+test('default drawing icon anchor is right inset and vertically centered', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /let barPos = \{ x: null, y: null, collapsed: true \};/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /const DEFAULT_CHROME_INSET = 24;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /Math\.round\(\(window\.innerHeight - FAB_SIZE\) \/ 2\)/);
+});
+
 test('page ink helpers load without a document and do not inject UI', () => {
   const Ink = loadInk();
   assert.equal(typeof Ink.normalizeStroke, 'function');

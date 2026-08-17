@@ -16,6 +16,7 @@
   const FALLBACK_TOOLBAR_HEIGHT = 48;
   const COLORS = ['#c97858', '#1f2937', '#dc2626', '#2563eb', '#16a34a', '#eab308'];
   const CHROME_KEY = 'pageAnnotateChrome';
+  const DEFAULT_CHROME_INSET = 24;
 
   function newObjectId() {
     try {
@@ -513,7 +514,7 @@
   let keyHandler = null;
   let resizeObserver = null;
   let mutationObserver = null;
-  let barPos = { x: null, y: 16, collapsed: true };
+  let barPos = { x: null, y: null, collapsed: true };
   let dragBar = null;
   let lastToggleAt = 0;
 
@@ -646,7 +647,11 @@
   }
 
   function defaultFabLeft() {
-    return Math.max(8, window.innerWidth - FAB_SIZE - 16);
+    return Math.max(CHROME_GAP, window.innerWidth - FAB_SIZE - DEFAULT_CHROME_INSET);
+  }
+
+  function defaultFabTop() {
+    return Math.max(CHROME_GAP, Math.round((window.innerHeight - FAB_SIZE) / 2));
   }
 
   function chromeLeft() {
@@ -654,7 +659,7 @@
   }
 
   function chromeTop() {
-    return Number.isFinite(barPos.y) ? barPos.y : 16;
+    return Number.isFinite(barPos.y) ? barPos.y : defaultFabTop();
   }
 
   function toolbarDimensions() {
@@ -760,7 +765,7 @@
         const y = Number(raw.y);
         barPos = {
           x: Number.isFinite(x) ? x : null,
-          y: Number.isFinite(y) ? y : 16,
+          y: Number.isFinite(y) ? y : null,
           collapsed: true,
         };
         tool = toolbarModeForCollapsed(true);
@@ -1198,7 +1203,7 @@
 
     const style = document.createElement('style');
     style.textContent = `
-      :host { all: initial; }
+      :host { all: initial; background: transparent !important; }
       [hidden] { display: none !important; }
       canvas {
         position: absolute;
@@ -1206,6 +1211,11 @@
         top: 0;
         display: none;
         z-index: 0;
+        background: transparent !important;
+        opacity: 1;
+        mix-blend-mode: normal;
+        pointer-events: none;
+        touch-action: none;
       }
       .fab {
         position: fixed;
@@ -1398,7 +1408,7 @@
     fab.addEventListener('keydown', onChromeKeyDown);
 
     shadow.append(style, canvas, toolbar, fab);
-    rootEl.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;';
+    rootEl.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;background:transparent;';
     document.documentElement.appendChild(rootEl);
   }
 

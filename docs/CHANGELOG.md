@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.3 — 2026-08-17
+
+- 繪圖 canvas 與宿主 overlay 明確保持透明，且只在 Pen／標註工具啟用時接收 pointer input，避免進入繪圖模式遮住頁面或無法繪圖。
+- 新安裝或沒有儲存 anchor 時，收合 icon 預設位於畫面右側中段並保留安全內縮；既有 `x/y` 位置格式不變。
+- 重新產生 `dist/TabWall-2.46.3.zip`。
+
 ## 2.46.2 — 2026-08-17
 
 - 繪圖層預設完全隱藏；Option／Alt+D 只顯示或隱藏收合後的單一 pen icon，筆畫資料仍保留。
