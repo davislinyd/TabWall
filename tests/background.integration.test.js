@@ -8,7 +8,7 @@ const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.ur
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js'].map((name) => [
+  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -244,6 +244,13 @@ function createRuntime() {
     mediaKeyTab: (id) => `t:${id}`,
     mediaKeyMember: (groupId, memberId) => `g:${groupId}:${memberId}`,
     mediaKeyNoteAttachment: (noteId, attachmentId) => `n:${noteId}:${attachmentId}`,
+    mediaKeyPageInk: (id) => `ink:${id}`,
+    async getInk(key) {
+      return media.get(key)?.ink || [];
+    },
+    async putInk(key, strokes) {
+      media.set(key, { ink: strokes || [] });
+    },
     async get(key) {
       return media.get(key) || { thumb: null, snap: null };
     },
@@ -456,18 +463,23 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.44.2');
+  assert.equal(MANIFEST.version, '2.46.1');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
   assert.match(BACKGROUND_SOURCE, /bgUndo\.js/);
-  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js', 'bgAi\.js'\)/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js', 'bgAi\.js', 'bgPageAnnotate\.js'\)/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(Object.keys(MANIFEST.commands || {}).length, 5);
+  assert.equal(Object.keys(MANIFEST.commands || {}).length, 6);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
   assert.equal(MANIFEST.commands?.['open-ai']?.suggested_key, undefined);
-  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js']);
+  assert.equal(MANIFEST.commands?.['toggle-annotate']?.suggested_key, undefined);
+  assert.ok(
+    Object.values(MANIFEST.commands || {}).filter((command) => command?.suggested_key).length <= 4,
+    'Chrome allows at most 4 suggested_key commands'
+  );
+  assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js', 'pageAnnotate.js']);
 });
 
 test('action badge matches standalone tabs and group members by exact URL', async () => {
@@ -590,6 +602,39 @@ test('temporary action badge restores the saved-state checkmark', async () => {
     .reverse()
     .find((call) => call.type === 'text' && call.tabId === 1301);
   assert.equal(currentText.text, '✓');
+});
+
+test('action badge shows a pen when the drawing overlay is open', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const url = 'https://draw-badge.example/page';
+  runtime.store.pageAnnotations = [{
+    id: 'live-draw',
+    url,
+    title: 'Draw',
+    note: '',
+    tags: [],
+    overlayVisible: true,
+    hasInk: true,
+    updatedAt: Date.now(),
+  }];
+  await runtime.api.refreshTabBadge({ id: 1401, url });
+  const drawText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1401);
+  const drawBackground = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'background' && call.tabId === 1401);
+  assert.equal(drawText.text, '✎');
+  assert.equal(drawBackground.color, '#c97858');
+
+  await runtime.api.setParkedItems([tab(ITEM_ID, url)]);
+  runtime.store.pageAnnotations[0].overlayVisible = false;
+  await runtime.api.refreshTabBadge({ id: 1401, url });
+  const parkedText = [...runtime.badgeCalls]
+    .reverse()
+    .find((call) => call.type === 'text' && call.tabId === 1401);
+  assert.equal(parkedText.text, '✓');
 });
 
 test('automatic save metadata rules support matchers, negation, and accumulation', async () => {
@@ -813,6 +858,45 @@ test('popup tab keep override saves without closing and does not change settings
     favIconUrl: '',
   })).ok, true);
   assert.deepEqual(runtime.removedTabs, [502]);
+});
+
+test('parking a tab merges live annotation tags/notes and consumes the live record', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = { preSaveEdit: false };
+  runtime.store.pageAnnotations = [{
+    id: 'live-1',
+    url: 'https://live-merge.example/path?q=1',
+    title: 'Live page',
+    note: 'from live',
+    tags: ['alpha', 'beta'],
+    overlayVisible: true,
+    hasInk: true,
+    updatedAt: Date.now(),
+  }];
+
+  const meta = await runtime.api.computeSaveMetadata({
+    url: 'https://live-merge.example/path?q=1',
+    title: 'Live page',
+  });
+  assert.equal(meta.metadata.note, 'from live');
+  assert.equal(Array.from(meta.metadata.tags || []).join(','), 'alpha,beta');
+
+  const saved = await runtime.api.commitSaveTab({
+    url: 'https://live-merge.example/path?q=1',
+    title: 'Live page',
+    favIconUrl: '',
+  }, { afterSave: 'keep' });
+  assert.equal(saved.ok, true);
+  const parked = (await runtime.api.getParkedItems())[0];
+  assert.equal(parked.note, 'from live');
+  assert.equal([...parked.tags].join(','), 'alpha,beta');
+  const remaining = runtime.store.pageAnnotations;
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].note, '');
+  assert.equal(remaining[0].tags.length, 0);
+  assert.equal(remaining[0].hasInk, true);
+  assert.equal(remaining[0].overlayVisible, true);
 });
 
 test('popup tab close override removes the saved tab', async () => {

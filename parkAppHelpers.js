@@ -652,6 +652,15 @@
           };
         }
         if (item.kind === 'note') return normalizeNoteProjection(item);
+        if (item.kind === 'live') {
+          return {
+            ...item,
+            kind: 'live',
+            note: typeof item.note === 'string' ? item.note : '',
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            hasInk: item.hasInk === true,
+          };
+        }
         return {
           ...item,
           kind: 'tab',

@@ -379,7 +379,7 @@
     if (!q) {
       // Empty query: scoped modes still restrict card kinds
       if (scope === 'group') return item?.kind === 'group';
-      if (scope === 'domain') return item?.kind === 'tab' || item?.kind === 'group';
+      if (scope === 'domain') return item?.kind === 'tab' || item?.kind === 'group' || item?.kind === 'live';
       if (scope === 'reminder') return Boolean(item?.reminder);
       return true;
     }

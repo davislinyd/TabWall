@@ -4,7 +4,7 @@
  */
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
-importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js');
+importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
@@ -179,6 +179,9 @@ chrome.tabs.onActivated?.addListener?.(({ tabId }) => {
 });
 
 chrome.tabs.onUpdated?.addListener?.((tabId, changeInfo, tab) => {
+  if (changeInfo?.url && typeof notifyPageAnnotationUrlChanged === 'function') {
+    notifyPageAnnotationUrlChanged(tabId, changeInfo.url).catch(() => {});
+  }
   if (!changeInfo?.url && changeInfo?.status !== 'complete') return;
   return refreshTabBadge(tab || tabId).catch(() => {});
 });
@@ -275,6 +278,9 @@ async function collectAllTagNames() {
       const name = String(t).trim();
       if (name) set.add(name);
     });
+  }
+  if (self.TabWallPageAnnotate?.collectLiveTagNames) {
+    await self.TabWallPageAnnotate.collectLiveTagNames(set);
   }
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 }
@@ -867,15 +873,20 @@ function normalizeAfterSaveMode(value, fallback = 'close') {
 async function computeSaveMetadata(tabLike) {
   const restoreHint = await findRestoreHint(tabLike.url);
   const settings = await getSettings();
-  const metadata = applyAutoSaveMetadata(
-    tabLike,
-    {
+  const live = self.TabWallPageAnnotate?.getPageAnnotation
+    ? await self.TabWallPageAnnotate.getPageAnnotation(tabLike.url)
+    : null;
+  const seed = self.TabWallPageAnnotate?.mergeLiveIntoSaveMeta
+    ? self.TabWallPageAnnotate.mergeLiveIntoSaveMeta(live, {
       note: restoreHint?.note || '',
       tags: restoreHint?.tags || [],
-    },
-    settings.autoSaveMetadata
-  );
-  return { metadata, restoreHint, settings };
+    })
+    : {
+      note: restoreHint?.note || '',
+      tags: restoreHint?.tags || [],
+    };
+  const metadata = applyAutoSaveMetadata(tabLike, seed, settings.autoSaveMetadata);
+  return { metadata, restoreHint, settings, live };
 }
 
 /**
@@ -957,6 +968,12 @@ async function commitSaveTab(tabLike, opts = {}) {
     await consumeRestoreHint(restoreHint?.id);
   } catch (err) {
     console.warn('[TabWall] restore hint cleanup failed:', err);
+  }
+
+  try {
+    await self.TabWallPageAnnotate?.consumePageAnnotationOnPark?.(tabLike.url);
+  } catch (err) {
+    console.warn('[TabWall] consume live annotation failed:', err);
   }
 
   const afterSave = normalizeAfterSaveMode(opts.afterSave, settings.afterSave);
@@ -1647,14 +1664,25 @@ async function saveActiveGroup(opts = {}) {
         }
       }
 
+      const live = self.TabWallPageAnnotate?.getPageAnnotation
+        ? await self.TabWallPageAnnotate.getPageAnnotation(m.url)
+        : null;
+      const seed = self.TabWallPageAnnotate?.mergeLiveIntoSaveMeta
+        ? self.TabWallPageAnnotate.mergeLiveIntoSaveMeta(live, { note: '', tags: [] })
+        : { note: '', tags: [] };
       const metadata = applyAutoSaveMetadata(
         {
           url: m.url || '',
           title: m.title || m.url || '',
         },
-        { note: '', tags: [] },
+        seed,
         settings.autoSaveMetadata
       );
+      try {
+        await self.TabWallPageAnnotate?.consumePageAnnotationOnPark?.(m.url);
+      } catch (err) {
+        console.warn('[TabWall] consume live annotation on group member failed:', err);
+      }
 
       groupTabs.push({
         id: memberId,
@@ -1739,6 +1767,10 @@ async function handleCommandAction(action) {
   if (action === 'open-ai') {
     return toggleAiPanelOnActiveTab();
   }
+  if (action === 'toggle-annotate') {
+    if (!beginAction('toggle-annotate')) return { ok: false, error: 'debounced' };
+    return toggleAnnotateOnActiveTab();
+  }
   return { ok: false, error: 'unknown_action' };
 }
 
@@ -1798,6 +1830,10 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'APPLY_DEDUPE',
   'SET_REMINDER',
   'CLEAR_REMINDER',
+  'UPSERT_PAGE_ANNOTATION',
+  'DELETE_PAGE_ANNOTATION',
+  'PUT_PAGE_INK',
+  'PARK_PAGE_ANNOTATION',
 ]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1881,6 +1917,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return saveActiveGroup({ afterSaveGroup: message.afterSaveGroup });
       case 'OPEN_PARK_ACTIVE':
         return openParkOnActiveTab(message.targetTabId);
+      case 'GET_PAGE_ANNOTATION':
+        return self.TabWallPageAnnotate.getPageAnnotationView(message.url);
+      case 'UPSERT_PAGE_ANNOTATION': {
+        const result = await self.TabWallPageAnnotate.upsertPageAnnotation(message);
+        if (sender?.tab?.id != null) {
+          refreshTabBadge(sender.tab).catch(() => {});
+        } else {
+          refreshActiveTabBadge().catch(() => {});
+        }
+        return result;
+      }
+      case 'DELETE_PAGE_ANNOTATION':
+        return self.TabWallPageAnnotate.deletePageAnnotation(message.url, {
+          clearInk: message.clearInk !== false,
+        });
+      case 'LIST_PAGE_ANNOTATIONS':
+        return { ok: true, items: await self.TabWallPageAnnotate.listVisiblePageAnnotations() };
+      case 'GET_PAGE_INK':
+        return self.TabWallPageAnnotate.getPageInk(message.url);
+      case 'PUT_PAGE_INK':
+        return self.TabWallPageAnnotate.putPageInk(message.url, message.strokes, {
+          title: message.title,
+          favIconUrl: message.favIconUrl,
+          overlayVisible: message.overlayVisible,
+        });
+      case 'OPEN_OR_FOCUS_URL':
+        return openOrFocusUrl(message.url);
+      case 'PARK_PAGE_ANNOTATION':
+        return parkPageAnnotation(message.url);
       case 'GET_TAGS':
         return { ok: true, tags: await getTagsWithCounts() };
       case 'ADD_TAG':
@@ -2113,6 +2178,10 @@ if (globalThis.__TABWALL_TEST__) {
     handleReminderAlarm,
     handleReminderNotificationClick,
     handleCommandAction,
+    toggleAnnotateOnActiveTab,
+    notifyPageAnnotationUrlChanged,
+    openOrFocusUrl,
+    parkPageAnnotation,
   };
 }
 

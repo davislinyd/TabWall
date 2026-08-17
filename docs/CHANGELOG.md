@@ -11,6 +11,40 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.1 — 2026-08-17
+
+- 繪圖層預設收合成可拖曳的小筆 FAB（比照 AI 面板）；點一下展開工具列。
+- 繪圖層開啟時工具列 icon 顯示 `✎`；關閉後若該網址已停車則回到綠色 `✓`。
+- 工具列／FAB 置於 canvas 之上，避免全頁畫布擋住拖曳。
+- 移除「選」工具：hover 物件後左鍵選取並可拖曳；點空白才依目前工具畫／寫。
+- 重新產生 `dist/TabWall-2.46.1.zip`。
+
+## 2.46.0 — 2026-08-17
+
+- 修正工具列收合（CSS `display:flex` 不再蓋過 `hidden`）。
+- 文字框可選取、拖曳；「字」模式點已有文字改為選取。選中物件可用 Delete／Backspace 刪除。
+- 繪圖 Undo（工具列「復原」或 ⌘Z／Ctrl+Z）；工具列平時半透明，hover／聚焦變實色。
+- 重新產生 `dist/TabWall-2.46.0.zip`。
+
+## 2.45.2 — 2026-08-17
+
+- 繪圖層開關寫入 session，重整同一網址會維持開或關。
+- 重新產生 `dist/TabWall-2.45.2.zip`。
+
+## 2.45.1 — 2026-08-17
+
+- Chromium 最多只能給 4 個 command 預設快捷鍵；拿掉 `toggle-annotate` 的 `suggested_key`，避免載入失敗（`Too many shortcuts`）。
+- 一般網頁改由 content script 聽 **Option／Alt+D** 開關繪圖層；`toggle-annotate` 仍可在瀏覽器捷徑頁自行綁定。
+- 重新產生 `dist/TabWall-2.45.1.zip`。
+
+## 2.45.0 — 2026-08-17
+
+- **未停車標註：** 不必停車即可對完整 URL 寫備註與 tag（popup）。資料與 `parkedItems` 分開；牆上以「未停車」輕量卡顯示。
+- 停車時自動合併 live tag／備註；繪圖留在原頁，不變 sticker。
+- **頁面繪圖層：** 不改網頁 DOM。筆、螢光直線、文字框、像素橡皮擦、檢視；圖層可關。
+- 備份：lite JSON 含標註中繼、不含筆畫；ink 存在 IndexedDB。
+- 重新產生 `dist/TabWall-2.45.0.zip`。
+
 ## 2.44.2 — 2026-08-16
 
 - 修正 Edge／Chromium 在畫布切換到列表時，列表模組仍引用已拆出的全域 thumbnail observer，造成 `thumbObserver is not defined` 與空白畫面。

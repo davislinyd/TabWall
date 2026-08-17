@@ -585,7 +585,9 @@
         let stacked = false;
         if (env.activeCanvasSelection().size === 1) {
           const targetId = env.canvasTargetAt(finalPoint, state.id);
-          if (targetId) {
+          const sourceItem = env.canvasItemById(state.id);
+          const targetItem = env.canvasItemById(targetId);
+          if (targetId && sourceItem?.kind !== 'live' && targetItem?.kind !== 'live') {
             await env.ensureCanvasStore()?.flush?.();
             if (pointerGeneration !== env.canvasInteractionGeneration) return;
             const result = await env.sendMessage({ type: 'STACK_ITEMS', sourceId: state.id, targetId });
@@ -1272,6 +1274,11 @@
       const item = env.canvasItemById(id);
       if (!item || !action) return;
       if (action === 'restore') await env.restoreItem(item.id);
+      else if (action === 'park' && item.kind === 'live') {
+        const res = await env.sendMessage({ type: 'PARK_PAGE_ANNOTATION', url: item.url });
+        if (res?.ok) await env.loadList();
+        else env.showCopyToast(env.t('liveParkFailed'));
+      }
       else if (action === 'snapshot') {
         if (item.kind === 'group') env.openCanvasGroupLightbox(item);
         else env.openLightbox(item);

@@ -122,11 +122,72 @@
 
   }
 
+  function createLiveCard(item) {
+    ensureBound('createLiveCard');
+    const card = document.createElement('article');
+    card.className = 'card live-card';
+    card.dataset.id = item.id;
+    card.dataset.kind = 'live';
+    card.setAttribute('role', 'listitem');
+    const title = item.title || item.url || 'Untitled';
+    const url = item.url || '';
+    const note = item.note || '';
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    if (env.selectedIds.has(item.id)) card.classList.add('selected');
+    card.innerHTML = `
+      <input type="checkbox" class="card-check" ${env.selectedIds.has(item.id) ? 'checked' : ''} aria-label="select" />
+      <div class="thumb-wrap">
+        <div class="live-cover">${iconSvg('edit')}<span>${escapeHtml(t('liveBadge'))}</span></div>
+        <div class="card-actions">
+          <button type="button" class="icon-btn lg edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}<span>${escapeHtml(t('edit'))}</span></button>
+          <button type="button" class="icon-btn lg park-btn" title="${escapeAttr(t('livePark'))}" aria-label="${escapeAttr(t('livePark'))}">${iconSvg('restore')}<span>${escapeHtml(t('livePark'))}</span></button>
+        </div>
+        <button type="button" class="icon-btn sm danger delete-corner delete-btn" title="${escapeAttr(t('delete'))}" aria-label="${escapeAttr(t('delete'))}">${iconSvg('delete')}</button>
+      </div>
+      <div class="meta copy-hit" title="${escapeAttr(t('copyLink'))}">
+        <div class="title-row">
+          ${item.favIconUrl ? `<img class="favicon" alt="" draggable="false" src="${escapeAttr(item.favIconUrl)}" />` : `<span class="favicon-fallback" aria-hidden="true"></span>`}
+          <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)} <span class="live-badge">${escapeHtml(t('liveBadge'))}</span></div>
+        </div>
+        <div class="url" title="${escapeAttr(url)}">${escapeHtml(url)}</div>
+        ${note ? `<div class="note-preview" title="${escapeAttr(note)}">${env.escapeHtml(note)}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((tg) => `<span class="tag">${escapeHtml(tg)}</span>`).join('')}</div>` : ''}
+      </div>
+    `;
+    card.querySelector('.card-check').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!env.selectMode) env.setSelectMode(true);
+      env.handleCardSelectClick(item.id, e);
+    });
+    card.querySelector('.edit-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      env.openEditBox(item);
+    });
+    card.querySelector('.park-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const res = await env.sendMessage({ type: 'PARK_PAGE_ANNOTATION', url: item.url });
+      if (res?.ok) await env.loadList();
+      else env.showCopyToast(env.t('liveParkFailed'));
+    });
+    card.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      env.deleteItem(item.id);
+    });
+    bindMetaCopy(card.querySelector('.meta'), item);
+    card.querySelector('.thumb-wrap').addEventListener('click', (e) => {
+      if (e.target.closest('.card-actions, .delete-btn, .edit-btn, .park-btn, .card-check')) return;
+      if (env.selectMode) env.handleCardSelectClick(item.id, e);
+      else env.restoreItem(item.id);
+    });
+    return card;
+  }
+
   function createCard(item) {
     ensureBound('createCard');
 
       if (item.kind === 'group') return createGroupCard(item);
       if (item.kind === 'note') return createRow(item);
+      if (item.kind === 'live') return createLiveCard(item);
 
       const card = document.createElement('article');
       const isImage = env.isImageCard?.(item) || item.cardSource === 'image';
@@ -246,23 +307,24 @@
     ensureBound('createRow');
 
       const row = document.createElement('article');
-      row.className = `row${item.kind === 'group' ? ' group-row' : ''}${item.kind === 'note' ? ' note-row' : ''}`;
+      row.className = `row${item.kind === 'group' ? ' group-row' : ''}${item.kind === 'note' ? ' note-row' : ''}${item.kind === 'live' ? ' live-row' : ''}`;
       row.dataset.id = item.id;
       row.setAttribute('role', 'listitem');
 
       const isGroup = item.kind === 'group';
       const isNote = item.kind === 'note';
+      const isLive = item.kind === 'live';
       const isImage = env.isImageCard?.(item) || item.cardSource === 'image';
       const title = itemTitle(item);
       const url = isGroup
         ? env.t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
-        : isNote ? env.t('noteKind') : isImage ? env.t('imageKind') : item.url || '';
+        : isNote ? env.t('noteKind') : isLive ? env.t('liveBadge') : isImage ? env.t('imageKind') : item.url || '';
       const mediaKey = isGroup
         ? (() => {
             const m = (item.tabs || []).find((x) => x.hasThumb || x.id) || (item.tabs || [])[0];
             return m ? env.mediaKeyForMember(item.id, m.id) : '';
           })()
-        : isNote ? '' : env.mediaKeyForItem(item);
+        : isNote || isLive ? '' : env.mediaKeyForItem(item);
       const note = isNote ? (item.markdown || '') : item.note || '';
       const tags = Array.isArray(item.tags) ? item.tags : [];
       const color = isGroup ? env.GROUP_COLORS[item.color] || env.GROUP_COLORS.grey : null;
@@ -272,6 +334,8 @@
         ${
           isNote
             ? `<button type="button" class="row-thumb note-row-thumb" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('note')}</button>`
+            : isLive
+            ? `<button type="button" class="row-thumb live-row-thumb" title="${escapeAttr(t('liveOpen'))}" aria-label="${escapeAttr(t('liveOpen'))}">${iconSvg('edit')}</button>`
             : env.isMediaLocked?.(item)
               ? mediaLockOverlayHtml(item, 'row-thumb')
               : `<img class="row-thumb lazy-thumb" alt="" draggable="false" decoding="async" data-media-key="${escapeAttr(mediaKey)}" title="${escapeAttr(t('restore'))}" />`
@@ -280,6 +344,7 @@
           <div class="title copy-hit" title="${escapeAttr(title)}">
             ${color ? `<span class="color-dot" style="background:${color};display:inline-block;margin-right:6px;vertical-align:middle"></span>` : ''}
             ${escapeHtml(title)}
+            ${isLive ? `<span class="live-badge">${escapeHtml(t('liveBadge'))}</span>` : ''}
             ${item.reminder ? `<span class="reminder-badge" title="${escapeAttr(t('reminderActive'))}">${iconSvg('reminder')}</span>` : ''}
             ${storedOnlyCount ? `<span class="stored-only-badge">${env.escapeHtml(env.t('storedOnlyShort'))}${storedOnlyCount > 1 ? ` ×${storedOnlyCount}` : ''}</span>` : ''}
           </div>
@@ -296,12 +361,12 @@
           }
         </div>
         <div class="row-actions">
-          <button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
-          <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>
+          ${isLive ? '' : `<button type="button" class="pin-btn lock-btn ${item.locked ? 'active' : ''}" aria-pressed="${item.locked ? 'true' : 'false'}" title="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}" aria-label="${escapeAttr(t(item.locked ? 'unlockAction' : 'lockAction'))}">${iconSvg(item.locked ? 'unlock' : 'lock')}</button>
+          <button type="button" class="pin-btn ${item.pinned ? 'active' : ''}" aria-pressed="${item.pinned ? 'true' : 'false'}" title="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}" aria-label="${escapeAttr(t(item.pinned ? 'unpin' : 'pin'))}">${iconSvg('pin')}</button>`}
           <button type="button" class="icon-btn edit-btn" title="${escapeAttr(t('edit'))}" aria-label="${escapeAttr(t('edit'))}">${iconSvg('edit')}</button>
-          <button type="button" class="icon-btn reminder-btn ${item.reminder ? 'active' : ''}" title="${escapeAttr(t('reminderAction'))}" aria-label="${escapeAttr(t('reminderAction'))}">${iconSvg('reminder')}</button>
+          ${isLive ? `<button type="button" class="icon-btn park-btn" title="${escapeAttr(t('livePark'))}" aria-label="${escapeAttr(t('livePark'))}">${iconSvg('restore')}</button>` : `<button type="button" class="icon-btn reminder-btn ${item.reminder ? 'active' : ''}" title="${escapeAttr(t('reminderAction'))}" aria-label="${escapeAttr(t('reminderAction'))}">${iconSvg('reminder')}</button>`}
           ${
-            isGroup || isNote
+            isGroup || isNote || isLive
               ? ''
               : `<button type="button" class="icon-btn expand-btn" title="${escapeAttr(t('expand'))}" aria-label="${escapeAttr(t('expand'))}">${iconSvg('expand')}</button>`
           }
@@ -341,16 +406,22 @@
         if (isNote) env.openStickerNoteEditor(item);
         else env.openEditBox(item);
       });
-      row.querySelector('.reminder-btn').addEventListener('click', (e) => {
+      row.querySelector('.park-btn')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await env.sendMessage({ type: 'PARK_PAGE_ANNOTATION', url: item.url });
+        if (res?.ok) await env.loadList();
+        else env.showCopyToast(env.t('liveParkFailed'));
+      });
+      row.querySelector('.reminder-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         env.openReminderEditor(item);
       });
-      row.querySelector('.lock-btn').addEventListener('click', (e) => {
+      row.querySelector('.lock-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         if (env.selectMode) return;
         env.toggleCardLock?.(item);
       });
-      row.querySelector('.pin-btn:not(.lock-btn)').addEventListener('click', (e) => {
+      row.querySelector('.pin-btn:not(.lock-btn)')?.addEventListener('click', (e) => {
         e.stopPropagation();
         if (env.selectMode) return;
         env.togglePinned(item);
@@ -759,6 +830,12 @@
 
       // Drop onto another card → stack / merge into group
       if (stackTargetId && stackTargetId !== state.id) {
+        const sourceItem = env.allTabs.find((candidate) => candidate.id === state.id);
+        const targetItem = env.allTabs.find((candidate) => candidate.id === stackTargetId);
+        if (sourceItem?.kind === 'live' || targetItem?.kind === 'live') {
+          env.showCopyToast(t('liveNoStack'));
+          return;
+        }
         const res = await env.sendMessage({
           type: 'STACK_ITEMS',
           sourceId: state.id,

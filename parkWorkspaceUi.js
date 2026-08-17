@@ -886,6 +886,11 @@
 
       return env.withUiActionLock(`restore:${id}`, async () => {
         const item = env.allTabs.find((t) => t.id === id);
+        if (item?.kind === 'live') {
+          const res = await env.sendMessage({ type: 'OPEN_OR_FOCUS_URL', url: item.url });
+          if (!res?.ok) env.showCopyToast(env.t('liveOpenFailed'));
+          return res;
+        }
         if (item?.kind === 'note') {
           env.openStickerNoteEditor(item);
           return { ok: false, error: 'note_not_restorable' };
@@ -924,7 +929,10 @@
     ensureBound('deleteItem');
 
       return env.withUiActionLock(`delete:${id}`, async () => {
-        const res = await env.sendMessage({ type: 'DELETE_ITEM', id });
+        const item = env.allTabs.find((candidate) => candidate.id === id);
+        const res = item?.kind === 'live'
+          ? await env.sendMessage({ type: 'DELETE_PAGE_ANNOTATION', url: item.url, clearInk: true })
+          : await env.sendMessage({ type: 'DELETE_ITEM', id });
         if (res.ok) {
           env.allTabs = env.allTabs.filter((t) => t.id !== id);
           if (env.expandedId === id) closeLightbox();
@@ -954,9 +962,10 @@
 
     try {
       const generation = ++env.canvasLoadGeneration;
-      const [itemsResult, layoutResult] = await Promise.allSettled([
+      const [itemsResult, layoutResult, liveResult] = await Promise.allSettled([
         env.sendMessage({ type: 'GET_PARKED_ITEMS' }),
         env.sendMessage({ type: 'GET_CANVAS_LAYOUT' }),
+        env.sendMessage({ type: 'LIST_PAGE_ANNOTATIONS' }),
       ]);
       if (generation !== env.canvasLoadGeneration) return false;
 
@@ -977,7 +986,12 @@
           : Array.isArray(res.tabs)
             ? res.tabs
             : [];
-      const nextItems = env.normalizeParkedList(raw);
+      const liveRaw = liveResult.status === 'fulfilled' && liveResult.value?.ok && Array.isArray(liveResult.value.items)
+        ? liveResult.value.items
+        : [];
+      const parkedItems = env.normalizeParkedList(raw);
+      const liveItems = liveRaw.length ? env.normalizeParkedList(liveRaw) : [];
+      const nextItems = liveItems.length ? [...liveItems, ...parkedItems] : parkedItems;
       if (!Array.isArray(nextItems)) throw new Error('invalid_normalized_items');
       env.markTagSuggestIndexDirty();
       env.pruneAttachmentUrlCache(nextItems);
@@ -1362,7 +1376,7 @@
         item.kind === 'group'
           ? env.t('groupTabs', { n: (item.tabs || []).length })
           : item.url || '';
-      fillEditTitleLockFields(item);
+      fillEditTitleLockFields(item, { hidden: item.kind === 'live' });
       env.editNote.value = item.note || '';
       env.editTagList = Array.isArray(item.tags) ? [...item.tags] : [];
       env.editTagDraft.value = '';

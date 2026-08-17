@@ -18,8 +18,8 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 
 ### Architecture
 
-- Metadata such as URLs, titles, notes, tags, and order is stored in `chrome.storage.local`.
-- Thumbnails, full snapshots, Sticker Note attachments, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
+- Metadata such as URLs, titles, notes, tags, live page annotations, and order is stored in `chrome.storage.local`.
+- Thumbnails, full snapshots, Sticker Note attachments, page-drawing ink, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
@@ -50,6 +50,7 @@ Browser command defaults are declared in `manifest.json` and managed in Edge at 
 | `Option/Alt+Shift+S` | Park the current tab or Tab Group and keep it open |
 | `Option/Alt+Shift+G` | Park the current Tab Group (uses the configured after-save behavior) |
 | `Option/Alt+O` | Toggle the TabWall canvas |
+| `Option/Alt+D` | Toggle the page drawing layer on a normal page (content-script shortcut) |
 | `Option/Alt+A` | Open external AI on a normal page; focus built-in AI inside TabWall (content-script shortcut) |
 | `/` | Focus search |
 | `⌥⌘S` on Mac / `Alt+Win+S` on Windows | Open or close settings in the wall |
@@ -68,7 +69,7 @@ Browser command defaults are declared in `manifest.json` and managed in Edge at 
 | `⌘⇧Z` / `Ctrl+⇧Z` / `Ctrl+Y` | Redo stack or connection |
 | `←` / `→` | Show the previous or next snapshot |
 
-The first four actions are Chrome commands with install-time suggested keys. `open-ai` is an additional Chrome command without a default key; bind it manually when needed. `Option/Alt+A` is handled by the page content script and is not a Chrome command. Existing Chrome assignments, shortcut conflicts, and platform rules can leave commands unbound. Manage them in Chrome shortcut settings; TabWall only displays the current bindings and opens the settings page.
+The first four actions are Chrome commands with install-time suggested keys (Chromium allows at most four suggested keys). `open-ai` and `toggle-annotate` are extra commands without a default key; bind them in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) when needed. `Option/Alt+A` and `Option/Alt+D` are handled by the page content script. Existing assignments, conflicts, and platform rules can leave commands unbound.
 
 Clicking the extension icon opens an action menu for saving the current tab or Tab Group with or without closing it, or opening the TabWall panel. Group actions are disabled when the current tab is not in a Tab Group.
 
@@ -116,7 +117,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 ### Features
 
-- **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page.
+- **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green `✓` badge means the URL is parked; an orange `✎` means the drawing layer is open.
+- **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is a toggleable overlay (pen, straight highlighter, text, eraser) that does not change the page DOM. It starts as a small pen FAB. Hover an object and left-click to select; ⌘Z/Ctrl+Z undoes drawing. `chrome://` pages cannot host the layer.
 - **Local AI agent:** connect the external panel to a loopback `llama-server` endpoint, analyze the current page or saved tab metadata, and optionally call allowlisted local bridge tools. Context is automatically budgeted to the configured `contextSize`; no cloud endpoint is used by default.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable; the Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
@@ -197,8 +199,8 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 
 ### 架構
 
-- 網址、標題、備註、標籤與排序等中繼資料儲存在 `chrome.storage.local`。
-- 縮圖、完整快照、Sticker Note 附件與可選的自訂背景以 `IndexedDB` 二進位資料儲存。背景的符合方式、模糊與濃度留在設定裡。
+- 網址、標題、備註、標籤、未停車標註與排序等中繼資料儲存在 `chrome.storage.local`。
+- 縮圖、完整快照、Sticker Note 附件、頁面繪圖筆畫與可選的自訂背景以 `IndexedDB` 二進位資料儲存。背景的符合方式、模糊與濃度留在設定裡。
 - 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
@@ -229,6 +231,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `Option/Alt+Shift+S` | 暫存目前分頁或目前 Tab Group 但不關閉 |
 | `Option/Alt+Shift+G` | 暫存目前 Tab Group（依「儲存後行為」設定） |
 | `Option/Alt+O` | 開關 TabWall 空間畫布 |
+| `Option/Alt+D` | 在一般網頁開關繪圖層（content script 快捷鍵） |
 | `Option/Alt+A` | 在一般網頁開啟本機 AI 面板（content script 快捷鍵） |
 | `/` | 聚焦搜尋框 |
 | Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉畫布設定 |
@@ -247,7 +250,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前四項是有安裝時建議鍵的瀏覽器 commands；另有沒有預設鍵的 `open-ai` command，可在需要時手動綁定。`Option/Alt+A` 由一般網頁的 content script 處理，不是瀏覽器 command。既有 Edge／Chrome 設定、快捷鍵衝突與平台規則都可能使命令保持未綁定，請在 Edge 的 `edge://extensions/shortcuts`（Chrome 的 `chrome://extensions/shortcuts`）管理；TabWall 只顯示目前綁定並提供開啟設定頁的按鈕。
+前四項是有安裝時建議鍵的瀏覽器 commands（Chromium 最多只能建議 4 組）。`open-ai` 與 `toggle-annotate` 沒有預設鍵，需要時請到 Edge 的 `edge://extensions/shortcuts`（Chrome：`chrome://extensions/shortcuts`）自行綁定。`Option/Alt+A` 與 `Option/Alt+D` 由頁面 content script 處理。既有設定、衝突與平台規則都可能使命令保持未綁定。
 
 點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
@@ -294,7 +297,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 ### 功能
 
-- **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。
+- **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示綠色 `✓` 表示該網址已停車；橘色 `✎` 表示繪圖層開著。
+- **未停車標註與繪圖：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層不改網頁 DOM，預設收合成小筆鈕；hover 後左鍵選取物件，⌘Z 可 Undo。<code>chrome://</code> 不能畫。
 - **本機 AI agent：** 外部 AI 面板可連線 loopback `llama-server`，分析目前分頁或已儲存分頁 metadata，並選擇性呼叫 allowlist 內的本機 bridge tools。系統會依 `contextSize` 自動控管 context，預設不連線雲端 endpoint。
 - **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片；背景啟用時會隱藏 Canvas 定位點，移除後恢復。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。

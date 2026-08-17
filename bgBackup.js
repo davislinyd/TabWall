@@ -635,11 +635,16 @@ async function hydrateWallpaperSettings(settings) {
  * @param {{ hydrate?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
  */
 async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
-  const [parkedItems, settingsData, tagCatalog, canvasLayout] = await Promise.all([
+  const [parkedItems, settingsData, tagCatalog, canvasLayout, pageAnnotations] = await Promise.all([
     getParkedItems(),
     chrome.storage.local.get(SETTINGS_KEY),
     getTagCatalog(),
     getCanvasLayout(),
+    self.TabWallPageAnnotate?.getPageAnnotationsList
+      ? self.TabWallPageAnnotate.getPageAnnotationsList()
+      : chrome.storage.local.get('pageAnnotations').then((data) => (
+        Array.isArray(data.pageAnnotations) ? data.pageAnnotations : []
+      )),
   ]);
 
   let items = parkedItems;
@@ -673,6 +678,7 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
       settings,
       tagCatalog,
       canvasLayout,
+      pageAnnotations: Array.isArray(pageAnnotations) ? pageAnnotations : [],
     },
   };
 }
@@ -1046,6 +1052,17 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
         const catalog = await getTagCatalog();
         const incoming = Array.isArray(backup.tagCatalog) ? backup.tagCatalog : [];
         await setTagCatalog([...catalog, ...incoming]);
+        if (Array.isArray(backup.pageAnnotations) && self.TabWallPageAnnotate) {
+          const existingLive = await self.TabWallPageAnnotate.getPageAnnotationsList();
+          const byUrl = new Map(existingLive.map((ann) => [ann.url, ann]));
+          for (const raw of backup.pageAnnotations) {
+            const next = self.TabWallPageAnnotate.normalizePageAnnotation(raw);
+            if (next) byUrl.set(next.url, next);
+          }
+          await chrome.storage.local.set({
+            [self.TabWallPageAnnotate.PAGE_ANNOTATIONS_KEY]: [...byUrl.values()],
+          });
+        }
         await cleanupOrphanMedia([...existing, ...items]);
         // Do not overwrite settings on append
         return { ok: true, mode: 'append', added: items.length, warnings };
@@ -1064,6 +1081,14 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
           : undefined,
         canvasInitialCenterMigrated: true,
       });
+      if (self.TabWallPageAnnotate) {
+        const incomingLive = (Array.isArray(backup.pageAnnotations) ? backup.pageAnnotations : [])
+          .map((raw) => self.TabWallPageAnnotate.normalizePageAnnotation(raw))
+          .filter(Boolean);
+        await chrome.storage.local.set({
+          [self.TabWallPageAnnotate.PAGE_ANNOTATIONS_KEY]: incomingLive,
+        });
+      }
       metadataCommitted = true;
       const staleKeys = [...oldKeys].filter((key) => !writtenKeys.has(key));
       try {
@@ -1434,6 +1459,8 @@ function isRestorableUrl(url) {
 
 const PARKED_BADGE_TEXT = '✓';
 const PARKED_BADGE_COLOR = '#16a34a';
+const DRAW_BADGE_TEXT = '✎';
+const DRAW_BADGE_COLOR = '#c97858';
 
 async function refreshTabBadge(tabOrId) {
   let tab = tabOrId;
@@ -1449,6 +1476,15 @@ async function refreshTabBadge(tabOrId) {
 
   const urlIndex = await getParkedUrlIndex();
   const parked = urlIndex.has(normalizeUrlKey(tab.url));
+  const live = self.TabWallPageAnnotate?.getPageAnnotation
+    ? await self.TabWallPageAnnotate.getPageAnnotation(tab.url)
+    : null;
+  const drawing = live?.overlayVisible === true;
+  if (drawing) {
+    await chrome.action.setBadgeBackgroundColor({ tabId, color: DRAW_BADGE_COLOR });
+    await chrome.action.setBadgeText({ tabId, text: DRAW_BADGE_TEXT });
+    return;
+  }
   if (parked) {
     await chrome.action.setBadgeBackgroundColor({
       tabId,

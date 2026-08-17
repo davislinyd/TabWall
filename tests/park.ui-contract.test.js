@@ -412,7 +412,7 @@ test('Top-level actions are consolidated in the header', () => {
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
-  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai']) {
+  for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai', 'toggle-annotate']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
   }
   assert.match(I18N_SOURCE, /helpShortcutAi: '一般分頁開啟外部 AI/);

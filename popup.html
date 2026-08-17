@@ -115,6 +115,85 @@
         background: var(--border);
       }
 
+      .annotate {
+        display: grid;
+        gap: 8px;
+      }
+
+      .annotate label,
+      .toggle {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      textarea,
+      .tag-input {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 64px;
+        resize: vertical;
+        padding: 8px;
+      }
+
+      .tag-input {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 6px;
+        min-height: 36px;
+        align-items: center;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: var(--hover);
+        font-size: 11px;
+      }
+
+      .chip button {
+        width: auto;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .tag-input input {
+        flex: 1;
+        min-width: 72px;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        outline: none;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       #status {
         min-height: 16px;
       }
@@ -130,6 +209,24 @@
         <h1 id="popupTitle">TabWall</h1>
         <p class="subtitle" data-i18n="subtitle">選擇目前分頁的操作</p>
       </header>
+
+      <section class="annotate" aria-labelledby="annotateHeading">
+        <strong id="annotateHeading" data-i18n="annotateHeading">此分頁標註</strong>
+        <p class="hint" id="annotateSource" hidden></p>
+        <label for="pageNote" data-i18n="noteLabel">備註</label>
+        <textarea id="pageNote" data-i18n-placeholder="notePh" placeholder="加入備註…"></textarea>
+        <label for="pageTagDraft" data-i18n="tagsLabel">Tags</label>
+        <div class="tag-input" id="pageTagInput">
+          <div class="chips" id="pageChips"></div>
+          <input id="pageTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="overlayToggle" />
+          <span data-i18n="overlayToggle">顯示繪圖圖層</span>
+        </label>
+      </section>
+
+      <div class="divider" aria-hidden="true"></div>
 
       <section class="actions" aria-label="TabWall actions">
         <button type="button" id="saveTabKeep" data-i18n="saveTabKeep">儲存目前分頁（不關閉）</button>

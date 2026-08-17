@@ -2460,7 +2460,15 @@ batchDelete.addEventListener('click', async () => {
     const ids = [...selectedIds];
     if (!ids.length) return;
     if (!window.confirm(t('batchDeleteConfirm', { n: ids.length }))) return;
-    await sendMessage({ type: 'BATCH_DELETE_ITEMS', ids });
+    const liveUrls = ids
+      .map((id) => allTabs.find((item) => item.id === id))
+      .filter((item) => item?.kind === 'live')
+      .map((item) => item.url);
+    const parkedIds = ids.filter((id) => allTabs.find((item) => item.id === id)?.kind !== 'live');
+    for (const url of liveUrls) {
+      await sendMessage({ type: 'DELETE_PAGE_ANNOTATION', url, clearInk: true });
+    }
+    if (parkedIds.length) await sendMessage({ type: 'BATCH_DELETE_ITEMS', ids: parkedIds });
     clearAllSelections();
     updateBatchBar();
     await loadList();
@@ -2572,6 +2580,24 @@ editSave.addEventListener('click', async () => {
     return;
   }
   if (!editingId) return;
+  const editingItem = allTabs.find((item) => item.id === editingId);
+  if (editingItem?.kind === 'live') {
+    const res = await sendMessage({
+      type: 'UPSERT_PAGE_ANNOTATION',
+      url: editingItem.url,
+      title: editingItem.title || '',
+      favIconUrl: editingItem.favIconUrl || '',
+      note: editNote.value,
+      tags: [...editTagList],
+    });
+    if (res.ok) {
+      closeEditBox();
+      await loadList();
+    } else {
+      editSub.textContent = t('editFailed');
+    }
+    return;
+  }
   const lockPatch = await collectLockPatchFromFields({
     locked: Boolean(editLockEnabled?.checked),
     password: editLockPassword?.value || '',
@@ -3273,7 +3299,7 @@ function scheduleLoadList(...args) { return AppHelpers.scheduleLoadList(...args)
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.parkedTabs || changes.parkedItems) scheduleLoadList();
+  if (changes.parkedTabs || changes.parkedItems || changes.pageAnnotations) scheduleLoadList();
   if (changes.canvasLayout || changes.canvasLayoutRevision) {
     const layout = changes.canvasLayout?.newValue;
     const revision = changes.canvasLayoutRevision?.newValue;

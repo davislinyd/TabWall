@@ -28,7 +28,9 @@ zip -r "$OUT_ZIP" \
   bgUndo.js \
   bgReminders.js \
   bgAi.js \
+  bgPageAnnotate.js \
   content.js \
+  pageAnnotate.js \
   quickSearch.js \
   aiUiCore.js \
   aiPanel.js \

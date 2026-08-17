@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.44.2 使用者說明：儲存分頁與 Tab Group、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.46.1 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.44.2</span>
+      <span>使用者說明 · v2.46.1</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -40,6 +40,7 @@
       <a href="#start"><span lang="zh-Hant">五分鐘上手</span><span lang="en">Five-minute start</span></a>
       <a href="#entries"><span lang="zh-Hant">三種入口</span><span lang="en">Three ways in</span></a>
       <a href="#save"><span lang="zh-Hant">儲存分頁與群組</span><span lang="en">Park tabs and groups</span></a>
+      <a href="#annotate"><span lang="zh-Hant">未停車標註與繪圖</span><span lang="en">Live notes and drawing</span></a>
       <a href="#presave"><span lang="zh-Hant">儲存前編輯與規則</span><span lang="en">Edit before save and rules</span></a>
       <a href="#canvas"><span lang="zh-Hant">空間畫布</span><span lang="en">Spatial canvas</span></a>
       <a href="#cards"><span lang="zh-Hant">卡片與還原</span><span lang="en">Cards and restore</span></a>
@@ -69,7 +70,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.44.2</span><span lang="en">Version 2.44.2</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.46.1</span><span lang="en">Version 2.46.1</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -89,8 +90,8 @@
           <li lang="en">Turn on Developer mode.</li>
           <li lang="zh-Hant">選擇「載入未封裝項目」，指定解壓後的 TabWall 資料夾（內含 <code>manifest.json</code>）。</li>
           <li lang="en">Choose Load unpacked and select the unzipped TabWall folder (it must contain <code>manifest.json</code>).</li>
-          <li lang="zh-Hant">到 <code>edge://extensions/shortcuts</code>（Chrome 為 <code>chrome://extensions/shortcuts</code>）確認四個有預設鍵的命令；需要時再手動綁定沒有預設鍵的 <code>open-ai</code>。衝突時請改成你習慣的組合。</li>
-          <li lang="en">On Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for the four commands with suggested keys; bind the optional <code>open-ai</code> command manually when needed.</li>
+          <li lang="zh-Hant">到 <code>edge://extensions/shortcuts</code>（Chrome 為 <code>chrome://extensions/shortcuts</code>）確認四個有預設鍵的命令。Chromium <strong>最多只能建議 4 組</strong>擴充快捷鍵；<code>open-ai</code> 與 <code>toggle-annotate</code> 沒有預設鍵，需要時請自行綁定。一般網頁繪圖層另用頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd>。</li>
+          <li lang="en">On Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for the four commands with suggested keys. Chromium allows <strong>at most four</strong> suggested extension shortcuts; bind <code>open-ai</code> and <code>toggle-annotate</code> yourself if needed. On normal pages the drawing layer also listens for <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd>.</li>
         </ol>
         <div class="callout warn">
           <p lang="zh-Hant">安裝、重新載入或更新後，若網頁上的浮層或 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 沒反應，請重新整理該分頁。舊頁面可能仍掛著上一版注入腳本。</p>
@@ -144,6 +145,8 @@
               <li lang="en">Park the current Tab Group (close or keep)</li>
               <li lang="zh-Hant">打開 TabWall 面板</li>
               <li lang="en">Open the TabWall panel</li>
+              <li lang="zh-Hant">不必停車即可編輯目前網址的備註／tags，並開關繪圖層</li>
+              <li lang="en">Edit notes and tags for the current URL without parking, and toggle the drawing layer</li>
             </ul>
             <p lang="zh-Hant">目前分頁不在 Tab Group 時，群組按鈕會停用。</p>
             <p lang="en">Group actions are disabled when the current tab is not in a Tab Group.</p>
@@ -157,8 +160,8 @@
           <article class="card">
             <h3 lang="zh-Hant">網頁浮層</h3>
             <h3 lang="en">Page overlay</h3>
-            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示右下角若出現綠色勾，代表這個網址已在牆裡（獨立卡片或群組成員）。</p>
-            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. The overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green check on the icon means this URL is already on the wall (as a card or a group member).</p>
+            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示右下角綠色勾代表這個網址已停車；繪圖層開啟時改為橘色小筆 <code>✎</code>。</p>
+            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. The overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green check on the icon means this URL is parked; an orange <code>✎</code> means the drawing layer is open.</p>
           </article>
         </div>
       </section>
@@ -220,6 +223,35 @@ https://wiki.example.com
           <p lang="zh-Hant">截圖範圍由 Chrome 決定。群組可在設定選擇截「全部成員」「僅目前分頁」或「不截圖（只存結構）」。</p>
           <p lang="en">Chrome decides what can be captured. For groups, Settings can capture all members, only the active tab, or structure only.</p>
         </div>
+      </section>
+
+      <section class="chapter" id="annotate">
+        <h2 lang="zh-Hant">未停車標註與繪圖</h2>
+        <h2 lang="en">Live notes and drawing</h2>
+        <p lang="zh-Hant">不必把分頁存進牆，也可以對<strong>完整網址</strong>（含 query／hash）寫備註與 tags。同一網址重開或換分頁都會帶回來。</p>
+        <p lang="en">You can add notes and tags to a <strong>full URL</strong> (including query and hash) without parking the tab. The same URL keeps them across reloads and other tabs.</p>
+        <h3 lang="zh-Hant">Popup 標註</h3>
+        <h3 lang="en">Popup notes</h3>
+        <p lang="zh-Hant">點工具列圖示即可編輯目前分頁的備註與 tags，並勾選「顯示繪圖圖層」。若該網址已經停車，編輯會寫入牆上的卡片，不會另建一筆 live 紀錄。</p>
+        <p lang="en">The toolbar popup edits the current tab’s note and tags, and can show the drawing layer. If the URL is already parked, edits update the parked card instead of creating a live record.</p>
+        <h3 lang="zh-Hant">牆上的「未停車」卡</h3>
+        <h3 lang="en">“Not parked” cards</h3>
+        <p lang="zh-Hant">有備註、tags 或繪圖、且該 URL 尚未停車時，畫布／列表會出現虛線「未停車」卡。點擊會聚焦或開啟該網址；可編輯、停車或刪除。不能組成 Stack、不能上鎖或設提醒。</p>
+        <p lang="en">If a URL has a note, tags, or ink and is not parked, the wall shows a dashed “Not parked” card. Click to focus or open the URL. You can edit, park, or delete it. Live cards cannot stack, lock, or use reminders.</p>
+        <p lang="zh-Hant">之後停車時，live tags 會與卡片聯集、備註接在後面；繪圖留在原頁圖層，不會變成 Sticker。</p>
+        <p lang="en">When you later park the tab, live tags are unioned and notes are appended. Drawings stay on the page layer; they do not become stickers.</p>
+        <h3 lang="zh-Hant">頁面繪圖層</h3>
+        <h3 lang="en">Page drawing layer</h3>
+        <p lang="zh-Hant">疊在網頁上的獨立圖層，不改頁面 DOM。一般網站可用 popup、或頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> 開關。<code>chrome://</code> 等受限頁不能畫。</p>
+        <p lang="en">A separate overlay on the page; it does not change the page DOM. Toggle it from the popup or with <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> on a normal site. Restricted pages such as <code>chrome://</code> cannot host it.</p>
+        <ul>
+          <li lang="zh-Hant">打開時先出現可拖曳的小筆鈕（像 AI FAB）。點一下展開工具列；「收合」回到小筆。工具列在畫布之上，平時半透明，滑鼠移上去變實色。</li>
+          <li lang="en">It starts as a small draggable pen FAB (like the AI chip). Click to expand the toolbar; Collapse returns to the FAB. The chrome stays above the canvas, faint until hover.</li>
+          <li lang="zh-Hant">工具：筆、螢光直線（接近水平會吸直）、文字框、像素橡皮擦、檢視。沒有獨立「選」鈕；滑鼠移到物件上再左鍵即可選取、拖曳。文字連點兩下進入編輯。Delete／Backspace 刪除選取；⌘Z／Ctrl+Z 或「復原」可 Undo（不跨重整）。</li>
+          <li lang="en">Tools: pen, straight highlighter (snaps near-horizontal), text box, pixel eraser, view. There is no Pick button — hover an object and left-click to select and drag. Double-click text to edit. Delete/Backspace removes the selection; ⌘Z/Ctrl+Z or Undo reverts (not across reload).</li>
+          <li lang="zh-Hant">筆畫綁完整 URL，存在本機 IndexedDB。重整同一網址會維持圖層開或關。</li>
+          <li lang="en">Ink is keyed by the full URL and stored in IndexedDB. Reloading the same URL keeps the layer open or closed.</li>
+        </ul>
       </section>
 
       <section class="chapter" id="presave">
@@ -700,8 +732,8 @@ https://wiki.example.com
           <article class="card">
             <h3 lang="zh-Hant">精簡 JSON</h3>
             <h3 lang="en">Lite JSON</h3>
-            <p lang="zh-Hant">保留網址、標題、note、tags、附件 metadata，以及背景的符合／模糊／濃度設定。不含截圖、附件或背景圖檔。檔案小，適合日常與自動備份。</p>
-            <p lang="en">Keeps URLs, titles, notes, tags, attachment metadata, and wallpaper fit / blur / strength. No screenshot, attachment, or wallpaper image binaries. Small enough for daily and automatic backups.</p>
+            <p lang="zh-Hant">保留網址、標題、note、tags、未停車標註中繼、附件 metadata，以及背景的符合／模糊／濃度設定。不含截圖、附件、背景圖檔或頁面筆畫。檔案小，適合日常與自動備份。</p>
+            <p lang="en">Keeps URLs, titles, notes, tags, live-annotation metadata, attachment metadata, and wallpaper fit / blur / strength. No screenshot, attachment, wallpaper, or page-ink binaries. Small enough for daily and automatic backups.</p>
           </article>
           <article class="card">
             <h3 lang="zh-Hant">完整 ZIP</h3>
@@ -730,10 +762,10 @@ https://wiki.example.com
         <p lang="zh-Hant">資料只留在這台電腦的瀏覽器。應用內說明也有精簡版。</p>
         <p lang="en">Data stays in this browser, on this device. In-app Help has a short version of this section.</p>
         <ul>
-          <li lang="zh-Hant">網址、標題、備註、標籤與設定存在 <code>chrome.storage.local</code>，通常只有數 MB。</li>
-          <li lang="en">URLs, titles, notes, tags, and settings live in <code>chrome.storage.local</code> — usually a few megabytes.</li>
-          <li lang="zh-Hant">縮圖、完整快照、圖片卡、Sticker 附件與自訂背景存在 IndexedDB（通常是最大一塊）。</li>
-          <li lang="en">Thumbnails, snapshots, image cards, sticker attachments, and the custom wallpaper live in IndexedDB (usually the bulk).</li>
+          <li lang="zh-Hant">網址、標題、備註、標籤、未停車標註中繼與設定存在 <code>chrome.storage.local</code>，通常只有數 MB。</li>
+          <li lang="en">URLs, titles, notes, tags, live-annotation metadata, and settings live in <code>chrome.storage.local</code> — usually a few megabytes.</li>
+          <li lang="zh-Hant">縮圖、完整快照、圖片卡、Sticker 附件、頁面繪圖筆畫與自訂背景存在 IndexedDB（通常是最大一塊）。</li>
+          <li lang="en">Thumbnails, snapshots, image cards, sticker attachments, page-drawing ink, and the custom wallpaper live in IndexedDB (usually the bulk).</li>
           <li lang="zh-Hant">下載目錄裡的自動備份是一般檔案，<strong>不算</strong>擴充儲存；解除安裝也不會刪。</li>
           <li lang="en">Automatic backups in the download folder are ordinary files. They are <strong>not</strong> extension storage, and uninstalling does not delete them.</li>
           <li lang="zh-Hant">設定／編輯器顯示的 Sticker 用量只含 Note 附件配額，不含分頁截圖或 wallpaper。</li>
@@ -764,12 +796,12 @@ https://wiki.example.com
         <ul>
           <li lang="zh-Hant">沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。</li>
           <li lang="en">There is no TabWall cloud account, and the wall is not uploaded to TabWall servers.</li>
-          <li lang="zh-Hant">網址、標題、note、tags、排序存在 <code>chrome.storage.local</code>。</li>
-          <li lang="en">URLs, titles, notes, tags, and order live in <code>chrome.storage.local</code>.</li>
+          <li lang="zh-Hant">網址、標題、note、tags、未停車標註中繼、排序存在 <code>chrome.storage.local</code>。</li>
+          <li lang="en">URLs, titles, notes, tags, live-annotation metadata, and order live in <code>chrome.storage.local</code>.</li>
           <li lang="zh-Hant">提醒的模式、下一次時間、間隔與通知文字也存在 <code>chrome.storage.local</code>；瀏覽器通知只在本機排程與發送。</li>
           <li lang="en">Reminder mode, next time, interval, and notification text also live in <code>chrome.storage.local</code>; browser notifications are scheduled and delivered locally.</li>
-          <li lang="zh-Hant">縮圖、快照、圖片卡、note 附件與自訂背景圖存在本機 IndexedDB。</li>
-          <li lang="en">Thumbnails, snapshots, image cards, note attachments, and the custom wallpaper live in local IndexedDB.</li>
+          <li lang="zh-Hant">縮圖、快照、圖片卡、note 附件、頁面繪圖筆畫與自訂背景圖存在本機 IndexedDB。</li>
+          <li lang="en">Thumbnails, snapshots, image cards, note attachments, page-drawing ink, and the custom wallpaper live in local IndexedDB.</li>
           <li lang="zh-Hant">只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
           <li lang="en">The current tab or group is read only when you act (including Chrome commands).</li>
           <li lang="zh-Hant">解除安裝會依瀏覽器機制清除擴充功能本機資料。已下載的備份檔仍在下載目錄，需自行刪。</li>
@@ -799,8 +831,8 @@ https://wiki.example.com
         <h3 lang="zh-Hant">快捷鍵沒反應</h3>
         <h3 lang="en">Shortcuts do nothing</h3>
         <ol>
-          <li lang="zh-Hant">Edge 到 <code>edge://extensions/shortcuts</code>（Chrome 到 <code>chrome://extensions/shortcuts</code>）看四個預設命令是否「未綁定」或跟別的擴充功能衝突；需要時可另外綁定 <code>open-ai</code>。</li>
-          <li lang="en">In Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for unbound or conflicting default commands; bind <code>open-ai</code> separately when needed.</li>
+          <li lang="zh-Hant">Edge 到 <code>edge://extensions/shortcuts</code>（Chrome 到 <code>chrome://extensions/shortcuts</code>）看四個預設命令是否「未綁定」或衝突。瀏覽器最多只能建議 4 組擴充快捷鍵；<code>open-ai</code>、<code>toggle-annotate</code> 需自行綁定。一般網頁繪圖層另聽 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd>。</li>
+          <li lang="en">In Edge, check <code>edge://extensions/shortcuts</code> (Chrome uses <code>chrome://extensions/shortcuts</code>) for unbound or conflicting default commands. Chromium allows only four suggested extension shortcuts; bind <code>open-ai</code> and <code>toggle-annotate</code> yourself. On normal pages the drawing layer also uses <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd>.</li>
           <li lang="zh-Hant">重新整理目前分頁（更新後舊注入會失效）。</li>
           <li lang="en">Refresh the tab (old injections die after an update).</li>
           <li lang="zh-Hant">牆上內建鍵（<kbd>/</kbd>、搜尋模式、<kbd>Esc</kbd>、<kbd>⌘</kbd>+<kbd>Z</kbd>、快照方向鍵）不能在 Chrome 設定改。</li>
@@ -810,6 +842,10 @@ https://wiki.example.com
         <h3 lang="en">The canvas looks empty or cards are far away</h3>
         <p lang="zh-Hant">新卡片會靠近既有群配置到下一個不重疊格。可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
         <p lang="en">New cards land near the existing cluster in the next free cell. Use Arrange canvas, or double-click the middle mouse button to reset the view.</p>
+        <h3 lang="zh-Hant">擴充開關自己關掉／版本停在舊號</h3>
+        <h3 lang="en">The extension toggle turns itself off / version stays old</h3>
+        <p lang="zh-Hant">改過程式後，Edge 常把未封裝擴充標成「待重新載入」，卡片仍顯示上次成功載入的版號，重整管理頁開關會彈回關，且不一定有錯誤。請開著開發人員模式，按卡片或頁面頂端的<strong>重新載入</strong>（不要只撥開關，也<strong>不要移除</strong>，否則本機資料會沒）。成功後版號應與 <code>manifest.json</code> 一致。</p>
+        <p lang="en">After you change files, Edge often marks an unpacked extension “needs reload”. The card keeps the last successfully loaded version, and refreshing the extensions page flips the toggle off—sometimes with no error. Leave Developer mode on and click <strong>Reload</strong> on the card or the page header. Do not only flip the switch, and do <strong>not Remove</strong> (that deletes local data). After a successful reload the version matches <code>manifest.json</code>.</p>
       </section>
 
       <section class="chapter" id="keys">
@@ -852,6 +888,11 @@ https://wiki.example.com
               <td lang="zh-Hant">手動綁定 <code>open-ai</code>，用於開啟 AI 面板；受限頁面會提示無法注入</td>
               <td lang="en">Bind <code>open-ai</code> manually to open the AI panel; restricted pages show an injection notice</td>
             </tr>
+            <tr>
+              <td><span lang="zh-Hant">無預設鍵</span><span lang="en">No default key</span></td>
+              <td lang="zh-Hant">手動綁定 <code>toggle-annotate</code> 開關繪圖層（一般網頁另有頁面內建 Alt+D）</td>
+              <td lang="en">Bind <code>toggle-annotate</code> to toggle the drawing layer (normal pages also use in-page Alt+D)</td>
+            </tr>
           </tbody>
         </table>
         <h3 lang="zh-Hant">畫布／頁面內建（不可在 TabWall 自訂）</h3>
@@ -880,14 +921,19 @@ https://wiki.example.com
               <td lang="en">Open the local AI panel on any normal page</td>
             </tr>
             <tr>
+              <td><kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd></td>
+              <td lang="zh-Hant">任何一般頁開關繪圖層（content script，不占 4 組預設 command）</td>
+              <td lang="en">Toggle the drawing layer on a normal page (content script; does not use a suggested command slot)</td>
+            </tr>
+            <tr>
               <td>Mac <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>S</kbd> / Windows <kbd>Alt</kbd>+<kbd>Win</kbd>+<kbd>S</kbd></td>
               <td lang="zh-Hant">開關設定</td>
               <td lang="en">Toggle settings</td>
             </tr>
             <tr>
               <td>Mac <kbd>⌘</kbd>+<kbd>Z</kbd> / Windows <kbd>Ctrl</kbd>+<kbd>Z</kbd></td>
-              <td lang="zh-Hant">復原誤 Stack 或連線（最多 20 步；輸入框內不攔截）</td>
-              <td lang="en">Undo an accidental stack or connection (up to 20 steps; ignored while typing)</td>
+              <td lang="zh-Hant">畫布：復原誤 Stack 或連線。繪圖層開啟且未在編輯文字時：復原上一筆繪圖</td>
+              <td lang="en">On the wall: undo an accidental stack or connection. On the drawing layer (not while editing text): undo the last drawing change</td>
             </tr>
             <tr>
               <td>Mac <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> / Windows <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> 或 <kbd>Ctrl</kbd>+<kbd>Y</kbd></td>
@@ -911,8 +957,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.44.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.44.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.46.1</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.46.1</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

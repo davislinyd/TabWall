@@ -5743,6 +5743,38 @@ html[data-theme='dark'] .canvas-node:not(.canvas-note):not(.canvas-image) {
   background-blend-mode: soft-light;
 }
 
+.card.live-card,
+.canvas-node.canvas-live {
+  outline: 1px dashed var(--accent, #c97858);
+  outline-offset: -2px;
+}
+
+.live-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent, #c97858);
+  color: #fff8f3;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.live-cover,
+.canvas-live-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 88px;
+  color: var(--muted, #a5aaa4);
+  font-size: 12px;
+}
+
 .card-actions {
   background: var(--overlay-actions);
 }

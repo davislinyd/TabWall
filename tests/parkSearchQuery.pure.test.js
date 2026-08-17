@@ -76,6 +76,17 @@ test('TabWallSearchQuery tag expression and domain scope + invalid regex boundar
   assert.equal(SQ.domainOf(domainHit.url), 'www.example.com');
   assert.equal(SQ.matchesQuery(domainHit, query), true);
   assert.equal(SQ.matchesQuery(domainMiss, query), false);
+  const liveHit = { kind: 'live', title: 'Live', url: 'https://docs.example.com/x', tags: ['docs'], note: 'margin note' };
+  assert.equal(SQ.matchesQuery(liveHit, query), true);
+
+  query = 'margin';
+  SQ.bind({
+    getSearchScope: () => 'all',
+    getSearchRegex: () => false,
+    getQuery: () => query,
+  });
+  SQ.compileSearchQuery(query);
+  assert.equal(SQ.matchesQuery(liveHit, query), true);
 
   query = '(unclosed';
   SQ.bind({

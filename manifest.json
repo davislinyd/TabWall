@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.44.2",
+  "version": "2.46.1",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -27,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["parkSearchQuery.js", "quickSearch.js", "aiUiCore.js", "aiPanel.js", "content.js"],
+      "js": ["parkSearchQuery.js", "quickSearch.js", "aiUiCore.js", "aiPanel.js", "content.js", "pageAnnotate.js"],
       "run_at": "document_idle"
     }
   ],
@@ -115,6 +115,9 @@
     },
     "open-ai": {
       "description": "Open TabWall AI panel"
+    },
+    "toggle-annotate": {
+      "description": "Toggle TabWall drawing layer"
     }
   }
 }

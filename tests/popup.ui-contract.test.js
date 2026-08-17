@@ -8,14 +8,16 @@ const POPUP_SOURCE = fs.readFileSync(new URL('../popup.js', import.meta.url), 'u
 
 test('extension action opens the TabWall popup', () => {
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(MANIFEST.version, '2.44.2');
+  assert.equal(MANIFEST.version, '2.46.1');
   assert.match(POPUP_HTML, /<script src="popup\.js"><\/script>/);
 });
 
 test('popup exposes separate tab and group save actions plus panel opening', () => {
-  for (const id of ['saveTabKeep', 'saveTabClose', 'saveGroupKeep', 'saveGroupClose', 'openPark']) {
+  for (const id of ['saveTabKeep', 'saveTabClose', 'saveGroupKeep', 'saveGroupClose', 'openPark', 'pageNote', 'pageTagDraft', 'overlayToggle']) {
     assert.match(POPUP_HTML, new RegExp('id="' + id + '"'));
   }
+  assert.match(POPUP_SOURCE, /type: 'GET_PAGE_ANNOTATION'/);
+  assert.match(POPUP_SOURCE, /type: 'UPSERT_PAGE_ANNOTATION'/);
   assert.match(POPUP_HTML, /id="saveGroupKeep"[^>]*data-group-action/);
   assert.match(POPUP_HTML, /id="saveGroupClose"[^>]*data-group-action/);
   assert.match(POPUP_SOURCE, /type: 'SAVE_ACTIVE_TAB', afterSave: 'keep'/);

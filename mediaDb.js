@@ -55,6 +55,10 @@
     return 'w:background';
   }
 
+  function mediaKeyPageInk(annotationId) {
+    return `ink:${annotationId}`;
+  }
+
   function txDone(tx) {
     return new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve();
@@ -89,6 +93,33 @@
       };
       req.onerror = () => reject(req.error);
     });
+  }
+
+  async function getInk(key) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      req.onsuccess = () => {
+        const strokes = req.result?.ink;
+        resolve(Array.isArray(strokes) ? strokes : []);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function putInk(key, strokes) {
+    const db = await openDb();
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    store.put({
+      key,
+      thumb: null,
+      snap: null,
+      ink: Array.isArray(strokes) ? strokes : [],
+      updatedAt: Date.now(),
+    });
+    await txDone(tx);
   }
 
   async function getPart(key, part) {
@@ -333,8 +364,11 @@
     mediaKeyMember,
     mediaKeyNoteAttachment,
     mediaKeyWallpaper,
+    mediaKeyPageInk,
     put,
     get,
+    getInk,
+    putInk,
     getPart,
     remove,
     removeMany,

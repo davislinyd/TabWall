@@ -7,6 +7,16 @@ const COPY = {
     saveGroupClose: '儲存目前群組（關閉）',
     groupHint: '目前分頁不在 Tab Group 中',
     openPark: '打開 TabWall 面板',
+    annotateHeading: '此分頁標註',
+    noteLabel: '備註',
+    notePh: '加入備註…',
+    tagsLabel: 'Tags',
+    tagPh: '輸入後按 Tab 新增',
+    overlayToggle: '顯示繪圖圖層',
+    annotateParked: '此網址已停車，編輯會寫入收藏項目',
+    annotateLive: '未停車，標註會跟這個網址一起保留',
+    annotateSaved: '已儲存標註',
+    overlayRestricted: '此頁面無法使用繪圖圖層',
     saving: '儲存中…',
     opening: '正在打開 TabWall…',
     openFailed: '無法打開 TabWall 面板',
@@ -26,6 +36,16 @@ const COPY = {
     saveGroupClose: 'Save current group (close)',
     groupHint: 'The current tab is not in a Tab Group',
     openPark: 'Open TabWall panel',
+    annotateHeading: 'Page notes',
+    noteLabel: 'Note',
+    notePh: 'Add a note…',
+    tagsLabel: 'Tags',
+    tagPh: 'Type then press Tab',
+    overlayToggle: 'Show drawing layer',
+    annotateParked: 'This URL is parked; edits update the saved item',
+    annotateLive: 'Not parked; notes stay with this URL',
+    annotateSaved: 'Notes saved',
+    overlayRestricted: 'This page cannot host a drawing layer',
     saving: 'Saving…',
     opening: 'Opening TabWall…',
     openFailed: 'Could not open the TabWall panel',
@@ -49,9 +69,18 @@ const groupActionButtons = [
 ];
 const groupHint = document.getElementById('groupHint');
 const statusEl = document.getElementById('status');
+const pageNoteEl = document.getElementById('pageNote');
+const pageChipsEl = document.getElementById('pageChips');
+const pageTagDraftEl = document.getElementById('pageTagDraft');
+const overlayToggleEl = document.getElementById('overlayToggle');
+const annotateSourceEl = document.getElementById('annotateSource');
 let locale = 'zh';
 let currentTabInGroup = false;
 let busy = false;
+let currentTab = null;
+let pageTags = [];
+let persistTimer = 0;
+let suppressPersist = false;
 
 function text(key, vars = {}) {
   let value = COPY[locale]?.[key] || COPY.zh[key] || key;
@@ -67,6 +96,10 @@ function applyLocale() {
     const key = element.getAttribute('data-i18n');
     element.textContent = text(key);
   });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+    const key = element.getAttribute('data-i18n-placeholder');
+    element.setAttribute('placeholder', text(key));
+  });
 }
 
 function setStatus(message = '', state = '') {
@@ -79,6 +112,105 @@ function syncButtonState() {
   for (const button of tabActionButtons) button.disabled = busy;
   for (const button of groupActionButtons) button.disabled = busy || !currentTabInGroup;
   document.getElementById('openPark').disabled = busy;
+}
+
+function isRestrictedPage(url) {
+  if (!url || typeof url !== 'string') return true;
+  const lower = url.toLowerCase();
+  return [
+    'chrome://',
+    'chrome-extension://',
+    'edge://',
+    'about:',
+    'devtools://',
+    'view-source:',
+    'chrome-search://',
+    'chrome-untrusted://',
+    'brave://',
+  ].some((prefix) => lower.startsWith(prefix));
+}
+
+function renderChips() {
+  pageChipsEl.replaceChildren();
+  for (const tag of pageTags) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = tag;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', 'remove');
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      pageTags = pageTags.filter((item) => item !== tag);
+      renderChips();
+      persistAnnotation();
+    });
+    chip.appendChild(remove);
+    pageChipsEl.appendChild(chip);
+  }
+}
+
+function addDraftTag() {
+  const next = String(pageTagDraftEl.value || '').trim();
+  if (!next) return false;
+  if (!pageTags.includes(next)) pageTags.push(next);
+  pageTagDraftEl.value = '';
+  renderChips();
+  persistAnnotation();
+  return true;
+}
+
+async function persistAnnotation() {
+  if (suppressPersist || !currentTab?.url) return;
+  const result = await sendMessage({
+    type: 'UPSERT_PAGE_ANNOTATION',
+    url: currentTab.url,
+    title: currentTab.title || '',
+    favIconUrl: currentTab.favIconUrl || '',
+    note: pageNoteEl.value,
+    tags: pageTags,
+    overlayVisible: overlayToggleEl.checked,
+  });
+  if (result.ok) {
+    setStatus(text('annotateSaved'));
+    if (currentTab.id != null && !overlayToggleEl.disabled) {
+      try {
+        chrome.tabs.sendMessage(currentTab.id, {
+          type: 'SET_ANNOTATE_VISIBLE',
+          visible: overlayToggleEl.checked,
+        }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch {
+        // content script may be missing
+      }
+    }
+  } else setStatus(errorMessage(result.error), 'error');
+}
+
+function schedulePersist() {
+  window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(() => {
+    persistAnnotation();
+  }, 400);
+}
+
+async function loadAnnotation() {
+  if (!currentTab?.url) return;
+  suppressPersist = true;
+  const result = await sendMessage({ type: 'GET_PAGE_ANNOTATION', url: currentTab.url });
+  const annotation = result?.annotation || {};
+  pageNoteEl.value = annotation.note || '';
+  pageTags = Array.isArray(annotation.tags) ? annotation.tags.slice() : [];
+  overlayToggleEl.checked = annotation.overlayVisible === true;
+  renderChips();
+  const restricted = isRestrictedPage(currentTab.url);
+  overlayToggleEl.disabled = restricted;
+  annotateSourceEl.hidden = false;
+  if (restricted) annotateSourceEl.textContent = text('overlayRestricted');
+  else if (result?.source === 'parked') annotateSourceEl.textContent = text('annotateParked');
+  else annotateSourceEl.textContent = text('annotateLive');
+  suppressPersist = false;
 }
 
 function errorMessage(error) {
@@ -111,13 +243,16 @@ async function refreshGroupState() {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
+    currentTab = tab || null;
     const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
     currentTabInGroup = Boolean(tab?.id != null && tab.groupId != null && tab.groupId !== none);
   } catch {
+    currentTab = null;
     currentTabInGroup = false;
   }
   groupHint.hidden = currentTabInGroup;
   syncButtonState();
+  await loadAnnotation();
 }
 
 async function runSave(message) {
@@ -181,6 +316,22 @@ function init() {
     runSave({ type: 'SAVE_ACTIVE_GROUP', afterSaveGroup: 'close' });
   });
   document.getElementById('openPark').addEventListener('click', openPark);
+  pageNoteEl.addEventListener('input', schedulePersist);
+  pageNoteEl.addEventListener('blur', persistAnnotation);
+  overlayToggleEl.addEventListener('change', persistAnnotation);
+  pageTagDraftEl.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab' || event.key === 'Enter' || event.key === ',') {
+      if (pageTagDraftEl.value.trim()) {
+        event.preventDefault();
+        addDraftTag();
+      }
+    }
+    if (event.key === 'Backspace' && !pageTagDraftEl.value && pageTags.length) {
+      pageTags.pop();
+      renderChips();
+      persistAnnotation();
+    }
+  });
   syncButtonState();
   Promise.all([loadLocale(), refreshGroupState()]).catch(() => {});
 }
