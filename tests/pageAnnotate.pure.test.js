@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
+const PAGE_ANNOTATE_SOURCE = fs.readFileSync(new URL('../pageAnnotate.js', import.meta.url), 'utf8');
+
 function loadInk() {
-  const src = fs.readFileSync(new URL('../pageAnnotate.js', import.meta.url), 'utf8');
   const sandbox = {
     self: null,
     globalThis: null,
@@ -22,7 +23,7 @@ function loadInk() {
   sandbox.self = sandbox;
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(src, sandbox, { filename: 'pageAnnotate.js' });
+  vm.runInContext(PAGE_ANNOTATE_SOURCE, sandbox, { filename: 'pageAnnotate.js' });
   return sandbox.TabWallPageInk;
 }
 
@@ -68,6 +69,94 @@ test('overlay stays open when session hint says it was visible', () => {
   assert.equal(Ink.resolveOverlayVisible(true, false), false);
   assert.equal(Ink.resolveOverlayVisible(true, null), true);
   assert.equal(Ink.resolveOverlayVisible(false, null), false);
+});
+
+test('toolbar modes reset to view when collapsed and pen when expanded', () => {
+  const Ink = loadInk();
+  assert.equal(Ink.toolbarModeForCollapsed(true), 'view');
+  assert.equal(Ink.toolbarModeForCollapsed(false), 'pen');
+});
+
+test('chrome layout opens away from the nearest horizontal edge', () => {
+  const Ink = loadInk();
+  const rightEdge = Ink.resolveChromeLayout({
+    anchorX: 760,
+    anchorY: 300,
+    viewportWidth: 800,
+    viewportHeight: 600,
+    panelWidth: 360,
+    panelHeight: 48,
+  });
+  assert.equal(rightEdge.orientation, 'horizontal');
+  assert.equal(rightEdge.side, 'left');
+  assert.equal(rightEdge.left, 432);
+
+  const leftEdge = Ink.resolveChromeLayout({
+    anchorX: 8,
+    anchorY: 300,
+    viewportWidth: 800,
+    viewportHeight: 600,
+    panelWidth: 360,
+    panelHeight: 48,
+  });
+  assert.equal(leftEdge.orientation, 'horizontal');
+  assert.equal(leftEdge.side, 'right');
+  assert.equal(leftEdge.left, 8);
+});
+
+test('chrome layout switches to vertical when horizontal space is insufficient or near a vertical edge', () => {
+  const Ink = loadInk();
+  const narrow = Ink.resolveChromeLayout({
+    anchorX: 200,
+    anchorY: 300,
+    viewportWidth: 420,
+    viewportHeight: 600,
+    panelWidth: 80,
+    horizontalWidth: 560,
+    panelHeight: 260,
+  });
+  assert.equal(narrow.orientation, 'vertical');
+  assert.equal(narrow.verticalDirection, 'up');
+  assert.equal(narrow.width, 80);
+
+  const top = Ink.resolveChromeLayout({
+    anchorX: 500,
+    anchorY: 8,
+    viewportWidth: 1200,
+    viewportHeight: 800,
+    panelWidth: 360,
+    panelHeight: 260,
+  });
+  assert.equal(top.orientation, 'vertical');
+  assert.equal(top.verticalDirection, 'down');
+
+  const bottom = Ink.resolveChromeLayout({
+    anchorX: 500,
+    anchorY: 752,
+    viewportWidth: 1200,
+    viewportHeight: 800,
+    panelWidth: 360,
+    panelHeight: 260,
+  });
+  assert.equal(bottom.orientation, 'vertical');
+  assert.equal(bottom.verticalDirection, 'up');
+});
+
+test('chrome anchor remains inside the viewport', () => {
+  const Ink = loadInk();
+  const anchor = Ink.clampChromeAnchor(9999, -50, 800, 600);
+  assert.equal(anchor.x, 752);
+  assert.equal(anchor.y, 8);
+});
+
+test('toolbar contract has one collapsed icon and no collapse control', () => {
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /data-act="collapse"/);
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /TabWall layer|TabWall 圖層/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /class="chrome-handle"/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /addEventListener\('dblclick', onChromeDoubleClick\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /toolbar\.hidden = !show \|\| barPos\.collapsed/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /fab\.hidden = !show \|\| !barPos\.collapsed/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /data-act="hide"/);
 });
 
 test('page ink helpers load without a document and do not inject UI', () => {

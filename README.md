@@ -69,7 +69,7 @@ Browser command defaults are declared in `manifest.json` and managed in Edge at 
 | `⌘⇧Z` / `Ctrl+⇧Z` / `Ctrl+Y` | Redo stack or connection |
 | `←` / `→` | Show the previous or next snapshot |
 
-The first four actions are Chrome commands with install-time suggested keys (Chromium allows at most four suggested keys). `open-ai` and `toggle-annotate` are extra commands without a default key; bind them in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) when needed. `Option/Alt+A` and `Option/Alt+D` are handled by the page content script. Existing assignments, conflicts, and platform rules can leave commands unbound.
+The first four actions are Chrome commands with install-time suggested keys (Chromium allows at most four suggested keys). `open-ai` and `toggle-annotate` are extra commands without a default key; bind them in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) when needed. `Option/Alt+A` and `Option/Alt+D` are handled by the page content script. Alt+D shows the drawing layer as one draggable icon; left double-click expands the tools into Pen mode, and collapsing returns to View mode. Existing assignments, conflicts, and platform rules can leave commands unbound.
 
 Clicking the extension icon opens an action menu for saving the current tab or Tab Group with or without closing it, or opening the TabWall panel. Group actions are disabled when the current tab is not in a Tab Group.
 
@@ -118,7 +118,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 ### Features
 
 - **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green `✓` badge means the URL is parked; an orange `✎` means the drawing layer is open.
-- **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is a toggleable overlay (pen, straight highlighter, text, eraser) that does not change the page DOM. It starts as a small pen FAB. Hover an object and left-click to select; ⌘Z/Ctrl+Z undoes drawing. `chrome://` pages cannot host the layer.
+- **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is hidden until Option/Alt+D and does not change the page DOM. The shortcut reveals one draggable pen icon; left double-click expands the tools into Pen mode, while the collapsed icon is View-only. The panel opens away from the nearest edge and turns vertical when horizontal space is insufficient. Hover an object and left-click to select; ⌘Z/Ctrl+Z undoes drawing. `chrome://` pages cannot host the layer.
 - **Local AI agent:** connect the external panel to a loopback `llama-server` endpoint, analyze the current page or saved tab metadata, and optionally call allowlisted local bridge tools. Context is automatically budgeted to the configured `contextSize`; no cloud endpoint is used by default.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable; the Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
@@ -250,7 +250,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前四項是有安裝時建議鍵的瀏覽器 commands（Chromium 最多只能建議 4 組）。`open-ai` 與 `toggle-annotate` 沒有預設鍵，需要時請到 Edge 的 `edge://extensions/shortcuts`（Chrome：`chrome://extensions/shortcuts`）自行綁定。`Option/Alt+A` 與 `Option/Alt+D` 由頁面 content script 處理。既有設定、衝突與平台規則都可能使命令保持未綁定。
+前四項是有安裝時建議鍵的瀏覽器 commands（Chromium 最多只能建議 4 組）。`open-ai` 與 `toggle-annotate` 沒有預設鍵，需要時請到 Edge 的 `edge://extensions/shortcuts`（Chrome：`chrome://extensions/shortcuts`）自行綁定。`Option/Alt+A` 與 `Option/Alt+D` 由頁面 content script 處理。Alt+D 只顯示一個可拖曳的繪圖 icon；左鍵雙擊會展開工具列並進入筆模式，收合後回到檢視模式。既有設定、衝突與平台規則都可能使命令保持未綁定。
 
 點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
@@ -298,7 +298,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 ### 功能
 
 - **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示綠色 `✓` 表示該網址已停車；橘色 `✎` 表示繪圖層開著。
-- **未停車標註與繪圖：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層不改網頁 DOM，預設收合成小筆鈕；hover 後左鍵選取物件，⌘Z 可 Undo。<code>chrome://</code> 不能畫。
+- **未停車標註與繪圖：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層平時完全隱藏，按 Option／Alt+D 顯示一個可拖曳的繪圖 icon；左鍵雙擊展開工具列並進入筆模式，收合後只顯示 icon 且回到檢視模式。工具列靠近邊緣時會向外側延伸或改成垂直排列，不會擠壓面板。<code>chrome://</code> 不能畫。
 - **本機 AI agent：** 外部 AI 面板可連線 loopback `llama-server`，分析目前分頁或已儲存分頁 metadata，並選擇性呼叫 allowlist 內的本機 bridge tools。系統會依 `contextSize` 自動控管 context，預設不連線雲端 endpoint。
 - **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片；背景啟用時會隱藏 Canvas 定位點，移除後恢復。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。

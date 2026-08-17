@@ -11,6 +11,13 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.2 — 2026-08-17
+
+- 繪圖層預設完全隱藏；Option／Alt+D 只顯示或隱藏收合後的單一 pen icon，筆畫資料仍保留。
+- 收合時固定為檢視模式；左鍵雙擊 icon 展開工具列並進入 Pen，移除 `Collapse` 按鈕，單擊保留拖曳位置。
+- 工具列靠近視窗邊緣時自動向左／右延伸或改為垂直排列，不再壓縮水平工具列。
+- 重新產生 `dist/TabWall-2.46.2.zip`。
+
 ## 2.46.1 — 2026-08-17
 
 - 繪圖層預設收合成可拖曳的小筆 FAB（比照 AI 面板）；點一下展開工具列。

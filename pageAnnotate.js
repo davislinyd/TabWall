@@ -10,6 +10,10 @@
   const HIGHLIGHT_ALPHA = 0.38;
   const HIT_PAD = 8;
   const FAB_SIZE = 40;
+  const CHROME_GAP = 8;
+  const CHROME_EDGE_THRESHOLD = 64;
+  const FALLBACK_TOOLBAR_WIDTH = 560;
+  const FALLBACK_TOOLBAR_HEIGHT = 48;
   const COLORS = ['#c97858', '#1f2937', '#dc2626', '#2563eb', '#16a34a', '#eab308'];
   const CHROME_KEY = 'pageAnnotateChrome';
 
@@ -288,6 +292,108 @@
     return stored === true;
   }
 
+  function toolbarModeForCollapsed(collapsed) {
+    return collapsed ? 'view' : 'pen';
+  }
+
+  function clampChromeAnchor(anchorX, anchorY, viewportWidth, viewportHeight, iconSize = FAB_SIZE, gap = CHROME_GAP) {
+    const width = Math.max(Number(viewportWidth) || 0, iconSize + gap * 2);
+    const height = Math.max(Number(viewportHeight) || 0, iconSize + gap * 2);
+    const maxX = Math.max(gap, width - iconSize - gap);
+    const maxY = Math.max(gap, height - iconSize - gap);
+    const rawX = Number(anchorX);
+    const rawY = Number(anchorY);
+    return {
+      x: clamp(Number.isFinite(rawX) ? rawX : maxX, gap, maxX),
+      y: clamp(Number.isFinite(rawY) ? rawY : gap, gap, maxY),
+    };
+  }
+
+  function resolveChromeLayout({
+    anchorX = 0,
+    anchorY = 0,
+    viewportWidth = 0,
+    viewportHeight = 0,
+    iconSize = FAB_SIZE,
+    panelWidth = FALLBACK_TOOLBAR_WIDTH,
+    horizontalWidth = panelWidth,
+    panelHeight = FALLBACK_TOOLBAR_HEIGHT,
+    gap = CHROME_GAP,
+    edgeThreshold = CHROME_EDGE_THRESHOLD,
+  } = {}) {
+    const width = Math.max(Number(viewportWidth) || 0, iconSize + gap * 2);
+    const height = Math.max(Number(viewportHeight) || 0, iconSize + gap * 2);
+    const anchor = clampChromeAnchor(anchorX, anchorY, width, height, iconSize, gap);
+    const measuredPanelWidth = Number(panelWidth);
+    const measuredHorizontalWidth = Number(horizontalWidth);
+    const toolbarWidth = Math.max(
+      iconSize,
+      Number.isFinite(measuredPanelWidth) && measuredPanelWidth > 0
+        ? measuredPanelWidth
+        : FALLBACK_TOOLBAR_WIDTH,
+    );
+    const fitWidth = Math.max(
+      iconSize,
+      Number.isFinite(measuredHorizontalWidth) && measuredHorizontalWidth > 0
+        ? measuredHorizontalWidth
+        : toolbarWidth,
+    );
+    const measuredPanelHeight = Number(panelHeight);
+    const toolbarHeight = Math.max(
+      iconSize,
+      Number.isFinite(measuredPanelHeight) && measuredPanelHeight > 0
+        ? measuredPanelHeight
+        : FALLBACK_TOOLBAR_HEIGHT,
+    );
+    const leftAvailable = anchor.x + iconSize - gap;
+    const rightAvailable = width - anchor.x - gap;
+    const fitsLeft = fitWidth <= leftAvailable;
+    const fitsRight = fitWidth <= rightAvailable;
+    const nearTop = anchor.y <= gap + edgeThreshold;
+    const nearBottom = anchor.y + iconSize >= height - gap - edgeThreshold;
+    const side = fitsLeft && fitsRight
+      ? (leftAvailable > rightAvailable ? 'left' : 'right')
+      : fitsLeft
+        ? 'left'
+        : 'right';
+    const needsVertical = (!fitsLeft && !fitsRight) || nearTop || nearBottom;
+
+    if (!needsVertical) {
+      const left = side === 'left' ? anchor.x + iconSize - toolbarWidth : anchor.x;
+      const top = clamp(anchor.y, gap, Math.max(gap, height - toolbarHeight - gap));
+      return {
+        orientation: 'horizontal',
+        side,
+        verticalDirection: '',
+        anchorX: anchor.x,
+        anchorY: anchor.y,
+        left: clamp(left, gap, Math.max(gap, width - toolbarWidth - gap)),
+        top,
+        width: toolbarWidth,
+        height: toolbarHeight,
+      };
+    }
+
+    const below = height - anchor.y - iconSize - gap;
+    const above = anchor.y - gap;
+    const verticalDirection = below >= toolbarHeight || below >= above ? 'down' : 'up';
+    const verticalTop = verticalDirection === 'down'
+      ? anchor.y
+      : anchor.y + iconSize - toolbarHeight;
+    const left = side === 'left' ? anchor.x + iconSize - toolbarWidth : anchor.x;
+    return {
+      orientation: 'vertical',
+      side,
+      verticalDirection,
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      left: clamp(left, gap, Math.max(gap, width - toolbarWidth - gap)),
+      top: clamp(verticalTop, gap, Math.max(gap, height - toolbarHeight - gap)),
+      width: toolbarWidth,
+      height: toolbarHeight,
+    };
+  }
+
   function hitTestObjects(list, point, pad = HIT_PAD) {
     let best = null;
     let bestDist = pad;
@@ -324,6 +430,9 @@
     snapshotObjects,
     createUndoStack,
     resolveOverlayVisible,
+    toolbarModeForCollapsed,
+    clampChromeAnchor,
+    resolveChromeLayout,
     DEFAULT_COLLAPSED: true,
   };
 
@@ -341,6 +450,9 @@
   } catch {
     // stale instance from extension reload
   }
+  for (const staleRoot of document.querySelectorAll('[data-tabwall-annotate="1"]')) {
+    staleRoot.remove();
+  }
 
   const ROOT_ID = 'tabwall-annotate-root';
   const zh = /zh/i.test(navigator.language || '');
@@ -354,12 +466,10 @@
       view: '檢視',
       del: '刪除',
       clear: '清除',
-      collapse: '收合',
-      expand: '展開',
+      expandTools: '展開繪圖工具',
+      collapseTools: '收合繪圖工具',
       hide: '關閉圖層',
-      drag: '拖曳面板',
       undo: '復原',
-      chip: 'TabWall 圖層',
     }
     : {
       select: 'Pick',
@@ -370,12 +480,10 @@
       view: 'View',
       del: 'Delete',
       clear: 'Clear',
-      collapse: 'Collapse',
-      expand: 'Expand',
+      expandTools: 'Expand drawing tools',
+      collapseTools: 'Collapse drawing tools',
       hide: 'Hide layer',
-      drag: 'Move panel',
       undo: 'Undo',
-      chip: 'TabWall layer',
     };
 
   let rootEl = null;
@@ -384,8 +492,8 @@
   let ctx = null;
   let toolbar = null;
   let toolsEl = null;
+  let chromeHandle = null;
   let fab = null;
-  let chip = null;
   let hoverId = '';
   let textEditor = null;
   let visible = false;
@@ -549,28 +657,71 @@
     return Number.isFinite(barPos.y) ? barPos.y : 16;
   }
 
+  function toolbarDimensions() {
+    const rect = toolbar?.getBoundingClientRect?.();
+    let horizontalWidth = rect?.width || 0;
+    if (toolbar && !toolbar.hidden && toolbar.classList.contains('is-vertical')) {
+      const className = toolbar.className;
+      toolbar.classList.remove('is-vertical', 'opens-up', 'opens-down');
+      horizontalWidth = toolbar.getBoundingClientRect().width || horizontalWidth;
+      toolbar.className = className;
+    }
+    return {
+      width: Math.max(rect?.width || 0, toolbar?.hidden ? FALLBACK_TOOLBAR_WIDTH : FAB_SIZE),
+      horizontalWidth: Math.max(horizontalWidth, FALLBACK_TOOLBAR_WIDTH),
+      height: Math.max(rect?.height || 0, toolbar?.hidden ? FALLBACK_TOOLBAR_HEIGHT : FAB_SIZE),
+    };
+  }
+
   function clampBar() {
-    if (barPos.x == null) return;
-    const width = barPos.collapsed ? FAB_SIZE : (toolbar?.getBoundingClientRect().width || 160);
-    const height = barPos.collapsed ? FAB_SIZE : (toolbar?.getBoundingClientRect().height || 40);
-    const maxX = Math.max(8, window.innerWidth - width - 8);
-    const maxY = Math.max(8, window.innerHeight - height - 8);
-    barPos.x = clamp(barPos.x, 8, maxX);
-    barPos.y = clamp(barPos.y, 8, maxY);
+    if (barPos.x == null) {
+      applyChromePosition();
+      return;
+    }
+    const anchor = clampChromeAnchor(
+      barPos.x,
+      barPos.y,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    barPos.x = anchor.x;
+    barPos.y = anchor.y;
     applyChromePosition();
   }
 
   function applyChromePosition() {
-    const left = `${chromeLeft()}px`;
-    const top = `${chromeTop()}px`;
+    const anchor = clampChromeAnchor(
+      chromeLeft(),
+      chromeTop(),
+      window.innerWidth,
+      window.innerHeight,
+    );
+    const dimensions = toolbarDimensions();
+    const layout = resolveChromeLayout({
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      panelWidth: dimensions.width,
+      horizontalWidth: dimensions.horizontalWidth,
+      panelHeight: dimensions.height,
+    });
     if (toolbar) {
-      toolbar.style.left = left;
-      toolbar.style.top = top;
+      toolbar.style.left = `${layout.left}px`;
+      toolbar.style.top = `${layout.top}px`;
       toolbar.style.transform = 'none';
+      toolbar.classList.toggle('is-vertical', layout.orientation === 'vertical');
+      toolbar.classList.toggle('opens-left', layout.side === 'left');
+      toolbar.classList.toggle('opens-right', layout.side === 'right');
+      toolbar.classList.toggle('opens-up', layout.verticalDirection === 'up');
+      toolbar.classList.toggle('opens-down', layout.verticalDirection === 'down');
+      toolbar.dataset.chromeOrientation = layout.orientation;
+      toolbar.dataset.chromeSide = layout.side;
+      toolbar.dataset.chromeVerticalDirection = layout.verticalDirection;
     }
     if (fab) {
-      fab.style.left = left;
-      fab.style.top = top;
+      fab.style.left = `${anchor.x}px`;
+      fab.style.top = `${anchor.y}px`;
     }
   }
 
@@ -612,6 +763,7 @@
           y: Number.isFinite(y) ? y : 16,
           collapsed: true,
         };
+        tool = toolbarModeForCollapsed(true);
       }
     } catch {
       // ignore
@@ -621,11 +773,15 @@
 
   function syncChrome() {
     if (!rootEl) return;
-    const showChip = !visible && objects.length > 0;
-    chip.hidden = !showChip;
     canvas.style.display = visible ? 'block' : 'none';
     canvas.style.pointerEvents = capturing() ? 'auto' : 'none';
-    chip.style.pointerEvents = showChip ? 'auto' : 'none';
+    const chromeLabel = barPos.collapsed ? copy.expandTools : copy.collapseTools;
+    for (const handle of [chromeHandle, fab]) {
+      if (!handle) continue;
+      handle.title = chromeLabel;
+      handle.setAttribute('aria-label', chromeLabel);
+      handle.setAttribute('aria-expanded', barPos.collapsed ? 'false' : 'true');
+    }
     for (const button of toolbar.querySelectorAll('[data-tool]')) {
       button.setAttribute('aria-pressed', button.dataset.tool === tool ? 'true' : 'false');
     }
@@ -797,22 +953,37 @@
     if (ink?.ok) objects = normalizeObjects(ink.strokes);
     const stored = view?.ok ? view.annotation?.overlayVisible === true : null;
     visible = resolveOverlayVisible(stored, hint);
+    setToolbarCollapsed(true, { render: false });
     current = null;
     selectedId = '';
+    hoverId = '';
+    dragObj = null;
     syncCanvasSize();
     syncChrome();
   }
 
-  function setVisible(next) {
-    visible = Boolean(next);
-    if (visible) {
-      if (tool === 'view') tool = 'pen';
-      barPos.collapsed = true;
-    } else {
+  function setToolbarCollapsed(collapsed, { render = true } = {}) {
+    barPos.collapsed = Boolean(collapsed);
+    tool = toolbarModeForCollapsed(barPos.collapsed);
+    if (barPos.collapsed) {
       closeTextEditor({ save: true });
+      current = null;
+      dragObj = null;
       selectedId = '';
       hoverId = '';
     }
+    if (render) syncChrome();
+  }
+
+  function toggleToolbar() {
+    if (!visible || parkBlocked) return barPos.collapsed;
+    setToolbarCollapsed(!barPos.collapsed);
+    return barPos.collapsed;
+  }
+
+  function setVisible(next) {
+    visible = Boolean(next);
+    setToolbarCollapsed(true, { render: false });
     syncChrome();
     persistOverlayVisible(visible);
   }
@@ -964,39 +1135,35 @@
     schedulePersist();
   }
 
-  function onBarPointerDown(event) {
-    const grip = event.target.closest('[data-act="drag"]');
-    if (!grip || event.button !== 0) return;
+  function beginChromeDrag(event, handle, target) {
+    if (!handle || event.button !== 0) return;
     event.preventDefault();
-    const rect = toolbar.getBoundingClientRect();
+    const rect = handle.getBoundingClientRect();
     dragBar = {
       pointerId: event.pointerId,
       dx: event.clientX - rect.left,
       dy: event.clientY - rect.top,
+      anchorDx: chromeLeft() - rect.left,
+      anchorDy: chromeTop() - rect.top,
       moved: false,
-      target: 'bar',
+      target,
     };
-    grip.setPointerCapture(event.pointerId);
+    handle.setPointerCapture(event.pointerId);
+  }
+
+  function onBarPointerDown(event) {
+    const grip = event.target.closest('.chrome-handle');
+    beginChromeDrag(event, grip, 'bar');
   }
 
   function onFabPointerDown(event) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const rect = fab.getBoundingClientRect();
-    dragBar = {
-      pointerId: event.pointerId,
-      dx: event.clientX - rect.left,
-      dy: event.clientY - rect.top,
-      moved: false,
-      target: 'fab',
-    };
-    fab.setPointerCapture(event.pointerId);
+    beginChromeDrag(event, fab, 'fab');
   }
 
   function onBarPointerMove(event) {
     if (!dragBar || event.pointerId !== dragBar.pointerId) return;
-    const nextX = event.clientX - dragBar.dx;
-    const nextY = event.clientY - dragBar.dy;
+    const nextX = event.clientX - dragBar.dx + dragBar.anchorDx;
+    const nextY = event.clientY - dragBar.dy + dragBar.anchorDy;
     if (Math.hypot(nextX - chromeLeft(), nextY - chromeTop()) > 3) dragBar.moved = true;
     barPos.x = nextX;
     barPos.y = nextY;
@@ -1005,15 +1172,21 @@
 
   function onBarPointerUp(event) {
     if (!dragBar || event.pointerId !== dragBar.pointerId) return;
-    const wasFabClick = dragBar.target === 'fab' && !dragBar.moved;
     dragBar = null;
-    if (wasFabClick) {
-      barPos.collapsed = false;
-      applyBarChrome();
-      return;
-    }
     clampBar();
     scheduleChromePersist();
+  }
+
+  function onChromeDoubleClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleToolbar();
+  }
+
+  function onChromeKeyDown(event) {
+    if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    toggleToolbar();
   }
 
   function ensureUi() {
@@ -1026,6 +1199,7 @@
     const style = document.createElement('style');
     style.textContent = `
       :host { all: initial; }
+      [hidden] { display: none !important; }
       canvas {
         position: absolute;
         left: 0;
@@ -1057,9 +1231,9 @@
       }
       .fab:active { cursor: grabbing; }
       .fab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-      .bar, .chip {
+      .bar {
         position: fixed;
-        z-index: 1;
+        z-index: 3;
         display: flex;
         gap: 6px;
         align-items: center;
@@ -1069,14 +1243,24 @@
         color: #f1f0eb;
         font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         box-shadow: none;
-        z-index: 3;
         pointer-events: auto;
         transition: background 0.15s ease, box-shadow 0.15s ease;
       }
-      .bar { top: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 16px); flex-wrap: wrap; outline: none; }
-      .bar .tools:not([hidden]) { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-      .bar.collapsed .tools { display: none; }
-      .chip { top: 12px; right: 12px; cursor: pointer; border: 0; }
+      .bar { width: max-content; flex-wrap: nowrap; outline: none; }
+      .bar.opens-left:not(.is-vertical) { flex-direction: row-reverse; }
+      .bar.is-vertical { max-height: calc(100vh - 16px); overflow: hidden; }
+      .bar.is-vertical.opens-left { align-items: flex-end; }
+      .bar.is-vertical.opens-right { align-items: flex-start; }
+      .bar.is-vertical.opens-up { flex-direction: column-reverse; }
+      .bar.is-vertical.opens-down { flex-direction: column; }
+      .bar .tools { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+      .bar.is-vertical .tools {
+        flex-direction: column;
+        align-items: stretch;
+        max-height: calc(100vh - 112px);
+        overflow-y: auto;
+      }
+      .palette { display: flex; gap: 6px; align-items: center; justify-content: center; }
       button, select {
         appearance: none;
         border: 0;
@@ -1087,21 +1271,34 @@
         padding: 5px 8px;
         cursor: pointer;
         opacity: 0.55;
+        flex: 0 0 auto;
         transition: opacity 0.15s ease, background 0.15s ease;
       }
-      .bar:hover, .bar:focus-within, .chip:hover, .chip:focus-visible {
+      .bar:hover, .bar:focus-within {
         background: rgba(16, 17, 16, 0.88);
         box-shadow: 0 8px 24px rgba(0,0,0,.28);
       }
       .bar:hover button, .bar:hover select,
-      .bar:focus-within button, .bar:focus-within select,
-      .chip:hover, .chip:focus-visible {
+      .bar:focus-within button, .bar:focus-within select {
         opacity: 1;
         background: #2a2d2b;
       }
       button[aria-pressed="true"] { background: #c97858; color: #fff8f3; opacity: 1; }
       .swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #fff3; padding: 0; }
-      .drag { cursor: grab; padding: 5px 7px; }
+      .chrome-handle {
+        width: ${FAB_SIZE}px;
+        height: ${FAB_SIZE}px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        cursor: grab;
+        border: 1px solid rgba(255,255,255,.28);
+        border-radius: 50%;
+        background: rgba(201, 120, 88, 0.42);
+        color: #fff8f3;
+      }
+      .chrome-handle:active { cursor: grabbing; }
+      .chrome-handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
       .text-edit {
         position: absolute;
         min-width: 80px;
@@ -1128,15 +1325,18 @@
     toolbar.className = 'bar';
     toolbar.setAttribute('role', 'toolbar');
     toolbar.tabIndex = -1;
+    const drawingIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l3.2-.7L18 8.5 15.5 6 4.7 16.8z"></path><path d="M14.2 4.8l3 3"></path></svg>';
     toolbar.innerHTML = `
-      <button type="button" class="drag" data-act="drag" title="${copy.drag}" aria-label="${copy.drag}">⋮⋮</button>
+      <button type="button" class="chrome-handle" data-act="drag" title="${copy.expandTools}" aria-label="${copy.expandTools}" aria-expanded="false">${drawingIcon}</button>
       <div class="tools">
         <button type="button" data-tool="pen">${copy.pen}</button>
         <button type="button" data-tool="highlight">${copy.highlight}</button>
         <button type="button" data-tool="text">${copy.text}</button>
         <button type="button" data-tool="eraser">${copy.eraser}</button>
         <button type="button" data-tool="view">${copy.view}</button>
-        ${COLORS.map((value) => `<button type="button" class="swatch" data-color="${value}" style="background:${value}"></button>`).join('')}
+        <div class="palette">
+          ${COLORS.map((value) => `<button type="button" class="swatch" data-color="${value}" style="background:${value}"></button>`).join('')}
+        </div>
         <select data-width>
           <option value="2">2</option>
           <option value="3" selected>3</option>
@@ -1147,10 +1347,12 @@
         <button type="button" data-act="undo">${copy.undo}</button>
         <button type="button" data-act="clear">${copy.clear}</button>
       </div>
-      <button type="button" data-act="collapse">${copy.collapse}</button>
       <button type="button" data-act="hide">${copy.hide}</button>
     `;
     toolsEl = toolbar.querySelector('.tools');
+    chromeHandle = toolbar.querySelector('.chrome-handle');
+    chromeHandle.addEventListener('dblclick', onChromeDoubleClick);
+    chromeHandle.addEventListener('keydown', onChromeKeyDown);
     toolbar.addEventListener('pointerdown', onBarPointerDown);
     toolbar.addEventListener('pointermove', onBarPointerMove);
     toolbar.addEventListener('pointerup', onBarPointerUp);
@@ -1174,35 +1376,28 @@
       if (button.dataset.act === 'delete') deleteSelected();
       if (button.dataset.act === 'undo') undo();
       if (button.dataset.act === 'clear') clearInk();
-      if (button.dataset.act === 'collapse') {
-        barPos.collapsed = true;
-        applyBarChrome();
-      }
       if (button.dataset.act === 'hide') setVisible(false);
     });
     toolbar.querySelector('[data-width]').addEventListener('change', (event) => {
       width = Number(event.target.value) || 3;
     });
 
-    chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip';
-    chip.textContent = copy.chip;
-    chip.addEventListener('click', () => setVisible(true));
-
     fab = document.createElement('button');
     fab.type = 'button';
     fab.className = 'fab';
     fab.hidden = true;
-    fab.title = copy.expand;
-    fab.setAttribute('aria-label', copy.expand);
-    fab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l3.2-.7L18 8.5 15.5 6 4.7 16.8z"></path><path d="M14.2 4.8l3 3"></path></svg>';
+    fab.title = copy.expandTools;
+    fab.setAttribute('aria-label', copy.expandTools);
+    fab.setAttribute('aria-expanded', 'false');
+    fab.innerHTML = drawingIcon;
     fab.addEventListener('pointerdown', onFabPointerDown);
     fab.addEventListener('pointermove', onBarPointerMove);
     fab.addEventListener('pointerup', onBarPointerUp);
     fab.addEventListener('pointercancel', onBarPointerUp);
+    fab.addEventListener('dblclick', onChromeDoubleClick);
+    fab.addEventListener('keydown', onChromeKeyDown);
 
-    shadow.append(style, canvas, toolbar, fab, chip);
+    shadow.append(style, canvas, toolbar, fab);
     rootEl.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;';
     document.documentElement.appendChild(rootEl);
   }
