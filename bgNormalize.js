@@ -174,6 +174,9 @@ function storedTitleLockFields(item) {
     ...(item.locked && item.lockSalt && item.lockHash
       ? { lockSalt: item.lockSalt, lockHash: item.lockHash }
       : {}),
+    ...(item.locked && item.displayTitle && item.hideOriginalTitle
+      ? { hideOriginalTitle: true }
+      : {}),
   };
 }
 
@@ -181,7 +184,10 @@ function applyDisplayTitlePatch(item, patch) {
   if (!item || typeof patch?.displayTitle !== 'string') return;
   const display = normalizeDisplayTitle(patch.displayTitle, item.title);
   if (display) item.displayTitle = display;
-  else delete item.displayTitle;
+  else {
+    delete item.displayTitle;
+    delete item.hideOriginalTitle;
+  }
 }
 
 function applyLockPatch(item, patch) {
@@ -190,6 +196,7 @@ function applyLockPatch(item, patch) {
     delete item.locked;
     delete item.lockSalt;
     delete item.lockHash;
+    delete item.hideOriginalTitle;
     return;
   }
   item.locked = true;
@@ -210,13 +217,30 @@ function applyLockPatch(item, patch) {
   }
 }
 
+function applyHideOriginalTitlePatch(item, patch) {
+  if (!item || typeof patch?.hideOriginalTitle !== 'boolean') return;
+  if (!patch.hideOriginalTitle || !item.locked || !item.displayTitle) {
+    delete item.hideOriginalTitle;
+    return;
+  }
+  item.hideOriginalTitle = true;
+}
+
 function withTitleLockFields(item, raw) {
   const displayTitle = normalizeDisplayTitle(raw?.displayTitle, item.title);
-  return {
+  const lockFields = normalizeLockFields(raw);
+  const normalized = {
     ...item,
     ...(displayTitle ? { displayTitle } : {}),
-    ...normalizeLockFields(raw),
+    ...lockFields,
   };
+  if (!displayTitle) delete normalized.displayTitle;
+  if (lockFields.locked && displayTitle && raw?.hideOriginalTitle === true) {
+    normalized.hideOriginalTitle = true;
+  } else {
+    delete normalized.hideOriginalTitle;
+  }
+  return normalized;
 }
 
 function safeTimestamp(value) {

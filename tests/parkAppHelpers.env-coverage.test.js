@@ -335,11 +335,13 @@ test('hashLockPassword / verifyLockPassword / collectLockPatchFromFields', async
   assert.equal(H.normalizeDisplayTitleValue('AAA', 'AAA'), '');
   assert.equal(H.normalizeDisplayTitleValue('  ', 'AAA'), '');
 
-  const keep = await H.collectLockPatchFromFields({ locked: true, hasPassword: true });
+  const keep = await H.collectLockPatchFromFields({ locked: true, hasPassword: true, hideOriginalTitle: true });
   assert.equal(keep.locked, true);
+  assert.equal(keep.hideOriginalTitle, true);
   assert.equal('lockSalt' in keep, false);
   const clear = await H.collectLockPatchFromFields({ locked: false });
   assert.equal(clear.locked, false);
+  assert.equal(clear.hideOriginalTitle, false);
   const mismatch = await H.collectLockPatchFromFields({
     locked: true,
     password: 'a',

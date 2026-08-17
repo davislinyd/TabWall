@@ -977,6 +977,9 @@
       return 'invalid_display_title';
     }
     if (item.locked != null && typeof item.locked !== 'boolean') return 'invalid_locked';
+    if (item.hideOriginalTitle != null && typeof item.hideOriginalTitle !== 'boolean') {
+      return 'invalid_hide_original_title';
+    }
     if (item.lockSalt != null && item.lockSalt !== '') {
       if (typeof item.lockSalt !== 'string' || !/^[0-9a-f]{32}$/i.test(item.lockSalt)) {
         return 'invalid_lock_salt';

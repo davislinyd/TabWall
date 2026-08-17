@@ -144,6 +144,8 @@ test('noteMessageResult clears history on item mutations only', () => {
   History.push({ kind: 'stack', token: 'keep' });
   History.noteMessageResult('STACK_ITEMS', { ok: true });
   assert.equal(History.canUndo(), true);
+  History.noteMessageResult('RESTORE_TAB', { ok: true, kept: true });
+  assert.equal(History.canUndo(), true);
   History.noteMessageResult('DELETE_ITEM', { ok: true });
   assert.equal(History.canUndo(), false);
 });

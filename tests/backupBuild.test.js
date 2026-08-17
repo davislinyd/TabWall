@@ -289,6 +289,7 @@ test('backup accepts optional displayTitle and lock fields', () => {
     ...sampleItem(),
     displayTitle: 'Friendly name',
     locked: true,
+    hideOriginalTitle: true,
     lockSalt: 'ab'.repeat(16),
     lockHash: 'cd'.repeat(32),
   };
@@ -296,6 +297,10 @@ test('backup accepts optional displayTitle and lock fields', () => {
   assert.equal(
     Build.validateBackup(sampleBackup([{ ...sampleItem(), lockSalt: 'nope' }])).error,
     'invalid_lock_salt'
+  );
+  assert.equal(
+    Build.validateBackup(sampleBackup([{ ...sampleItem(), hideOriginalTitle: 'yes' }])).error,
+    'invalid_hide_original_title'
   );
 });
 

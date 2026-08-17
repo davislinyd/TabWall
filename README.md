@@ -88,7 +88,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Click the pin control | Pin or unpin the top-level item; use the toolbar filter to show pinned items |
 | Select a node | Show the contextual actions; hold `Shift` / `Control` for multi-select |
 | Right-click empty canvas | Custom menu: sort by date, realign cards, export lite backup, add Sticker Note |
-| Right-click a card | Same actions as the card toolbar (restore, snapshot, edit, copy, pin, delete—by kind) |
+| Right-click a card | Same actions as the card toolbar (restore and keep, snapshot, edit, copy, pin, delete—by kind) |
 | Drag a node | Move it on the canvas; positions are saved automatically |
 | Drag one node onto another | Stack the items into a group |
 | Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
@@ -141,8 +141,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
-- **Group restore:** ask for confirmation before restoring a complete group; note members remain in the Canvas-only group.
-- **Metadata continuity:** notes and tags are retained when a restored tab or group is saved again in the same browser session.
+- **Restore and keep:** restoring a tab, group, or group member opens or focuses the browser tab while keeping the TabWall card, notes, tags, thumbnails, and snapshots. Use Delete when the card should be removed.
+- **Group restore:** ask for confirmation before restoring a complete group; matching open tabs are reused and regrouped, while note members and stored-only URLs remain in the kept card.
 - **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups can run on a schedule or after data changes, and 1–99 copies can be retained.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
 - **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
@@ -263,13 +263,13 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 操作 | 結果 |
 |------|------|
 | Sticker Note 工具／點擊空白畫布 | 建立僅存在於 Canvas 的 note，並開啟左右分割編輯器 |
-| 點擊縮圖 | 還原分頁或群組；群組會先要求確認 |
+| 點擊縮圖 | 還原並保留分頁或群組卡片；群組會先要求確認 |
 | 點擊 note 標題或編輯 | 編輯標題、標籤、安全 Markdown 與本機圖片附件 |
 | 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
 | 點擊固定控制項 | 固定／取消固定頂層項目；可用工具列篩選已固定項目 |
 | 選取節點 | 顯示上下文操作；按住 `Shift`／`Control` 可多選 |
 | 空白畫布右鍵 | 自訂選單：按日期排序、重新對齊卡片、匯出精簡備份、新增 Sticker Note |
-| 卡片右鍵 | 與卡片工具列相同操作（開啟／快照／編輯／複製／固定／刪除，依類型） |
+| 卡片右鍵 | 與卡片工具列相同操作（還原並保留／快照／編輯／複製／固定／刪除，依類型） |
 | 拖曳節點 | 在畫布上移動；位置會自動儲存 |
 | 將節點拖到另一節點 | 將項目堆疊成群組 |
 | 使用平移／框選工具 | 平移畫布或框選多個節點 |
@@ -278,7 +278,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 拖曳 minimap 視角框 | 平移目前畫布；放開後提交單次視角操作 |
 | 連結工具 | 將滑鼠移到卡片即可顯示四側 `+` handle，從任一側拖曳；連線會貼齊相對方向的側邊 handle，也可點擊兩張卡片或群組建立無方向持久連線 |
 | 拖曳連線線段 | 前／後三分之一可重接端點，中間三分之一可彎曲或拉長線段；線段提供 16px 近距離命中範圍，雙擊可重設自訂曲線 |
-| 還原堆疊或群組 | 分頁成員重新建立 Chrome Tab Group；note 保留在僅限 Canvas 的群組 |
+| 還原堆疊或群組 | 分頁成員重新建立或聚焦 Chrome Tab Group，原本的 Group 卡片與 note 保留 |
 
 畫布與卡片網格中的卡片在 hover 時會放大約 `1.30×`。拖曳與 Stack hover 會保留操作優先順序；Quiet／作業系統 reduced-motion 設定仍會抑制視覺效果。Canvas 視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。
 
@@ -321,8 +321,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
-- **群組還原：** 還原完整群組前會要求確認；note 成員會保留在僅限 Canvas 的群組。
-- **中繼資料延續：** 還原分頁或群組後，在同一瀏覽器工作階段再次儲存時，會保留原本的備註與標籤。
+- **群組還原：** 還原完整群組前會要求確認；會重用相同 URL 的開啟分頁並重新分組，note 與不可直接還原的 URL 會保留在原 Group 卡片。
+- **還原並保留：** 還原分頁、Group 或 Group 成員會保留 TabWall 卡片、備註、標籤、縮圖與快照；要移除記錄請使用 Delete。
 - **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可依排程或資料變更後執行，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。

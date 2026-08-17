@@ -911,7 +911,6 @@
         const type = item?.kind === 'group' ? 'RESTORE_GROUP' : 'RESTORE_TAB';
         const res = await env.sendMessage({ type, id });
         if (res.ok) {
-          env.allTabs = env.allTabs.filter((t) => t.id !== id);
           if (env.expandedId === id) closeLightbox();
           if (env.editingId === id) closeEditBox();
           if (env.membersGroupId === id) closeMembersBox();
@@ -1369,7 +1368,11 @@
     ensureBound('openEditBox');
 
       env.editingId = item.id;
-      env.editContext = { type: 'item', hasPassword: Boolean(item.lockHash) };
+      env.editContext = {
+        type: 'item',
+        hasPassword: Boolean(item.lockHash),
+        originalTitle: item.title || '',
+      };
       env.editHeading.textContent = env.t('editHeading');
       env.editItemTitle.textContent = env.itemTitle(item);
       env.editSub.textContent =
@@ -1423,6 +1426,11 @@
         : '';
     }
     if (env.editLockEnabled) env.editLockEnabled.checked = Boolean(!hidden && item?.locked);
+    if (env.editHideOriginalTitle) {
+      env.editHideOriginalTitle.checked = Boolean(
+        !hidden && item?.locked && item?.displayTitle && item?.hideOriginalTitle
+      );
+    }
     if (env.editLockPassword) env.editLockPassword.value = '';
     if (env.editLockPasswordConfirm) env.editLockPasswordConfirm.value = '';
     syncEditLockFields();
@@ -1431,7 +1439,16 @@
 
   function syncEditLockFields() {
     if (!env.editLockFields || !env.editLockEnabled) return;
-    env.editLockFields.hidden = !env.editLockEnabled.checked;
+    const locked = Boolean(env.editLockEnabled.checked);
+    const displayTitle = String(env.editDisplayTitle?.value || '').trim();
+    const originalTitle = String(env.editContext?.originalTitle || '').trim();
+    const hasCustomDisplayTitle = Boolean(displayTitle && displayTitle !== originalTitle);
+    env.editLockFields.hidden = !locked;
+    if (env.editHideOriginalTitle) {
+      const canHide = locked && hasCustomDisplayTitle;
+      env.editHideOriginalTitle.disabled = !canHide;
+      if (!canHide) env.editHideOriginalTitle.checked = false;
+    }
   }
 
   function finishUnlockDialog(ok) {
@@ -1558,7 +1575,13 @@
     ensureBound('openMemberEditBox');
 
       env.editingId = member.id;
-      env.editContext = { type: 'member', groupId, memberId: member.id, hasPassword: Boolean(member.lockHash) };
+      env.editContext = {
+        type: 'member',
+        groupId,
+        memberId: member.id,
+        hasPassword: Boolean(member.lockHash),
+        originalTitle: member.title || '',
+      };
       env.editHeading.textContent = env.t('editMemberHeading');
       env.editItemTitle.textContent = itemTitle(member);
       env.editSub.textContent = member.url || '';

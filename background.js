@@ -409,6 +409,7 @@ async function updateGroupMember(groupId, memberId, patch) {
   if (typeof patch.note === 'string') member.note = patch.note;
   applyDisplayTitlePatch(member, patch);
   applyLockPatch(member, patch);
+  applyHideOriginalTitlePatch(member, patch);
   if (Array.isArray(patch.tags)) {
     member.tags = patch.tags
       .map((t) => String(t).trim())
@@ -1871,6 +1872,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           locked: message.locked,
           lockSalt: message.lockSalt,
           lockHash: message.lockHash,
+          hideOriginalTitle: message.hideOriginalTitle,
         });
       case 'CREATE_NOTE':
         return createNote(message.note || message.item, message.position);
@@ -1893,6 +1895,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           locked: message.locked,
           lockSalt: message.lockSalt,
           lockHash: message.lockHash,
+          hideOriginalTitle: message.hideOriginalTitle,
         });
       case 'REORDER_TABS':
       case 'REORDER_ITEMS':

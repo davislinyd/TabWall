@@ -135,24 +135,59 @@ function createRuntime() {
         }
         if (queryInfo.active && queryInfo.currentWindow) return runtime.activeTabs;
         if (queryInfo.url) {
-          return runtime.parkTabs.filter((tab) => tab.url === queryInfo.url);
+          return [...runtime.openTabs, ...runtime.parkTabs].filter((tab) => tab.url === queryInfo.url);
         }
         if (queryInfo.windowType === 'normal') return runtime.parkTabs;
-        if (queryInfo.groupId != null) return runtime.groupTabs;
-        return [];
+        if (queryInfo.groupId != null) {
+          return [...runtime.openTabs, ...runtime.groupTabs, ...runtime.activeTabs]
+            .filter((tab, index, tabs) => tabs.findIndex((candidate) => candidate.id === tab.id) === index)
+            .filter((tab) => tab.groupId === queryInfo.groupId);
+        }
+        return runtime.openTabs;
       },
       async create(info) {
         if (runtime.failTabCreate) throw new Error('tabs_create_failed');
-        const tab = { id: ++runtime.nextTabId, ...info };
+        const tab = {
+          id: ++runtime.nextTabId,
+          windowId: info.windowId ?? runtime.activeTabs[0]?.windowId ?? 1,
+          groupId: -1,
+          index: runtime.openTabs.length,
+          ...info,
+        };
         runtime.createdTabs.push(tab);
+        runtime.openTabs.push(tab);
         return tab;
       },
       async remove(ids) {
-        removedTabs.push(...(Array.isArray(ids) ? ids : [ids]));
+        const list = Array.isArray(ids) ? ids : [ids];
+        removedTabs.push(...list);
+        runtime.openTabs = runtime.openTabs.filter((tab) => !list.includes(tab.id));
       },
-      async group() { return 77; },
+      async group(options = {}) {
+        if (runtime.failNextGroup) {
+          runtime.failNextGroup = false;
+          throw new Error('tabs_group_failed');
+        }
+        const groupId = options.groupId ?? 77;
+        runtime.groupCalls.push({ ...options, groupId });
+        const ids = new Set(options.tabIds || []);
+        runtime.openTabs.forEach((tab) => {
+          if (ids.has(tab.id)) tab.groupId = groupId;
+        });
+        return groupId;
+      },
       async update(id, info) {
         runtime.updatedTabs.push({ id, info });
+        const tab = runtime.openTabs.find((candidate) => candidate.id === id);
+        if (tab) Object.assign(tab, info, { active: info.active === true ? true : tab.active });
+      },
+      async move(ids, info) {
+        const list = Array.isArray(ids) ? ids : [ids];
+        runtime.movedTabs.push({ ids: [...list], info: { ...info } });
+        runtime.openTabs.forEach((tab) => {
+          if (list.includes(tab.id) && info.windowId != null) tab.windowId = info.windowId;
+        });
+        return runtime.openTabs.filter((tab) => list.includes(tab.id));
       },
       async getCurrent() {
         return runtime.currentTab;
@@ -161,6 +196,7 @@ function createRuntime() {
         const candidates = [
           ...runtime.activeTabs,
           ...runtime.groupTabs,
+          ...runtime.openTabs,
           ...runtime.createdTabs,
         ];
         const found = candidates.find((tab) => tab?.id === id);
@@ -186,13 +222,23 @@ function createRuntime() {
           collapsed: false,
         };
       },
-      async update() {},
+      async update(id, info) {
+        runtime.groupUpdates.push({ id, info });
+        runtime.groupMeta = { id, ...info };
+      },
     },
     windows: {
       async create(info) {
         if (runtime.failWindowCreate) throw new Error('windows_create_failed');
-        const tab = { id: ++runtime.nextTabId, url: info.url };
+        const tab = {
+          id: ++runtime.nextTabId,
+          url: info.url || 'chrome://newtab/',
+          windowId: 55,
+          groupId: -1,
+          index: 0,
+        };
         runtime.createdTabs.push(tab);
+        runtime.openTabs.push(tab);
         return { id: 55, tabs: [tab] };
       },
       async update(id, info) {
@@ -219,12 +265,17 @@ function createRuntime() {
   const runtime = {
     failNextStorageSet: false,
     failTabCreate: false,
+    failNextGroup: false,
     failWindowCreate: false,
     nextTabId: 100,
     createdTabs: [],
+    openTabs: [],
     lastFocusedTabs: null,
     updatedTabs: [],
     updatedWindows: [],
+    movedTabs: [],
+    groupCalls: [],
+    groupUpdates: [],
     badgeCalls,
     alarmStore,
     notificationCalls,
@@ -463,7 +514,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.46.7');
+  assert.equal(MANIFEST.version, '2.48.0');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -724,7 +775,7 @@ test('automatic save metadata rules support matchers, negation, and accumulation
   ), false);
 });
 
-test('automatic save metadata merges restored hints and updates the tag catalog', async () => {
+test('automatic save metadata applies without creating restore hints', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   await runtime.api.setParkedItems([{
@@ -734,6 +785,8 @@ test('automatic save metadata merges restored hints and updates the tag catalog'
   }]);
   const restored = await runtime.api.restoreTab(ITEM_ID);
   assert.equal(restored.ok, true);
+  assert.equal(restored.kept, true);
+  assert.equal(runtime.store.parkedItems.length, 1);
 
   runtime.store.settings = {
     preSaveEdit: false,
@@ -748,7 +801,7 @@ test('automatic save metadata merges restored hints and updates the tag catalog'
       }],
     },
   };
-  const saved = await runtime.api.saveCurrentTab({
+  const saved = await runtime.api.commitSaveTab({
     id: 301,
     windowId: null,
     url: 'https://merge-rules.example/',
@@ -756,9 +809,12 @@ test('automatic save metadata merges restored hints and updates the tag catalog'
     favIconUrl: '',
   });
   assert.equal(saved.ok, true);
-  const item = (await runtime.api.getParkedItems())[0];
-  assert.equal(item.note, 'restored note\nautomatic note');
-  assert.deepEqual([...item.tags], ['legacy', 'automatic']);
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items.length, 2);
+  assert.equal(items[0].note, 'automatic note');
+  assert.deepEqual([...items[0].tags], ['automatic', 'legacy']);
+  assert.equal(items[1].note, 'restored note');
+  assert.deepEqual([...items[1].tags], ['legacy']);
   assert.deepEqual([...runtime.store.tagCatalog].sort(), ['automatic', 'legacy']);
 });
 
@@ -1481,6 +1537,7 @@ test('UPDATE_ITEM persists displayTitle and lock fields through normalize', asyn
     id: ITEM_ID,
     displayTitle: 'BBB',
     locked: true,
+    hideOriginalTitle: true,
     lockSalt: 'aa'.repeat(16),
     lockHash: 'bb'.repeat(32),
   });
@@ -1488,6 +1545,7 @@ test('UPDATE_ITEM persists displayTitle and lock fields through normalize', asyn
   assert.equal(salted.item.displayTitle, 'BBB');
   assert.equal(salted.item.title, ITEM_ID);
   assert.equal(salted.item.locked, true);
+  assert.equal(salted.item.hideOriginalTitle, true);
   assert.equal(salted.item.lockSalt, 'aa'.repeat(16));
   assert.equal(salted.item.lockHash, 'bb'.repeat(32));
 
@@ -1495,9 +1553,21 @@ test('UPDATE_ITEM persists displayTitle and lock fields through normalize', asyn
     type: 'UPDATE_ITEM',
     id: ITEM_ID,
     displayTitle: ITEM_ID,
+    hideOriginalTitle: true,
   });
   assert.equal(sameTitle.ok, true);
   assert.equal(sameTitle.item.displayTitle, undefined);
+  assert.equal(sameTitle.item.hideOriginalTitle, undefined);
+
+  const relocked = await dispatchMessage(runtime, {
+    type: 'UPDATE_ITEM',
+    id: ITEM_ID,
+    displayTitle: 'BBB',
+    locked: true,
+    hideOriginalTitle: true,
+  });
+  assert.equal(relocked.ok, true);
+  assert.equal(relocked.item.hideOriginalTitle, true);
 
   const unlocked = await dispatchMessage(runtime, {
     type: 'UPDATE_ITEM',
@@ -1507,6 +1577,7 @@ test('UPDATE_ITEM persists displayTitle and lock fields through normalize', asyn
   assert.equal(unlocked.ok, true);
   assert.equal(unlocked.item.locked, undefined);
   assert.equal(unlocked.item.lockHash, undefined);
+  assert.equal(unlocked.item.hideOriginalTitle, undefined);
 });
 
 test('legacy items default top-level pinned to false and update keeps order', async () => {
@@ -1712,10 +1783,12 @@ test('restoring a mixed Stack keeps notes after browser tabs are restored', asyn
   assert.equal(runtime.runtime.createdTabs.length, 1);
   assert.equal(runtime.store.parkedItems.length, 1);
   assert.equal(runtime.store.parkedItems[0].kind, 'group');
-  assert.equal(runtime.store.parkedItems[0].tabs.length, 0);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 1);
   assert.equal(runtime.store.parkedItems[0].notes.length, 1);
   assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), true);
-  assert.equal((await runtime.api.restoreGroup(GROUP_ID)).error, 'notes_only');
+  const repeated = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(repeated.ok, true);
+  assert.equal(repeated.reused, 1);
 });
 
 test('append import remints note and attachment IDs and rewrites Markdown tokens', async () => {
@@ -2569,7 +2642,8 @@ test('legacy import keeps file members and group restore reports skipped count',
   assert.equal(restored.ok, true);
   assert.equal(restored.skipped, 1);
   assert.equal(runtime.runtime.createdTabs.length, 1);
-  assert.equal(runtime.store.parkedItems.length, 0);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 2);
 });
 
 test('service worker import accepts the local legacy full ZIP after rehydration', {
@@ -2615,45 +2689,219 @@ test('restore create failure retains parked metadata', async () => {
   assert.equal(runtime.store.parkedItems.length, 1);
 });
 
-test('restored tab preserves note and tags when saved again', async () => {
+test('restored tab keeps its card and focuses an existing URL on repeat', async () => {
   const runtime = createRuntime();
   await runtime.ready;
-  runtime.store.settings = { preSaveEdit: false };
   await runtime.api.setParkedItems([{
     ...tab(ITEM_ID),
     note: 'keep this note',
     tags: ['keep', 'important'],
   }]);
+  runtime.media.set(`t:${ITEM_ID}`, { thumb: 'thumb', snap: 'snap' });
 
   const restored = await runtime.api.restoreTab(ITEM_ID);
   assert.equal(restored.ok, true);
-  assert.equal(runtime.store.parkedItems.length, 0);
-
-  const saved = await runtime.api.saveCurrentTab({
-    id: 201,
-    windowId: 1,
-    url: 'https://example.com/',
-    title: 'Updated title',
-    favIconUrl: '',
-  });
-  assert.equal(saved.ok, true);
+  assert.equal(restored.kept, true);
+  assert.equal(restored.created, 1);
   assert.equal(runtime.store.parkedItems.length, 1);
   assert.equal(runtime.store.parkedItems[0].note, 'keep this note');
   assert.deepEqual([...runtime.store.parkedItems[0].tags], ['keep', 'important']);
+  assert.equal(runtime.media.has(`t:${ITEM_ID}`), true);
 
-  const savedAgain = await runtime.api.commitSaveTab({
-    id: 204,
-    windowId: 1,
-    url: 'https://example.com/',
-    title: 'Saved without hint',
-    favIconUrl: '',
-  });
-  assert.equal(savedAgain.ok, true);
-  assert.equal(runtime.store.parkedItems[0].note, '');
-  assert.deepEqual([...runtime.store.parkedItems[0].tags], []);
+  const repeated = await runtime.api.restoreTab(ITEM_ID);
+  assert.equal(repeated.ok, true);
+  assert.equal(repeated.kept, true);
+  assert.equal(repeated.reused, 1);
+  assert.equal(repeated.created, 0);
+  assert.equal(runtime.runtime.createdTabs.length, 1);
+  assert.equal(runtime.runtime.updatedTabs.at(-1).info.active, true);
 });
 
-test('restore save hints require an exact URL match', async () => {
+test('restore matches the exact full URL and focuses the existing tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const url = 'https://exact.example/path?q=1#section';
+  await runtime.api.setParkedItems([tab(ITEM_ID, url)]);
+  runtime.runtime.openTabs = [{
+    id: 701,
+    windowId: 3,
+    index: 2,
+    groupId: -1,
+    url,
+    active: false,
+  }, {
+    id: 702,
+    windowId: 3,
+    index: 3,
+    groupId: -1,
+    url: 'https://exact.example/path?q=2#section',
+    active: true,
+  }];
+
+  const restored = await runtime.api.restoreTab(ITEM_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.kept, true);
+  assert.equal(restored.reused, 1);
+  assert.equal(restored.created, 0);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+  assert.equal(runtime.runtime.updatedTabs.at(-1).id, 701);
+  assert.equal(runtime.runtime.updatedTabs.at(-1).info.active, true);
+  assert.equal(runtime.runtime.updatedWindows.at(-1).id, 3);
+  assert.equal(runtime.runtime.updatedWindows.at(-1).info.focused, true);
+});
+
+test('group restore reuses matching tabs, creates missing members, and regroups them', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const group = {
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Reuse group',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [
+      { ...tab(GROUP_HTTP_MEMBER_ID, 'https://reuse.example/a'), indexInGroup: 0 },
+      { ...tab(GROUP_FILE_MEMBER_ID, 'https://reuse.example/b'), indexInGroup: 1 },
+    ],
+  };
+  await runtime.api.setParkedItems([group]);
+  runtime.runtime.openTabs = [{
+    id: 710,
+    windowId: 2,
+    index: 0,
+    groupId: 88,
+    url: 'https://reuse.example/a',
+    active: false,
+  }];
+  runtime.runtime.activeTabs = [{
+    id: 711,
+    windowId: 1,
+    url: 'https://other.example/',
+    active: true,
+  }];
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.kept, true);
+  assert.equal(restored.reused, 1);
+  assert.equal(restored.created, 1);
+  assert.equal(restored.skipped, 0);
+  assert.equal(runtime.runtime.movedTabs.length, 1);
+  assert.equal(runtime.runtime.groupCalls.at(-1).tabIds.length, 2);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 2);
+});
+
+test('group duplicate URLs are matched one-to-one and preserve member count', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const url = 'https://duplicate.example/path?q=1#tab';
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Duplicate URLs',
+    color: 'purple',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [
+      { ...tab(GROUP_HTTP_MEMBER_ID, url), indexInGroup: 0 },
+      { ...tab(GROUP_FILE_MEMBER_ID, url), indexInGroup: 1 },
+    ],
+  }]);
+  runtime.runtime.activeTabs = [{ id: 718, windowId: 1, active: true, url: 'https://other.example/' }];
+  runtime.runtime.openTabs = [{
+    id: 719,
+    windowId: 1,
+    index: 0,
+    groupId: -1,
+    url,
+  }];
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.reused, 1);
+  assert.equal(restored.created, 1);
+  assert.equal(runtime.runtime.groupCalls.at(-1).tabIds.length, 2);
+  assert.equal(new Set(runtime.runtime.groupCalls.at(-1).tabIds).size, 2);
+  assert.equal(runtime.runtime.openTabs.filter((tab) => tab.url === url).length, 2);
+});
+
+test('new-window group restore moves matching tabs into the focused window', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'New window group',
+    color: 'green',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [
+      { ...tab(GROUP_HTTP_MEMBER_ID, 'https://window.example/a'), indexInGroup: 0 },
+      { ...tab(GROUP_FILE_MEMBER_ID, 'https://window.example/b'), indexInGroup: 1 },
+    ],
+  }]);
+  runtime.store.settings = { restoreGroupIn: 'newWindow' };
+  runtime.runtime.openTabs = [
+    { id: 720, windowId: 2, index: 0, groupId: 88, url: 'https://window.example/a' },
+    { id: 721, windowId: 3, index: 0, groupId: 89, url: 'https://window.example/b' },
+  ];
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.kept, true);
+  assert.equal(restored.reused, 2);
+  assert.equal(restored.created, 0);
+  assert.equal(runtime.runtime.movedTabs.length, 2);
+  assert.ok(runtime.removedTabs.length >= 1, 'new-window placeholder should be removed');
+  assert.equal(runtime.store.parkedItems.length, 1);
+});
+
+test('group restore failure rolls back moved tabs and removes only new tabs', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Rollback group',
+    color: 'red',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [
+      { ...tab(GROUP_HTTP_MEMBER_ID, 'https://rollback.example/a'), indexInGroup: 0 },
+      { ...tab(GROUP_FILE_MEMBER_ID, 'https://rollback.example/b'), indexInGroup: 1 },
+    ],
+  }]);
+  runtime.runtime.openTabs = [{
+    id: 730,
+    windowId: 2,
+    index: 4,
+    groupId: 88,
+    url: 'https://rollback.example/a',
+  }];
+  runtime.runtime.activeTabs = [{ id: 731, windowId: 1, active: true, url: 'https://other.example/' }];
+  runtime.runtime.failNextGroup = true;
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, false);
+  assert.match(restored.error, /tabs_group_failed/);
+  const reused = runtime.runtime.openTabs.find((tab) => tab.id === 730);
+  assert.equal(reused.windowId, 2);
+  assert.equal(runtime.runtime.openTabs.some((tab) => tab.url === 'https://rollback.example/b'), false);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 2);
+});
+
+test('restoring a tab does not seed metadata for a different URL', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   runtime.store.settings = { preSaveEdit: false };
@@ -2676,9 +2924,11 @@ test('restore save hints require an exact URL match', async () => {
   assert.equal(saved.ok, true);
   assert.equal(runtime.store.parkedItems[0].note, '');
   assert.deepEqual([...runtime.store.parkedItems[0].tags], []);
+  assert.equal(runtime.store.parkedItems[1].note, 'do not copy');
+  assert.deepEqual([...runtime.store.parkedItems[1].tags], ['source']);
 });
 
-test('restored group member preserves note and tags when saved again', async () => {
+test('restored group member keeps its member metadata', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   runtime.store.settings = { preSaveEdit: false };
@@ -2707,22 +2957,14 @@ test('restored group member preserves note and tags when saved again', async () 
 
   const restored = await runtime.api.restoreGroupMember(GROUP_ID, GROUP_HTTP_MEMBER_ID);
   assert.equal(restored.ok, true);
-  assert.equal(runtime.store.parkedItems.length, 0);
-
-  const saved = await runtime.api.saveCurrentTab({
-    id: 203,
-    windowId: 1,
-    url: 'https://example.com/member',
-    title: 'Member again',
-    favIconUrl: '',
-  });
-  assert.equal(saved.ok, true);
+  assert.equal(restored.kept, true);
   assert.equal(runtime.store.parkedItems.length, 1);
-  assert.equal(runtime.store.parkedItems[0].note, 'member note');
-  assert.deepEqual([...runtime.store.parkedItems[0].tags], ['member-tag']);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 1);
+  assert.equal(runtime.store.parkedItems[0].tabs[0].note, 'member note');
+  assert.deepEqual([...runtime.store.parkedItems[0].tabs[0].tags], ['member-tag']);
 });
 
-test('restored group preserves group note and tags when saved again', async () => {
+test('restored group keeps group and member metadata', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   await runtime.api.setParkedItems([{
@@ -2750,29 +2992,11 @@ test('restored group preserves group note and tags when saved again', async () =
 
   const restored = await runtime.api.restoreGroup(GROUP_ID);
   assert.equal(restored.ok, true);
-  assert.equal(runtime.store.parkedItems.length, 0);
-
-  const restoredTab = runtime.runtime.createdTabs[0];
-  runtime.store.settings = { saveGroupCapture: 'none' };
-  runtime.runtime.groupMeta = {
-    id: 77,
-    title: 'Saved group',
-    color: 'blue',
-    collapsed: false,
-  };
-  runtime.runtime.groupTabs = [{
-    ...restoredTab,
-    windowId: 1,
-    groupId: 77,
-    index: 0,
-  }];
-  runtime.runtime.activeTabs = [runtime.runtime.groupTabs[0]];
-
-  const saved = await runtime.api.saveActiveGroup();
-  assert.equal(saved.ok, true);
+  assert.equal(restored.kept, true);
   assert.equal(runtime.store.parkedItems.length, 1);
   assert.equal(runtime.store.parkedItems[0].note, 'group note');
   assert.deepEqual([...runtime.store.parkedItems[0].tags], ['group-tag']);
+  assert.equal(runtime.store.parkedItems[0].tabs.length, 1);
 });
 
 test('Stack storage failure rolls copied media back and preserves old keys', async () => {

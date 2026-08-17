@@ -68,6 +68,22 @@
       
   }
 
+  function syncStickerNoteLockFields() {
+    ensureBound('syncStickerNoteLockFields');
+    const locked = Boolean(env.stickerNoteLockEnabled?.checked);
+    const typed = String(env.stickerNoteTitle?.value || '').trim();
+    const original = String(env.stickerNoteContext?.originalTitle || '').trim();
+    const hasCustomDisplayTitle = Boolean(
+      env.stickerNoteContext?.mode === 'edit' && typed && typed !== original
+    );
+    if (env.stickerNoteLockFields) env.stickerNoteLockFields.hidden = !locked;
+    if (env.stickerNoteHideOriginalTitle) {
+      const canHide = locked && hasCustomDisplayTitle;
+      env.stickerNoteHideOriginalTitle.disabled = !canHide;
+      if (!canHide) env.stickerNoteHideOriginalTitle.checked = false;
+    }
+  }
+
   function renderStickerNoteTags() {
     ensureBound('renderStickerNoteTags');
 
@@ -321,9 +337,12 @@
     }));
     env.stickerNoteTitle.value = (source.displayTitle || source.title || env.t('noteUntitled'));
     if (env.stickerNoteLockEnabled) env.stickerNoteLockEnabled.checked = Boolean(source.locked);
+    if (env.stickerNoteHideOriginalTitle) {
+      env.stickerNoteHideOriginalTitle.checked = Boolean(source.locked && source.displayTitle && source.hideOriginalTitle);
+    }
     if (env.stickerNoteLockPassword) env.stickerNoteLockPassword.value = '';
     if (env.stickerNoteLockPasswordConfirm) env.stickerNoteLockPasswordConfirm.value = '';
-    if (env.stickerNoteLockFields) env.stickerNoteLockFields.hidden = !source.locked;
+    syncStickerNoteLockFields();
     env.stickerNoteMarkdown.value = source.markdown || '';
     env.stickerNoteTagDraft.value = '';
     setStickerNoteMediaBusy(false);
@@ -368,6 +387,7 @@
     const note = stickerNoteDraftRecord();
     const lockPatch = await env.collectLockPatchFromFields?.({
       locked: Boolean(env.stickerNoteLockEnabled?.checked),
+      hideOriginalTitle: Boolean(env.stickerNoteHideOriginalTitle?.checked),
       password: env.stickerNoteLockPassword?.value || '',
       confirm: env.stickerNoteLockPasswordConfirm?.value || '',
       hasPassword: Boolean(env.stickerNoteContext?.hasPassword),
@@ -421,6 +441,7 @@
     stickerNoteUuid,
     stickerNoteDraftMeta,
     stickerNoteDraftRecord,
+    syncStickerNoteLockFields,
     renderStickerNoteTags,
     setStickerNoteMediaStatus,
     setStickerNoteMediaBusy,

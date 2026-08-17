@@ -1079,6 +1079,7 @@
         kind: item.kind,
         title: item.title,
         displayTitle: item.displayTitle || '',
+        hideOriginalTitle: Boolean(item.hideOriginalTitle),
         locked: Boolean(item.locked),
         lockHash: item.lockHash || '',
         unlocked: Boolean(env.sessionUnlockedIds?.has(item.id)),
@@ -1098,6 +1099,7 @@
             member.id,
             member.title,
             member.displayTitle || '',
+            Boolean(member.hideOriginalTitle),
             member.url,
             member.hasThumb,
             member.hasSnap,
@@ -1106,7 +1108,15 @@
           ])
           : undefined,
         notes: item.kind === 'group'
-          ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
+          ? (item.notes || []).map((note) => [
+            note.id,
+            note.title,
+            note.displayTitle || '',
+            Boolean(note.hideOriginalTitle),
+            note.markdown,
+            note.tags,
+            note.attachments?.length,
+          ])
           : undefined,
         locale: env.settings.locale,
       });
@@ -1151,18 +1161,19 @@
     return hash === String(hashHex).toLowerCase();
   }
 
-  async function collectLockPatchFromFields({ locked, password, confirm, hasPassword } = {}) {
-    if (!locked) return { locked: false };
+  async function collectLockPatchFromFields({ locked, password, confirm, hasPassword, hideOriginalTitle } = {}) {
+    const hide = Boolean(hideOriginalTitle);
+    if (!locked) return { locked: false, hideOriginalTitle: false };
     const pw = String(password || '');
     const confirmPw = String(confirm || '');
     if (pw || confirmPw) {
       if (pw !== confirmPw) return { error: 'lockPasswordMismatch' };
-      if (!pw) return { locked: true, lockSalt: '', lockHash: '' };
+      if (!pw) return { locked: true, hideOriginalTitle: hide, lockSalt: '', lockHash: '' };
       const { salt, hash } = await hashLockPassword(pw);
-      return { locked: true, lockSalt: salt, lockHash: hash };
+      return { locked: true, hideOriginalTitle: hide, lockSalt: salt, lockHash: hash };
     }
-    if (hasPassword) return { locked: true };
-    return { locked: true, lockSalt: '', lockHash: '' };
+    if (hasPassword) return { locked: true, hideOriginalTitle: hide };
+    return { locked: true, hideOriginalTitle: hide, lockSalt: '', lockHash: '' };
   }
 
   function isItemMediaLocked(item, unlockedIds) {

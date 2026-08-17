@@ -211,6 +211,7 @@ const stickerNoteDrag = document.getElementById('stickerNoteDrag');
 const stickerNoteTitle = document.getElementById('stickerNoteTitle');
 const stickerNoteLockEnabled = document.getElementById('stickerNoteLockEnabled');
 const stickerNoteLockFields = document.getElementById('stickerNoteLockFields');
+const stickerNoteHideOriginalTitle = document.getElementById('stickerNoteHideOriginalTitle');
 const stickerNoteLockPassword = document.getElementById('stickerNoteLockPassword');
 const stickerNoteLockPasswordConfirm = document.getElementById('stickerNoteLockPasswordConfirm');
 const stickerNoteMarkdown = document.getElementById('stickerNoteMarkdown');
@@ -454,6 +455,7 @@ const editSave = document.getElementById('editSave');
 const editCloseX = document.getElementById('editCloseX');
 const editDisplayTitle = document.getElementById('editDisplayTitle');
 const editOriginalTitle = document.getElementById('editOriginalTitle');
+const editHideOriginalTitle = document.getElementById('editHideOriginalTitle');
 const editLockEnabled = document.getElementById('editLockEnabled');
 const editLockFields = document.getElementById('editLockFields');
 const editLockPassword = document.getElementById('editLockPassword');
@@ -790,6 +792,7 @@ function bindPanelModules() {
     "editChips": () => editChips,
     "editDisplayTitle": () => editDisplayTitle,
     "editHeading": () => editHeading,
+    "editHideOriginalTitle": () => editHideOriginalTitle,
     "editItemTitle": () => editItemTitle,
     "editLockEnabled": () => editLockEnabled,
     "editLockFields": () => editLockFields,
@@ -1017,6 +1020,7 @@ function bindPanelModules() {
     "stickerNoteTitle": () => stickerNoteTitle,
     "stickerNoteLockEnabled": () => stickerNoteLockEnabled,
     "stickerNoteLockFields": () => stickerNoteLockFields,
+    "stickerNoteHideOriginalTitle": () => stickerNoteHideOriginalTitle,
     "stickerNoteLockPassword": () => stickerNoteLockPassword,
     "stickerNoteLockPasswordConfirm": () => stickerNoteLockPasswordConfirm,
     "suppressCanvasNodeClick": () => suppressCanvasNodeClick,
@@ -2146,23 +2150,13 @@ lbRestore.addEventListener('click', async () => {
     return;
   }
   if (expandedMeta?.groupId) {
-    const res = await sendMessage({
-      type: 'RESTORE_GROUP_MEMBER',
-      groupId: expandedMeta.groupId,
-      memberId: expandedId,
-    });
+    const res = await restoreMember(expandedMeta.groupId, expandedId);
     if (res.ok) {
       closeLightbox();
-      await loadList();
     }
     return;
   }
-  const res = await sendMessage({ type: 'RESTORE_TAB', id: expandedId });
-  if (res.ok) {
-    allTabs = allTabs.filter((t) => t.id !== expandedId);
-    closeLightbox();
-    renderGrid();
-  }
+  await restoreItem(expandedId);
 });
 
 function renderEditChips(...args) { return WorkspaceUi.renderEditChips(...args); }
@@ -2513,6 +2507,7 @@ function closeEditBox(...args) { return WorkspaceUi.closeEditBox(...args); }
 editCancel.addEventListener('click', closeEditBox);
 editCloseX.addEventListener('click', closeEditBox);
 editLockEnabled?.addEventListener('change', () => WorkspaceUi.syncEditLockFields());
+editDisplayTitle?.addEventListener('input', () => WorkspaceUi.syncEditLockFields());
 unlockCancel?.addEventListener('click', () => WorkspaceUi.closeUnlockDialog());
 unlockCloseX?.addEventListener('click', () => WorkspaceUi.closeUnlockDialog());
 unlockSubmit?.addEventListener('click', () => WorkspaceUi.submitUnlockDialog());
@@ -2523,7 +2518,7 @@ unlockPassword?.addEventListener('keydown', (event) => {
   }
 });
 stickerNoteLockEnabled?.addEventListener('change', () => {
-  if (stickerNoteLockFields) stickerNoteLockFields.hidden = !stickerNoteLockEnabled.checked;
+  StickerUi.syncStickerNoteLockFields?.();
 });
 
 editSave.addEventListener('click', async () => {
@@ -2532,6 +2527,7 @@ editSave.addEventListener('click', async () => {
   if (editContext.type === 'member') {
     const lockPatch = await collectLockPatchFromFields({
       locked: Boolean(editLockEnabled?.checked),
+      hideOriginalTitle: Boolean(editHideOriginalTitle?.checked),
       password: editLockPassword?.value || '',
       confirm: editLockPasswordConfirm?.value || '',
       hasPassword: Boolean(editContext.hasPassword),
@@ -2600,6 +2596,7 @@ editSave.addEventListener('click', async () => {
   }
   const lockPatch = await collectLockPatchFromFields({
     locked: Boolean(editLockEnabled?.checked),
+    hideOriginalTitle: Boolean(editHideOriginalTitle?.checked),
     password: editLockPassword?.value || '',
     confirm: editLockPasswordConfirm?.value || '',
     hasPassword: Boolean(editContext.hasPassword),
@@ -2667,7 +2664,10 @@ function deleteGroupNote(groupId, noteId) {
   });
 }
 
-stickerNoteTitle?.addEventListener('input', renderStickerNotePreview);
+stickerNoteTitle?.addEventListener('input', () => {
+  renderStickerNotePreview();
+  StickerUi.syncStickerNoteLockFields?.();
+});
 stickerNoteMarkdown?.addEventListener('input', renderStickerNotePreview);
 stickerNoteTagDraft?.addEventListener('keydown', (event) => {
   if ((event.key === 'Enter' || event.key === 'Tab') && stickerNoteTagDraft.value.trim()) {

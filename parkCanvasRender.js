@@ -610,6 +610,7 @@ function canvasNodeRenderKey(item) {
     kind: item.kind,
     title: item.title,
     displayTitle: item.displayTitle || '',
+    hideOriginalTitle: Boolean(item.hideOriginalTitle),
     locked: Boolean(item.locked),
     lockHash: item.lockHash || '',
     unlocked: Boolean(unlockedIds?.has?.(item.id)),
@@ -629,6 +630,7 @@ function canvasNodeRenderKey(item) {
         member.id,
         member.title,
         member.displayTitle || '',
+        Boolean(member.hideOriginalTitle),
         member.url,
         member.hasThumb,
         member.hasSnap,
@@ -636,7 +638,15 @@ function canvasNodeRenderKey(item) {
       ])
       : undefined,
     notes: item.kind === 'group'
-      ? (item.notes || []).map((note) => [note.id, note.title, note.markdown, note.tags, note.attachments?.length])
+      ? (item.notes || []).map((note) => [
+        note.id,
+        note.title,
+        note.displayTitle || '',
+        Boolean(note.hideOriginalTitle),
+        note.markdown,
+        note.tags,
+        note.attachments?.length,
+      ])
       : undefined,
     locale: getSettings().locale,
   });

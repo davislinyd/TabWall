@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.46.7 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.48.0 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.46.7</span>
+      <span>使用者說明 · v2.48.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -70,7 +70,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.46.7</span><span lang="en">Version 2.46.7</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.48.0</span><span lang="en">Version 2.48.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -121,8 +121,8 @@
             <span class="n">3</span>
             <h3 lang="zh-Hant">找回來</h3>
             <h3 lang="en">Restore</h3>
-            <p lang="zh-Hant">點卡片縮圖還原分頁。群組會先問一次。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
-            <p lang="en">Click a thumbnail to restore. Groups ask first. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> to search and restore without opening the wall.</p>
+            <p lang="zh-Hant">點卡片縮圖還原分頁並保留卡片。群組會先問一次。不必開牆時，按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> 直接搜尋並還原。</p>
+            <p lang="en">Click a thumbnail to restore and keep its card. Groups ask first. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>/</kbd> to search and restore without opening the wall.</p>
           </article>
         </div>
         <p lang="zh-Hant">畫布上的「說明」按鈕可隨時打開精簡版提示。本手冊是完整版。</p>
@@ -276,8 +276,8 @@ https://wiki.example.com
           <li lang="en">The edit-before-save panel is prefilled from matching rules; you can still change it.</li>
         </ul>
         <div class="callout ok">
-          <p lang="zh-Hant">同一瀏覽器工作階段裡，還原過的分頁或群組若再次儲存，會沿用原本的備註與標籤。</p>
-          <p lang="en">If you restore a tab or group and park it again in the same browser session, the original notes and tags come back.</p>
+          <p lang="zh-Hant">還原分頁或群組會保留原本的卡片、備註、標籤、縮圖與快照；要移除記錄請使用 Delete。</p>
+          <p lang="en">Restoring a tab or group keeps its card, notes, tags, thumbnails, and snapshots. Use Delete to remove the record.</p>
         </div>
       </section>
 
@@ -361,8 +361,8 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">卡片右鍵</td>
               <td lang="en">Right-click a card</td>
-              <td lang="zh-Hant">與卡片工具列相同：還原、快照、編輯、複製、固定、刪除（依類型）。</td>
-              <td lang="en">Same as the card toolbar: restore, snapshot, edit, copy, pin, delete — by kind.</td>
+              <td lang="zh-Hant">與卡片工具列相同：還原並保留、快照、編輯、複製、固定、刪除（依類型）。</td>
+              <td lang="en">Same as the card toolbar: restore and keep, snapshot, edit, copy, pin, delete — by kind.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">「畫布整理」</td>
@@ -384,8 +384,8 @@ https://wiki.example.com
         <h2 lang="zh-Hant">卡片與還原</h2>
         <h2 lang="en">Cards and restore</h2>
         <ul>
-          <li lang="zh-Hant">點<strong>縮圖</strong>：還原分頁；群組會先確認。</li>
-          <li lang="en">Click the <strong>thumbnail</strong> to restore. Groups ask first.</li>
+          <li lang="zh-Hant">點<strong>縮圖</strong>：還原分頁並保留卡片；群組會先確認。</li>
+          <li lang="en">Click the <strong>thumbnail</strong> to restore and keep the card. Groups ask first.</li>
           <li lang="zh-Hant">點<strong>標題或中繼資料</strong>：複製已存網址（群組則複製成員網址）。</li>
           <li lang="en">Click the <strong>title or metadata</strong> to copy the saved URL (or member URLs for a group).</li>
           <li lang="zh-Hant">點<strong>編輯</strong>：改顯示標題、note／tags 與上鎖設定。Note 可點標題進入。</li>
@@ -396,8 +396,8 @@ https://wiki.example.com
           <li lang="en">Click <strong>Expand</strong> for the full snapshot (thumbnail if none). Use <kbd>←</kbd> / <kbd>→</kbd> for previous / next.</li>
           <li lang="zh-Hant">點<strong>固定</strong>：只作用於頂層項目。工具列「已固定」是篩選，不改手動順序，也不寫進備份的篩選狀態。</li>
           <li lang="en">Click <strong>Pin</strong> on top-level items. The Pinned filter does not change manual order or backup state.</li>
-          <li lang="zh-Hant">點<strong>刪除</strong>：從牆移除。</li>
-          <li lang="en">Click <strong>Delete</strong> to remove it from the wall.</li>
+          <li lang="zh-Hant">點<strong>刪除</strong>：從牆移除卡片與其記錄。</li>
+          <li lang="en">Click <strong>Delete</strong> to remove the card and its record from the wall.</li>
         </ul>
         <h3 lang="zh-Hant">自訂顯示標題與原始名稱</h3>
         <h3 lang="en">Display titles and subtitles</h3>
@@ -409,8 +409,8 @@ https://wiki.example.com
         <p lang="en">Tab cards, groups, image cards, notes, and group members can be locked from the edit box. Locking hides thumbnails and full snapshots with a lock overlay so passersby cannot see page contents. Restoring tabs and editing notes still work without unlocking. Unlocking lasts only for the current tab session (re-locks upon closing). An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately.</p>
         <h3 lang="zh-Hant">群組卡片</h3>
         <h3 lang="en">Group cards</h3>
-        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；note 成員不會變成瀏覽器分頁。群組卡有色條與淡色，方便和一般分頁區分。</p>
-        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore one member or the whole group. Restore can target the current window or a new one. Note members never become browser tabs. Group cards have a color bar and tint so they stand apart from tab cards.</p>
+        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原並保留單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；相同 URL 的開啟分頁會重用並重新分組，note 成員不會變成瀏覽器分頁且會保留在卡片中。群組卡有色條與淡色，方便和一般分頁區分。</p>
+        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore and keep one member or the whole group. Restore can target the current window or a new one; matching open tabs are reused and regrouped. Note members never become browser tabs and remain in the card. Group cards have a color bar and tint so they stand apart from tab cards.</p>
         <h3 lang="zh-Hant">圖片卡</h3>
         <h3 lang="en">Image cards</h3>
         <p lang="zh-Hant">用「新增卡片」上傳、貼上或拖放本機圖片。支援 JPEG、PNG、WEBP、GIF、SVG、HEIC。會壓縮成縮圖與快照，以 contain 填滿節點。這不是分頁，點縮圖不會還原瀏覽器分頁。</p>
@@ -577,8 +577,8 @@ https://wiki.example.com
         <ul>
           <li lang="zh-Hant">左欄結果（最多 12 筆），右欄預覽截圖、note、tags、成員。</li>
           <li lang="en">Results on the left (up to 12). Snapshot, note, tags, and members on the right.</li>
-          <li lang="zh-Hant">方向鍵移動；<kbd>Enter</kbd> 或雙擊還原分頁／群組。Note 不能還原成分頁。</li>
-          <li lang="en">Arrow keys move. <kbd>Enter</kbd> or double-click restores a tab or group. Notes cannot restore a tab.</li>
+          <li lang="zh-Hant">方向鍵移動；<kbd>Enter</kbd> 或雙擊還原並保留分頁／群組。Note 不能還原成分頁。</li>
+          <li lang="en">Arrow keys move. <kbd>Enter</kbd> or double-click restores and keeps a tab or group. Notes cannot restore a tab.</li>
           <li lang="zh-Hant">欄位切換與牆上相同：<kbd>tag</kbd>／<kbd>group</kbd>／<kbd>note</kbd>／<kbd>nn</kbd>／<kbd>noti</kbd>／<kbd>domain</kbd> 再按 Tab；<kbd>all</kbd>+Tab 重設。</li>
           <li lang="en">Same field scopes as the wall: <kbd>tag</kbd> / <kbd>group</kbd> / <kbd>note</kbd> / <kbd>nn</kbd> / <kbd>noti</kbd> / <kbd>domain</kbd> then Tab; <kbd>all</kbd>+Tab resets.</li>
           <li><kbd>Esc</kbd> <span lang="zh-Hant">關閉。</span><span lang="en">closes it.</span></li>
@@ -641,8 +641,8 @@ https://wiki.example.com
         <p lang="en">Header → Tags opens the manager: search, add, rename, delete. Deleting a tag removes it from every parked item.</p>
         <h3 lang="zh-Hant">複選與批次</h3>
         <h3 lang="en">Multi-select and batch</h3>
-        <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原、附加 note／tags（不覆蓋既有內容）、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
-        <p lang="en">Turn on Select, pick cards, then batch restore, append notes / tags (without overwriting existing text), delete, or export only the selection (lite JSON or full ZIP).</p>
+        <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原並保留卡片、附加 note／tags（不覆蓋既有內容）、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
+        <p lang="en">Turn on Select, pick cards, then batch restore and keep cards, append notes / tags (without overwriting existing text), delete, or export only the selection (lite JSON or full ZIP).</p>
         <p lang="zh-Hant"><kbd>Shift</kbd>／<kbd>Control</kbd> 可在畫布上加選。</p>
         <p lang="en">Hold <kbd>Shift</kbd> / <kbd>Control</kbd> to add to the canvas selection.</p>
       </section>
@@ -957,8 +957,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.46.7</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.46.7</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.48.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.48.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

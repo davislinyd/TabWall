@@ -411,6 +411,16 @@ test('Top-level actions are consolidated in the header', () => {
   assert.doesNotMatch(PARK_SOURCE, /canvasArrangePanel|canvasArrangeBtn|canvasSnapToggle|data-settings-arrange/);
 });
 
+test('restore actions keep TabWall cards and use one lightbox path', () => {
+  assert.match(I18N_SOURCE, /restore: '還原並保留卡片'/);
+  assert.match(I18N_SOURCE, /restore: 'Restore and keep card'/);
+  assert.match(I18N_SOURCE, /restoreGroup: '還原並保留整個 Group'/);
+  assert.match(I18N_SOURCE, /memberRestore: '還原並保留此分頁'/);
+  assert.doesNotMatch(extractFnSource(WORKSPACE_UI_SOURCE, 'restoreItem'), /allTabs = allTabs\.filter/);
+  assert.match(PARK_SOURCE, /const res = await restoreMember\(expandedMeta\.groupId, expandedId\)/);
+  assert.match(PARK_SOURCE, /await restoreItem\(expandedId\)/);
+});
+
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {
   for (const command of ['save-tab', 'save-keep', 'save-group', 'toggle-park', 'open-ai', 'toggle-annotate']) {
     assert.match(HTML_SOURCE, new RegExp(`data-chrome-cmd="${command}"`));
@@ -742,18 +752,25 @@ test('Canvas search relations and connection gestures have a stable UI contract'
 test('Edit box exposes display title, lock controls, and unlock dialog', () => {
   assert.match(HTML_MARKUP, /id="editDisplayTitle"/);
   assert.match(HTML_MARKUP, /id="editLockEnabled"/);
+  assert.match(HTML_MARKUP, /id="editHideOriginalTitle"/);
   assert.match(HTML_MARKUP, /id="editLockPassword"/);
   assert.match(HTML_MARKUP, /id="unlockBox"/);
   assert.match(HTML_MARKUP, /id="unlockPassword"/);
   assert.match(HTML_MARKUP, /id="stickerNoteLockEnabled"/);
+  assert.match(HTML_MARKUP, /id="stickerNoteHideOriginalTitle"/);
   assert.match(HTML_MARKUP, /id="lbLockOverlay"/);
   assert.match(I18N_SOURCE, /editDisplayTitle: '顯示標題'/);
   assert.match(I18N_SOURCE, /editDisplayTitle: 'Display title'/);
   assert.match(I18N_SOURCE, /lockCard: '上鎖（隱藏縮圖與快照）'/);
+  assert.match(I18N_SOURCE, /hideOriginalTitle: '隱藏原始標題（僅顯示自訂標題）'/);
+  assert.match(I18N_SOURCE, /hideOriginalTitle: 'Hide original title \(show custom title only\)'/);
   assert.match(I18N_SOURCE, /unlockTitle: 'Unlock card'/);
   assert.match(PARK_BEHAVIOR_FLAT, /function requestUnlockItem\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /function toggleCardLock\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /function itemOriginalTitle\(/);
+  assert.match(LIST_UI_SOURCE, /item\?\.locked && item\?\.hideOriginalTitle/);
+  assert.match(APP_HELPERS_SOURCE, /hideOriginalTitle: Boolean\(item\.hideOriginalTitle\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /hideOriginalTitle: Boolean\(item\.hideOriginalTitle\)/);
   assert.match(CSS_SOURCE, /\.media-lock-overlay/);
   assert.match(CSS_SOURCE, /\.title-original/);
 });

@@ -294,6 +294,16 @@ async function deleteTabItemsByIds(ids) {
 
 async function cleanupCreatedTabs(tabIds, windowId = null) {
   const ids = [...new Set((tabIds || []).filter((id) => id != null))];
+  let canRemoveWindow = false;
+  if (windowId != null && chrome.windows?.get) {
+    try {
+      const win = await chrome.windows.get(windowId, { populate: true });
+      const tabs = Array.isArray(win?.tabs) ? win.tabs : [];
+      canRemoveWindow = tabs.length > 0 && tabs.every((tab) => ids.includes(tab.id));
+    } catch {
+      // Leave the window open when its remaining tabs cannot be verified safely.
+    }
+  }
   if (ids.length) {
     try {
       await chrome.tabs.remove(ids);
@@ -301,7 +311,7 @@ async function cleanupCreatedTabs(tabIds, windowId = null) {
       appLogPush('warn', 'rollback', 'tab cleanup failed', err?.message || err);
     }
   }
-  if (windowId != null && chrome.windows?.remove) {
+  if (canRemoveWindow && chrome.windows?.remove) {
     try {
       await chrome.windows.remove(windowId);
     } catch {
@@ -310,58 +320,123 @@ async function cleanupCreatedTabs(tabIds, windowId = null) {
   }
 }
 
-async function commitRestoredItem(
-  list,
-  index,
-  item,
-  createdIds,
-  windowId = null,
-  restoredGroupId = null
-) {
-  const next = list.filter((entry) => entry.id !== item.id);
-  const remainingNotes = item.kind === 'group' ? (item.notes || []) : [];
-  const remainingImageTabs = item.kind === 'group'
-    ? (item.tabs || []).filter((member) => member?.cardSource === 'image')
-    : [];
-  if (remainingNotes.length || remainingImageTabs.length) {
-    next.splice(Math.min(index, next.length), 0, {
-      ...item,
-      tabs: remainingImageTabs,
-      notes: remainingNotes,
-      savedAt: Date.now(),
-    });
-  }
+async function getCreatedWindowTab(win) {
+  const direct = Array.isArray(win?.tabs)
+    ? win.tabs.find((tab) => tab?.id != null)
+    : null;
+  if (direct) return direct;
+  if (win?.id == null || !chrome.windows?.get) return null;
   try {
-    await setParkedItems(next);
-  } catch (err) {
-    await cleanupCreatedTabs(createdIds, windowId);
-    return { ok: false, error: String(err?.message || err) };
+    const populated = await chrome.windows.get(win.id, { populate: true });
+    return Array.isArray(populated?.tabs)
+      ? populated.tabs.find((tab) => tab?.id != null) || null
+      : null;
+  } catch {
+    return null;
   }
-  if (item.kind === 'tab') {
-    try {
-      await rememberRestoreHints([item]);
-    } catch (err) {
-      console.warn('[TabWall] restore hint save failed:', err);
-    }
-  } else if (restoredGroupId != null) {
-    try {
-      await rememberRestoreGroupHint(restoredGroupId, item);
-    } catch (err) {
-      console.warn('[TabWall] group restore hint save failed:', err);
-    }
-  }
+}
+
+function restoreResult(list, item, { created = 0, reused = 0, skipped = 0 } = {}) {
+  return {
+    ok: true,
+    kept: true,
+    remaining: list.length,
+    created,
+    reused,
+    skipped,
+    notesRemaining: item.kind === 'group' ? (item.notes || []).length : 0,
+  };
+}
+
+function groupIdForTab(tab) {
+  const id = Number(tab?.groupId);
+  return Number.isInteger(id) && id >= 0 ? id : null;
+}
+
+function chooseOpenTab(openTabs, url, usedIds = new Set(), preferredWindowId = null) {
+  const key = normalizeUrlKey(url);
+  if (!key) return null;
+  const matches = (openTabs || [])
+    .filter((tab) => (
+      tab?.id != null
+      && !usedIds.has(tab.id)
+      && normalizeUrlKey(tab.url) === key
+    ));
+  matches.sort((left, right) => {
+    const leftScore = (preferredWindowId != null && left.windowId === preferredWindowId ? 4 : 0)
+      + (left.active ? 2 : 0);
+    const rightScore = (preferredWindowId != null && right.windowId === preferredWindowId ? 4 : 0)
+      + (right.active ? 2 : 0);
+    return rightScore - leftScore;
+  });
+  return matches[0] || null;
+}
+
+async function getLastFocusedWindowId() {
   try {
-    const tabMediaKeys = item.kind === 'group'
-      ? (item.tabs || [])
-        .filter((member) => member?.cardSource !== 'image')
-        .map((member) => Media.mediaKeyMember(item.id, member.id))
-      : Media.keysForItem(item);
-    await Media.removeMany(tabMediaKeys);
-  } catch (err) {
-    // Metadata is already committed; retain correctness and let orphan GC retry.
-    appLogPush('warn', 'restore', 'media cleanup deferred', err?.message || err);
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    return tabs?.[0]?.windowId ?? null;
+  } catch {
+    return null;
   }
-  return { ok: true, remaining: next.length, notesRemaining: remainingNotes.length };
+}
+
+async function focusOpenTab(tab) {
+  if (tab?.id == null) throw new Error('tab_not_found');
+  await chrome.tabs.update(tab.id, { active: true });
+  if (tab.windowId != null && chrome.windows?.update) {
+    await chrome.windows.update(tab.windowId, { focused: true });
+  }
+  return tab;
+}
+
+async function createRestoreTab(url, { active = false, windowId = null } = {}) {
+  const info = { url, active };
+  if (windowId != null) info.windowId = windowId;
+  return chrome.tabs.create(info);
+}
+
+async function rollbackMovedTabs(movedTabs) {
+  for (const moved of [...(movedTabs || [])].reverse()) {
+    if (moved?.tabId == null) continue;
+    if (moved.moved && moved.originalWindowId != null) {
+      try {
+        const move = { windowId: moved.originalWindowId };
+        if (Number.isInteger(moved.originalIndex)) move.index = moved.originalIndex;
+        await chrome.tabs.move([moved.tabId], move);
+      } catch (err) {
+        appLogPush('warn', 'rollback', 'tab move rollback failed', err?.message || err);
+      }
+    }
+    if (moved.originalGroupId != null && chrome.tabs.group) {
+      try {
+        await chrome.tabs.group({ tabIds: [moved.tabId], groupId: moved.originalGroupId });
+      } catch (err) {
+        appLogPush('warn', 'rollback', 'tab group rollback failed', err?.message || err);
+      }
+    } else if (moved.originalGroupId == null && chrome.tabs.ungroup) {
+      try {
+        await chrome.tabs.ungroup([moved.tabId]);
+      } catch (err) {
+        appLogPush('warn', 'rollback', 'tab ungroup rollback failed', err?.message || err);
+      }
+    }
+  }
+}
+
+function commonExistingGroupId(resolved) {
+  if (!resolved.length || resolved.some((entry) => !entry.reused)) return null;
+  const ids = resolved.map((entry) => groupIdForTab(entry.tab));
+  if (ids.some((id) => id == null)) return null;
+  return ids.every((id) => id === ids[0]) ? ids[0] : null;
+}
+
+async function updateRestoredGroup(groupId, item) {
+  await chrome.tabGroups.update(groupId, {
+    title: item.title || '',
+    color: item.color || 'grey',
+    collapsed: Boolean(item.collapsed),
+  });
 }
 
 async function restoreTab(id) {
@@ -374,13 +449,18 @@ async function restoreTab(id) {
   if (item.cardSource === 'image') return { ok: false, error: 'image_not_restorable' };
   if (!isRestorableUrl(item.url)) return { ok: false, error: 'restricted_url' };
 
-  let tab;
   try {
-    tab = await chrome.tabs.create({ url: item.url, active: true });
+    const openTabs = await chrome.tabs.query({});
+    const existing = chooseOpenTab(openTabs, item.url);
+    if (existing) {
+      await focusOpenTab(existing);
+      return restoreResult(list, item, { reused: 1 });
+    }
+    await createRestoreTab(item.url, { active: true });
+    return restoreResult(list, item, { created: 1 });
   } catch (err) {
-    return { ok: false, error: String(err) };
+    return { ok: false, error: String(err?.message || err) };
   }
-  return commitRestoredItem(list, i, item, tab?.id != null ? [tab.id] : []);
 }
 
 async function restoreGroup(id) {
@@ -395,75 +475,129 @@ async function restoreGroup(id) {
     (a, b) => (a.indexInGroup || 0) - (b.indexInGroup || 0)
   );
 
-  if (settings.restoreGroupIn === 'newWindow') {
-    const first = members.find((m) => isRestorableUrl(m.url));
-    if (!first) return { ok: false, error: 'no_restorable_urls' };
-    const createdIds = [];
-    let windowId = null;
+  const restorableMembers = members.filter(
+    (member) => member.cardSource !== 'image' && isRestorableUrl(member.url)
+  );
+  const skipped = members.length - restorableMembers.length;
+  if (!restorableMembers.length) return { ok: false, error: 'no_restorable_urls' };
+
+  let openTabs;
+  let preferredWindowId = null;
+  try {
+    openTabs = await chrome.tabs.query({});
+    preferredWindowId = await getLastFocusedWindowId();
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+
+  const usedIds = new Set();
+  const resolved = restorableMembers.map((member) => {
+    const existing = chooseOpenTab(openTabs, member.url, usedIds, preferredWindowId);
+    if (!existing) return { member, reused: false, tab: null };
+    usedIds.add(existing.id);
+    return { member, reused: true, tab: existing };
+  });
+
+  const existingGroupId = commonExistingGroupId(resolved);
+  if (existingGroupId != null) {
     try {
-      const win = await chrome.windows.create({ url: first.url, focused: true });
-      windowId = win.id;
-      const firstTab = win.tabs && win.tabs[0];
-      if (firstTab?.id != null) createdIds.push(firstTab.id);
-      for (const m of members) {
-        if (m === first) continue;
-        if (!isRestorableUrl(m.url)) continue;
-        const t = await chrome.tabs.create({ url: m.url, active: false, windowId });
-        createdIds.push(t.id);
-      }
-      if (!createdIds.length) throw new Error('no_restorable_urls');
-      const groupId = await chrome.tabs.group({
-        tabIds: createdIds,
-        createProperties: { windowId },
+      await updateRestoredGroup(existingGroupId, item);
+      await focusOpenTab(resolved[0].tab);
+      return restoreResult(list, item, {
+        reused: resolved.length,
+        skipped,
       });
-      await chrome.tabGroups.update(groupId, {
-        title: item.title || '',
-        color: item.color || 'grey',
-        collapsed: Boolean(item.collapsed),
-      });
-      const result = await commitRestoredItem(
-        list,
-        idx,
-        item,
-        createdIds,
-        windowId,
-        groupId
-      );
-      if (!result.ok) return result;
-      return { ...result, skipped: members.filter((m) => !isRestorableUrl(m.url)).length };
     } catch (err) {
-      await cleanupCreatedTabs(createdIds, windowId);
       return { ok: false, error: String(err?.message || err) };
     }
   }
 
   const createdIds = [];
-  let skipped = 0;
+  const movedTabs = [];
+  const reorderExisting = resolved.length > 1;
+  let windowId = settings.restoreGroupIn === 'newWindow' ? null : preferredWindowId;
+  let placeholderId = null;
   try {
-    for (const m of members) {
-      if (!isRestorableUrl(m.url)) {
-        skipped++;
+    if (settings.restoreGroupIn === 'newWindow') {
+      const win = await chrome.windows.create({ focused: true });
+      windowId = win.id;
+      const placeholder = await getCreatedWindowTab(win);
+      placeholderId = placeholder?.id ?? null;
+      if (windowId == null || placeholderId == null) throw new Error('window_tab_not_found');
+    } else if (windowId == null) {
+      windowId = resolved.find((entry) => entry.reused)?.tab?.windowId ?? null;
+    }
+
+    for (const entry of resolved) {
+      if (entry.reused) {
+        const original = {
+          tabId: entry.tab.id,
+          originalWindowId: entry.tab.windowId,
+          originalIndex: entry.tab.index,
+          originalGroupId: groupIdForTab(entry.tab),
+          moved: false,
+        };
+        movedTabs.push(original);
+        if (
+          windowId != null
+          && entry.tab.windowId != null
+          && (entry.tab.windowId !== windowId || reorderExisting)
+        ) {
+          const moved = await chrome.tabs.move([entry.tab.id], {
+            windowId,
+            index: -1,
+          });
+          original.moved = true;
+          entry.tab = Array.isArray(moved) && moved[0]
+            ? moved[0]
+            : { ...entry.tab, windowId };
+        }
         continue;
       }
-      const t = await chrome.tabs.create({ url: m.url, active: false });
-      createdIds.push(t.id);
+
+      let tab;
+      if (placeholderId != null) {
+        tab = await chrome.tabs.update(placeholderId, {
+          url: entry.member.url,
+          active: false,
+        });
+        tab = tab || { id: placeholderId, url: entry.member.url, windowId };
+        placeholderId = null;
+      } else {
+        tab = await createRestoreTab(entry.member.url, { active: false, windowId });
+      }
+      if (tab?.id == null) throw new Error('tab_create_failed');
+      entry.tab = tab;
+      entry.created = true;
+      createdIds.push(tab.id);
+      if (windowId == null && tab.windowId != null) windowId = tab.windowId;
     }
-    if (!createdIds.length) return { ok: false, error: 'no_restorable_urls' };
-    const groupId = await chrome.tabs.group({ tabIds: createdIds });
-    await chrome.tabGroups.update(groupId, {
-      title: item.title || '',
-      color: item.color || 'grey',
-      collapsed: Boolean(item.collapsed),
+
+    const tabIds = resolved.map((entry) => entry.tab?.id).filter((tabId) => tabId != null);
+    if (!tabIds.length) throw new Error('no_restorable_urls');
+    const groupOptions = windowId != null
+      ? { tabIds, createProperties: { windowId } }
+      : { tabIds };
+    const groupId = await chrome.tabs.group(groupOptions);
+    await updateRestoredGroup(groupId, item);
+    if (placeholderId != null) {
+      try {
+        await chrome.tabs.remove(placeholderId);
+      } catch (err) {
+        appLogPush('warn', 'restore', 'window placeholder cleanup failed', err?.message || err);
+      }
+      placeholderId = null;
+    }
+    await focusOpenTab(resolved[0].tab);
+    return restoreResult(list, item, {
+      created: resolved.filter((entry) => entry.created).length,
+      reused: resolved.filter((entry) => entry.reused).length,
+      skipped,
     });
-    try {
-      await chrome.tabs.update(createdIds[0], { active: true });
-    } catch {
-      // ignore
-    }
-    const result = await commitRestoredItem(list, idx, item, createdIds, null, groupId);
-    return result.ok ? { ...result, skipped } : result;
   } catch (err) {
-    await cleanupCreatedTabs(createdIds);
+    await rollbackMovedTabs(movedTabs);
+    const cleanupIds = placeholderId == null ? createdIds : [...createdIds, placeholderId];
+    await cleanupCreatedTabs(cleanupIds, settings.restoreGroupIn === 'newWindow' ? windowId : null);
     return { ok: false, error: String(err?.message || err) };
   }
 }
@@ -479,37 +613,18 @@ async function restoreGroupMember(groupId, memberId) {
   if (member.cardSource === 'image') return { ok: false, error: 'image_not_restorable' };
   if (!isRestorableUrl(member.url)) return { ok: false, error: 'restricted_url' };
 
-  let created;
   try {
-    created = await chrome.tabs.create({ url: member.url, active: true });
+    const openTabs = await chrome.tabs.query({});
+    const existing = chooseOpenTab(openTabs, member.url);
+    if (existing) {
+      await focusOpenTab(existing);
+      return restoreResult(list, group, { reused: 1 });
+    }
+    await createRestoreTab(member.url, { active: true });
+    return restoreResult(list, group, { created: 1 });
   } catch (err) {
-    return { ok: false, error: String(err) };
-  }
-
-  group.tabs.splice(mIdx, 1);
-  const nextList = [...list];
-  if (!group.tabs.length) {
-    nextList.splice(gIdx, 1);
-  } else {
-    nextList[gIdx] = group;
-  }
-  try {
-    await setParkedItems(nextList);
-  } catch (err) {
-    await cleanupCreatedTabs(created?.id != null ? [created.id] : []);
     return { ok: false, error: String(err?.message || err) };
   }
-  try {
-    await rememberRestoreHints([member]);
-  } catch (err) {
-    console.warn('[TabWall] restore hint save failed:', err);
-  }
-  try {
-    await Media.remove(Media.mediaKeyMember(groupId, memberId));
-  } catch (err) {
-    appLogPush('warn', 'restore', 'member media cleanup deferred', err?.message || err);
-  }
-  return { ok: true, remaining: nextList.length };
 }
 
 async function deleteItem(id) {
@@ -537,6 +652,7 @@ async function updateItem(id, patch) {
   if (typeof patch.note === 'string') item.note = patch.note;
   applyDisplayTitlePatch(item, patch);
   applyLockPatch(item, patch);
+  applyHideOriginalTitlePatch(item, patch);
   if (Array.isArray(patch.tags)) {
     item.tags = patch.tags
       .map((t) => String(t).trim())
@@ -582,4 +698,3 @@ async function getMediaMessage(key, kind) {
   const dataUrl = await Media.blobToDataUrl(blob);
   return { ok: true, dataUrl, key, kind: part };
 }
-

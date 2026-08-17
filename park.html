@@ -219,7 +219,7 @@
               <span data-canvas-selection-items><span data-canvas-selection-count>0</span> 個項目</span>
               <span data-canvas-selection-connection hidden data-i18n="canvasConnectionSelected">已選取 1 條線段</span>
             </span>
-            <button type="button" data-canvas-action="restore" data-i18n="canvasOpen">開啟</button>
+            <button type="button" data-canvas-action="restore" data-i18n="canvasOpen">還原並保留卡片</button>
             <button type="button" data-canvas-action="snapshot" data-i18n="canvasSnapshot">快照</button>
             <button type="button" data-canvas-action="edit" data-i18n="edit">編輯</button>
             <button type="button" data-canvas-action="members" data-i18n="expandGroup">成員</button>
@@ -268,7 +268,7 @@
 
     <div id="batchBar" aria-hidden="true">
       <span class="batch-count" id="batchCount">0</span>
-      <button type="button" class="btn primary" id="batchRestore" data-i18n="batchRestore">還原</button>
+      <button type="button" class="btn primary" id="batchRestore" data-i18n="batchRestore">還原並保留卡片</button>
       <button type="button" class="btn" id="batchEdit" data-i18n="batchEdit">Note / Tags</button>
       <button type="button" class="btn" id="batchExportLite" data-i18n="batchExportLite">匯出精簡</button>
       <button type="button" class="btn" id="batchExportFull" data-i18n="batchExportFull">匯出完整</button>
@@ -718,7 +718,7 @@
           <button type="button" class="btn lb-nav" id="lbPrev" title="←" aria-label="Previous">‹</button>
           <span class="lb-counter" id="lbCounter">—</span>
           <button type="button" class="btn lb-nav" id="lbNext" title="→" aria-label="Next">›</button>
-          <button type="button" class="btn" id="lbRestore" data-i18n="restore">還原分頁</button>
+          <button type="button" class="btn" id="lbRestore" data-i18n="restore">還原並保留卡片</button>
           <button type="button" class="btn" id="lbClose" data-i18n="close">關閉</button>
         </div>
       </div>
@@ -766,15 +766,15 @@
         </div>
         <div class="help-section">
           <h3 data-i18n="helpBasicTitle">基本使用</h3>
-          <p data-i18n="helpBasicBody">點縮圖還原、標題複製連結；編輯按鈕管理 note／tags；展開按鈕查看快照；刪除按鈕移除項目。拖曳可重排；拖到另一張卡片的標題／meta 區可組成 Stack（還原為 Tab Group）。</p>
+          <p data-i18n="helpBasicBody">點縮圖還原分頁並保留卡片、標題複製連結；編輯按鈕管理 note／tags；展開按鈕查看快照；刪除按鈕移除項目。拖曳可重排；拖到另一張卡片的標題／meta 區可組成 Stack（還原為 Tab Group）。</p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpGroupTitle">Tab Group / Stack</h3>
-          <p data-i18n="helpGroupBody">Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。成員面板可預覽、編輯、還原單一或整個 group。</p>
+          <p data-i18n="helpGroupBody">Alt+Shift+G 存整組；拖曳 tab 疊合亦可建 Stack。成員面板可預覽、編輯、還原並保留單一或整個 group。</p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpSelectTitle">複選</h3>
-          <p data-i18n="helpSelectBody">點「選擇」進入複選，勾選多張卡片後可批次還原、合併 tags、或刪除。</p>
+          <p data-i18n="helpSelectBody">點「選擇」進入複選，勾選多張卡片後可批次還原並保留卡片、合併 tags、或刪除。</p>
         </div>
         <div class="help-section">
           <h3 data-i18n="helpBackupTitle">備份</h3>
@@ -970,7 +970,7 @@
         <button type="button" class="btn icon-close" id="membersCloseX" title="關閉" aria-label="關閉"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
       </div>
       <div class="members-toolbar">
-        <button type="button" class="btn primary" id="membersRestoreAll" data-i18n="restoreGroup">還原整個 Group</button>
+        <button type="button" class="btn primary" id="membersRestoreAll" data-i18n="restoreGroup">還原並保留整個 Group</button>
         <button type="button" class="btn" id="membersDelete" data-i18n="delete">刪除</button>
       </div>
       <div class="members-list" id="membersList"></div>
@@ -994,6 +994,10 @@
           <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
         </label>
         <div id="editLockFields" class="edit-lock-fields" hidden>
+          <label>
+            <input id="editHideOriginalTitle" type="checkbox" />
+            <span data-i18n="hideOriginalTitle">隱藏原始標題（僅顯示自訂標題）</span>
+          </label>
           <label>
             <span data-i18n="lockPassword">解鎖密碼（可選）</span>
             <input id="editLockPassword" type="password" autocomplete="new-password" />
@@ -1057,6 +1061,10 @@
             <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
           </label>
           <div id="stickerNoteLockFields" class="edit-lock-fields" hidden>
+            <label>
+              <input id="stickerNoteHideOriginalTitle" type="checkbox" />
+              <span data-i18n="hideOriginalTitle">隱藏原始標題（僅顯示自訂標題）</span>
+            </label>
             <label>
               <span data-i18n="lockPassword">解鎖密碼（可選）</span>
               <input id="stickerNoteLockPassword" type="password" autocomplete="new-password" />

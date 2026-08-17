@@ -706,6 +706,7 @@
     const display = typeof item?.displayTitle === 'string' ? item.displayTitle.trim() : '';
     const original = typeof item?.title === 'string' ? item.title.trim() : '';
     if (!display || !original || display === original) return '';
+    if (item?.locked && item?.hideOriginalTitle) return '';
     return original;
   }
 
