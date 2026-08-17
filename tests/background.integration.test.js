@@ -463,7 +463,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.46.6');
+  assert.equal(MANIFEST.version, '2.46.7');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -480,6 +480,31 @@ test('manifest overrides the New Tab page with the TabWall UI', () => {
     'Chrome allows at most 4 suggested_key commands'
   );
   assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js', 'pageAnnotate.js']);
+});
+
+test('page ink survives extension-startup orphan cleanup', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const url = 'https://ink-persistence.example/page';
+  const strokes = [
+    { id: 'line-1', kind: 'line', x1: 10, y1: 20, x2: 80, y2: 20, color: '#2563eb', width: 3 },
+    { id: 'text-1', kind: 'text', x: 30, y: 40, text: 'survives reload', color: '#111827', fontSize: 16 },
+  ];
+
+  const saved = await runtime.api.putPageInk(url, strokes, {
+    title: 'Ink persistence',
+    overlayVisible: true,
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.annotation.hasInk, true);
+  runtime.media.set('ink:orphan', ['remove me']);
+
+  await runtime.api.cleanupOrphanMedia();
+
+  assert.equal(runtime.media.has(`ink:${saved.annotation.id}`), true);
+  assert.equal(runtime.media.has('ink:orphan'), false);
+  const loaded = await runtime.api.getPageInk(url);
+  assert.deepEqual(loaded.strokes, strokes);
 });
 
 test('action badge matches standalone tabs and group members by exact URL', async () => {

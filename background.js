@@ -2162,6 +2162,7 @@ if (globalThis.__TABWALL_TEST__) {
     getAttachmentUsage,
     normalizeNoteItem,
     remintItemIds,
+    cleanupOrphanMedia,
     saveActiveGroup,
     restoreTab,
     restoreGroup,
@@ -2182,6 +2183,8 @@ if (globalThis.__TABWALL_TEST__) {
     notifyPageAnnotationUrlChanged,
     openOrFocusUrl,
     parkPageAnnotation,
+    getPageInk: self.TabWallPageAnnotate.getPageInk,
+    putPageInk: self.TabWallPageAnnotate.putPageInk,
   };
 }
 

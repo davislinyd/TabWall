@@ -962,6 +962,18 @@ async function cleanupOrphanMedia(items = null) {
     // settings read is best-effort; never drop keep-set of item media
   }
   try {
+    const annotations = self.TabWallPageAnnotate?.getPageAnnotationsList
+      ? await self.TabWallPageAnnotate.getPageAnnotationsList()
+      : [];
+    if (Media.mediaKeyPageInk) {
+      for (const annotation of annotations) {
+        if (annotation?.id && annotation.hasInk) keep.add(Media.mediaKeyPageInk(annotation.id));
+      }
+    }
+  } catch {
+    // page ink cleanup is best-effort; never drop the existing keep-set
+  }
+  try {
     return await Media.removeOrphans([...keep]);
   } catch (err) {
     console.warn('[TabWall] media orphan cleanup failed:', err);

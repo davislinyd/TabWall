@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.7 — 2026-08-17
+
+- Pen 模式下左鍵雙擊已完成的文字框，可重新進入編輯模式。
+- 筆畫與文字完成操作後立即排隊寫入，並保留 page ink media，避免 reload extension 後資料消失。
+- 重新產生 `dist/TabWall-2.46.7.zip`。
+
 ## 2.46.6 — 2026-08-17
 
 - 文字框輸入完成後按 Esc 會儲存並回到 View 模式。

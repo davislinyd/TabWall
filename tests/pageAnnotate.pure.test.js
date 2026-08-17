@@ -186,6 +186,15 @@ test('completed text boxes return to View and reopen on double-click', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /view\.classList\.toggle\('is-editable', tool === 'view'\)/);
   assert.match(PAGE_ANNOTATE_SOURCE, /view\.addEventListener\('dblclick'/);
   assert.match(PAGE_ANNOTATE_SOURCE, /startTextEdit\(obj\);/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /hit\.kind === 'text' && event\.detail >= 2 && \(tool === 'pen' \|\| tool === 'text'\)/);
+});
+
+test('page ink persistence queues immutable snapshots and flushes after loading', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /let persistChain = Promise\.resolve\(\);/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /strokes: snapshotObjects\(objects\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /inkLoaded = Boolean\(ink\?\.ok\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /if \(inkLoaded\) \{\s*schedulePersist\(\);/);
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /persistTimer = window\.setTimeout/);
 });
 
 test('selected drawing tool has an explicit high-contrast state', () => {

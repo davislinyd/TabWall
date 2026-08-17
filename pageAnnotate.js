@@ -625,6 +625,8 @@
   let selectedId = '';
   let editingId = '';
   let persistTimer = 0;
+  let persistChain = Promise.resolve();
+  let inkLoaded = false;
   let dragObj = null;
   const undoStack = createUndoStack(40);
   let chromeTimer = 0;
@@ -1025,15 +1027,17 @@
 
   function schedulePersist() {
     window.clearTimeout(persistTimer);
-    persistTimer = window.setTimeout(() => {
-      sendRuntime({
-        type: 'PUT_PAGE_INK',
-        url: pageUrl(),
-        title: document.title || '',
-        overlayVisible: visible,
-        strokes: objects,
-      });
-    }, 400);
+    persistTimer = 0;
+    const payload = {
+      type: 'PUT_PAGE_INK',
+      url: pageUrl(),
+      title: document.title || '',
+      overlayVisible: visible,
+      strokes: snapshotObjects(objects),
+    };
+    persistChain = persistChain
+      .catch(() => {})
+      .then(() => sendRuntime(payload));
   }
 
   function closeTextEditor({ save = true } = {}) {
@@ -1112,12 +1116,14 @@
 
   async function loadForCurrentUrl() {
     closeTextEditor({ save: false });
+    inkLoaded = false;
     const [view, ink, hint] = await Promise.all([
       sendRuntime({ type: 'GET_PAGE_ANNOTATION', url: pageUrl() }),
       sendRuntime({ type: 'GET_PAGE_INK', url: pageUrl() }),
       readOpenHint(),
     ]);
     if (ink?.ok) objects = normalizeObjects(ink.strokes);
+    inkLoaded = Boolean(ink?.ok);
     const stored = view?.ok ? view.annotation?.overlayVisible === true : null;
     visible = resolveOverlayVisible(stored, hint);
     setToolbarCollapsed(true, { render: false });
@@ -1186,7 +1192,7 @@
     if (hit) {
       event.preventDefault();
       closeTextEditor({ save: true });
-      if (hit.kind === 'text' && event.detail >= 2) {
+      if (hit.kind === 'text' && event.detail >= 2 && (tool === 'pen' || tool === 'text')) {
         startTextEdit(hit);
         return;
       }
@@ -1425,9 +1431,9 @@
       .text-render a {
         color: inherit;
         cursor: pointer;
-        pointer-events: auto;
         text-decoration: underline;
       }
+      .text-render.is-editable a { pointer-events: auto; }
       .markdown-blank { min-height: 1.3em; }
       .fab {
         position: fixed;
@@ -1701,16 +1707,8 @@
 
   function flushBeforeUnload() {
     writeOpenHint(visible);
-    if (persistTimer) {
-      window.clearTimeout(persistTimer);
-      persistTimer = 0;
-      sendRuntime({
-        type: 'PUT_PAGE_INK',
-        url: pageUrl(),
-        title: document.title || '',
-        overlayVisible: visible,
-        strokes: objects,
-      });
+    if (inkLoaded) {
+      schedulePersist();
     } else {
       persistOverlayVisible(visible);
     }
@@ -1718,6 +1716,7 @@
 
   function dispose() {
     window.clearTimeout(persistTimer);
+    if (inkLoaded) schedulePersist();
     window.clearTimeout(chromeTimer);
     window.removeEventListener('resize', onWindowResize);
     window.removeEventListener('popstate', loadForCurrentUrl);
