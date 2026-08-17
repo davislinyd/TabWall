@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.5 — 2026-08-17
+
+- 文字框鍵盤事件在編輯期間與頁面快捷鍵隔離，避免輸入 Markdown／URL 時誤觸發頁面操作。
+- 文字框支援多行 Markdown 原文，離開編輯後安全呈現標題、格式、列表與 `http(s)` 超連結。
+- 重新產生 `dist/TabWall-2.46.5.zip`。
+
 ## 2.46.4 — 2026-08-17
 
 - 上下邊緣的繪圖工具列維持水平排列；只有水平空間不足時才改用垂直排列。

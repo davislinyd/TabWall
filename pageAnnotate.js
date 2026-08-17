@@ -41,6 +41,127 @@
     return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, maxLength);
   }
 
+  function safeMarkdownUrl(value) {
+    const raw = String(value || '').trim();
+    if (!/^https?:\/\//i.test(raw) || typeof URL !== 'function') return '';
+    try {
+      const url = new URL(raw);
+      return /^https?:$/.test(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function splitMarkdownUrl(value) {
+    let url = String(value || '');
+    let trailing = '';
+    while (/[.,!?;:)，。！？；：、]$/.test(url)) {
+      trailing = `${url.slice(-1)}${trailing}`;
+      url = url.slice(0, -1);
+    }
+    return { url, trailing };
+  }
+
+  function appendInlineMarkdown(parent, source) {
+    const text = String(source || '');
+    const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/gi;
+    let cursor = 0;
+    let match;
+    while ((match = pattern.exec(text))) {
+      if (match.index > cursor) parent.append(document.createTextNode(text.slice(cursor, match.index)));
+      if (match[1] != null) {
+        const href = safeMarkdownUrl(match[2]);
+        if (!href) {
+          parent.append(document.createTextNode(match[0]));
+        } else {
+          const link = document.createElement('a');
+          link.href = href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = match[1];
+          link.addEventListener('click', (event) => event.stopPropagation());
+          parent.append(link);
+        }
+      } else if (match[3] != null) {
+        const split = splitMarkdownUrl(match[3]);
+        const href = safeMarkdownUrl(split.url);
+        if (!href) {
+          parent.append(document.createTextNode(match[0]));
+        } else {
+          const link = document.createElement('a');
+          link.href = href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = split.url;
+          link.addEventListener('click', (event) => event.stopPropagation());
+          parent.append(link, document.createTextNode(split.trailing));
+        }
+      } else if (match[4] != null) {
+        const code = document.createElement('code');
+        code.textContent = match[4];
+        parent.append(code);
+      } else if (match[5] != null || match[6] != null) {
+        const strong = document.createElement('strong');
+        strong.textContent = match[5] ?? match[6];
+        parent.append(strong);
+      } else if (match[7] != null) {
+        const del = document.createElement('del');
+        del.textContent = match[7];
+        parent.append(del);
+      } else {
+        const em = document.createElement('em');
+        em.textContent = match[8] ?? match[9];
+        parent.append(em);
+      }
+      cursor = pattern.lastIndex;
+    }
+    if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+  }
+
+  function appendMarkdownBlocks(parent, source) {
+    const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+    let list = null;
+    let listType = '';
+    const closeList = () => {
+      list = null;
+      listType = '';
+    };
+    for (const line of lines) {
+      const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+      const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+      const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+      if (heading) {
+        closeList();
+        const element = document.createElement(`h${heading[1].length}`);
+        appendInlineMarkdown(element, heading[2]);
+        parent.append(element);
+      } else if (unordered || ordered) {
+        const nextType = unordered ? 'ul' : 'ol';
+        if (!list || listType !== nextType) {
+          closeList();
+          listType = nextType;
+          list = document.createElement(nextType);
+          parent.append(list);
+        }
+        const item = document.createElement('li');
+        appendInlineMarkdown(item, (unordered || ordered)[1]);
+        list.append(item);
+      } else if (!line.trim()) {
+        closeList();
+        const blank = document.createElement('div');
+        blank.className = 'markdown-blank';
+        blank.textContent = '\u00a0';
+        parent.append(blank);
+      } else {
+        closeList();
+        const paragraph = document.createElement('div');
+        paragraph.className = 'markdown-line';
+        appendInlineMarkdown(paragraph, line);
+        parent.append(paragraph);
+      }
+    }
+  }
+
   function downsamplePoints(points) {
     const src = Array.isArray(points) ? points : [];
     const out = [];
@@ -423,6 +544,7 @@
     objectBounds,
     textBounds,
     measureTextBox,
+    safeMarkdownUrl,
     translateObject,
     snapshotObjects,
     createUndoStack,
@@ -491,6 +613,7 @@
   let toolsEl = null;
   let chromeHandle = null;
   let fab = null;
+  let textLayer = null;
   let hoverId = '';
   let textEditor = null;
   let visible = false;
@@ -577,7 +700,7 @@
   }
 
   function paintText(obj, context) {
-    if (obj.id === editingId) return;
+    if (obj.id === editingId || textLayer) return;
     context.save();
     context.globalCompositeOperation = 'source-over';
     context.fillStyle = obj.color;
@@ -588,6 +711,25 @@
       context.fillText(line, obj.x, obj.y + index * obj.fontSize * 1.3);
     });
     context.restore();
+  }
+
+  function renderTextObjects() {
+    if (!textLayer) return;
+    textLayer.replaceChildren();
+    for (const obj of objects) {
+      if (obj.kind !== 'text' || obj.id === editingId) continue;
+      const view = document.createElement('div');
+      view.className = 'text-render';
+      view.dataset.objectId = obj.id;
+      view.style.left = `${obj.x}px`;
+      view.style.top = `${obj.y}px`;
+      view.style.width = `${Math.max(80, Number(obj.w) || 80)}px`;
+      view.style.minHeight = `${Math.max(1, Number(obj.h) || obj.fontSize || 16)}px`;
+      view.style.color = obj.color;
+      view.style.fontSize = `${obj.fontSize || 16}px`;
+      appendMarkdownBlocks(view, obj.text);
+      textLayer.appendChild(view);
+    }
   }
 
   function paintSelection(obj, context, hover = false) {
@@ -621,6 +763,7 @@
     if (hover) paintSelection(hover, ctx, true);
     const selected = objects.find((obj) => obj.id === selectedId);
     if (selected) paintSelection(selected, ctx, false);
+    renderTextObjects();
   }
 
   function syncCanvasSize() {
@@ -629,6 +772,10 @@
     const dpr = window.devicePixelRatio || 1;
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
+    if (textLayer) {
+      textLayer.style.width = `${w}px`;
+      textLayer.style.height = `${h}px`;
+    }
     const nextW = Math.max(1, Math.round(w * dpr));
     const nextH = Math.max(1, Math.round(h * dpr));
     if (canvas.width !== nextW || canvas.height !== nextH) {
@@ -776,6 +923,7 @@
     if (!rootEl) return;
     canvas.style.display = visible ? 'block' : 'none';
     canvas.style.pointerEvents = capturing() ? 'auto' : 'none';
+    if (textLayer) textLayer.hidden = !visible || parkBlocked;
     const chromeLabel = barPos.collapsed ? copy.expandTools : copy.collapseTools;
     for (const handle of [chromeHandle, fab]) {
       if (!handle) continue;
@@ -925,6 +1073,10 @@
     textEditor = document.createElement('div');
     textEditor.className = 'text-edit';
     textEditor.contentEditable = 'true';
+    textEditor.setAttribute('role', 'textbox');
+    textEditor.setAttribute('aria-multiline', 'true');
+    textEditor.setAttribute('aria-label', copy.text);
+    textEditor.spellcheck = false;
     textEditor.dataset.x = String(item.x);
     textEditor.dataset.y = String(item.y);
     textEditor.style.left = `${item.x}px`;
@@ -932,12 +1084,14 @@
     textEditor.style.color = item.color || color;
     textEditor.style.fontSize = `${item.fontSize || 16}px`;
     textEditor.textContent = item.text || '';
-    textEditor.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+    const stopEditorKeyboard = (event) => {
+      if (event.type === 'keydown' && event.key === 'Escape') {
         event.preventDefault();
         closeTextEditor({ save: true });
       }
-    });
+      event.stopPropagation();
+    };
+    ['keydown', 'keypress', 'keyup'].forEach((type) => textEditor.addEventListener(type, stopEditorKeyboard));
     textEditor.addEventListener('blur', () => closeTextEditor({ save: true }));
     shadow.appendChild(textEditor);
     redraw();
@@ -1213,6 +1367,52 @@
         pointer-events: none;
         touch-action: none;
       }
+      .text-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 1;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .text-render {
+        position: absolute;
+        max-width: calc(100vw - 24px);
+        color: #1f2937;
+        font: 16px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        pointer-events: none;
+      }
+      .text-render h1,
+      .text-render h2,
+      .text-render h3,
+      .text-render h4,
+      .text-render h5,
+      .text-render h6 {
+        margin: 0 0 .2em;
+        font: inherit;
+        font-weight: 700;
+      }
+      .text-render ul,
+      .text-render ol {
+        margin: 0 0 .2em 1.35em;
+        padding: 0;
+      }
+      .text-render code {
+        padding: 0 .2em;
+        border-radius: 3px;
+        background: rgba(15, 23, 42, .12);
+        font: .92em ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .text-render a {
+        color: inherit;
+        cursor: pointer;
+        pointer-events: auto;
+        text-decoration: underline;
+      }
+      .markdown-blank { min-height: 1.3em; }
       .fab {
         position: fixed;
         z-index: 3;
@@ -1321,6 +1521,10 @@
         color: #1f2937;
         font: 16px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        max-width: calc(100vw - 24px);
+        user-select: text;
         pointer-events: auto;
         z-index: 2;
       }
@@ -1332,6 +1536,10 @@
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
+
+    textLayer = document.createElement('div');
+    textLayer.className = 'text-layer';
+    textLayer.hidden = true;
 
     toolbar = document.createElement('div');
     toolbar.className = 'bar';
@@ -1409,7 +1617,7 @@
     fab.addEventListener('dblclick', onChromeDoubleClick);
     fab.addEventListener('keydown', onChromeKeyDown);
 
-    shadow.append(style, canvas, toolbar, fab);
+    shadow.append(style, canvas, textLayer, toolbar, fab);
     rootEl.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;background:transparent;';
     document.documentElement.appendChild(rootEl);
   }
@@ -1422,13 +1630,21 @@
 
   function isTypingTarget(target) {
     if (!target) return false;
-    if (target === textEditor || target.isContentEditable) return true;
-    const tag = String(target.tagName || '').toLowerCase();
+    const element = target.nodeType === 1 ? target : target.parentElement;
+    if (element === textEditor || element?.isContentEditable) return true;
+    const tag = String(element?.tagName || '').toLowerCase();
     return tag === 'input' || tag === 'textarea' || tag === 'select';
+  }
+
+  function isTextEditorEvent(event) {
+    if (!textEditor) return false;
+    if (event?.target === textEditor) return true;
+    return typeof event?.composedPath === 'function' && event.composedPath().includes(textEditor);
   }
 
   function onKeyDown(event) {
     if (parkBlocked) return;
+    if (isTextEditorEvent(event)) return;
     const isAltD = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
       && (event.key === 'd' || event.key === 'D' || event.code === 'KeyD');
     if (isAltD && !isTypingTarget(event.target) && !textEditor) {
@@ -1455,6 +1671,18 @@
     }
   }
 
+  function onKeyEvent(event) {
+    if (isTextEditorEvent(event)) {
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        event.preventDefault();
+        closeTextEditor({ save: true });
+      }
+      event.stopPropagation();
+      return;
+    }
+    if (event.type === 'keydown') onKeyDown(event);
+  }
+
   function flushBeforeUnload() {
     writeOpenHint(visible);
     if (persistTimer) {
@@ -1479,7 +1707,9 @@
     window.removeEventListener('popstate', loadForCurrentUrl);
     window.removeEventListener('hashchange', loadForCurrentUrl);
     window.removeEventListener('pagehide', flushBeforeUnload);
-    if (keyHandler) window.removeEventListener('keydown', keyHandler, true);
+    if (keyHandler) {
+      ['keydown', 'keypress', 'keyup'].forEach((type) => window.removeEventListener(type, keyHandler, true));
+    }
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     if (runtimeHandler) {
@@ -1509,8 +1739,8 @@
   window.addEventListener('popstate', loadForCurrentUrl);
   window.addEventListener('hashchange', loadForCurrentUrl);
   window.addEventListener('pagehide', flushBeforeUnload);
-  keyHandler = onKeyDown;
-  window.addEventListener('keydown', keyHandler, true);
+  keyHandler = onKeyEvent;
+  ['keydown', 'keypress', 'keyup'].forEach((type) => window.addEventListener(type, keyHandler, true));
   resizeObserver = new ResizeObserver(syncCanvasSize);
   try {
     resizeObserver.observe(document.documentElement);

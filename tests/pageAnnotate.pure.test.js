@@ -18,6 +18,7 @@ function loadInk() {
     Boolean,
     JSON,
     Date,
+    URL,
     crypto: { randomUUID: () => 'stroke-1' },
   };
   sandbox.self = sandbox;
@@ -167,6 +168,18 @@ test('canvas overlay stays transparent and only captures drawing input', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /canvas\.style\.pointerEvents = capturing\(\) \? 'auto' : 'none';/);
 });
 
+test('text editor isolates keyboard events and renders safe Markdown links', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /aria-multiline.*true/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /event\.composedPath\(\)\.includes\(textEditor\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\['keydown', 'keypress', 'keyup'\]/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /function onKeyEvent\(event\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /event\.stopPropagation\(\);/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /function appendMarkdownBlocks\(parent, source\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /target = '_blank'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /rel = 'noopener noreferrer'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\.text-render \{/);
+});
+
 test('selected drawing tool has an explicit high-contrast state', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /button\.setAttribute\('aria-pressed', button\.dataset\.tool === tool \? 'true' : 'false'\)/);
   assert.match(PAGE_ANNOTATE_SOURCE, /\.bar \.tools > button\[data-tool\]\[aria-pressed="true"\]/);
@@ -249,6 +262,16 @@ test('text objects require content and clip length', () => {
   assert.equal(text.kind, 'text');
   assert.equal(text.text.length, Ink.MAX_TEXT_LENGTH);
   assert.equal(text.text.startsWith('ok'), true);
+});
+
+test('text objects preserve multiline Markdown source and only allow web links', () => {
+  const Ink = loadInk();
+  const source = '# Title\n\n**bold** [open](https://example.com)';
+  const text = Ink.normalizeText({ x: 12, y: 24, text: source, fontSize: 16 });
+  assert.equal(text.text, source);
+  assert.equal(text.h >= 16 * 1.3 * 3, true);
+  assert.match(Ink.safeMarkdownUrl('https://example.com/path'), /^https:\/\/example\.com\/path$/);
+  assert.equal(Ink.safeMarkdownUrl('javascript:alert(1)'), '');
 });
 
 test('hit-test prefers the topmost nearby object', () => {

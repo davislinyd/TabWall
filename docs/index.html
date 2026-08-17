@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.46.4 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.46.5 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.46.4</span>
+      <span>使用者說明 · v2.46.5</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -70,7 +70,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.46.4</span><span lang="en">Version 2.46.4</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.46.5</span><span lang="en">Version 2.46.5</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
@@ -247,8 +247,8 @@ https://wiki.example.com
         <ul>
           <li lang="zh-Hant">繪圖層平時完全隱藏；按頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> 會顯示單一可拖曳 pen icon，預設位於畫面右側中段。canvas 保持透明，只在繪圖工具啟用時接收輸入。左鍵雙擊 icon 展開工具列並進入 Pen，收合後只保留 icon 並回到 View。工具列在上下邊緣仍保持水平；左右側若水平空間不足才改成垂直排列。</li>
           <li lang="en">The drawing layer is hidden by default. Press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> to show one draggable pen icon, defaulting to the right side at mid-height. The canvas stays transparent and captures input only while a drawing tool is active. Left double-click the icon to expand into Pen mode; collapsing leaves only the icon and returns to View. At the top or bottom it stays horizontal; it becomes vertical only when horizontal space is insufficient at the sides.</li>
-          <li lang="zh-Hant">工具：筆、螢光直線（接近水平會吸直）、文字框、像素橡皮擦、檢視。沒有獨立「選」鈕；滑鼠移到物件上再左鍵即可選取、拖曳。文字連點兩下進入編輯。Delete／Backspace 刪除選取；⌘Z／Ctrl+Z 或「復原」可 Undo（不跨重整）。</li>
-          <li lang="en">Tools: pen, straight highlighter (snaps near-horizontal), text box, pixel eraser, view. There is no Pick button — hover an object and left-click to select and drag. Double-click text to edit. Delete/Backspace removes the selection; ⌘Z/Ctrl+Z or Undo reverts (not across reload).</li>
+          <li lang="zh-Hant">工具：筆、螢光直線（接近水平會吸直）、文字框、像素橡皮擦、檢視。沒有獨立「選」鈕；滑鼠移到物件上再左鍵即可選取、拖曳。文字連點兩下進入編輯；文字框支援多行 Markdown 原文，離開編輯後會安全呈現標題、粗斜體、程式碼、列表、Markdown 超連結與純文字 <code>http(s)</code> URL，聚焦時不觸發頁面快捷鍵。Delete／Backspace 刪除選取；⌘Z／Ctrl+Z 或「復原」可 Undo（不跨重整）。</li>
+          <li lang="en">Tools: pen, straight highlighter (snaps near-horizontal), text box, pixel eraser, view. There is no Pick button — hover an object and left-click to select and drag. Double-click text to edit. Text boxes preserve multiline Markdown source and safely render headings, emphasis, code, lists, Markdown links, and plain <code>http(s)</code> URLs after editing; focused text boxes isolate page shortcuts. Delete/Backspace removes the selection; ⌘Z/Ctrl+Z or Undo reverts (not across reload).</li>
           <li lang="zh-Hant">筆畫綁完整 URL，存在本機 IndexedDB。重整同一網址會維持圖層開或關。</li>
           <li lang="en">Ink is keyed by the full URL and stored in IndexedDB. Reloading the same URL keeps the layer open or closed.</li>
         </ul>
@@ -957,8 +957,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.46.4</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.46.4</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+    <p lang="zh-Hant">對應 TabWall <strong>2.46.5</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.46.5</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·
