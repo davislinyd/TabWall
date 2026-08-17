@@ -720,6 +720,7 @@
       if (obj.kind !== 'text' || obj.id === editingId) continue;
       const view = document.createElement('div');
       view.className = 'text-render';
+      view.classList.toggle('is-editable', tool === 'view');
       view.dataset.objectId = obj.id;
       view.style.left = `${obj.x}px`;
       view.style.top = `${obj.y}px`;
@@ -728,6 +729,11 @@
       view.style.color = obj.color;
       view.style.fontSize = `${obj.fontSize || 16}px`;
       appendMarkdownBlocks(view, obj.text);
+      view.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        startTextEdit(obj);
+      });
       textLayer.appendChild(view);
     }
   }
@@ -1065,6 +1071,12 @@
     redraw();
   }
 
+  function exitTextEditToView() {
+    tool = 'view';
+    closeTextEditor({ save: true });
+    syncChrome();
+  }
+
   function startTextEdit(obj) {
     closeTextEditor({ save: true });
     const item = obj || { id: newObjectId(), x: 0, y: 0, text: '', color, fontSize: 16 };
@@ -1087,7 +1099,7 @@
     const stopEditorKeyboard = (event) => {
       if (event.type === 'keydown' && event.key === 'Escape') {
         event.preventDefault();
-        closeTextEditor({ save: true });
+        exitTextEditToView();
       }
       event.stopPropagation();
     };
@@ -1385,6 +1397,10 @@
         word-break: break-word;
         pointer-events: none;
       }
+      .text-render.is-editable {
+        cursor: text;
+        pointer-events: auto;
+      }
       .text-render h1,
       .text-render h2,
       .text-render h3,
@@ -1675,7 +1691,7 @@
     if (isTextEditorEvent(event)) {
       if (event.type === 'keydown' && event.key === 'Escape') {
         event.preventDefault();
-        closeTextEditor({ save: true });
+        exitTextEditToView();
       }
       event.stopPropagation();
       return;

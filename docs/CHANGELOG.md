@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.46.6 — 2026-08-17
+
+- 文字框輸入完成後按 Esc 會儲存並回到 View 模式。
+- 在 View 模式左鍵雙擊已完成的文字框，可重新進入編輯模式。
+- 重新產生 `dist/TabWall-2.46.6.zip`。
+
 ## 2.46.5 — 2026-08-17
 
 - 文字框鍵盤事件在編輯期間與頁面快捷鍵隔離，避免輸入 Markdown／URL 時誤觸發頁面操作。

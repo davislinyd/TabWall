@@ -180,6 +180,14 @@ test('text editor isolates keyboard events and renders safe Markdown links', () 
   assert.match(PAGE_ANNOTATE_SOURCE, /\.text-render \{/);
 });
 
+test('completed text boxes return to View and reopen on double-click', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /function exitTextEditToView\(\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /tool = 'view';\s+closeTextEditor\(\{ save: true \}\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /view\.classList\.toggle\('is-editable', tool === 'view'\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /view\.addEventListener\('dblclick'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /startTextEdit\(obj\);/);
+});
+
 test('selected drawing tool has an explicit high-contrast state', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /button\.setAttribute\('aria-pressed', button\.dataset\.tool === tool \? 'true' : 'false'\)/);
   assert.match(PAGE_ANNOTATE_SOURCE, /\.bar \.tools > button\[data-tool\]\[aria-pressed="true"\]/);
