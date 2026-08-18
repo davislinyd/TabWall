@@ -26,7 +26,7 @@ When you use TabWall, it may process:
 | Tab / group URLs, titles, display titles, favicon URLs | Park and restore sessions | `chrome.storage.local` on your device |
 | Notes and tags you enter | Search and organize parked items | `chrome.storage.local` |
 | Live page notes and tags (without parking) | Annotate a full URL that is not parked | `chrome.storage.local` (`pageAnnotations`) |
-| Page-drawing strokes, highlighter lines, and text boxes | Overlay notes that do not change the host page | IndexedDB on your device |
+| Page-drawing strokes, shape outlines, highlighter lines, and text boxes | Overlay notes that do not change the host page | IndexedDB on your device |
 | Card lock status and optional password hashes | Card privacy (salted SHA-256 hash) | `chrome.storage.local` |
 | Screenshots (thumbnails and full snapshots) and image-card files | Photo-wall preview | IndexedDB on your device |
 | Custom wallpaper image (optional) | Canvas background | IndexedDB on your device |

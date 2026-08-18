@@ -10,9 +10,10 @@
   const HIGHLIGHT_ALPHA = 0.38;
   const HIT_PAD = 8;
   const FAB_SIZE = 40;
+  const TOOLBAR_HANDLE_SIZE = 32;
   const CHROME_GAP = 8;
   const FALLBACK_TOOLBAR_WIDTH = 560;
-  const FALLBACK_TOOLBAR_HEIGHT = 48;
+  const FALLBACK_TOOLBAR_HEIGHT = 40;
   const COLORS = ['#c97858', '#1f2937', '#dc2626', '#2563eb', '#16a34a', '#eab308'];
   const CHROME_KEY = 'pageAnnotateChrome';
   const DEFAULT_CHROME_INSET = 24;
@@ -228,6 +229,30 @@
     };
   }
 
+  function normalizeShape(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const shape = ['line', 'circle', 'rect'].includes(src.shape) ? src.shape : '';
+    const x1 = Number(src.x1);
+    const y1 = Number(src.y1);
+    const x2 = Number(src.x2);
+    const y2 = Number(src.y2);
+    if (!shape || ![x1, y1, x2, y2].every(Number.isFinite)) return null;
+    if (shape === 'line' ? (x1 === x2 && y1 === y2) : (x1 === x2 || y1 === y2)) return null;
+    return {
+      id: typeof src.id === 'string' && src.id ? src.id : newObjectId(),
+      kind: 'shape',
+      shape,
+      tool: shape,
+      color: safeHexColor(src.color, '#c97858'),
+      width: clamp(Math.round(Number(src.width) || 3), 1, 24),
+      x1,
+      y1,
+      x2,
+      y2,
+      constrainCircle: shape === 'circle' && src.constrainCircle === true,
+    };
+  }
+
   function normalizeText(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
     const x = Number(src.x);
@@ -254,6 +279,7 @@
 
   function objectKind(raw) {
     if (!raw || typeof raw !== 'object') return '';
+    if (raw.kind === 'shape' || ['line', 'circle', 'rect'].includes(raw.shape)) return 'shape';
     if (raw.kind === 'line' || raw.kind === 'text' || raw.kind === 'stroke') return raw.kind;
     if (raw.tool === 'highlight' || (raw.x1 != null && raw.x2 != null)) return 'line';
     if (raw.tool === 'text' || typeof raw.text === 'string') return 'text';
@@ -262,6 +288,7 @@
 
   function normalizeObject(raw) {
     const kind = objectKind(raw);
+    if (kind === 'shape') return normalizeShape(raw);
     if (kind === 'line') return normalizeLine(raw);
     if (kind === 'text') return normalizeText(raw);
     return normalizeStroke(raw);
@@ -269,6 +296,44 @@
 
   function normalizeObjects(list) {
     return (Array.isArray(list) ? list : []).map(normalizeObject).filter(Boolean).slice(-MAX_STROKES);
+  }
+
+  function shapeGeometry(obj) {
+    const shape = obj?.shape;
+    const x1 = Number(obj?.x1);
+    const y1 = Number(obj?.y1);
+    const sourceX2 = Number(obj?.x2);
+    const sourceY2 = Number(obj?.y2);
+    if (!['line', 'circle', 'rect'].includes(shape) || ![x1, y1, sourceX2, sourceY2].every(Number.isFinite)) return null;
+    if (shape === 'line') return { shape, x1, y1, x2: sourceX2, y2: sourceY2 };
+    let x2 = sourceX2;
+    let y2 = sourceY2;
+    if (shape === 'circle' && obj.constrainCircle === true) {
+      const dx = sourceX2 - x1;
+      const dy = sourceY2 - y1;
+      const size = Math.max(Math.abs(dx), Math.abs(dy));
+      x2 = x1 + (dx === 0 ? (dy < 0 ? -size : size) : Math.sign(dx) * size);
+      y2 = y1 + (dy === 0 ? (dx < 0 ? -size : size) : Math.sign(dy) * size);
+    }
+    const x = Math.min(x1, x2);
+    const y = Math.min(y1, y2);
+    const w = Math.abs(x2 - x1);
+    const h = Math.abs(y2 - y1);
+    return {
+      shape,
+      x1,
+      y1,
+      x2,
+      y2,
+      x,
+      y,
+      w,
+      h,
+      cx: x + w / 2,
+      cy: y + h / 2,
+      rx: w / 2,
+      ry: h / 2,
+    };
   }
 
   function distToSegment(px, py, x1, y1, x2, y2) {
@@ -314,6 +379,15 @@
     if (!x && !y) return obj;
     if (obj.kind === 'text') return { ...obj, x: obj.x + x, y: obj.y + y };
     if (obj.kind === 'line') {
+      return {
+        ...obj,
+        x1: obj.x1 + x,
+        y1: obj.y1 + y,
+        x2: obj.x2 + x,
+        y2: obj.y2 + y,
+      };
+    }
+    if (obj.kind === 'shape') {
       return {
         ...obj,
         x1: obj.x1 + x,
@@ -377,11 +451,62 @@
     return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
   }
 
+  function shapeBounds(obj) {
+    const geometry = shapeGeometry(obj);
+    if (!geometry) return null;
+    const pad = (obj.width || 3) / 2 + 2;
+    if (geometry.shape === 'line') {
+      const minX = Math.min(geometry.x1, geometry.x2);
+      const minY = Math.min(geometry.y1, geometry.y2);
+      const maxX = Math.max(geometry.x1, geometry.x2);
+      const maxY = Math.max(geometry.y1, geometry.y2);
+      return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+    }
+    return {
+      x: geometry.x - pad,
+      y: geometry.y - pad,
+      w: geometry.w + pad * 2,
+      h: geometry.h + pad * 2,
+    };
+  }
+
   function objectBounds(obj) {
     if (!obj) return null;
     if (obj.kind === 'text') return textBounds(obj);
     if (obj.kind === 'line') return lineBounds(obj);
+    if (obj.kind === 'shape') return shapeBounds(obj);
     return strokeBounds(obj);
+  }
+
+  function distToRectOutline(px, py, box) {
+    const outsideX = Math.max(box.x - px, 0, px - (box.x + box.w));
+    const outsideY = Math.max(box.y - py, 0, py - (box.y + box.h));
+    if (outsideX || outsideY) return Math.hypot(outsideX, outsideY);
+    return Math.min(px - box.x, box.x + box.w - px, py - box.y, box.y + box.h - py);
+  }
+
+  function distToEllipseOutline(px, py, geometry) {
+    if (geometry.rx <= 0 || geometry.ry <= 0) return Infinity;
+    const normalized = Math.hypot(
+      (px - geometry.cx) / geometry.rx,
+      (py - geometry.cy) / geometry.ry,
+    );
+    return Math.abs(normalized - 1) * Math.min(geometry.rx, geometry.ry);
+  }
+
+  function hitTestShape(obj, point) {
+    const geometry = shapeGeometry(obj);
+    if (!geometry) return Infinity;
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (![x, y].every(Number.isFinite)) return Infinity;
+    if (geometry.shape === 'line') {
+      return distToSegment(x, y, geometry.x1, geometry.y1, geometry.x2, geometry.y2) - (obj.width || 3) / 2;
+    }
+    const distance = geometry.shape === 'rect'
+      ? distToRectOutline(x, y, geometry)
+      : distToEllipseOutline(x, y, geometry);
+    return distance - (obj.width || 3) / 2;
   }
 
   function hitTestObject(obj, point, pad = HIT_PAD) {
@@ -398,6 +523,7 @@
     if (obj.kind === 'line') {
       return distToSegment(x, y, obj.x1, obj.y1, obj.x2, obj.y2) - (obj.width || 16) / 2;
     }
+    if (obj.kind === 'shape') return hitTestShape(obj, point);
     const pts = obj.points || [];
     let best = Infinity;
     for (let i = 1; i < pts.length; i++) {
@@ -535,10 +661,12 @@
     downsamplePoints,
     normalizeStroke,
     normalizeLine,
+    normalizeShape,
     normalizeText,
     normalizeObject,
     normalizeObjects,
     snapHighlightLine,
+    shapeGeometry,
     hitTestObject,
     hitTestObjects,
     objectBounds,
@@ -552,6 +680,7 @@
     toolbarModeForCollapsed,
     clampChromeAnchor,
     resolveChromeLayout,
+    canvasScrollTransform,
     DEFAULT_COLLAPSED: true,
   };
 
@@ -580,6 +709,9 @@
       select: '選',
       pen: '筆',
       highlight: '螢',
+      line: '直線',
+      circle: '圓圈',
+      rectangle: '方框',
       text: '字',
       eraser: '擦',
       view: '檢視',
@@ -594,6 +726,9 @@
       select: 'Pick',
       pen: 'Pen',
       highlight: 'Mark',
+      line: 'Line',
+      circle: 'Circle',
+      rectangle: 'Box',
       text: 'Text',
       eraser: 'Erase',
       view: 'View',
@@ -672,6 +807,14 @@
     return { x: event.pageX, y: event.pageY };
   }
 
+  function canvasScrollTransform(scrollX, scrollY) {
+    const x = Number(scrollX);
+    const y = Number(scrollY);
+    const offsetX = Number.isFinite(x) ? x : 0;
+    const offsetY = Number.isFinite(y) ? y : 0;
+    return `translate(${-offsetX}px, ${-offsetY}px)`;
+  }
+
   function paintStroke(obj, context) {
     if (!obj?.points || obj.points.length < 2) return;
     context.save();
@@ -697,6 +840,29 @@
     context.beginPath();
     context.moveTo(obj.x1, obj.y1);
     context.lineTo(obj.x2, obj.y2);
+    context.stroke();
+    context.restore();
+  }
+
+  function paintShape(obj, context) {
+    const geometry = shapeGeometry(obj);
+    if (!geometry) return;
+    context.save();
+    context.globalCompositeOperation = 'source-over';
+    context.globalAlpha = 1;
+    context.strokeStyle = obj.color;
+    context.lineWidth = obj.width;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.beginPath();
+    if (geometry.shape === 'line') {
+      context.moveTo(geometry.x1, geometry.y1);
+      context.lineTo(geometry.x2, geometry.y2);
+    } else if (geometry.shape === 'rect') {
+      context.rect(geometry.x, geometry.y, geometry.w, geometry.h);
+    } else {
+      context.ellipse(geometry.cx, geometry.cy, geometry.rx, geometry.ry, 0, 0, Math.PI * 2);
+    }
     context.stroke();
     context.restore();
   }
@@ -754,6 +920,7 @@
   function paintObject(obj, context) {
     if (!obj) return;
     if (obj.kind === 'line') paintLine(obj, context);
+    else if (obj.kind === 'shape') paintShape(obj, context);
     else if (obj.kind === 'text') paintText(obj, context);
     else paintStroke(obj, context);
   }
@@ -790,11 +957,19 @@
       canvas.width = nextW;
       canvas.height = nextH;
     }
+    syncCanvasScroll();
     redraw();
   }
 
+  function syncCanvasScroll() {
+    const transform = canvasScrollTransform(window.scrollX, window.scrollY);
+    if (canvas) canvas.style.transform = transform;
+    if (textLayer) textLayer.style.transform = transform;
+    if (textEditor) textEditor.style.transform = transform;
+  }
+
   function capturing() {
-    return visible && !parkBlocked && ['pen', 'eraser', 'highlight', 'text'].includes(tool);
+    return visible && !parkBlocked && ['pen', 'eraser', 'highlight', 'line', 'circle', 'rect', 'text'].includes(tool);
   }
 
   function defaultFabLeft() {
@@ -1097,6 +1272,7 @@
     textEditor.dataset.y = String(item.y);
     textEditor.style.left = `${item.x}px`;
     textEditor.style.top = `${item.y}px`;
+    textEditor.style.transform = canvasScrollTransform(window.scrollX, window.scrollY);
     textEditor.style.color = item.color || color;
     textEditor.style.fontSize = `${item.fontSize || 16}px`;
     textEditor.textContent = item.text || '';
@@ -1221,6 +1397,20 @@
         x2: point.x,
         y2: point.y,
       };
+    } else if (['line', 'circle', 'rect'].includes(tool)) {
+      current = {
+        id: newObjectId(),
+        kind: 'shape',
+        shape: tool,
+        tool,
+        color,
+        width,
+        x1: point.x,
+        y1: point.y,
+        x2: point.x,
+        y2: point.y,
+        constrainCircle: tool === 'circle' && event.shiftKey,
+      };
     } else {
       current = {
         id: newObjectId(),
@@ -1262,13 +1452,20 @@
     if (current.kind === 'line') {
       const snapped = snapHighlightLine(current.x1, current.y1, point.x, point.y) || current;
       current = { ...current, ...snapped };
+    } else if (current.kind === 'shape') {
+      current = {
+        ...current,
+        x2: point.x,
+        y2: point.y,
+        constrainCircle: current.shape === 'circle' ? event.shiftKey : current.constrainCircle,
+      };
     } else {
       current.points = downsamplePoints([...current.points, point]);
     }
     redraw();
   }
 
-  function onPointerUp() {
+  function onPointerUp(event) {
     if (dragObj) {
       if (dragObj.moved) schedulePersist();
       dragObj = null;
@@ -1276,6 +1473,9 @@
       return;
     }
     if (!current) return;
+    if (current.kind === 'shape' && current.shape === 'circle' && event) {
+      current = { ...current, constrainCircle: event.shiftKey };
+    }
     const next = normalizeObject(current);
     current = null;
     if (next) {
@@ -1463,9 +1663,9 @@
         position: fixed;
         z-index: 3;
         display: flex;
-        gap: 6px;
+        gap: 4px;
         align-items: center;
-        padding: 6px 8px;
+        padding: 4px 6px;
         border-radius: 14px;
         background: rgba(16, 17, 16, 0.18);
         color: #f1f0eb;
@@ -1481,14 +1681,14 @@
       .bar.is-vertical.opens-right { align-items: flex-start; }
       .bar.is-vertical.opens-up { flex-direction: column-reverse; }
       .bar.is-vertical.opens-down { flex-direction: column; }
-      .bar .tools { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+      .bar .tools { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; }
       .bar.is-vertical .tools {
         flex-direction: column;
         align-items: stretch;
-        max-height: calc(100vh - 112px);
+        max-height: calc(100vh - 128px);
         overflow-y: auto;
       }
-      .palette { display: flex; gap: 6px; align-items: center; justify-content: center; }
+      .palette { display: flex; gap: 4px; align-items: center; justify-content: center; }
       button, select {
         appearance: none;
         border: 0;
@@ -1496,7 +1696,7 @@
         background: rgba(42, 45, 43, 0.35);
         color: inherit;
         font: inherit;
-        padding: 5px 8px;
+        padding: 4px 7px;
         cursor: pointer;
         opacity: 0.55;
         flex: 0 0 auto;
@@ -1518,10 +1718,10 @@
         border: 1px solid rgba(255,255,255,.65);
         box-shadow: 0 0 0 2px rgba(201,120,88,.3), 0 3px 8px rgba(0,0,0,.2);
       }
-      .swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #fff3; padding: 0; }
+      .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #fff3; padding: 0; }
       .chrome-handle {
-        width: ${FAB_SIZE}px;
-        height: ${FAB_SIZE}px;
+        width: ${TOOLBAR_HANDLE_SIZE}px;
+        height: ${TOOLBAR_HANDLE_SIZE}px;
         padding: 0;
         display: grid;
         place-items: center;
@@ -1573,6 +1773,9 @@
       <div class="tools">
         <button type="button" data-tool="pen">${copy.pen}</button>
         <button type="button" data-tool="highlight">${copy.highlight}</button>
+        <button type="button" data-tool="line">${copy.line}</button>
+        <button type="button" data-tool="circle">${copy.circle}</button>
+        <button type="button" data-tool="rect">${copy.rectangle}</button>
         <button type="button" data-tool="text">${copy.text}</button>
         <button type="button" data-tool="eraser">${copy.eraser}</button>
         <button type="button" data-tool="view">${copy.view}</button>
@@ -1640,7 +1843,7 @@
     fab.addEventListener('keydown', onChromeKeyDown);
 
     shadow.append(style, canvas, textLayer, toolbar, fab);
-    rootEl.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;background:transparent;';
+    rootEl.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;background:transparent;';
     document.documentElement.appendChild(rootEl);
   }
 
@@ -1719,6 +1922,7 @@
     if (inkLoaded) schedulePersist();
     window.clearTimeout(chromeTimer);
     window.removeEventListener('resize', onWindowResize);
+    window.removeEventListener('scroll', onWindowScroll);
     window.removeEventListener('popstate', loadForCurrentUrl);
     window.removeEventListener('hashchange', loadForCurrentUrl);
     window.removeEventListener('pagehide', flushBeforeUnload);
@@ -1744,6 +1948,10 @@
     clampBar();
   }
 
+  function onWindowScroll() {
+    syncCanvasScroll();
+  }
+
   ensureUi();
   syncCanvasSize();
   syncChrome();
@@ -1751,6 +1959,7 @@
   loadForCurrentUrl();
 
   window.addEventListener('resize', onWindowResize);
+  window.addEventListener('scroll', onWindowScroll, { passive: true });
   window.addEventListener('popstate', loadForCurrentUrl);
   window.addEventListener('hashchange', loadForCurrentUrl);
   window.addEventListener('pagehide', flushBeforeUnload);

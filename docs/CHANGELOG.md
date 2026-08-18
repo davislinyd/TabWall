@@ -11,6 +11,13 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.49.0 — 2026-08-18
+
+- 修正頁面繪圖層的座標處理；筆畫、文字與圖形會跟著頁面上下捲動，並維持完整 URL 對應的 IndexedDB 保存資料。
+- 新增直線、圓圈／橢圓與方框工具；按住 Shift 可繪製正圓，圖形內部保持透明；既有螢光標記保留。
+- 縮小繪圖工具面板，並同步更新 README 與 GitHub Pages 使用者手冊。
+- 重新產生 `dist/TabWall-2.49.0.zip`。
+
 ## 2.46.7 — 2026-08-17
 
 - Pen 模式下左鍵雙擊已完成的文字框，可重新進入編輯模式。

@@ -51,6 +51,16 @@ test('translateObject moves text, lines, and stroke points', () => {
   }, 5, 5);
   assert.equal(stroke.points[1].x, 7);
   assert.equal(stroke.points[1].y, 7);
+  const rect = Ink.translateObject({
+    kind: 'shape',
+    shape: 'rect',
+    x1: 0,
+    y1: 0,
+    x2: 8,
+    y2: 2,
+  }, 5, 5);
+  assert.equal(rect.x2, 13);
+  assert.equal(rect.y2, 7);
 });
 
 test('undo stack restores the previous snapshot', () => {
@@ -166,6 +176,19 @@ test('canvas overlay stays transparent and only captures drawing input', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /mix-blend-mode: normal;/);
   assert.match(PAGE_ANNOTATE_SOURCE, /pointer-events: none;/);
   assert.match(PAGE_ANNOTATE_SOURCE, /canvas\.style\.pointerEvents = capturing\(\) \? 'auto' : 'none';/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /rootEl\.style\.cssText = 'position:fixed;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /window\.addEventListener\('scroll', onWindowScroll, \{ passive: true \}\);/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /canvas\.style\.transform = transform/);
+});
+
+test('drawing toolbar exposes line, circle, and rectangle tools with compact sizing', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /data-tool="line"/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /data-tool="circle"/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /data-tool="rect"/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\['pen', 'eraser', 'highlight', 'line', 'circle', 'rect', 'text'\]/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /const TOOLBAR_HANDLE_SIZE = 32;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /padding: 4px 6px;/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\.swatch \{ width: 14px; height: 14px;/);
 });
 
 test('text editor isolates keyboard events and renders safe Markdown links', () => {
@@ -246,6 +269,56 @@ test('legacy strokes stay valid through normalizeObject', () => {
   });
   assert.equal(obj.kind, 'stroke');
   assert.equal(obj.tool, 'pen');
+});
+
+test('shape objects normalize and Shift constrains circles to a square', () => {
+  const Ink = loadInk();
+  const ellipse = Ink.normalizeShape({
+    shape: 'circle',
+    x1: 10,
+    y1: 20,
+    x2: 50,
+    y2: 80,
+    color: '#2563eb',
+  });
+  assert.equal(ellipse.kind, 'shape');
+  assert.equal(ellipse.shape, 'circle');
+  assert.equal(Ink.shapeGeometry(ellipse).w, 40);
+  assert.equal(Ink.shapeGeometry(ellipse).h, 60);
+
+  const circle = Ink.normalizeShape({
+    shape: 'circle',
+    x1: 10,
+    y1: 20,
+    x2: 50,
+    y2: 80,
+    constrainCircle: true,
+  });
+  const geometry = Ink.shapeGeometry(circle);
+  assert.equal(geometry.w, 60);
+  assert.equal(geometry.h, 60);
+  assert.equal(geometry.x2, 70);
+  assert.equal(geometry.y2, 80);
+
+  const rect = Ink.normalizeShape({ shape: 'rect', x1: 20, y1: 30, x2: 5, y2: 10 });
+  assert.equal(rect.shape, 'rect');
+  assert.equal(Ink.normalizeShape({ shape: 'rect', x1: 1, y1: 1, x2: 1, y2: 10 }), null);
+});
+
+test('transparent shape interiors do not hit-test as the outline', () => {
+  const Ink = loadInk();
+  const rect = Ink.normalizeShape({ shape: 'rect', x1: 0, y1: 0, x2: 100, y2: 80, width: 4 });
+  assert.equal(Ink.hitTestObjects([rect], { x: 50, y: 40 }), null);
+  assert.equal(Ink.hitTestObjects([rect], { x: 50, y: 2 }).id, rect.id);
+  const ellipse = Ink.normalizeShape({ shape: 'circle', x1: 0, y1: 0, x2: 100, y2: 80, width: 4 });
+  assert.equal(Ink.hitTestObjects([ellipse], { x: 50, y: 40 }), null);
+  assert.equal(Ink.hitTestObjects([ellipse], { x: 50, y: 2 }).id, ellipse.id);
+});
+
+test('canvas scroll transform keeps page coordinates aligned to the viewport', () => {
+  const Ink = loadInk();
+  assert.equal(Ink.canvasScrollTransform(24, 80), 'translate(-24px, -80px)');
+  assert.equal(Ink.canvasScrollTransform('bad', null), 'translate(0px, 0px)');
 });
 
 test('highlight lines snap near-horizontal and keep steep diagonals', () => {

@@ -41,6 +41,7 @@ jobs:
             bgUndo.js \
             bgReminders.js \
             bgAi.js \
+            bgPageAnnotate.js \
             content.js \
             quickSearch.js \
             aiUiCore.js \
