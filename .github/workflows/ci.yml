@@ -43,6 +43,7 @@ jobs:
             bgAi.js \
             bgPageAnnotate.js \
             content.js \
+            pageAnnotate.js \
             quickSearch.js \
             aiUiCore.js \
             aiPanel.js \
