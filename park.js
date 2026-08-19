@@ -23,7 +23,6 @@ const CANVAS_CONNECTION_HIT_WIDTH = 16;
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
   mode: 'lite',
-  onChange: true,
   intervalUnit: 'hour',
   intervalValue: 24,
   maxKeep: 5,
@@ -31,7 +30,6 @@ const DEFAULT_AUTO_BACKUP = {
   folderPath: '',
   lastSuccessAt: 0,
   lastError: '',
-  dirtyAt: 0,
 };
 
 const AUTO_SAVE_METADATA_MAX_RULES = 50;
@@ -376,7 +374,6 @@ diagLogClearBtn?.addEventListener('click', async () => {
 const autoBackupEnabledEl = document.getElementById('autoBackupEnabled');
 const autoBackupSubfolderEl = document.getElementById('autoBackupSubfolder');
 const autoBackupLocationLabelEl = document.getElementById('autoBackupLocationLabel');
-const autoBackupOnChangeEl = document.getElementById('autoBackupOnChange');
 const autoBackupIntervalValueEl = document.getElementById('autoBackupIntervalValue');
 const autoBackupIntervalUnitEl = document.getElementById('autoBackupIntervalUnit');
 const autoBackupMaxKeepEl = document.getElementById('autoBackupMaxKeep');
@@ -643,7 +640,6 @@ function bindPanelModules() {
     "autoBackupLocationLabelEl": () => autoBackupLocationLabelEl,
     "autoBackupMaxKeepEl": () => autoBackupMaxKeepEl,
     "autoBackupNowBtn": () => autoBackupNowBtn,
-    "autoBackupOnChangeEl": () => autoBackupOnChangeEl,
     "autoBackupShowFolderBtn": () => autoBackupShowFolderBtn,
     "autoBackupStatusEl": () => autoBackupStatusEl,
     "autoBackupSubfolderEl": () => autoBackupSubfolderEl,

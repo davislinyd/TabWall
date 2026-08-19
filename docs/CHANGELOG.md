@@ -11,6 +11,13 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.49.1 — 2026-08-19
+
+- 修正自動備份過早觸發：資料、標籤與 Canvas 寫入不再於固定排程前建立備份下載。
+- 移除設定頁「資料變更後也備份」選項；自動備份只依固定週期執行，手動「立即備份」保留。
+- 更新 README 與 GitHub Pages 使用者手冊，明確說明資料變更會納入下一次排程備份。
+- 重新產生 `dist/TabWall-2.49.1.zip`。
+
 ## 2.49.0 — 2026-08-18
 
 - 修正頁面繪圖層的座標處理；筆畫、文字與圖形會跟著頁面上下捲動，並維持完整 URL 對應的 IndexedDB 保存資料。

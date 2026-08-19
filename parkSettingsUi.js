@@ -201,7 +201,6 @@
     return {
       enabled: Boolean(o.enabled),
       mode: o.mode === 'full' ? 'full' : 'lite',
-      onChange: o.onChange !== false,
       intervalUnit: unit,
       intervalValue: env.clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
       maxKeep: env.clampInt(o.maxKeep, 1, 99, 5),
@@ -209,7 +208,6 @@
       folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
       lastSuccessAt: Number(o.lastSuccessAt) || 0,
       lastError: typeof o.lastError === 'string' ? o.lastError : '',
-      dirtyAt: Number(o.dirtyAt) || 0,
     };
       
   }
@@ -573,7 +571,6 @@
     const ab = normalizeAutoBackup(env.settings.autoBackup);
     env.settings.autoBackup = ab;
     if (env.autoBackupEnabledEl) env.autoBackupEnabledEl.checked = ab.enabled;
-    if (env.autoBackupOnChangeEl) env.autoBackupOnChangeEl.checked = ab.onChange;
     if (env.autoBackupIntervalUnitEl) env.autoBackupIntervalUnitEl.value = ab.intervalUnit;
     if (env.autoBackupIntervalValueEl) {
       env.autoBackupIntervalValueEl.value = String(ab.intervalValue);
@@ -933,9 +930,6 @@
     env.autoBackupEnabledEl?.addEventListener('change', async () => {
       await saveSettings({ autoBackup: { enabled: env.autoBackupEnabledEl.checked } });
       syncAutoBackupUi();
-    });
-    env.autoBackupOnChangeEl?.addEventListener('change', async () => {
-      await saveSettings({ autoBackup: { onChange: env.autoBackupOnChangeEl.checked } });
     });
     env.autoBackupSubfolderEl?.addEventListener('change', async () => {
       const subfolder = sanitizeSubfolder(env.autoBackupSubfolderEl.value);

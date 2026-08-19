@@ -58,7 +58,6 @@ function normalizeAutoBackup(raw) {
   return {
     enabled: Boolean(o.enabled),
     mode: o.mode === 'full' ? 'full' : 'lite',
-    onChange: o.onChange !== false,
     intervalUnit: unit,
     intervalValue: clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
     maxKeep: clampInt(o.maxKeep, 1, 99, 5),
@@ -66,7 +65,6 @@ function normalizeAutoBackup(raw) {
     folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
     lastSuccessAt: Number(o.lastSuccessAt) || 0,
     lastError: typeof o.lastError === 'string' ? o.lastError : '',
-    dirtyAt: Number(o.dirtyAt) || 0,
   };
 }
 
@@ -259,16 +257,15 @@ function normalizeSettings(raw) {
 async function patchSettings(partial) {
   const current = await getSettings();
   const patch = partial && typeof partial === 'object' ? partial : {};
-  // lastSuccessAt / dirtyAt / lastError are owned by runAutoBackup and
-  // markAutoBackupDirty. Park saveSettings used to send a fully-normalized
-  // autoBackup object (stale lastSuccessAt: 0), which reset the schedule and
-  // made the next New Tab catch-up download immediately.
+  // lastSuccessAt / lastError are owned by runAutoBackup. Ignore the legacy
+  // change-trigger fields so old settings pages cannot re-enable that path.
   let autoBackupPatch = patch.autoBackup;
   if (autoBackupPatch && typeof autoBackupPatch === 'object') {
     autoBackupPatch = { ...autoBackupPatch };
     delete autoBackupPatch.lastSuccessAt;
     delete autoBackupPatch.dirtyAt;
     delete autoBackupPatch.lastError;
+    delete autoBackupPatch.onChange;
   }
   const next = normalizeSettings({
     ...current,
@@ -298,19 +295,10 @@ async function patchSettings(partial) {
       await syncAutoBackupAlarms(nextAb);
     }
   }
-  // Settings-only writes must not schedule on-change backups. Parked data /
-  // tags / canvas already call markAutoBackupDirty via their own writers;
-  // preferences ride along on the next data or scheduled backup.
+  // Settings-only writes do not trigger backups; preferences ride along on the
+  // next scheduled or manually requested backup.
   return { ok: true, settings: next };
 }
-
-// Mirrors settings.autoBackup.{enabled,onChange} so markAutoBackupDirty
-// doesn't need a settings read just to check whether it should no-op.
-let autoBackupFlagsCache = null;
-// True once dirtyAt + the alarm are set for the current edit burst, so
-// further edits before the alarm fires are no-ops instead of repeat
-// settings reads/writes. Reset when the alarm actually fires.
-let autoBackupAlarmPending = false;
 
 async function patchAutoBackup(partial) {
   const settings = await getSettings();
@@ -320,34 +308,10 @@ async function patchAutoBackup(partial) {
   return autoBackup;
 }
 
-async function markAutoBackupDirty() {
-  if (!autoBackupFlagsCache) {
-    const settings = await getSettings();
-    autoBackupFlagsCache = { enabled: settings.autoBackup.enabled, onChange: settings.autoBackup.onChange };
-  }
-  if (!autoBackupFlagsCache.enabled || !autoBackupFlagsCache.onChange) return;
-  if (autoBackupAlarmPending) return;
-  autoBackupAlarmPending = true;
-  try {
-    const settings = await getSettings();
-    const ab = settings.autoBackup;
-    await chrome.storage.local.set({
-      [SETTINGS_KEY]: {
-        ...settings,
-        autoBackup: normalizeAutoBackup({ ...ab, dirtyAt: Date.now(), lastError: ab.lastError || '' }),
-      },
-    });
-    // 0.5 min when allowed; Chrome may clamp to ≥1 min for store installs
-    await chrome.alarms.create(AUTO_BACKUP_ONCHANGE_ALARM, { delayInMinutes: 0.5 });
-  } catch (err) {
-    autoBackupAlarmPending = false; // allow retry on the next edit
-    console.warn('[TabWall] markAutoBackupDirty failed:', err);
-  }
-}
-
 async function syncAutoBackupAlarms(autoBackup) {
   const ab = normalizeAutoBackup(autoBackup);
   await chrome.alarms.clear(AUTO_BACKUP_ALARM);
+  await chrome.alarms.clear(LEGACY_AUTO_BACKUP_ONCHANGE_ALARM);
   if (!ab.enabled) return;
   const periodInMinutes = Math.max(10, autoBackupIntervalMinutes(ab));
   // Align first fire with lastSuccessAt so re-sync (settings write / SW wake)
@@ -365,9 +329,8 @@ async function syncAutoBackupAlarms(autoBackup) {
 
 /**
  * Gate for non-manual auto-backup paths. Manual (reason === 'manual') always
- * proceeds when force or enabled. schedule / onchange / local (New Tab
- * catch-up) each have their own due rule so they cannot each write a full
- * backup within the same interval.
+ * proceeds when force or enabled. schedule and local (New Tab catch-up) only
+ * proceed when the configured periodic backup is due.
  * @param {object} ab normalizeAutoBackup result
  * @param {{ force?: boolean, reason?: string }} opts
  * @returns {{ run: boolean, skipReason?: string }}
@@ -388,18 +351,10 @@ function autoBackupShouldRun(ab, opts = {}) {
   const intervalMs = Math.max(10, autoBackupIntervalMinutes(normalized)) * 60 * 1000;
   const now = Date.now();
   const sinceOk = normalized.lastSuccessAt ? now - normalized.lastSuccessAt : Infinity;
-  const dirtyCovered =
-    normalized.dirtyAt > 0 &&
-    normalized.lastSuccessAt > 0 &&
-    normalized.lastSuccessAt >= normalized.dirtyAt;
-  const dueDirty = normalized.onChange && normalized.dirtyAt > 0 && !dirtyCovered;
   const dueSchedule = !normalized.lastSuccessAt || sinceOk >= intervalMs;
 
   if (reason === 'onchange') {
-    if (!normalized.onChange) return { run: false, skipReason: 'onchange_disabled' };
-    if (!normalized.dirtyAt) return { run: false, skipReason: 'not_dirty' };
-    if (dirtyCovered) return { run: false, skipReason: 'already_backed_up' };
-    return { run: true };
+    return { run: false, skipReason: 'onchange_disabled' };
   }
 
   if (reason === 'schedule') {
@@ -408,17 +363,17 @@ function autoBackupShouldRun(ab, opts = {}) {
   }
 
   // New Tab / park catch-up: only recover a missed periodic backup.
-  // First-enable (!lastSuccessAt) waits for the schedule alarm; on-change
-  // dirty is handled by AUTO_BACKUP_ONCHANGE_ALARM. park.html is also the
-  // New Tab page, so treating those as due downloads a file on tab open.
+  // First-enable (!lastSuccessAt) waits for the schedule alarm. park.html is
+  // also the New Tab page, so treating that state as due downloads a file on
+  // tab open.
   if (reason === 'local') {
     const overdue = normalized.lastSuccessAt > 0 && sinceOk >= intervalMs;
     if (!overdue) return { run: false, skipReason: 'not_due' };
     return { run: true };
   }
 
-  // any other automatic reason
-  if (!dueDirty && !dueSchedule) return { run: false, skipReason: 'not_due' };
+  // Any other automatic reason follows the periodic schedule.
+  if (!dueSchedule) return { run: false, skipReason: 'not_due' };
   return { run: true };
 }
 
@@ -432,7 +387,6 @@ async function runAutoBackup(opts = {}) {
   const reason = typeof opts.reason === 'string' && opts.reason ? opts.reason : 'manual';
   if (autoBackupRunning) return { ok: false, error: 'busy' };
   autoBackupRunning = true;
-  const startedAt = Date.now();
   try {
     const settings = await getSettings();
     const ab = settings.autoBackup;
@@ -482,33 +436,12 @@ async function runAutoBackup(opts = {}) {
 
     // Always prefer path from this download (clears stale FS-access paths)
     const folderPath = dirnameOfLocalPath(downloaded.filename) || '';
-    // Preserve dirtyAt set while this run was in progress so mid-backup edits
-    // still get an on-change follow-up; otherwise clear and drop the alarm.
-    const latest = await getSettings();
-    const dirtyDuring = Number(latest.autoBackup?.dirtyAt) || 0;
-    const keepDirty = dirtyDuring > startedAt;
     await patchAutoBackup({
       lastSuccessAt: Date.now(),
       lastError: '',
-      dirtyAt: keepDirty ? dirtyDuring : 0,
       subfolder,
       folderPath,
     });
-    try {
-      await chrome.alarms.clear(AUTO_BACKUP_ONCHANGE_ALARM);
-    } catch {
-      // ignore
-    }
-    autoBackupAlarmPending = false;
-    if (keepDirty) {
-      autoBackupAlarmPending = true;
-      try {
-        await chrome.alarms.create(AUTO_BACKUP_ONCHANGE_ALARM, { delayInMinutes: 0.5 });
-      } catch (err) {
-        autoBackupAlarmPending = false;
-        console.warn('[TabWall] re-arm onchange backup failed:', err);
-      }
-    }
 
     try {
       await pruneDownloadedAutoBackups(mode, ab.maxKeep, { folderPath, subfolder });

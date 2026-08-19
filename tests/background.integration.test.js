@@ -514,7 +514,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('manifest overrides the New Tab page with the TabWall UI', () => {
   assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.49.0');
+  assert.equal(MANIFEST.version, '2.49.1');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -3046,7 +3046,7 @@ test('auto-backup pruning only deletes exact folder and mode names', async () =>
   assert.deepEqual(runtime.removedDownloads, [2]);
 });
 
-test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt', async () => {
+test('autoBackupShouldRun only permits due periodic backups', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   assert.equal(typeof runtime.api.autoBackupShouldRun, 'function');
@@ -3062,41 +3062,28 @@ test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt'
     intervalUnit: 'minute',
     intervalValue: intervalMin,
     dirtyAt: now - 5000,
-    lastSuccessAt: now - 1000, // success after dirty → covered
-  });
-  assert.equal(intervalOf(ab), intervalMin);
-
-  // Peer run already covered this dirty burst
-  const coveredOnchange = shouldRun(ab, { reason: 'onchange' });
-  assert.equal(coveredOnchange.run, false);
-  assert.equal(coveredOnchange.skipReason, 'already_backed_up');
-  const coveredLocal = shouldRun(ab, { force: true, reason: 'local' });
-  assert.equal(coveredLocal.run, false);
-  assert.equal(coveredLocal.skipReason, 'not_due');
-  const coveredSchedule = shouldRun(ab, { reason: 'schedule' });
-  assert.equal(coveredSchedule.run, false);
-  assert.equal(coveredSchedule.skipReason, 'not_due');
-
-  // Fresh dirty after last success → onchange runs; New Tab catch-up must not
-  const dirtyAgain = normalize({
-    ...ab,
-    dirtyAt: now,
     lastSuccessAt: now - 1000,
   });
-  assert.equal(shouldRun(dirtyAgain, { reason: 'onchange' }).run, true);
-  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).run, false);
-  assert.equal(shouldRun(dirtyAgain, { reason: 'local' }).skipReason, 'not_due');
-  assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).run, false);
-  assert.equal(shouldRun(dirtyAgain, { reason: 'schedule' }).skipReason, 'not_due');
+  assert.equal(intervalOf(ab), intervalMin);
+  assert.equal(Object.prototype.hasOwnProperty.call(ab, 'onChange'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(ab, 'dirtyAt'), false);
+
+  // Recent success blocks every automatic path before the interval expires.
+  for (const reason of ['schedule', 'local']) {
+    const result = shouldRun(ab, { reason });
+    assert.equal(result.run, false);
+    assert.equal(result.skipReason, 'not_due');
+  }
+  const legacyOnchange = shouldRun(ab, { reason: 'onchange' });
+  assert.equal(legacyOnchange.run, false);
+  assert.equal(legacyOnchange.skipReason, 'onchange_disabled');
 
   // First enable: schedule may run once the alarm fires; New Tab must not
   const firstEnable = normalize({
     enabled: true,
-    onChange: true,
     intervalUnit: 'hour',
     intervalValue: 24,
     lastSuccessAt: 0,
-    dirtyAt: 0,
   });
   assert.equal(shouldRun(firstEnable, { reason: 'schedule' }).run, true);
   assert.equal(shouldRun(firstEnable, { reason: 'local' }).run, false);
@@ -3106,19 +3093,53 @@ test('autoBackupShouldRun dedupes schedule/onchange/local against lastSuccessAt'
   // Schedule due after interval
   const due = normalize({
     ...ab,
-    dirtyAt: 0,
     lastSuccessAt: now - (intervalMin + 1) * 60 * 1000,
   });
   assert.equal(shouldRun(due, { reason: 'schedule' }).run, true);
   assert.equal(shouldRun(due, { reason: 'local' }).run, true);
   assert.equal(shouldRun(due, { reason: 'onchange' }).run, false);
-  assert.equal(shouldRun(due, { reason: 'onchange' }).skipReason, 'not_dirty');
+  assert.equal(shouldRun(due, { reason: 'onchange' }).skipReason, 'onchange_disabled');
 
   // Manual always runs when forced even if just backed up
   assert.equal(shouldRun(ab, { force: true, reason: 'manual' }).run, true);
 });
 
-test('PATCH_SETTINGS keeps auto-backup clocks and does not resync on mode/onChange', async () => {
+test('data writes do not create legacy auto-backup change alarms', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      mode: 'lite',
+      onChange: true,
+      intervalUnit: 'hour',
+      intervalValue: 24,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: Date.now(),
+      lastError: '',
+      dirtyAt: 123,
+    },
+  };
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  assert.equal(runtime.alarmStore.has('tabwall-auto-backup-onchange'), false);
+  assert.equal(runtime.store.settings.autoBackup.dirtyAt, 123);
+});
+
+test('schedule sync clears legacy auto-backup change alarms', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.alarmStore.set('tabwall-auto-backup-onchange', {
+    name: 'tabwall-auto-backup-onchange',
+    delayInMinutes: 0.5,
+  });
+  const result = await dispatchMessage(runtime, { type: 'AUTO_BACKUP_SYNC_ALARMS' });
+  assert.equal(result.ok, true);
+  assert.equal(runtime.alarmStore.has('tabwall-auto-backup-onchange'), false);
+});
+
+test('PATCH_SETTINGS ignores removed auto-backup change fields and keeps clocks', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   const lastSuccessAt = Date.now() - 60_000;
@@ -3152,7 +3173,7 @@ test('PATCH_SETTINGS keeps auto-backup clocks and does not resync on mode/onChan
       autoBackup: {
         enabled: true,
         mode: 'full',
-        onChange: false,
+        onChange: true,
         intervalUnit: 'hour',
         intervalValue: 24,
         maxKeep: 5,
@@ -3166,38 +3187,11 @@ test('PATCH_SETTINGS keeps auto-backup clocks and does not resync on mode/onChan
   });
   assert.equal(result.ok, true);
   assert.equal(result.settings.autoBackup.mode, 'full');
-  assert.equal(result.settings.autoBackup.onChange, false);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.settings.autoBackup, 'onChange'), false);
   assert.equal(result.settings.autoBackup.lastSuccessAt, lastSuccessAt);
-  assert.equal(result.settings.autoBackup.dirtyAt, dirtyAt);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.settings.autoBackup, 'dirtyAt'), false);
   assert.equal(result.settings.autoBackup.lastError, '');
   assert.equal(created.length, 0);
-});
-
-test('PATCH_SETTINGS does not mark auto-backup dirty', async () => {
-  const runtime = createRuntime();
-  await runtime.ready;
-  runtime.store.settings = {
-    afterSave: 'close',
-    autoBackup: {
-      enabled: true,
-      mode: 'full',
-      onChange: true,
-      intervalUnit: 'hour',
-      intervalValue: 24,
-      maxKeep: 5,
-      subfolder: 'TabWall-Backups',
-      folderPath: '',
-      lastSuccessAt: Date.now(),
-      lastError: '',
-      dirtyAt: 0,
-    },
-  };
-  const result = await dispatchMessage(runtime, {
-    type: 'PATCH_SETTINGS',
-    partial: { theme: 'light' },
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.settings.autoBackup.dirtyAt, 0);
 });
 
 test('mutation queue executes concurrent tasks in FIFO order', async () => {
