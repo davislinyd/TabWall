@@ -318,7 +318,6 @@ async function commitItemsAndCanvas(items, layout, options = {}) {
       console.warn('[TabWall] reminder alarm sync failed:', err);
     }
   }
-  await markAutoBackupDirty();
   return { items: stored, layout: normalized, revision };
 }
 

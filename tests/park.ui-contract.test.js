@@ -616,6 +616,8 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.doesNotMatch(railCss, /overflow-y:\s*auto/);
   assert.match(HTML_SOURCE, /\.canvas-stack-index\s*\{[\s\S]*?overflow-y: auto;/);
   assert.match(HTML_SOURCE, /id="autoBackupStatus"[\s\S]*?<\/div>\s*<\/div>\s*<div class="settings-footer"/);
+  assert.doesNotMatch(HTML_SOURCE, /id="autoBackupOnChange"/);
+  assert.doesNotMatch(SETTINGS_UI_SOURCE, /autoBackupOnChange/);
 });
 
 test('Automatic note and tag save rules expose a localized settings editor', () => {

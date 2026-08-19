@@ -53,7 +53,6 @@ const DATA_LIMITS = Build?.LIMITS || {
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
   mode: 'lite',
-  onChange: true,
   intervalUnit: 'hour', // minute | hour | day
   intervalValue: 24,
   maxKeep: 5,
@@ -61,7 +60,6 @@ const DEFAULT_AUTO_BACKUP = {
   folderPath: '', // absolute dir after last successful backup
   lastSuccessAt: 0,
   lastError: '',
-  dirtyAt: 0,
 };
 
 const AUTO_SAVE_METADATA_MAX_RULES = 50;
@@ -91,7 +89,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const AUTO_BACKUP_ALARM = 'tabwall-auto-backup-schedule';
-const AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
+// Kept only so startup/install alarm sync can remove alarms created by older versions.
+const LEGACY_AUTO_BACKUP_ONCHANGE_ALARM = 'tabwall-auto-backup-onchange';
 const PARK_PAGE_PATH = 'park.html';
 const STANDALONE_SURFACE = 'standalone';
 const SHORTCUTS_PAGE_URL = /Edg\//i.test(String(globalThis.navigator?.userAgent || ''))
@@ -158,9 +157,6 @@ async function getParkedUrlIndex() {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_BACKUP_ALARM) {
     enqueueMutation(() => runAutoBackup({ reason: 'schedule' })).catch(() => {});
-  } else if (alarm.name === AUTO_BACKUP_ONCHANGE_ALARM) {
-    autoBackupAlarmPending = false;
-    enqueueMutation(() => runAutoBackup({ reason: 'onchange' })).catch(() => {});
   } else if (String(alarm?.name || '').startsWith(REMINDER_ALARM_PREFIX)) {
     enqueueMutation(() => handleReminderAlarm(alarm)).catch((err) => {
       console.warn('[TabWall] reminder alarm failed:', err);
@@ -192,10 +188,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     const nextAb = normalizeAutoBackup(changes.settings.newValue?.autoBackup);
     const prevAb = normalizeAutoBackup(changes.settings.oldValue?.autoBackup);
-    autoBackupFlagsCache = { enabled: nextAb.enabled, onChange: nextAb.onChange };
     // Only re-create the periodic alarm when schedule-relevant fields change.
-    // dirtyAt / lastSuccessAt / folderPath writes used to reset delay every
-    // edit and after each backup, which could align schedule with onchange.
+    // lastSuccessAt / folderPath writes must not reset the periodic delay.
     const scheduleChanged =
       nextAb.enabled !== prevAb.enabled ||
       nextAb.intervalUnit !== prevAb.intervalUnit ||
@@ -253,7 +247,6 @@ async function setTagCatalog(tags) {
       .filter(Boolean)
   )].slice(0, Build?.LIMITS?.MAX_TAG_CATALOG || 2000);
   await chrome.storage.local.set({ [TAG_CATALOG_KEY]: cleaned });
-  await markAutoBackupDirty();
   return cleaned;
 }
 

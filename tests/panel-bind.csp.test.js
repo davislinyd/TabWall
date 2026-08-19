@@ -65,7 +65,6 @@ test('panel bind accessors return and mutate real values without eval', () => {
     autoBackup: {
       enabled: false,
       mode: 'lite',
-      onChange: true,
       intervalUnit: 'hour',
       intervalValue: 24,
       maxKeep: 5,
@@ -73,7 +72,6 @@ test('panel bind accessors return and mutate real values without eval', () => {
       folderPath: '',
       lastSuccessAt: 0,
       lastError: '',
-      dirtyAt: 0,
     },
   };
   let tCalls = 0;
@@ -98,7 +96,6 @@ test('panel bind accessors return and mutate real values without eval', () => {
       return {
         enabled: false,
         mode: 'lite',
-        onChange: true,
         intervalUnit: 'hour',
         intervalValue: 24,
         maxKeep: 5,
@@ -106,7 +103,6 @@ test('panel bind accessors return and mutate real values without eval', () => {
         folderPath: '',
         lastSuccessAt: 0,
         lastError: '',
-        dirtyAt: 0,
       };
     },
   });
