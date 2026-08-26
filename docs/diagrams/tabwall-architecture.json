@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TabWall MV3 本機優先架構",
+    "output": "docs/diagrams/tabwall-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/davislinyd/TabWall",
+      "revision": "e4e8dce1927d478437759d235702603ebcf7e054"
+    },
+    "viewBox": [1320, 720],
+    "views": [
+      {
+        "id": "entrypoints",
+        "label": "入口與互動面",
+        "focus": ["user-browser", "popup", "park-ui", "content", "worker"],
+        "note": "從 Chrome action、Canvas 與頁面 content script 進入 Extension Runtime。"
+      },
+      {
+        "id": "local-state",
+        "label": "狀態與還原",
+        "focus": ["park-ui", "worker", "runtime", "chrome-api", "local-storage", "media-db"],
+        "note": "追蹤項目、布局、媒體與 Chrome Tab／Group 還原的本機資料路徑。"
+      },
+      {
+        "id": "isolation",
+        "label": "隔離與可選 AI",
+        "focus": ["content", "sandbox", "runtime", "llama"],
+        "note": "頁面 Sticker 與 Web／code note 走隔離 sandbox；AI 僅在使用者啟用 localhost bridge 時離開 extension。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user-browser",
+      "type": "external",
+      "label": "使用者與瀏覽器頁面",
+      "sublabel": "active tabs · shortcuts",
+      "pos": [42, 100],
+      "size": [170, 70]
+    },
+    {
+      "id": "popup",
+      "type": "frontend",
+      "label": "Popup action",
+      "sublabel": "popup.html · popup.js",
+      "pos": [260, 100],
+      "size": [190, 70],
+      "sources": [
+        { "path": "manifest.json", "label": "action" },
+        { "path": "popup.html" },
+        { "path": "popup.js" }
+      ]
+    },
+    {
+      "id": "park-ui",
+      "type": "frontend",
+      "label": "Canvas workspace",
+      "sublabel": "park.html · park.js · Canvas modules",
+      "pos": [260, 300],
+      "size": [210, 76],
+      "tag": "list + spatial canvas",
+      "sources": [
+        { "path": "park.html" },
+        { "path": "park.js" },
+        { "path": "canvasStore.js" }
+      ]
+    },
+    {
+      "id": "content",
+      "type": "frontend",
+      "label": "Page content layer",
+      "sublabel": "content.js · pageAnnotate · quickSearch",
+      "pos": [260, 480],
+      "size": [210, 76],
+      "tag": "page overlay + annotations",
+      "sources": [
+        { "path": "content.js" },
+        { "path": "pageAnnotate.js" },
+        { "path": "quickSearch.js" }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "MV3 service worker",
+      "sublabel": "background.js · messages + alarms",
+      "pos": [555, 300],
+      "size": [220, 82],
+      "tag": "single runtime boundary",
+      "sources": [
+        { "path": "background.js" },
+        { "path": "bgNormalize.js" },
+        { "path": "bgRestore.js" }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Domain modules",
+      "sublabel": "backup · layout · AI · reminders",
+      "pos": [830, 300],
+      "size": [220, 82],
+      "sources": [
+        { "path": "bgBackup.js" },
+        { "path": "bgLayout.js" },
+        { "path": "bgAi.js" }
+      ]
+    },
+    {
+      "id": "chrome-api",
+      "type": "external",
+      "label": "Chrome APIs",
+      "sublabel": "tabs · tabGroups · alarms",
+      "pos": [1090, 100],
+      "size": [200, 72],
+      "tag": "MV3 permissions",
+      "sources": [
+        { "path": "manifest.json", "label": "permissions" }
+      ]
+    },
+    {
+      "id": "local-storage",
+      "type": "database",
+      "label": "Extension local state",
+      "sublabel": "chrome.storage.local",
+      "pos": [1090, 300],
+      "size": [200, 82],
+      "sources": [
+        { "path": "canvasStore.js" },
+        { "path": "bgBackup.js" }
+      ]
+    },
+    {
+      "id": "media-db",
+      "type": "database",
+      "label": "IndexedDB media",
+      "sublabel": "thumbs · ink · attachments",
+      "pos": [1090, 480],
+      "size": [200, 72],
+      "sources": [
+        { "path": "mediaDb.js" },
+        { "path": "noteMedia.js" }
+      ]
+    },
+    {
+      "id": "sandbox",
+      "type": "security",
+      "label": "Isolated note sandbox",
+      "sublabel": "Web Sticker · code note",
+      "pos": [555, 560],
+      "size": [220, 76],
+      "tag": "no extension API / network",
+      "sources": [
+        { "path": "noteCodeSandbox.html" },
+        { "path": "pageStickerEditor.html" },
+        { "path": "pageStickerEditor.js" }
+      ]
+    },
+    {
+      "id": "llama",
+      "type": "external",
+      "label": "Optional local AI",
+      "sublabel": "llama-server · OpenAI-compatible",
+      "pos": [830, 560],
+      "size": [220, 76],
+      "tag": "localhost bridge only",
+      "sources": [
+        { "path": "bgAi.js" },
+        { "path": "README.md", "label": "local AI" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Chromium Manifest V3 extension",
+      "wraps": ["popup", "park-ui", "content", "worker", "runtime"],
+      "pad": 24
+    },
+    {
+      "kind": "security-group",
+      "label": "Sandbox execution boundary",
+      "wraps": ["sandbox"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Device-local persistence",
+      "wraps": ["local-storage", "media-db"],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    { "id": "user-popup", "from": "user-browser", "to": "popup", "variant": "emphasis" },
+    { "id": "popup-worker", "from": "popup", "to": "worker", "label": "runtime message", "variant": "emphasis" },
+    { "id": "park-worker", "from": "park-ui", "to": "worker", "variant": "emphasis" },
+    { "id": "content-worker", "from": "content", "to": "worker", "label": "annotate", "variant": "dashed" },
+    { "id": "worker-runtime", "from": "worker", "to": "runtime", "label": "dispatch", "variant": "emphasis" },
+    { "id": "runtime-chrome", "from": "runtime", "to": "chrome-api", "label": "tabs", "variant": "default" },
+    { "id": "runtime-state", "from": "runtime", "to": "local-storage", "variant": "default", "route": "orthogonal-h" },
+    { "id": "runtime-media", "from": "runtime", "to": "media-db", "label": "media", "variant": "dashed" },
+    { "id": "content-sandbox", "from": "content", "to": "sandbox", "label": "sandbox", "variant": "security" },
+    { "id": "runtime-ai", "from": "runtime", "to": "llama", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "MV3 entrypoints",
+      "items": [
+        "Popup, park.html, and content scripts share the service worker",
+        "Canvas and page surfaces stay separate from domain dispatch"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Local-first safety",
+      "items": [
+        "storage.local and IndexedDB keep state on the device",
+        "Sandboxed notes and optional localhost AI remain explicit boundaries"
+      ]
+    }
+  ]
+}

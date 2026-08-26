@@ -23,6 +23,8 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
+- [Interactive project architecture diagram (Archify)](docs/diagrams/tabwall-architecture.html) maps the MV3 entrypoints, service worker, domain modules, Chrome APIs, local persistence, sandbox, and optional localhost AI boundary.
+- [Interactive core workflow diagram (Archify)](docs/diagrams/tabwall-workflow.html) follows the main message loop from user action through local state and Canvas/list rendering, with the restore branch to Chrome APIs.
 - [Canvas / Sticker architecture diagram](docs/diagrams/canvas-sticker-flow.svg) maps page placement, the reverse source index, local storage, and the one-time initial viewport repair gate. The repair waits for card and viewport geometry, then leaves existing custom views untouched.
 
 ### Local AI agent
@@ -208,6 +210,8 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 - 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
+- [全專案互動式架構圖（Archify）](docs/diagrams/tabwall-architecture.html) 展示 MV3 入口、service worker、domain modules、Chrome API、本機儲存、sandbox 與可選 localhost AI 邊界。
+- [核心使用流程圖（Archify）](docs/diagrams/tabwall-workflow.html) 追蹤使用者操作經 message loop 寫入本機狀態並更新 Canvas／列表，以及通往 Chrome API 的還原分支。
 - [Canvas／Sticker 架構圖](docs/diagrams/canvas-sticker-flow.svg) 展示頁面 placement、來源反向索引、本機儲存與初始視角修正閘門；修正會等卡片與 viewport 尺寸就緒後才執行，且不覆寫既有自訂視角。
 
 ### 本機 AI agent

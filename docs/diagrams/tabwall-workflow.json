@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "TabWall 核心使用流程",
+    "output": "docs/diagrams/tabwall-workflow.html",
+    "quality_profile": "showcase",
+    "viewBox": [920, 590],
+    "views": [
+      {
+        "id": "save-and-render",
+        "label": "儲存與畫面更新",
+        "focus": ["user", "entry", "route", "dispatch", "persist", "render"],
+        "note": "從快捷鍵、Popup 或 Canvas 互動進入訊息路由，寫入本機狀態後更新畫面。"
+      },
+      {
+        "id": "restore",
+        "label": "還原分支",
+        "focus": ["entry", "route", "dispatch", "chrome"],
+        "note": "需要還原時，domain handler 轉呼叫 Chrome Tab／Group API。"
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "user-lane", "label": "使用者與 Chrome" },
+    { "id": "surface-lane", "label": "互動介面" },
+    { "id": "runtime-lane", "label": "Extension Runtime" },
+    { "id": "data-lane", "label": "本機資料" }
+  ],
+  "phases": [
+    { "id": "entry-phase", "label": "入口", "fromCol": 0, "toCol": 1 },
+    { "id": "route-phase", "label": "路由與處理", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "effect-phase", "label": "狀態與結果", "fromCol": 4, "toCol": 5 }
+  ],
+  "groups": [
+    { "id": "message-loop", "label": "Message loop", "lane": "runtime-lane", "fromCol": 2, "toCol": 3, "variant": "emphasis" }
+  ],
+  "mainPath": ["user", "entry", "route", "dispatch", "persist", "render"],
+  "nodes": [
+    { "id": "user", "lane": "user-lane", "col": 0, "type": "external", "label": "使用者操作", "sublabel": "快捷鍵／Popup" },
+    { "id": "entry", "lane": "surface-lane", "col": 1, "type": "frontend", "label": "介面入口", "sublabel": "Popup／Canvas／page" },
+    { "id": "route", "lane": "runtime-lane", "col": 2, "type": "backend", "label": "訊息路由", "sublabel": "background onMessage" },
+    { "id": "dispatch", "lane": "runtime-lane", "col": 3, "type": "backend", "label": "能力分派", "sublabel": "save／restore", "tag": "domain modules" },
+    { "id": "persist", "lane": "data-lane", "col": 4, "type": "database", "label": "本機狀態", "sublabel": "local state" },
+    { "id": "render", "lane": "surface-lane", "col": 5, "type": "frontend", "label": "畫面更新", "sublabel": "Canvas／list" },
+    { "id": "chrome", "lane": "user-lane", "col": 4, "type": "external", "label": "Chrome API", "sublabel": "tabs／groups" }
+  ],
+  "edges": [
+    { "id": "user-entry", "from": "user", "to": "entry", "role": "main", "variant": "emphasis" },
+    { "id": "entry-route", "from": "entry", "to": "route", "label": "runtime message", "role": "main", "variant": "emphasis" },
+    { "id": "route-dispatch", "from": "route", "to": "dispatch", "role": "main", "variant": "emphasis" },
+    { "id": "dispatch-persist", "from": "dispatch", "to": "persist", "label": "read／write", "role": "main", "variant": "emphasis" },
+    { "id": "persist-render", "from": "persist", "to": "render", "role": "main", "variant": "emphasis" },
+    { "id": "dispatch-chrome", "from": "dispatch", "to": "chrome", "label": "restore", "role": "branch", "variant": "default" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "入口與資料",
+      "items": [
+        "Popup／Canvas／page → message loop → local state"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "延伸路徑",
+      "items": [
+        "restore → tabs／tabGroups；Sticker sandbox／AI 見架構圖"
+      ]
+    }
+  ]
+}
