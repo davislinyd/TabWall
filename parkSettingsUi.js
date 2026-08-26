@@ -8,6 +8,7 @@
 
   /** @type {Record<string, any>|null} */
   let env = null;
+  let webhookUiBound = false;
 
   function bind(next) {
     if (!next || typeof next !== 'object') return;
@@ -250,6 +251,9 @@
     merged.sortBy = env.normalizeSortBy(merged.sortBy);
     // Local shortcut settings were removed; discard the legacy field on the next write.
     delete merged.shortcuts;
+    merged.webhookProfiles = env.Webhook?.normalizeProfiles
+      ? env.Webhook.normalizeProfiles(merged.webhookProfiles)
+      : [];
     merged.autoBackup = normalizeAutoBackup({
       ...env.DEFAULT_AUTO_BACKUP,
       ...(merged.autoBackup || {}),
@@ -290,6 +294,9 @@
     }
     if (patch.autoSaveMetadata) {
       patch.autoSaveMetadata = normalizeAutoSaveMetadata(patch.autoSaveMetadata);
+    }
+    if (patch.webhookProfiles && env.Webhook) {
+      patch.webhookProfiles = env.Webhook.normalizeProfiles(patch.webhookProfiles);
     }
     if (patch.ai) {
       patch.ai = normalizeAiSettings({ ...env.settings.ai, ...patch.ai });
@@ -525,12 +532,207 @@
       
     syncAutoBackupUi();
     syncAutoSaveMetadataUi();
+    syncWebhookProfilesUi();
       
     env.applyI18n();
     env.syncAiSettingsUi?.();
     refreshChromeCommandLabels();
     env.syncSearchRegexUi();
       
+  }
+
+  function webhookHeaderRowHtml(name = '', value = '') {
+    ensureBound('webhookHeaderRowHtml');
+
+    return `
+      <div class="webhook-header-row" data-webhook-header-row>
+        <input class="settings-input" type="text" data-webhook-header-name maxlength="256" value="${env.escapeAttr(name)}" placeholder="${env.escapeAttr(env.t('webhookHeaderNamePh'))}" autocomplete="off" spellcheck="false" />
+        <input class="settings-input" type="text" data-webhook-header-value maxlength="4096" value="${env.escapeAttr(value)}" placeholder="${env.escapeAttr(env.t('webhookHeaderValuePh'))}" autocomplete="off" spellcheck="false" />
+        <button type="button" class="btn webhook-header-delete" data-webhook-action="remove-header" title="${env.escapeAttr(env.t('webhookRemoveHeader'))}" aria-label="${env.escapeAttr(env.t('webhookRemoveHeader'))}">${env.iconSvg('delete')}</button>
+      </div>`;
+  }
+
+  function webhookProfileCardHtml(profile) {
+    ensureBound('webhookProfileCardHtml');
+
+    const headerRows = Object.entries(profile.headers || {})
+      .map(([name, value]) => webhookHeaderRowHtml(name, value))
+      .join('');
+    return `
+      <article class="webhook-profile-card" data-webhook-profile-id="${env.escapeAttr(profile.id)}">
+        <div class="webhook-profile-header">
+          <label class="webhook-profile-name">
+            <span>${env.escapeHtml(env.t('webhookProfileName'))}</span>
+            <input class="settings-input" type="text" data-webhook-profile-field="name" maxlength="128" value="${env.escapeAttr(profile.name)}" autocomplete="off" />
+          </label>
+          <button type="button" class="btn webhook-profile-delete" data-webhook-action="delete-profile" title="${env.escapeAttr(env.t('webhookDeleteProfile'))}" aria-label="${env.escapeAttr(env.t('webhookDeleteProfile'))}">${env.escapeHtml(env.t('delete'))}</button>
+        </div>
+        <label class="settings-stack-label">
+          <span>${env.escapeHtml(env.t('webhookUrl'))}</span>
+          <input class="settings-input" type="text" data-webhook-profile-field="url" maxlength="8192" value="${env.escapeAttr(profile.url)}" placeholder="https://…" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="webhook-header-heading">
+          <span>${env.escapeHtml(env.t('webhookHeaders'))}</span>
+          <button type="button" class="btn" data-webhook-action="add-header">${env.escapeHtml(env.t('webhookAddHeader'))}</button>
+        </div>
+        <div class="webhook-header-list" data-webhook-header-list>${headerRows}</div>
+        <label class="settings-stack-label">
+          <span>${env.escapeHtml(env.t('webhookBody'))}</span>
+          <textarea class="settings-textarea webhook-body" rows="6" maxlength="65536" data-webhook-profile-field="body" spellcheck="false">${env.escapeHtml(profile.body)}</textarea>
+        </label>
+        <p class="hint webhook-template-hint">${env.escapeHtml(env.t('webhookTemplateHint'))}</p>
+        <div class="webhook-profile-actions">
+          <button type="button" class="btn primary" data-webhook-action="test-profile">${env.escapeHtml(env.t('webhookTest'))}</button>
+          <span class="hint webhook-profile-status" data-webhook-status role="status" aria-live="polite"></span>
+        </div>
+      </article>`;
+  }
+
+  function normalizeWebhookProfiles(raw) {
+    ensureBound('normalizeWebhookProfiles');
+    return env.Webhook?.normalizeProfiles ? env.Webhook.normalizeProfiles(raw) : [];
+  }
+
+  function readWebhookProfileCard(card) {
+    ensureBound('readWebhookProfileCard');
+
+    const headers = {};
+    card?.querySelectorAll('[data-webhook-header-row]').forEach((row) => {
+      const name = row.querySelector('[data-webhook-header-name]')?.value?.trim() || '';
+      if (!name) return;
+      headers[name] = row.querySelector('[data-webhook-header-value]')?.value || '';
+    });
+    return {
+      id: card?.dataset.webhookProfileId || '',
+      name: card?.querySelector('[data-webhook-profile-field="name"]')?.value || '',
+      url: card?.querySelector('[data-webhook-profile-field="url"]')?.value || '',
+      headers,
+      body: card?.querySelector('[data-webhook-profile-field="body"]')?.value || '',
+    };
+  }
+
+  function readWebhookProfilesFromDom() {
+    ensureBound('readWebhookProfilesFromDom');
+
+    const root = env.webhookProfilesEl;
+    if (!root) return normalizeWebhookProfiles(env.settings.webhookProfiles);
+    return normalizeWebhookProfiles([...root.querySelectorAll('[data-webhook-profile-id]')]
+      .map((card) => readWebhookProfileCard(card)));
+  }
+
+  async function persistWebhookProfilesFromDom() {
+    ensureBound('persistWebhookProfilesFromDom');
+
+    const profiles = readWebhookProfilesFromDom();
+    env.settings.webhookProfiles = profiles;
+    return saveSettings({ webhookProfiles: profiles });
+  }
+
+  function renderWebhookProfiles() {
+    ensureBound('renderWebhookProfiles');
+
+    const root = env.webhookProfilesEl;
+    if (!root) return;
+    const profiles = normalizeWebhookProfiles(env.settings.webhookProfiles);
+    env.settings.webhookProfiles = profiles;
+    root.innerHTML = profiles.length
+      ? profiles.map(webhookProfileCardHtml).join('')
+      : `<div class="webhook-profile-empty">${env.escapeHtml(env.t('webhookEmpty'))}</div>`;
+  }
+
+  function syncWebhookProfilesUi() {
+    ensureBound('syncWebhookProfilesUi');
+
+    renderWebhookProfiles();
+  }
+
+  function setWebhookStatus(card, message = '', isError = false) {
+    const status = card?.querySelector('[data-webhook-status]');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('error', isError);
+  }
+
+  function webhookTestResultText(result) {
+    ensureBound('webhookTestResultText');
+
+    if (result?.ok) {
+      const status = result.status ? ` (${result.status})` : '';
+      const preview = result.responsePreview ? ` — ${result.responsePreview}` : '';
+      return `${env.t('webhookTestSuccess')}${status}${preview}`;
+    }
+    const status = result?.status ? ` (${result.status})` : '';
+    const error = result?.error ? `: ${result.error}` : '';
+    const preview = result?.responsePreview ? ` — ${result.responsePreview}` : '';
+    return `${env.t('webhookTestFailed')}${status}${error}${preview}`;
+  }
+
+  async function testWebhookProfileCard(card) {
+    ensureBound('testWebhookProfileCard');
+
+    const profile = readWebhookProfileCard(card);
+    const button = card?.querySelector('[data-webhook-action="test-profile"]');
+    if (button) button.disabled = true;
+    setWebhookStatus(card, env.t('webhookTesting'));
+    try {
+      const result = await env.sendMessage({ type: 'TEST_WEBHOOK_PROFILE', profile });
+      setWebhookStatus(card, webhookTestResultText(result), !result?.ok);
+    } catch (err) {
+      setWebhookStatus(card, `${env.t('webhookTestFailed')}: ${String(err?.message || err)}`, true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function addWebhookProfile() {
+    ensureBound('addWebhookProfile');
+
+    const profiles = normalizeWebhookProfiles(env.settings.webhookProfiles);
+    if (profiles.length >= (env.Webhook?.MAX_PROFILES || 20)) return;
+    profiles.push(env.Webhook.normalizeProfile({ name: env.t('webhookNewProfile') }));
+    env.settings.webhookProfiles = profiles;
+    await saveSettings({ webhookProfiles: profiles });
+    renderWebhookProfiles();
+    env.webhookProfilesEl?.querySelector('[data-webhook-profile-field="name"]')?.focus();
+  }
+
+  function initWebhookProfilesUi() {
+    ensureBound('initWebhookProfilesUi');
+    if (webhookUiBound) return;
+    webhookUiBound = true;
+    env.webhookAddProfileBtn?.addEventListener('click', () => {
+      addWebhookProfile().catch((err) => env.uiLog('error', 'webhook', 'add profile failed', err?.message || err));
+    });
+    env.webhookProfilesEl?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!target?.matches?.('[data-webhook-profile-field], [data-webhook-header-name], [data-webhook-header-value]')) return;
+      persistWebhookProfilesFromDom().catch((err) => env.uiLog('error', 'webhook', 'save profile failed', err?.message || err));
+    });
+    env.webhookProfilesEl?.addEventListener('click', (event) => {
+      const action = event.target.closest?.('[data-webhook-action]');
+      if (!action) return;
+      const card = action.closest('[data-webhook-profile-id]');
+      const kind = action.dataset.webhookAction;
+      if (kind === 'add-header' && card) {
+        const list = card.querySelector('[data-webhook-header-list]');
+        if (!list || list.querySelectorAll('[data-webhook-header-row]').length >= (env.Webhook?.MAX_HEADERS || 50)) return;
+        list.insertAdjacentHTML('beforeend', webhookHeaderRowHtml());
+        list.lastElementChild?.querySelector('[data-webhook-header-name]')?.focus();
+      } else if (kind === 'remove-header' && card) {
+        action.closest('[data-webhook-header-row]')?.remove();
+        persistWebhookProfilesFromDom().catch((err) => env.uiLog('error', 'webhook', 'remove header failed', err?.message || err));
+      } else if (kind === 'delete-profile' && card) {
+        if (!window.confirm(env.t('webhookDeleteConfirm'))) return;
+        const id = card.dataset.webhookProfileId;
+        env.settings.webhookProfiles = normalizeWebhookProfiles(env.settings.webhookProfiles)
+          .filter((profile) => profile.id !== id);
+        saveSettings({ webhookProfiles: env.settings.webhookProfiles })
+          .then(() => renderWebhookProfiles())
+          .catch((err) => env.uiLog('error', 'webhook', 'delete profile failed', err?.message || err));
+      } else if (kind === 'test-profile' && card) {
+        testWebhookProfileCard(card).catch((err) => setWebhookStatus(card, String(err?.message || err), true));
+      }
+    });
   }
 
   function autoBackupErrorText(code, detail) {
@@ -893,6 +1095,7 @@
       
     syncSettingsUi();
     initAutoSaveMetadataUi();
+    initWebhookProfilesUi();
       
     try {
       env.versionBadge.textContent = `v${chrome.runtime.getManifest().version}`;
@@ -1064,6 +1267,7 @@
           await saveSettings({ locale: input.value });
           env.applyI18n();
           syncViewModeButton(env.settings.viewMode);
+          renderWebhookProfiles();
           env.renderGrid();
         }
       });
@@ -1136,7 +1340,7 @@
   function applySettingsSection(section = 'general') {
     ensureBound('applySettingsSection');
 
-    const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'ai', 'shortcuts', 'diagnostic']);
+    const allowed = new Set(['general', 'automation', 'canvas', 'display', 'backup', 'ai', 'webhook', 'shortcuts', 'diagnostic']);
     env.settingsSection = allowed.has(section) ? section : 'general';
     env.settingsEl?.querySelectorAll('.settings-block[data-settings-section]').forEach((block) => {
       block.hidden = block.dataset.settingsSection !== env.settingsSection;
@@ -1221,6 +1425,9 @@
     persistAutoSaveMetadata,
     commitAutoSaveMetadataTag,
     initAutoSaveMetadataUi,
+    renderWebhookProfiles,
+    syncWebhookProfilesUi,
+    initWebhookProfilesUi,
     refreshChromeCommandLabels,
     refreshChromeCommandLabelsOnFocus,
     openChromeShortcutsForApply,

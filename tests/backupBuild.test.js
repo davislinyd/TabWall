@@ -8,12 +8,16 @@ function loadBuild() {
     atob,
     btoa,
     Blob,
+    crypto: globalThis.crypto,
     TextDecoder,
     TextEncoder,
     URL,
     console,
   };
   sandbox.self = sandbox;
+  vm.runInNewContext(fs.readFileSync(new URL('../webhookCore.js', import.meta.url), 'utf8'), sandbox, {
+    filename: 'webhookCore.js',
+  });
   vm.runInNewContext(fs.readFileSync(new URL('../backupBuild.js', import.meta.url), 'utf8'), sandbox, {
     filename: 'backupBuild.js',
   });
@@ -375,6 +379,32 @@ test('backup preserves valid top-level reminders and rejects nested reminder sco
     Build.validateBackup(sampleBackup([{ ...group, reminder: undefined }])).error,
     'invalid_reminder_scope'
   );
+});
+
+test('lite, full, and partial backups exclude webhook profiles', async () => {
+  const backup = sampleBackup([sampleItem()]);
+  backup.settings = {
+    locale: 'zh',
+    webhookProfiles: [{
+      id: 'secret',
+      name: 'Private endpoint',
+      url: 'https://hooks.example.test/private',
+      headers: { Authorization: 'Bearer should-not-export' },
+      body: '{{json}}',
+    }],
+  };
+
+  const lite = JSON.parse(await Build.buildLiteBlob(backup).blob.text());
+  assert.equal(Object.prototype.hasOwnProperty.call(lite.settings, 'webhookProfiles'), false);
+  assert.equal(lite.settings.locale, 'zh');
+
+  const partial = JSON.parse(await Build.buildLiteBlob(backup, { partial: true }).blob.text());
+  assert.equal(Object.prototype.hasOwnProperty.call(partial.settings, 'webhookProfiles'), false);
+
+  const full = Build.buildFullZipBlob(backup, { partial: true });
+  const files = Build.unzipStore(new Uint8Array(await full.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  assert.equal(Object.prototype.hasOwnProperty.call(metadata.settings, 'webhookProfiles'), false);
 });
 
 test('backup preserves optional canvas layout and validates its bounds', async () => {

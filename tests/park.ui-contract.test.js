@@ -15,6 +15,8 @@ const WORKSPACE_UI_SOURCE = fs.readFileSync(new URL('../parkWorkspaceUi.js', imp
 const REMINDER_UI_SOURCE = fs.readFileSync(new URL('../parkReminderUi.js', import.meta.url), 'utf8');
 const APP_HELPERS_SOURCE = fs.readFileSync(new URL('../parkAppHelpers.js', import.meta.url), 'utf8');
 const I18N_SOURCE = fs.readFileSync(new URL('../parkI18n.js', import.meta.url), 'utf8');
+const WEBHOOK_CORE_SOURCE = fs.readFileSync(new URL('../webhookCore.js', import.meta.url), 'utf8');
+const REMINDER_BG_SOURCE = fs.readFileSync(new URL('../bgReminders.js', import.meta.url), 'utf8');
 const SETTINGS_UI_SOURCE = fs.readFileSync(new URL('../parkSettingsUi.js', import.meta.url), 'utf8');
 const IMPORT_EXPORT_SOURCE = fs.readFileSync(new URL('../parkImportExport.js', import.meta.url), 'utf8');
 const STICKER_UI_SOURCE = fs.readFileSync(new URL('../parkStickerUi.js', import.meta.url), 'utf8');
@@ -222,7 +224,7 @@ test('Card reminders expose the shared panel, editor, and card actions', () => {
   for (const id of [
     'remindersBtn', 'reminderCount', 'remindersBox', 'remindersList', 'reminderModeOnce',
     'reminderModeInterval', 'reminderAt', 'reminderIntervalValue', 'reminderIntervalUnit',
-    'reminderMessage', 'reminderSaveBtn', 'reminderClearBtn',
+    'reminderMessage', 'reminderWebhookProfiles', 'reminderSaveBtn', 'reminderClearBtn',
   ]) {
     assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
   }
@@ -230,10 +232,40 @@ test('Card reminders expose the shared panel, editor, and card actions', () => {
   assert.match(PARK_SOURCE, /TabWallReminderUi/);
   assert.match(REMINDER_UI_SOURCE, /SET_REMINDER/);
   assert.match(REMINDER_UI_SOURCE, /CLEAR_REMINDER/);
+  assert.match(REMINDER_UI_SOURCE, /webhookProfileIds/);
+  assert.match(REMINDER_UI_SOURCE, /data-reminder-webhook-profile/);
   assert.match(LIST_UI_SOURCE, /reminder-btn/);
   assert.match(CANVAS_RENDER_SOURCE, /action: 'reminder'/);
   assert.match(CANVAS_IX_SOURCE, /action === 'reminder'/);
   assert.match(CSS_SOURCE, /#remindersBox/);
+});
+
+test('Webhook profiles expose settings CRUD, reminder multi-select, and safe test wiring', () => {
+  for (const id of ['webhookProfiles', 'webhookAddProfileBtn']) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  assert.match(HTML_MARKUP, /data-settings-section="webhook"[^>]*data-i18n="settingsWebhook"/);
+  assert.match(HTML_MARKUP, /<script src="webhookCore\.js"><\/script>/);
+  assert.match(PARK_SOURCE, /TabWallWebhookCore/);
+  assert.match(WEBHOOK_CORE_SOURCE, /REQUEST_TIMEOUT_MS = 15 \* 1000/);
+  assert.match(REMINDER_BG_SOURCE, /credentials: 'omit'/);
+  assert.match(REMINDER_BG_SOURCE, /Promise\.allSettled/);
+  assert.match(WEBHOOK_CORE_SOURCE, /function buildContext\(/);
+  assert.match(WEBHOOK_CORE_SOURCE, /function renderBodyTemplate\(/);
+  assert.match(WEBHOOK_CORE_SOURCE, /key === 'json'/);
+  assert.match(WEBHOOK_CORE_SOURCE, /key === 'tags'/);
+  for (const action of ['add-header', 'remove-header', 'delete-profile', 'test-profile']) {
+    assert.match(SETTINGS_UI_SOURCE, new RegExp(`data-webhook-action=\\"${action}\\"`));
+  }
+  assert.match(SETTINGS_UI_SOURCE, /TEST_WEBHOOK_PROFILE/);
+  assert.match(SETTINGS_UI_SOURCE, /readWebhookProfileCard/);
+  assert.match(SETTINGS_UI_SOURCE, /saveSettings\(\{ webhookProfiles:/);
+  assert.match(SETTINGS_UI_SOURCE, /webhookProfiles/);
+  assert.match(HTML_SOURCE, /.webhook-profile-card/);
+  assert.match(CSS_SOURCE, /\.webhook-profile-list/);
+  for (const key of ['settingsWebhook', 'webhookSettingsTitle', 'webhookTest', 'reminderWebhooks']) {
+    assert.match(I18N_SOURCE, new RegExp(`${key}:`));
+  }
 });
 
 test('Search field scopes include reminder and domain modes via Tab', () => {

@@ -241,6 +241,9 @@ function normalizeSettings(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === 'object' ? raw : {}) };
   // Local shortcut settings were removed; discard the legacy field on the next write.
   delete merged.shortcuts;
+  merged.webhookProfiles = self.TabWallWebhookCore?.normalizeProfiles
+    ? self.TabWallWebhookCore.normalizeProfiles(merged.webhookProfiles)
+    : [];
   merged.autoBackup = normalizeAutoBackup({
     ...DEFAULT_AUTO_BACKUP,
     ...(merged.autoBackup || {}),
@@ -591,6 +594,9 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
   } else if (mode === 'full') {
     // Meta only — park hydrates from IDB to avoid huge extension messages
     media = 'idb';
+  }
+  if (self.TabWallWebhookCore?.withoutProfiles) {
+    settings = self.TabWallWebhookCore.withoutProfiles(settings);
   }
 
   const parkedTabs = items
@@ -1053,9 +1059,16 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
 
       const oldKeys = mediaKeysForItems(existing);
       const tagCatalog = Array.isArray(backup.tagCatalog) ? backup.tagCatalog : [];
-      const importedSettings = backup.settings && typeof backup.settings === 'object'
-        ? normalizeSettings(backup.settings)
-        : undefined;
+      let importedSettings;
+      if (backup.settings && typeof backup.settings === 'object') {
+        const currentSettings = await getSettings();
+        importedSettings = normalizeSettings({
+          ...backup.settings,
+          // Webhook profiles never come from backup files; keep the local
+          // profiles even when replacing the rest of the settings.
+          webhookProfiles: currentSettings.webhookProfiles,
+        });
+      }
       await setParkedItems(items, {
         tagCatalog,
         settings: importedSettings,

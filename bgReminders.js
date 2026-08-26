@@ -25,6 +25,90 @@ function normalizeReminderForStorage(raw) {
   return normalizeReminder(raw);
 }
 
+function webhookErrorText(error, fallback = 'webhook_failed') {
+  const text = String(error?.message || error || fallback).trim();
+  return text.slice(0, 400) || fallback;
+}
+
+async function postWebhookProfile(rawProfile, context) {
+  const core = self.TabWallWebhookCore;
+  if (!core?.validateProfile || !core?.renderBodyTemplate) {
+    return { ok: false, error: 'webhook_unavailable' };
+  }
+  const validated = core.validateProfile(rawProfile);
+  if (!validated.ok) return { ok: false, error: validated.error };
+  const profile = validated.profile;
+  if (typeof fetch !== 'function') return { ok: false, error: 'fetch_unavailable' };
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timeoutMs = Number(core.REQUEST_TIMEOUT_MS) || 15000;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const body = core.renderBodyTemplate(profile.body, context);
+  try {
+    const response = await fetch(profile.url, {
+      method: 'POST',
+      headers: profile.headers,
+      ...(body ? { body } : {}),
+      credentials: 'omit',
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+    let responsePreview = '';
+    try {
+      responsePreview = String(await response.text()).slice(0, 1000);
+    } catch {
+      responsePreview = '';
+    }
+    return {
+      ok: response.ok === true,
+      status: Number(response.status) || 0,
+      responsePreview,
+      ...(response.ok === true ? {} : { error: `http_${Number(response.status) || 0}` }),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: controller?.signal?.aborted ? 'webhook_timeout' : webhookErrorText(err),
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function sendReminderWebhooks(item, reminder) {
+  const core = self.TabWallWebhookCore;
+  const ids = core?.normalizeProfileIds
+    ? core.normalizeProfileIds(reminder?.webhookProfileIds)
+    : [];
+  if (!ids.length) return [];
+
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch (err) {
+    return ids.map((id) => ({ id, ok: false, error: webhookErrorText(err, 'settings_unavailable') }));
+  }
+  const profiles = new Map((settings.webhookProfiles || []).map((profile) => [profile.id, profile]));
+  const context = core.buildContext(item, reminder);
+  const settled = await Promise.allSettled(ids.map(async (id) => {
+    const profile = profiles.get(id);
+    if (!profile) return { id, ok: false, skipped: true, error: 'profile_not_found' };
+    const result = await postWebhookProfile(profile, context);
+    if (!result.ok) console.warn('[TabWall] reminder webhook failed:', id, result.error);
+    return { id, name: profile.name, ...result };
+  }));
+  return settled.map((entry, index) => entry.status === 'fulfilled'
+    ? entry.value
+    : { id: ids[index], ok: false, error: webhookErrorText(entry.reason) });
+}
+
+async function testWebhookProfile(rawProfile) {
+  const core = self.TabWallWebhookCore;
+  if (!core?.sampleContext) return { ok: false, error: 'webhook_unavailable' };
+  const context = core.sampleContext();
+  const result = await postWebhookProfile(rawProfile, context);
+  return { ...result, test: true };
+}
+
 async function listReminderItems(items = null) {
   const source = Array.isArray(items) ? items : await getParkedItems();
   return source
@@ -170,7 +254,8 @@ async function handleReminderAlarm(alarm) {
   items[index] = item;
   await setParkedItems(items);
   await syncReminderAlarmsForItems(items);
-  return { ok: true, notificationId: sent.id, item };
+  const webhooks = await sendReminderWebhooks(items[index], reminder);
+  return { ok: true, notificationId: sent.id, item, webhooks };
 }
 
 async function handleReminderNotificationClick(notificationId) {

@@ -11,6 +11,15 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.56.0 — 2026-08-27
+
+- 新增 Webhook reminder profiles：可自訂 HTTP／HTTPS URL、headers 與 body，提醒可同時選取多個 profile。
+- Reminder 到期時保留 Chrome notification；notification 成功後，各 profile 以固定 POST、15 秒 timeout 並行投遞，單一失敗不影響其它 profile、一次性清除或 Interval 重排。
+- 新增 body template 變數（含 `{{message}}`、`{{url}}`、`{{json}}`）與設定頁 Test；Test 使用目前表單內容與固定 sample context，不寫入設定。
+- Webhook profiles 僅保存在 `chrome.storage.local`；lite JSON、full ZIP 與 partial backup 都排除 profiles，匯入不覆蓋本機 profiles。
+- 更新 README、GitHub Pages 使用者手冊與隱私政策，新增提醒／Webhook sequence diagram（Archify）。
+- 重新產生 `dist/TabWall-2.56.0.zip`。
+
 ## 2.55.3 — 2026-08-27
 
 - 補充 Canvas／Sticker 的架構圖與 GitHub Pages／README 排錯說明，標示頁面 placement、來源反向索引、本機資料與初始視角修正路徑。

@@ -71,6 +71,7 @@ const DEFAULT_SETTINGS = {
   defaultViewMode: 'canvas',
   openWithSearchFocus: false,
   searchRegex: false,
+  webhookProfiles: [],
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
   autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
   canvasSnap: true,
@@ -91,6 +92,7 @@ const DEFAULT_SETTINGS = {
 const Build = self.TabWallBackupBuild;
 const CanvasStoreApi = self.TabWallCanvasStore;
 const NoteMedia = self.TabWallNoteMedia;
+const Webhook = self.TabWallWebhookCore;
 const SearchQuery = self.TabWallSearchQuery;
 const SearchUi = self.TabWallSearchUi;
 const Media = self.TabWallMediaDB;
@@ -403,6 +405,8 @@ const autoBackupStatusEl = document.getElementById('autoBackupStatus');
 const autoSaveMetadataEnabledEl = document.getElementById('autoSaveMetadataEnabled');
 const autoSaveMetadataRulesEl = document.getElementById('autoSaveMetadataRules');
 const autoSaveMetadataAddRuleBtn = document.getElementById('autoSaveMetadataAddRuleBtn');
+const webhookProfilesEl = document.getElementById('webhookProfiles');
+const webhookAddProfileBtn = document.getElementById('webhookAddProfileBtn');
 const selectModeBtn = document.getElementById('selectModeBtn');
 const batchBar = document.getElementById('batchBar');
 const batchCount = document.getElementById('batchCount');
@@ -1107,6 +1111,9 @@ function bindPanelModules() {
     "viewModeLabel": () => viewModeLabel,
     "viewModeListIcon": () => viewModeListIcon,
     "Wallpaper": () => Wallpaper,
+    "Webhook": () => Webhook,
+    "webhookAddProfileBtn": () => webhookAddProfileBtn,
+    "webhookProfilesEl": () => webhookProfilesEl,
     "withUiActionLock": () => withUiActionLock,
   };
   const rw = {
@@ -3412,6 +3419,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     settings.cardCols = clampCols(settings.cardCols);
     settings.searchRegex = Boolean(settings.searchRegex);
     settings.canvasSnap = settings.canvasSnap !== false;
+    settings.webhookProfiles = Webhook?.normalizeProfiles
+      ? Webhook.normalizeProfiles(settings.webhookProfiles)
+      : [];
     settings.autoBackup = normalizeAutoBackup({
       ...DEFAULT_AUTO_BACKUP,
       ...(settings.autoBackup || {}),

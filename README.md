@@ -19,12 +19,14 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 ### Architecture
 
 - Metadata such as URLs, titles, notes, tags, live page annotations, and order is stored in `chrome.storage.local`.
+- Webhook profiles and each reminder's selected profile IDs are stored in `chrome.storage.local`; profile URLs, headers, and bodies are excluded from JSON, ZIP, and partial backups.
 - Thumbnails, full snapshots, Sticker Note attachments, page-drawing ink, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
 - [Interactive project architecture diagram (Archify)](docs/diagrams/tabwall-architecture.html) maps the MV3 entrypoints, service worker, domain modules, Chrome APIs, local persistence, sandbox, and optional localhost AI boundary.
 - [Interactive core workflow diagram (Archify)](docs/diagrams/tabwall-workflow.html) follows the main message loop from user action through local state and Canvas/list rendering, with the restore branch to Chrome APIs.
+- [Reminder and Webhook sequence diagram (Archify)](docs/diagrams/webhook-reminder-sequence.html) follows reminder persistence, Chrome notification delivery, parallel profile POSTs, best-effort isolation, and draft-profile testing.
 - [Canvas / Sticker architecture diagram](docs/diagrams/canvas-sticker-flow.svg) maps page placement, the reverse source index, local storage, and the one-time initial viewport repair gate. The repair waits for card and viewport geometry, then leaves existing custom views untouched.
 
 ### Local AI agent
@@ -131,6 +133,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
 - **Custom display titles:** assign a custom display title to cards in the edit box. The card prominently displays the custom title while retaining the original title as a subtitle. Plain search and Option+/ search match both display and original titles.
 - **Card reminders:** set one-time or interval reminders on top-level tabs, groups, image cards, and Sticker Notes. Reminders use browser notifications, are included in backups, and can be reviewed from the bell panel; blank notification text falls back to the card title.
+- **Webhook reminders:** Settings → Webhook manages up to 20 local profiles with an HTTP(S) URL, up to 50 headers, and a body up to 64 KiB. A reminder can select multiple profiles; each sends a fixed `POST` with a 15-second timeout and `credentials: omit`, while one failure does not stop the Chrome notification, other profiles, or interval rescheduling. Body templates support `{{id}}`, `{{title}}`, `{{displayTitle}}`, `{{url}}`, `{{message}}`, `{{mode}}`, `{{nextAt}}`, `{{nextAtIso}}`, `{{tags}}`, and `{{json}}`. The Test button uses the current unsaved profile form and never writes settings; profiles are excluded from backups.
 - **Sticker Notes:** create notes on the Canvas or directly on a page through Option/Alt+D → Sticker. The page placement and Canvas position are independent, so one top-level Note can appear on multiple URLs. Canvas shows the source pages for each placed Note and opens them in new tabs; the Canvas editor also shows a clickable source list. Locked Notes hide that source information. Page Stickers support multiple cards, header drag, independent resize (160–640 × 120–560), title double-click collapse/expand, pencil-button or body double-click editing, reminder badges, and removing only the current page placement. Notes support title, tags, Markdown or Web mode, and up to 12 local image attachments. Web mode uses one complete HTML document textarea; include `<style>` and `<script>` in that document and press Preview/Run manually. Markdown and Web content stay separate. The editor and visible page Sticker use an isolated sandbox with no extension API, network access, popups, forms, or outer-page navigation; Canvas and list cards show only a static safe summary. Notes can join Stacks, but Stack notes cannot be page Stickers or reminders and are never restored as browser tabs.
 - Multi-selection and batch operations.
 - **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible. Right-click the empty canvas or a card for a custom context menu.
@@ -212,6 +215,7 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
 - [全專案互動式架構圖（Archify）](docs/diagrams/tabwall-architecture.html) 展示 MV3 入口、service worker、domain modules、Chrome API、本機儲存、sandbox 與可選 localhost AI 邊界。
 - [核心使用流程圖（Archify）](docs/diagrams/tabwall-workflow.html) 追蹤使用者操作經 message loop 寫入本機狀態並更新 Canvas／列表，以及通往 Chrome API 的還原分支。
+- [提醒與 Webhook sequence 圖（Archify）](docs/diagrams/webhook-reminder-sequence.html) 追蹤提醒保存、Chrome notification、複數 profile 並行 POST、失敗隔離與草稿測試。
 - [Canvas／Sticker 架構圖](docs/diagrams/canvas-sticker-flow.svg) 展示頁面 placement、來源反向索引、本機儲存與初始視角修正閘門；修正會等卡片與 viewport 尺寸就緒後才執行，且不覆寫既有自訂視角。
 
 ### 本機 AI agent
@@ -317,6 +321,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **卡片上鎖：** 可將分頁、群組、圖片卡、Sticker Note 或成員上鎖，以鎖頭遮罩隱藏縮圖與快照。解鎖狀態僅存在本次工作階段，重開分頁自動再鎖。支援 SHA-256 加鹽密碼保護或免密碼點擊解鎖；還原分頁不需解鎖。
 - **自訂顯示標題：** 在編輯盒中設定「顯示標題」，卡片主標題顯示自訂名稱，下方以小字保留原始標題；搜尋引擎與 Option+/ 全域搜尋同時支援搜尋顯示標題與原始標題。
 - **卡片提醒：** 可在頂層分頁、群組、圖片卡與 Sticker Note 設定一次性或 Interval 提醒，透過 browser notification 通知；提醒會包含在備份中，也可從頂端鈴鐺面板查詢。通知文字留空時會使用卡片標題。
+- **Webhook 提醒：** 設定 → Webhook 可管理最多 20 個只存在本機的 profile，每個 profile 可設定 HTTP／HTTPS URL、最多 50 列 headers 與 64 KiB body。提醒可同時勾選多個 profile；每個固定使用 `POST`、15 秒 timeout 與 `credentials: omit`，單一失敗不會阻止 Chrome notification、其它 profile 或 Interval 重排。Body 支援 `{{id}}`、`{{title}}`、`{{displayTitle}}`、`{{url}}`、`{{message}}`、`{{mode}}`、`{{nextAt}}`、`{{nextAtIso}}`、`{{tags}}`、`{{json}}`；Test 直接使用目前尚未儲存的表單內容，且不會寫入設定。Webhook profiles 不會進入備份檔。
 - **Sticker Note：** 可在 Canvas 建立，或在一般頁面按 Option／Alt+D → Sticker 後點擊位置建立。頁面 placement 與 Canvas 位置分開保存，同一頂層 Note 可放在多個 URL；Canvas 會列出該 Note 的來源網頁，點擊會在新分頁開啟；進入 Canvas 編輯器時也會顯示可點擊的來源清單。上鎖時隱藏來源資訊。頁面支援多張、標題列拖曳、獨立縮放（160–640 × 120–560）、標題雙擊收合／展開、鉛筆按鈕或 body 雙擊編輯、提醒 badge 與只移除目前頁面 placement。內容支援標題、標籤、Markdown 或 Web 模式，以及最多 12 張本機圖片附件；Web 模式使用一個完整 HTML 文件輸入框，可在其中放 `<style>` 與 `<script>`，按下「預覽／執行」才在隔離 sandbox 執行。Markdown 與 Web 內容分開保存。編輯器與可見的頁面 Sticker 都不能使用 extension API、網路、popup、form 或導覽外層頁面；Canvas／列表只顯示靜態安全摘要。note 可加入 Stack，但 Stack 內 note 不支援頁面 Sticker 或提醒，也不會還原成瀏覽器分頁。
 - 多選與批次操作。
 - **空間畫布：** 支援自由排列、平移、縮放、框選、點擊或拖曳 minimap 定位、吸附格線、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。空白畫布或卡片可右鍵開啟自訂選單。
@@ -366,7 +371,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 ### 檔案
 
 ```text
-manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js
+manifest.json   background.js   mediaDb.js   noteMedia.js   backupBuild.js   webhookCore.js
 content.js      popup.html      popup.js     park.html       park.js
 parkWallpaper.js
 icons/          scripts/pack.sh

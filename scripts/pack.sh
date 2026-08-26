@@ -36,6 +36,7 @@ zip -r "$OUT_ZIP" \
   aiPanel.js \
   mediaDb.js \
   backupBuild.js \
+  webhookCore.js \
   noteMedia.js \
   noteCodeSandbox.html \
   noteCodeSandbox.js \

@@ -14,12 +14,18 @@ function normalizeReminder(raw) {
   const nextAt = Number(raw.nextAt);
   if (!mode || !Number.isFinite(nextAt) || nextAt <= 0) return null;
   const message = safeText(raw.message, DATA_LIMITS.MAX_NOTE_LENGTH);
+  const webhookProfileIds = self.TabWallWebhookCore?.normalizeProfileIds
+    ? self.TabWallWebhookCore.normalizeProfileIds(raw.webhookProfileIds)
+    : [];
+  const withProfiles = (reminder) => webhookProfileIds.length
+    ? { ...reminder, webhookProfileIds }
+    : reminder;
   if (mode === 'interval') {
     const intervalMinutes = Number(raw.intervalMinutes);
     if (!Number.isInteger(intervalMinutes) || intervalMinutes < REMINDER_MIN_INTERVAL_MINUTES) return null;
-    return { mode, message, nextAt, intervalMinutes };
+    return withProfiles({ mode, message, nextAt, intervalMinutes });
   }
-  return { mode, message, nextAt };
+  return withProfiles({ mode, message, nextAt });
 }
 
 function storedReminder(item) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.55.3 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.56.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.55.3</span>
+      <span>使用者說明 · v2.56.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,10 +71,11 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.55.3</span><span lang="en">Version 2.55.3</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.56.0</span><span lang="en">Version 2.56.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 可設定為畫布</span><span lang="en">New Tab can be the canvas</span></span>
+          <span class="chip"><span lang="zh-Hant">提醒可呼叫 Webhook</span><span lang="en">Reminders can call webhooks</span></span>
         </div>
       </header>
       <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「AI」「提醒」「備份」「硬碟」「搜尋」或「快捷鍵」。</p>
@@ -82,11 +83,12 @@
       <section class="chapter" id="diagrams">
         <h2 lang="zh-Hant">架構與流程圖</h2>
         <h2 lang="en">Architecture and workflow</h2>
-        <p lang="zh-Hant">這兩張 Archify 互動圖以目前專案的 MV3 manifest、service worker、content scripts、Canvas modules 與本機資料路徑為依據；可直接開啟 standalone HTML，使用深色／淺色、縮放與 guided views。</p>
-        <p lang="en">These two Archify diagrams reflect the current MV3 manifest, service worker, content scripts, Canvas modules, and local data paths. Open the standalone HTML files for light/dark themes, zoom, and guided views.</p>
+        <p lang="zh-Hant">這三張 Archify 互動圖以目前專案的 MV3 manifest、service worker、content scripts、Canvas modules、本機資料路徑與提醒 Webhook 投遞為依據；可直接開啟 standalone HTML，使用深色／淺色、縮放與 guided views。</p>
+        <p lang="en">These three Archify diagrams reflect the current MV3 manifest, service worker, content scripts, Canvas modules, local data paths, and reminder Webhook delivery. Open the standalone HTML files for light/dark themes, zoom, and guided views.</p>
         <ul>
           <li><a href="diagrams/tabwall-architecture.html"><span lang="zh-Hant">全專案互動式架構圖</span><span lang="en">Interactive project architecture</span></a></li>
           <li><a href="diagrams/tabwall-workflow.html"><span lang="zh-Hant">核心使用流程圖</span><span lang="en">Interactive core workflow</span></a></li>
+          <li><a href="diagrams/webhook-reminder-sequence.html"><span lang="zh-Hant">提醒與 Webhook sequence 圖</span><span lang="en">Reminder and Webhook sequence</span></a></li>
         </ul>
       </section>
 
@@ -470,6 +472,28 @@ https://wiki.example.com
             </ul>
           </article>
         </div>
+        <h3 lang="zh-Hant">Webhook 提醒</h3>
+        <h3 lang="en">Webhook reminders</h3>
+        <p lang="zh-Hant">提醒到期時，TabWall 會先建立 Chrome notification；成功後再對提醒所選的每個 Webhook profile 並行發送固定的 <code>POST</code>。每個 profile 最多等待 15 秒、且不帶 cookies；單一 endpoint 失敗不會阻止其他 profile、Chrome notification 或 Interval 重排。</p>
+        <p lang="en">When a reminder fires, TabWall creates the Chrome notification first, then sends a fixed <code>POST</code> to every selected Webhook profile in parallel. Each profile waits at most 15 seconds and sends no cookies; one endpoint failure does not stop other profiles, the Chrome notification, or interval rescheduling.</p>
+        <ol class="steps">
+          <li lang="zh-Hant">到設定 → Webhook 新增 profile，填入 HTTP／HTTPS URL；需要時新增 <code>Authorization</code>、<code>Content-Type</code> 等 headers。</li>
+          <li lang="en">Open Settings → Webhook and add a profile with an HTTP(S) URL. Add headers such as <code>Authorization</code> or <code>Content-Type</code> when the endpoint requires them.</li>
+          <li lang="zh-Hant">Body 是自由格式文字。JSON API 可使用 <code>"content": "{{message}}"</code>；其它 API 建立另一個 profile，依對方格式填寫 body 並自行設定 <code>Content-Type</code>。</li>
+          <li lang="en">The body is free-form text. For a JSON API, use <code>"content": "{{message}}"</code>; create another profile for a different API shape, then set its body and <code>Content-Type</code> independently.</li>
+          <li lang="zh-Hant">在提醒 editor 勾選一個或多個 profile。設定頁的 Test 會使用目前表單內容與固定 sample context，回報 HTTP status／response preview，但不會先儲存或修改 profile。</li>
+          <li lang="en">In the reminder editor, select one or more profiles. Test uses the current form values and a fixed sample context, reports the HTTP status and response preview, and does not save or modify the profile first.</li>
+        </ol>
+        <pre><code>{
+  "tag": "text",
+  "text": { "content": "{{message}}" }
+}</code></pre>
+        <p lang="zh-Hant">可用模板變數：<code>{{id}}</code>、<code>{{title}}</code>、<code>{{displayTitle}}</code>、<code>{{url}}</code>、<code>{{message}}</code>、<code>{{mode}}</code>、<code>{{nextAt}}</code>、<code>{{nextAtIso}}</code>、<code>{{tags}}</code>、<code>{{json}}</code>。<code>{{json}}</code> 會產生完整提醒 context，可嵌入 JSON object，例如 <code>{"data": {{json}}}</code>。模板目前是直接文字替換；若將含雙引號或換行的通知文字放進 JSON string，請先確保 endpoint 可接受該內容。</p>
+        <p lang="en">Available template variables are <code>{{id}}</code>, <code>{{title}}</code>, <code>{{displayTitle}}</code>, <code>{{url}}</code>, <code>{{message}}</code>, <code>{{mode}}</code>, <code>{{nextAt}}</code>, <code>{{nextAtIso}}</code>, <code>{{tags}}</code>, and <code>{{json}}</code>. <code>{{json}}</code> produces the complete reminder context and can be embedded as a JSON object, for example <code>{"data": {{json}}}</code>. Templates currently use direct text replacement; if a notification may contain quotes or newlines inside a JSON string, make sure the endpoint can accept the resulting body.</p>
+        <div class="callout">
+          <p lang="zh-Hant">最多 20 個 profiles、每個最多 50 個 headers、body 上限 64 KiB。Profile 只存在 <code>chrome.storage.local</code>，不會寫入 lite JSON、full ZIP 或 partial backup；提醒若保留了不存在的 profile ID，投遞時會安全略過。</p>
+          <p lang="en">The limits are 20 profiles, 50 headers per profile, and a 64 KiB body. Profiles live only in <code>chrome.storage.local</code>; lite JSON, full ZIP, and partial backups omit them. A reminder may retain an unknown profile ID, which is safely skipped at delivery.</p>
+        </div>
         <div class="callout">
           <p lang="zh-Hant">提醒會隨卡片寫入精簡 JSON 與完整 ZIP 備份。Stack 時若選取項目含超過一個提醒，操作會被阻止；只有一個提醒時會移到新的 Stack 卡片，避免遺失。</p>
           <p lang="en">Reminders travel with cards in lite JSON and full ZIP backups. Stacking is blocked when more than one selected item has a reminder; with exactly one, the reminder moves to the new Stack card.</p>
@@ -719,6 +743,12 @@ https://wiki.example.com
               <td lang="en">Manual export / restore / append, plus automatic backups.</td>
             </tr>
             <tr>
+              <td lang="zh-Hant">Webhook</td>
+              <td lang="en">Webhook</td>
+              <td lang="zh-Hant">管理提醒用的 URL、headers、body 與測試；profile 只存在本機，不進入備份。</td>
+              <td lang="en">Manage reminder URLs, headers, bodies, and tests; profiles stay local and are excluded from backups.</td>
+            </tr>
+            <tr>
               <td lang="zh-Hant">快捷鍵</td>
               <td lang="en">Shortcuts</td>
               <td lang="zh-Hant">只讀顯示 Chrome 綁定；可開啟 Chrome 設定頁。不能在 TabWall 裡錄製熱鍵。</td>
@@ -828,6 +858,8 @@ https://wiki.example.com
           <li lang="en">URLs, titles, notes, tags, live-annotation metadata, and order live in <code>chrome.storage.local</code>.</li>
           <li lang="zh-Hant">提醒的模式、下一次時間、間隔與通知文字也存在 <code>chrome.storage.local</code>；瀏覽器通知只在本機排程與發送。</li>
           <li lang="en">Reminder mode, next time, interval, and notification text also live in <code>chrome.storage.local</code>; browser notifications are scheduled and delivered locally.</li>
+          <li lang="zh-Hant">Webhook profile 的 URL、headers 與 body 也只存在 <code>chrome.storage.local</code>。只有你選擇的提醒到期或按下 Test 時，提醒 context 才會依 profile 送到你指定的 endpoint；不會送到 TabWall 伺服器，且 request 不帶 cookies。</li>
+          <li lang="en">Webhook profile URLs, headers, and bodies also live only in <code>chrome.storage.local</code>. Reminder context is sent only to endpoints you choose when a selected reminder fires or you press Test; it is not sent to TabWall servers, and requests carry no cookies.</li>
           <li lang="zh-Hant">縮圖、快照、圖片卡、note 附件、頁面繪圖筆畫與自訂背景圖存在本機 IndexedDB。</li>
           <li lang="en">Thumbnails, snapshots, image cards, note attachments, page-drawing ink, and the custom wallpaper live in local IndexedDB.</li>
           <li lang="zh-Hant">只在你操作（含 Chrome 快捷鍵）時讀取目前分頁／群組來截圖與儲存。</li>
@@ -856,6 +888,10 @@ https://wiki.example.com
           <li lang="zh-Hant">Sticker Note 不能還原成分頁；<code>file:</code> 一類 stored-only 項目也不可直接還原。</li>
           <li lang="en">Sticker Notes cannot restore as tabs. Stored-only items such as <code>file:</code> URLs also cannot restore directly.</li>
         </ul>
+        <h3 lang="zh-Hant">Webhook 限制</h3>
+        <h3 lang="en">Webhook limitations</h3>
+        <p lang="zh-Hant">Webhook 一律使用 <code>POST</code>，不支援 GET／PUT、cookie 或內建的動態簽名／HMAC。需要簽名、轉換格式或 URL encoding 的 API，請在中介 endpoint 做 adapter，再把 adapter URL 設成 profile；headers 與 body 仍可依各 endpoint 分別設定。</p>
+        <p lang="en">Webhooks always use <code>POST</code>; GET / PUT, cookies, and built-in dynamic signing / HMAC are not supported. For an API that needs signing, payload transformation, or URL encoding, put an adapter endpoint in between and use its URL as the profile URL. Headers and bodies can still differ per endpoint.</p>
         <h3 lang="zh-Hant">快捷鍵沒反應</h3>
         <h3 lang="en">Shortcuts do nothing</h3>
         <ol>
@@ -985,8 +1021,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.55.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.55.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.56.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.56.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

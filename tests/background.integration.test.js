@@ -7,8 +7,9 @@ import vm from 'node:vm';
 const BUILD_SOURCE = fs.readFileSync(new URL('../backupBuild.js', import.meta.url), 'utf8');
 const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
+const PACK_SOURCE = fs.readFileSync(new URL('../scripts/pack.sh', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js'].map((name) => [
+  ['webhookCore.js', 'bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -281,6 +282,8 @@ function createRuntime() {
     alarmStore,
     notificationCalls,
     tabMessages: [],
+    fetchCalls: [],
+    fetchImpl: null,
     parkTabs: [],
     currentTab: null,
     downloadItems: [],
@@ -404,6 +407,7 @@ function createRuntime() {
     TextDecoder,
     atob,
     btoa,
+    AbortController,
     console,
     setTimeout(callback, delay, ...args) {
       const timer = testSetTimeout(callback, delay, ...args);
@@ -411,7 +415,11 @@ function createRuntime() {
       return timer;
     },
     clearTimeout: testClearTimeout,
-    fetch,
+    fetch: (...args) => {
+      runtime.fetchCalls.push(args);
+      if (runtime.fetchImpl) return runtime.fetchImpl(...args);
+      return Promise.reject(new Error('fetch_not_stubbed'));
+    },
     OffscreenCanvas: class {
       constructor(width, height) {
         this.width = width;
@@ -445,6 +453,7 @@ function createRuntime() {
   const ready = new Promise((resolve) => setTimeout(resolve, 0));
   return {
     api: sandbox.TabWallBackgroundTest,
+    core: sandbox.TabWallWebhookCore,
     chrome,
     Build: sandbox.TabWallBackupBuild,
     store,
@@ -517,7 +526,10 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.55.3');
+  assert.equal(MANIFEST.version, '2.56.0');
+  assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
+  assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
+  assert.match(PACK_SOURCE, /\bwebhookCore\.js/);
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -1411,6 +1423,14 @@ function dispatchMessage(runtime, message, sender = {}) {
   });
 }
 
+function webhookResponse(status = 200, body = '') {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() { return body; },
+  };
+}
+
 test('card reminders create, list, clear, and sync one-shot alarms', async () => {
   const runtime = createRuntime();
   await runtime.ready;
@@ -1510,6 +1530,146 @@ test('one-shot reminder notification clears the reminder and interval reschedule
   assert.ok(intervalRuntime.alarmStore.get(`tabwall-reminder:${ITEM_ID}`).when >= stored.reminder.nextAt);
 });
 
+test('reminder webhook profiles send parallel POST requests and preserve one-shot lifecycle', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    webhookProfiles: [
+      {
+        id: 'first',
+        name: 'First',
+        url: 'https://first.example.test/hook',
+        headers: { 'X-Profile': 'one' },
+        body: '{"id":"{{id}}","title":"{{title}}","display":"{{displayTitle}}","tags":"{{tags}}"}',
+      },
+      {
+        id: 'second',
+        name: 'Second',
+        url: 'https://second.example.test/hook',
+        headers: { 'X-Profile': 'two' },
+        body: '{{message}}|{{mode}}|{{nextAtIso}}',
+      },
+    ],
+  };
+  const started = [];
+  const resolvers = [];
+  let resolveStarted;
+  const allStarted = new Promise((resolve) => { resolveStarted = resolve; });
+  runtime.runtime.fetchImpl = (url, options) => {
+    started.push({ url, options });
+    if (started.length === 2) resolveStarted();
+    return new Promise((resolve) => resolvers.push(() => resolve(webhookResponse(204, 'accepted'))));
+  };
+  await runtime.api.setParkedItems([{
+    ...tab(ITEM_ID),
+    displayTitle: 'Visible card',
+    tags: ['one', 'two'],
+    reminder: {
+      mode: 'once',
+      message: 'Review now',
+      nextAt: Date.now() - 1000,
+      webhookProfileIds: ['first', 'second'],
+    },
+  }]);
+
+  const alarmPromise = runtime.api.handleReminderAlarm({ name: `tabwall-reminder:${ITEM_ID}` });
+  await allStarted;
+  assert.equal(started.length, 2);
+  assert.equal(started[0].options.method, 'POST');
+  assert.equal(started[0].options.credentials, 'omit');
+  assert.equal(started[0].options.headers['X-Profile'], 'one');
+  assert.equal(started[0].options.body, `{"id":"${ITEM_ID}","title":"${ITEM_ID}","display":"Visible card","tags":"one, two"}`);
+  assert.match(started[1].options.body, /^Review now\|once\|/);
+  resolvers.forEach((resolve) => resolve());
+
+  const result = await alarmPromise;
+  assert.equal(result.ok, true);
+  assert.deepEqual(Array.from(result.webhooks, (entry) => entry.status), [204, 204]);
+  assert.equal(runtime.notificationCalls.length, 1);
+  assert.equal((await runtime.api.getParkedItems())[0].reminder, undefined);
+  assert.equal(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`), false);
+});
+
+test('webhook failures are isolated from interval rescheduling and missing profiles', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    webhookProfiles: [
+      { id: 'ok', name: 'OK', url: 'https://ok.example.test/hook', headers: {}, body: 'ok' },
+      { id: 'failed', name: 'Failed', url: 'https://failed.example.test/hook', headers: {}, body: 'failed' },
+      { id: 'timeout', name: 'Timeout', url: 'https://timeout.example.test/hook', headers: {}, body: 'timeout' },
+    ],
+  };
+  runtime.core.REQUEST_TIMEOUT_MS = 10;
+  runtime.runtime.fetchImpl = (url, options) => {
+    if (url.includes('failed')) return Promise.resolve(webhookResponse(503, 'downstream unavailable'));
+    if (url.includes('timeout')) {
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    }
+    return Promise.resolve(webhookResponse(200, 'ok'));
+  };
+  try {
+    await runtime.api.setParkedItems([{
+      ...tab(ITEM_ID),
+      reminder: {
+        mode: 'interval',
+        message: 'Keep checking',
+        nextAt: Date.now() - 1000,
+        intervalMinutes: 5,
+        webhookProfileIds: ['missing', 'ok', 'failed', 'timeout'],
+      },
+    }]);
+    const result = await runtime.api.handleReminderAlarm({ name: `tabwall-reminder:${ITEM_ID}` });
+    assert.equal(result.ok, true);
+    assert.deepEqual(Array.from(result.webhooks, (entry) => entry.id), ['missing', 'ok', 'failed', 'timeout']);
+    assert.equal(result.webhooks[0].skipped, true);
+    assert.equal(result.webhooks[0].error, 'profile_not_found');
+    assert.equal(result.webhooks[1].ok, true);
+    assert.equal(result.webhooks[2].status, 503);
+    assert.equal(result.webhooks[2].ok, false);
+    assert.equal(result.webhooks[3].error, 'webhook_timeout');
+    assert.equal(runtime.notificationCalls.length, 1);
+    const stored = (await runtime.api.getParkedItems())[0];
+    assert.equal(stored.reminder.message, 'Keep checking');
+    assert.ok(stored.reminder.nextAt > Date.now());
+    assert.ok(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`));
+    assert.equal(runtime.runtime.fetchCalls.length, 3);
+  } finally {
+    runtime.core.REQUEST_TIMEOUT_MS = 15000;
+  }
+});
+
+test('TEST_WEBHOOK_PROFILE posts draft data without persisting settings', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    keep: 'local-only',
+    webhookProfiles: [{ id: 'saved', name: 'Saved', url: 'https://saved.example.test', headers: {}, body: 'saved' }],
+  };
+  const before = JSON.parse(JSON.stringify(runtime.store.settings));
+  runtime.runtime.fetchImpl = (_url, options) => Promise.resolve(webhookResponse(201, 'x'.repeat(1200)));
+  const result = await dispatchMessage(runtime, {
+    type: 'TEST_WEBHOOK_PROFILE',
+    profile: {
+      id: 'draft',
+      name: 'Draft',
+      url: 'https://draft.example.test/test',
+      headers: { 'X-Test': 'draft' },
+      body: '{{id}}|{{url}}|{{tags}}',
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.test, true);
+  assert.equal(result.status, 201);
+  assert.equal(result.responsePreview.length, 1000);
+  assert.equal(runtime.runtime.fetchCalls.length, 1);
+  assert.equal(runtime.runtime.fetchCalls[0][1].headers['X-Test'], 'draft');
+  assert.match(runtime.runtime.fetchCalls[0][1].body, /^webhook-test\|https:\/\/example\.com\/tabwall-webhook-test\|webhook, test$/);
+  assert.deepEqual(runtime.store.settings, before);
+});
+
 test('notification failure preserves reminder metadata and reports an error result', async () => {
   const runtime = createRuntime();
   await runtime.ready;
@@ -1582,6 +1742,50 @@ test('reminder import syncs alarms and Stack blocks conflicts or transfers the s
   const group = (await transferRuntime.api.getParkedItems())[0];
   assert.deepEqual(JSON.parse(JSON.stringify(group.reminder)), reminder);
   assert.equal(group.tabs.every((member) => member.reminder == null), true);
+});
+
+test('backup export removes webhook profiles and import preserves local profiles', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const localProfile = {
+    id: 'local',
+    name: 'Local profile',
+    url: 'https://local.example.test/hook',
+    headers: { Authorization: 'Bearer local-secret' },
+    body: 'local body',
+  };
+  runtime.store.settings = { webhookProfiles: [localProfile] };
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  const exported = await dispatchMessage(runtime, { type: 'EXPORT_BACKUP', mode: 'lite' });
+  assert.equal(exported.ok, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(exported.backup.settings, 'webhookProfiles'), false);
+
+  const reminder = {
+    mode: 'once',
+    message: 'Imported reminder',
+    nextAt: Date.now() + 60000,
+    webhookProfileIds: ['local', 'missing'],
+  };
+  const imported = await runtime.api.importBackup({
+    format: 'tabwall-backup',
+    version: runtime.Build.FORMAT_VERSION,
+    media: 'none',
+    parkedItems: [{ ...tab(SOURCE_ID), reminder }],
+    parkedTabs: [tab(SOURCE_ID)],
+    settings: {
+      webhookProfiles: [{
+        id: 'remote',
+        name: 'Remote profile',
+        url: 'https://remote.example.test/hook',
+        headers: { Authorization: 'Bearer remote-secret' },
+        body: 'remote body',
+      }],
+    },
+    tagCatalog: [],
+  }, { mode: 'replace' });
+  assert.equal(imported.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.settings.webhookProfiles)), [localProfile]);
+  assert.deepEqual(Array.from((await runtime.api.getParkedItems())[0].reminder.webhookProfileIds), ['local', 'missing']);
 });
 
 test('BATCH_UPDATE_ITEMS appends unique note lines and merges tags', async () => {

@@ -6,7 +6,7 @@ permalink: /privacy.html
 
 # Privacy Policy — TabWall
 
-**Last updated:** 2026-08-17
+**Last updated:** 2026-08-27
 **Product:** TabWall (Chrome / Chromium extension)  
 **Contact:** Use the [GitHub repository issues](https://github.com/davislinyd/TabWall/issues).
 
@@ -14,7 +14,7 @@ permalink: /privacy.html
 
 TabWall parks browser tabs and Tab Groups as a visual photo wall **on your device**.  
 We do **not** operate a TabWall backend that receives your browsing data. Parked URLs, titles, notes, tags, and screenshots stay in **your browser’s local storage**.
-Reminder schedules and notification text also stay in your browser’s local storage and are used only to deliver local browser notifications.
+Reminder schedules and notification text stay in your browser’s local storage and are used to deliver local browser notifications. If you configure optional Webhook profiles, the reminder context is also sent to the HTTP(S) endpoints you choose; those endpoints are not TabWall servers.
 
 ## Data the extension processes
 
@@ -32,6 +32,7 @@ When you use TabWall, it may process:
 | Custom wallpaper image (optional) | Canvas background | IndexedDB on your device |
 | Extension settings (theme, wallpaper fit/blur/strength, sort, view, auto-backup preferences, etc.) | Preferences | `chrome.storage.local` |
 | Auto-backup preferences (subfolder name, schedule) | Control local automatic backups under your download directory | `chrome.storage.local` |
+| Webhook profile names, URLs, headers, bodies, and reminder profile IDs | Send the reminder context to endpoints you explicitly select | Profile data in `chrome.storage.local`; request data is sent only to the configured endpoint |
 | AI prompts, selected page context, tool schemas, and local model responses | Analyze tabs with a local `llama-server` when you enable the AI agent | Sent to the configured loopback endpoint; conversation and page bodies are not persisted by TabWall |
 | Optional bridge tool arguments and results | Call tools you explicitly allow through a local bridge | Bridge memory / the third-party service selected by that bridge; external disclosure requires confirmation when page content may be included |
 | Optional AI bridge token | Authenticate the current bridge session | In-memory panel session only; not stored in extension storage |
@@ -48,7 +49,9 @@ TabWall does **not**:
 - Sell or rent your data
 - Use your parked content for advertising
 - Require an account to use the extension
-- Send reminder text, card metadata, or notification history to a server
+- Send reminder text, card metadata, or notification history to TabWall servers (there are none for this product)
+
+If you configure a Webhook profile, TabWall sends a fixed `POST` with the body and headers you entered to that profile’s HTTP(S) URL when a selected reminder fires or you press Test. The body can include reminder fields such as the title, URL, message, mode, time, and tags through the documented template variables. Requests omit cookies and use a 15-second timeout; the endpoint’s own retention and logging policy applies after delivery. Profile URLs, headers, and bodies stay local and are excluded from exported backups.
 
 If you configure the optional local bridge to call a third-party API, that bridge may send the arguments you approved to that service. TabWall does not accept arbitrary URLs, methods, or headers from the model; review the bridge registry and confirmation prompt before allowing a call.
 
@@ -96,14 +99,15 @@ For privacy questions about TabWall, contact the publisher through the [project�
 
 # 隱私權政策 — TabWall（中文摘要）
 
-**最後更新日期：** 2026-08-16
+**最後更新日期：** 2026-08-27
 
 TabWall 將分頁與 Tab Group 暫存為本機照片牆。  
 提醒的模式、下一次觸發時間、間隔與通知文字也只保存在您的瀏覽器本機，用來排程本機通知。
 **不會**把您的網址、備註、標籤、截圖或自訂背景上傳到 TabWall 自有伺服器（本產品不提供此類後端）。資料保存在**您的瀏覽器本機**（`chrome.storage` 與 IndexedDB）。
+若您設定 Webhook profile，提醒到期或按下 Test 時，提醒 context 會依您輸入的 body／headers 送到您指定的 HTTP／HTTPS endpoint；該 endpoint 不是 TabWall 伺服器，後續保存與日誌依對方政策處理。Profile 的 URL、headers、body 只保存在 `chrome.storage.local`，不會進入匯出的備份檔，request 也不帶 cookies。
 
 僅在您操作（含 Chrome 快捷鍵命令）時讀取目前分頁／群組以截圖與儲存。
-提醒通知由瀏覽器本機排程與發送，不會把提醒內容傳到 TabWall 伺服器。
+提醒通知由瀏覽器本機排程與發送；若啟用 Webhook，提醒內容只會另外送到您明確設定的 endpoint，不會送到 TabWall 伺服器。
 您匯出的備份檔僅在本機產生；請自行妥善保管。  
 若啟用**自動備份**，TabWall 會查詢 Chrome 的 Downloads history 以辨識自己建立的備份，並依您設定的保留數量刪除舊的 TabWall 備份；備份會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。
 解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。

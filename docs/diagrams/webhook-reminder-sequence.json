@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "TabWall 提醒與 Webhook 投遞流程",
+    "output": "docs/diagrams/webhook-reminder-sequence.html",
+    "viewBox": [1000, 580],
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "views": [
+      {
+        "id": "save-selection",
+        "label": "保存提醒選擇",
+        "focus": ["user", "ui", "worker", "state"],
+        "note": "提醒 editor 將複數 profile ID 與提醒一起保存到本機狀態。"
+      },
+      {
+        "id": "deliver-reminder",
+        "label": "到期與並行投遞",
+        "focus": ["chrome", "worker", "state", "core", "endpoint"],
+        "note": "Chrome notification 成功後，Service Worker 對選定 profiles 並行 POST，結果以 allSettled 收集。"
+      },
+      {
+        "id": "test-draft",
+        "label": "測試未儲存草稿",
+        "focus": ["user", "ui", "worker", "core", "endpoint"],
+        "note": "設定面板可用目前表單內容測試固定 sample context，不改寫本機 profiles。"
+      }
+    ]
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "使用者", "sublabel": "reminder + test" },
+    { "id": "ui", "type": "frontend", "label": "TabWall UI", "sublabel": "reminder + settings" },
+    { "id": "chrome", "type": "external", "label": "Chrome APIs", "sublabel": "alarms · notifications" },
+    { "id": "worker", "type": "backend", "label": "MV3 worker", "sublabel": "bgReminders.js" },
+    { "id": "state", "type": "database", "label": "Local state", "sublabel": "chrome.storage.local" },
+    { "id": "core", "type": "backend", "label": "Webhook core", "sublabel": "template + validation" },
+    { "id": "endpoint", "type": "external", "label": "Endpoints", "sublabel": "one POST per profile" }
+  ],
+  "segments": [
+    { "from": 150, "to": 205, "label": "Save reminder" },
+    { "from": 213, "to": 379, "label": "Reminder delivery" },
+    { "from": 387, "to": 501, "label": "Draft profile test" }
+  ],
+  "messages": [
+    { "from": "ui", "to": "worker", "y": 160, "label": "SET_REMINDER + profile IDs", "variant": "emphasis" },
+    { "from": "worker", "to": "state", "y": 189, "label": "persist reminder", "variant": "emphasis" },
+    { "from": "chrome", "to": "worker", "y": 218, "label": "reminder alarm", "variant": "emphasis" },
+    { "from": "worker", "to": "chrome", "y": 247, "label": "create Chrome notification", "variant": "emphasis" },
+    { "from": "worker", "to": "state", "y": 276, "label": "clear once / reschedule interval", "variant": "emphasis" },
+    { "from": "worker", "to": "core", "y": 305, "label": "context + body template", "variant": "default" },
+    { "from": "core", "to": "endpoint", "y": 334, "label": "parallel POST per profile", "variant": "dashed", "note": "Fixed POST, credentials omitted, 15-second timeout." },
+    { "from": "endpoint", "to": "worker", "y": 363, "label": "status + allSettled results", "variant": "return" },
+    { "from": "ui", "to": "worker", "y": 402, "label": "TEST_WEBHOOK_PROFILE draft", "variant": "default" },
+    { "from": "worker", "to": "core", "y": 431, "label": "fixed sample + render", "variant": "dashed" },
+    { "from": "core", "to": "endpoint", "y": 460, "label": "POST test profile", "variant": "dashed" },
+    { "from": "endpoint", "to": "worker", "y": 489, "label": "status + response preview", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "ui", "from": 154, "to": 166, "type": "frontend" },
+    { "participant": "worker", "from": 183, "to": 377, "type": "backend" },
+    { "participant": "state", "from": 183, "to": 282, "type": "database" },
+    { "participant": "chrome", "from": 212, "to": 251, "type": "external" },
+    { "participant": "core", "from": 299, "to": 464, "type": "backend" },
+    { "participant": "endpoint", "from": 328, "to": 493, "type": "external" },
+    { "participant": "ui", "from": 396, "to": 408, "type": "frontend" },
+    { "participant": "worker", "from": 425, "to": 493, "type": "backend" }
+  ]
+}

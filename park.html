@@ -352,6 +352,7 @@
           <button type="button" class="settings-nav-btn" data-settings-section="display" data-i18n="settingsDisplay">顯示</button>
           <button type="button" class="settings-nav-btn" data-settings-section="backup" data-i18n="settingsBackup">備份</button>
           <button type="button" class="settings-nav-btn" data-settings-section="ai" data-i18n="settingsAi">AI</button>
+          <button type="button" class="settings-nav-btn" data-settings-section="webhook" data-i18n="settingsWebhook">Webhook</button>
           <button type="button" class="settings-nav-btn" data-settings-section="shortcuts" data-i18n="settingsShortcuts">快捷鍵</button>
           <button type="button" class="settings-nav-btn" data-settings-section="diagnostic" data-i18n="settingsDiagnostic">診斷</button>
         </nav>
@@ -439,6 +440,14 @@
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
             <button type="button" class="btn primary" id="aiTestConnectionBtn" data-i18n="aiTestConnection">測試連線</button>
             <span id="aiConnectionStatus" class="hint" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="settings-block" data-settings-section="webhook">
+          <h2 data-i18n="webhookSettingsTitle">Webhook Profiles</h2>
+          <p class="hint" data-i18n="webhookSettingsHint">設定提醒到期時要呼叫的 webhook。Profile 只保存在本機，不會寫入備份檔。</p>
+          <div id="webhookProfiles" class="webhook-profile-list"></div>
+          <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:12px">
+            <button type="button" class="btn primary" id="webhookAddProfileBtn" data-i18n="webhookAddProfile">新增 Profile</button>
           </div>
         </div>
         <div class="settings-block" data-settings-section="automation">
@@ -915,6 +924,11 @@
             <textarea id="reminderMessage" rows="4" data-i18n-placeholder="reminderMessagePh" placeholder="留空則使用卡片標題"></textarea>
           </label>
           <p class="hint reminder-form-hint" data-i18n="reminderMessageHint">通知文字可留空，發送時會使用卡片標題。</p>
+          <div class="reminder-webhook-field">
+            <span data-i18n="reminderWebhooks">Webhook profiles</span>
+            <div id="reminderWebhookProfiles" class="reminder-webhook-list"></div>
+            <p class="hint reminder-form-hint" data-i18n="reminderWebhooksHint">可選擇多個 profile；提醒到期時會同時呼叫。</p>
+          </div>
           <p id="reminderEditorStatus" class="hint" role="status" aria-live="polite"></p>
           <div class="reminder-form-actions">
             <button type="button" class="btn" id="reminderBackBtn" data-i18n="cancel">取消</button>
@@ -1149,6 +1163,7 @@
 
     <script src="mediaDb.js"></script>
     <script src="backupBuild.js"></script>
+    <script src="webhookCore.js"></script>
     <script src="noteMedia.js"></script>
     <script src="parkWallpaper.js"></script>
     <script src="canvasStore.js"></script>

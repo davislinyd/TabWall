@@ -6672,6 +6672,25 @@ html[data-theme='dark'] .canvas-node.canvas-note {
 .canvas-note-code-preview pre { max-height: 90px; margin: 8px 0 0; overflow: hidden; white-space: pre-wrap; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .note-code-badge { display: inline-block; padding: 2px 5px; border: 1px solid currentColor; border-radius: 4px; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
 .sticker-note-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
+.webhook-profile-list { display: grid; gap: 12px; margin-top: 12px; }
+.webhook-profile-empty { padding: 14px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: 12px; }
+.webhook-profile-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-raised); }
+.webhook-profile-header, .webhook-header-heading, .webhook-profile-actions { display: flex; align-items: center; gap: 8px; }
+.webhook-profile-header { justify-content: space-between; }
+.webhook-profile-name { display: flex; flex: 1 1 260px; min-width: 0; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.webhook-profile-name .settings-input { flex: 1 1 auto; min-width: 0; }
+.webhook-profile-delete, .webhook-header-delete { color: var(--danger, #f87171); }
+.webhook-header-heading { justify-content: space-between; color: var(--muted); font-size: 12px; font-weight: 700; }
+.webhook-header-list { display: grid; gap: 7px; }
+.webhook-header-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr) auto; align-items: center; gap: 7px; }
+.webhook-header-row .settings-input { min-width: 0; width: 100%; }
+.webhook-header-delete { display: grid; width: 30px; height: 30px; padding: 0; place-items: center; }
+.webhook-header-delete svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.webhook-body { width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.webhook-template-hint { margin: 0; font-size: 11px; }
+.webhook-profile-actions { flex-wrap: wrap; }
+.webhook-profile-status { min-width: 0; overflow-wrap: anywhere; }
+.webhook-profile-status.error { color: var(--danger, #f87171); }
 .auto-save-rule-list { display: grid; gap: 12px; margin-top: 12px; }
 .auto-save-rule-empty { padding: 12px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: 12px; }
 .auto-save-rule-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-raised); }
@@ -7266,6 +7285,34 @@ body.has-wallpaper .canvas-viewport {
   min-height: 84px;
   resize: vertical;
 }
+
+.reminder-webhook-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reminder-webhook-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.reminder-webhook-option {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.reminder-webhook-empty { font-size: 11px; }
 
 #reminderEditorStatus {
   min-height: 18px;

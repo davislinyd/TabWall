@@ -21,6 +21,7 @@ jobs:
           node --check bgAi.js
           node --check aiUiCore.js
           node --check aiPanel.js
+          node --check webhookCore.js
           node --check parkAiUi.js
           node --check park.js
           node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'))"
@@ -49,7 +50,10 @@ jobs:
             aiPanel.js \
             mediaDb.js \
             backupBuild.js \
+            webhookCore.js \
             noteMedia.js \
+            noteCodeSandbox.html \
+            noteCodeSandbox.js \
             vendor/libheif-bundle.js \
             parkWallpaper.js \
             canvasStore.js \
@@ -74,6 +78,9 @@ jobs:
             parkAppHelpers.js \
             parkHistory.js \
             parkAiUi.js \
+            pageStickerEditor.html \
+            pageStickerEditor.js \
+            pageStickerEditor.css \
             park.js \
             icons/icon16.png \
             icons/icon48.png \

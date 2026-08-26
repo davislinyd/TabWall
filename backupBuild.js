@@ -919,6 +919,16 @@
     return note;
   }
 
+  function withoutWebhookProfiles(settings) {
+    if (global.TabWallWebhookCore?.withoutProfiles) {
+      return global.TabWallWebhookCore.withoutProfiles(settings);
+    }
+    const source = settings && typeof settings === 'object' ? settings : {};
+    const next = { ...source };
+    delete next.webhookProfiles;
+    return next;
+  }
+
   function canonicalizeBackupForExport(backup) {
     const source = backup && typeof backup === 'object' ? backup : {};
     const items = (Array.isArray(source.parkedItems) ? source.parkedItems : []).map((item) => {
@@ -930,10 +940,14 @@
       }
       return item?.kind === 'note' ? canonicalizeNoteForExport(item) : item;
     });
+    const settings = source.settings && typeof source.settings === 'object'
+      ? withoutWebhookProfiles(source.settings)
+      : source.settings;
     return {
       ...source,
       parkedItems: items,
       parkedTabs: items.filter((item) => item?.kind === 'tab').map(({ kind, ...rest }) => rest),
+      ...(settings !== undefined ? { settings } : {}),
     };
   }
 
@@ -1044,6 +1058,18 @@
     if (value.mode !== 'once' && value.mode !== 'interval') return 'invalid_reminder_mode';
     if (!validateString(value.message, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_reminder_message';
     if (!Number.isFinite(value.nextAt) || value.nextAt <= 0) return 'invalid_reminder_time';
+    if (value.webhookProfileIds != null) {
+      if (!Array.isArray(value.webhookProfileIds) || value.webhookProfileIds.length > 20) {
+        return 'invalid_reminder_webhooks';
+      }
+      const ids = new Set();
+      for (const id of value.webhookProfileIds) {
+        if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id) || ids.has(id)) {
+          return 'invalid_reminder_webhooks';
+        }
+        ids.add(id);
+      }
+    }
     if (value.mode === 'interval') {
       if (!Number.isInteger(value.intervalMinutes) || value.intervalMinutes < 1) {
         return 'invalid_reminder_interval';

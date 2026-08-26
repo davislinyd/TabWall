@@ -69,6 +69,37 @@
     return value * (unit === 'day' ? 1440 : unit === 'hour' ? 60 : 1);
   }
 
+  function webhookProfiles() {
+    ensureBound('webhookProfiles');
+    return env.Webhook?.normalizeProfiles
+      ? env.Webhook.normalizeProfiles(env.settings?.webhookProfiles)
+      : [];
+  }
+
+  function renderWebhookProfileOptions(selectedIds = []) {
+    ensureBound('renderWebhookProfileOptions');
+    const root = get('reminderWebhookProfiles');
+    if (!root) return;
+    const selected = new Set(env.Webhook?.normalizeProfileIds
+      ? env.Webhook.normalizeProfileIds(selectedIds)
+      : []);
+    const profiles = webhookProfiles();
+    root.innerHTML = profiles.length
+      ? profiles.map((profile) => `
+        <label class="reminder-webhook-option">
+          <input type="checkbox" data-reminder-webhook-profile="${env.escapeAttr(profile.id)}" ${selected.has(profile.id) ? 'checked' : ''} />
+          <span>${env.escapeHtml(profile.name)}</span>
+        </label>`).join('')
+      : `<span class="hint reminder-webhook-empty">${env.escapeHtml(t('reminderWebhooksEmpty'))}</span>`;
+  }
+
+  function selectedWebhookProfileIds() {
+    ensureBound('selectedWebhookProfileIds');
+    const values = [...document.querySelectorAll('#reminderWebhookProfiles [data-reminder-webhook-profile]:checked')]
+      .map((input) => input.dataset.reminderWebhookProfile);
+    return env.Webhook?.normalizeProfileIds ? env.Webhook.normalizeProfileIds(values) : [];
+  }
+
   function updateModeFields() {
     const interval = get('reminderModeInterval')?.checked === true;
     const fields = get('reminderIntervalFields');
@@ -201,6 +232,7 @@
     const fields = intervalFields(reminder.intervalMinutes || 60);
     if (get('reminderIntervalValue')) get('reminderIntervalValue').value = String(fields.value);
     if (get('reminderIntervalUnit')) get('reminderIntervalUnit').value = fields.unit;
+    renderWebhookProfileOptions(reminder.webhookProfileIds);
     const clear = get('reminderClearBtn');
     if (clear) clear.hidden = !item.reminder;
     const title = get('reminderEditorTitle');
@@ -226,6 +258,7 @@
       mode,
       message: get('reminderMessage')?.value || '',
       nextAt,
+      webhookProfileIds: selectedWebhookProfileIds(),
     };
     if (mode === 'interval') {
       const minutes = intervalMinutes();

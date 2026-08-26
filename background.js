@@ -2,7 +2,7 @@
  * TabWall — Service Worker
  * Meta in chrome.storage.local; images in IndexedDB (mediaDb.js)
  */
-importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js');
+importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js', 'webhookCore.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
 importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js');
 
@@ -86,6 +86,7 @@ const DEFAULT_SETTINGS = {
   saveGroupCapture: 'all',
   restoreGroupIn: 'currentWindow',
   preSaveEdit: true,
+  webhookProfiles: [],
   ai: { ...(self.TabWallAi?.DEFAULT_AI_SETTINGS || {}) },
   autoBackup: { ...DEFAULT_AUTO_BACKUP },
   autoSaveMetadata: { ...DEFAULT_AUTO_SAVE_METADATA },
@@ -1928,6 +1929,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'APPLY_DEDUPE',
   'SET_REMINDER',
   'CLEAR_REMINDER',
+  'TEST_WEBHOOK_PROFILE',
   'UPSERT_PAGE_ANNOTATION',
   'DELETE_PAGE_ANNOTATION',
   'PUT_PAGE_INK',
@@ -1984,6 +1986,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return setReminder(message.id, message.reminder);
       case 'CLEAR_REMINDER':
         return clearReminder(message.id);
+      case 'TEST_WEBHOOK_PROFILE':
+        return testWebhookProfile(message.profile);
       case 'RESTORE_TAB':
         return restoreTab(message.id);
       case 'RESTORE_GROUP':
@@ -2326,6 +2330,7 @@ if (globalThis.__TABWALL_TEST__) {
     syncReminderAlarmsForItems,
     setReminder,
     clearReminder,
+    testWebhookProfile,
     handleReminderAlarm,
     handleReminderNotificationClick,
     handleCommandAction,

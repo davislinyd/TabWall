@@ -8,7 +8,7 @@ const POPUP_SOURCE = fs.readFileSync(new URL('../popup.js', import.meta.url), 'u
 
 test('extension action opens the TabWall popup', () => {
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
-  assert.equal(MANIFEST.version, '2.55.3');
+  assert.equal(MANIFEST.version, '2.56.0');
   assert.match(POPUP_HTML, /<script src="popup\.js"><\/script>/);
 });
 
