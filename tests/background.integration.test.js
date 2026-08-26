@@ -128,6 +128,7 @@ function createRuntime() {
   },
     tabs: {
       onActivated: event(),
+      onCreated: event(),
       onUpdated: event(),
       async query(queryInfo = {}) {
         if (queryInfo.active && queryInfo.lastFocusedWindow) {
@@ -480,6 +481,8 @@ function note(id = NOTE_ID, { attachment = true, tags = ['idea'] } = {}) {
     id,
     title: 'Canvas note',
     markdown: attachment ? `# Heading\n\n![diagram](attachment://${NOTE_ATTACHMENT_ID})` : 'Plain note',
+    contentMode: 'markdown',
+    webSource: '',
     tags,
     pinned: false,
     savedAt: Date.now() - 1000,
@@ -512,9 +515,9 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
   return result;
 }
 
-test('manifest overrides the New Tab page with the TabWall UI', () => {
-  assert.equal(MANIFEST.chrome_url_overrides?.newtab, 'park.html');
-  assert.equal(MANIFEST.version, '2.49.1');
+test('New Tab takeover is configurable through the dynamic background route', async () => {
+  assert.equal(MANIFEST.chrome_url_overrides, undefined);
+  assert.equal(MANIFEST.version, '2.55.3');
   assert.match(BACKGROUND_SOURCE, /bgNormalize\.js/);
   assert.match(BACKGROUND_SOURCE, /bgLayout\.js/);
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
@@ -531,6 +534,60 @@ test('manifest overrides the New Tab page with the TabWall UI', () => {
     'Chrome allows at most 4 suggested_key commands'
   );
   assert.deepEqual(MANIFEST.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js', 'pageAnnotate.js']);
+
+  const runtime = createRuntime();
+  await runtime.ready;
+  const defaults = await dispatchMessage(runtime, { type: 'PATCH_SETTINGS', partial: {} });
+  assert.equal(defaults.settings.newTabOverride, true);
+
+  const newTab = { id: 7101, windowId: 1, url: 'chrome://newtab/', incognito: false };
+  runtime.runtime.openTabs.push(newTab);
+  await runtime.chrome.tabs.onCreated.listeners[0](newTab);
+  assert.equal(newTab.url, 'chrome-extension://test/park.html');
+  assert.equal(runtime.runtime.updatedTabs.filter(({ id }) => id === newTab.id).length, 1);
+
+  await runtime.chrome.tabs.onUpdated.listeners[0](newTab.id, {
+    url: 'chrome-extension://test/park.html',
+    status: 'complete',
+  }, newTab);
+  assert.equal(runtime.runtime.updatedTabs.filter(({ id }) => id === newTab.id).length, 1);
+});
+
+test('New Tab takeover waits for a late URL and respects disabled/incognito boundaries', async () => {
+  const lateRuntime = createRuntime();
+  await lateRuntime.ready;
+  const lateTab = { id: 7102, windowId: 1, url: '', incognito: false };
+  lateRuntime.runtime.openTabs.push(lateTab);
+  await lateRuntime.chrome.tabs.onCreated.listeners[0](lateTab);
+  assert.equal(lateTab.url, '');
+  lateTab.url = 'edge://newtab/';
+  await lateRuntime.chrome.tabs.onUpdated.listeners[0](lateTab.id, {
+    url: lateTab.url,
+    status: 'loading',
+  }, lateTab);
+  assert.equal(lateTab.url, 'chrome-extension://test/park.html');
+
+  const normalTab = { id: 7105, windowId: 1, url: 'https://example.com/', incognito: false };
+  lateRuntime.runtime.openTabs.push(normalTab);
+  await lateRuntime.chrome.tabs.onCreated.listeners[0](normalTab);
+  assert.equal(normalTab.url, 'https://example.com/');
+
+  const disabledRuntime = createRuntime();
+  await disabledRuntime.ready;
+  await dispatchMessage(disabledRuntime, {
+    type: 'PATCH_SETTINGS',
+    partial: { newTabOverride: false },
+  });
+  const disabledTab = { id: 7103, windowId: 1, url: 'chrome://newtab/', incognito: false };
+  disabledRuntime.runtime.openTabs.push(disabledTab);
+  await disabledRuntime.chrome.tabs.onCreated.listeners[0](disabledTab);
+  assert.equal(disabledTab.url, 'chrome://newtab/');
+
+  disabledRuntime.store.settings.newTabOverride = true;
+  const incognitoTab = { id: 7104, windowId: 1, url: 'chrome://newtab/', incognito: true };
+  disabledRuntime.runtime.openTabs.push(incognitoTab);
+  await disabledRuntime.chrome.tabs.onCreated.listeners[0](incognitoTab);
+  assert.equal(incognitoTab.url, 'chrome://newtab/');
 });
 
 test('page ink survives extension-startup orphan cleanup', async () => {
@@ -1380,6 +1437,51 @@ test('card reminders create, list, clear, and sync one-shot alarms', async () =>
   assert.equal(runtime.alarmStore.has(`tabwall-reminder:${ITEM_ID}`), false);
 });
 
+test('top-level Sticker Note reminders stay independent while Stack notes remain unsupported', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([
+    note(NOTE_ID, { attachment: false }),
+    note(SOURCE_ID, { attachment: false }),
+  ]);
+  const firstReminder = { mode: 'once', message: 'First', nextAt: Date.now() + 60000 };
+  const secondReminder = { mode: 'once', message: 'Second', nextAt: Date.now() + 120000 };
+  assert.equal((await dispatchMessage(runtime, { type: 'SET_REMINDER', id: NOTE_ID, reminder: firstReminder })).ok, true);
+  assert.equal((await dispatchMessage(runtime, { type: 'SET_REMINDER', id: SOURCE_ID, reminder: secondReminder })).ok, true);
+  assert.ok(runtime.alarmStore.has(`tabwall-reminder:${NOTE_ID}`));
+  assert.ok(runtime.alarmStore.has(`tabwall-reminder:${SOURCE_ID}`));
+  assert.equal((await dispatchMessage(runtime, { type: 'CLEAR_REMINDER', id: NOTE_ID })).ok, true);
+  assert.equal(runtime.alarmStore.has(`tabwall-reminder:${NOTE_ID}`), false);
+  assert.ok(runtime.alarmStore.has(`tabwall-reminder:${SOURCE_ID}`));
+  const items = await runtime.api.getParkedItems();
+  assert.equal(items.find((item) => item.id === NOTE_ID).reminder, undefined);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(items.find((item) => item.id === SOURCE_ID).reminder)),
+    secondReminder
+  );
+
+  const nested = note(TARGET_ID, { attachment: false });
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Stack',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [],
+    notes: [nested],
+  }]);
+  const rejected = await dispatchMessage(runtime, {
+    type: 'SET_REMINDER',
+    id: TARGET_ID,
+    reminder: firstReminder,
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, 'not_found');
+});
+
 test('one-shot reminder notification clears the reminder and interval reschedules from send time', async () => {
   const onceRuntime = createRuntime();
   await onceRuntime.ready;
@@ -1618,17 +1720,21 @@ test('note CRUD persists fixed metadata and cleans attachment media', async () =
   assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), true);
   assert.deepEqual(
     Object.keys(runtime.store.parkedItems[0]).sort(),
-    ['attachments', 'id', 'kind', 'markdown', 'pinned', 'savedAt', 'tags', 'title'].sort()
+    ['attachments', 'contentMode', 'id', 'kind', 'markdown', 'pinned', 'savedAt', 'tags', 'title', 'webSource'].sort()
   );
 
   const updated = await runtime.api.updateNote(NOTE_ID, {
     title: 'Updated note',
     markdown: 'Updated **text**',
+    contentMode: 'web',
+    webSource: '<!doctype html><html><head><style>button { color: blue; }</style></head><body><button>Updated</button><script>document.body.dataset.updated = "yes";</script></body></html>',
     tags: ['updated'],
     attachments: [],
   });
   assert.equal(updated.ok, true);
   assert.equal(runtime.store.parkedItems[0].title, 'Updated note');
+  assert.equal(runtime.store.parkedItems[0].contentMode, 'web');
+  assert.equal(runtime.store.parkedItems[0].webSource, '<!doctype html><html><head><style>button { color: blue; }</style></head><body><button>Updated</button><script>document.body.dataset.updated = "yes";</script></body></html>');
   assert.deepEqual([...runtime.store.parkedItems[0].tags], ['updated']);
   assert.equal(runtime.media.has(`n:${NOTE_ID}:${NOTE_ATTACHMENT_ID}`), false);
 
@@ -1638,6 +1744,201 @@ test('note CRUD persists fixed metadata and cleans attachment media', async () =
   assert.equal(updatedTag?.count, 1);
   assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
   assert.equal(runtime.store.parkedItems.length, 0);
+});
+
+test('page Stickers share top-level Notes, preserve independent reminders, and detach safely', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const firstUrl = 'https://page-sticker.example/first';
+  const secondUrl = 'https://page-sticker.example/second';
+  const first = await runtime.api.createNotePageSticker(
+    note(NOTE_ID, { attachment: false }),
+    { x: 40, y: 80, w: 280, h: 220 },
+    firstUrl,
+    { x: 120, y: 240, w: 320, h: 240, z: 2 },
+  );
+  const second = await runtime.api.createNotePageSticker(
+    note(SOURCE_ID, { attachment: false }),
+    { x: 420, y: 480, w: 300, h: 230 },
+    firstUrl,
+    { x: 520, y: 640, w: 360, h: 260, z: 3 },
+  );
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+
+  const crossPage = await runtime.api.createPageSticker(secondUrl, NOTE_ID, {
+    x: 16, y: 32, w: 240, h: 180, z: 1,
+  });
+  assert.equal(crossPage.ok, true);
+  assert.equal((await runtime.api.getPageStickers(firstUrl)).stickers.length, 2);
+  assert.equal((await runtime.api.getPageStickers(secondUrl)).stickers.length, 1);
+
+  const firstReminder = { mode: 'once', message: 'First', nextAt: Date.now() + 60000 };
+  const secondReminder = { mode: 'once', message: 'Second', nextAt: Date.now() + 120000 };
+  assert.equal((await runtime.api.setReminder(NOTE_ID, firstReminder)).ok, true);
+  assert.equal((await runtime.api.setReminder(SOURCE_ID, secondReminder)).ok, true);
+  assert.equal((await runtime.api.clearReminder(NOTE_ID)).ok, true);
+  const listed = await runtime.api.getPageStickers(firstUrl);
+  assert.equal(listed.stickers.find((item) => item.note.id === NOTE_ID).note.reminder, undefined);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(listed.stickers.find((item) => item.note.id === SOURCE_ID).note.reminder)),
+    secondReminder,
+  );
+
+  assert.equal((await runtime.api.deletePageSticker(firstUrl, SOURCE_ID)).removed, true);
+  assert.equal((await runtime.api.getPageStickers(firstUrl)).stickers.length, 1);
+  assert.equal((await runtime.api.getParkedItems()).some((item) => item.id === SOURCE_ID), true);
+
+  assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
+  assert.equal((await runtime.api.getPageStickers(firstUrl)).stickers.length, 0);
+  assert.equal((await runtime.api.getPageStickers(secondUrl)).stickers.length, 0);
+
+  const nested = note(TARGET_ID, { attachment: false });
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Stack',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [],
+    notes: [nested],
+  }]);
+  const rejected = await runtime.api.createPageSticker(firstUrl, TARGET_ID, {
+    x: 10, y: 10, w: 240, h: 180, z: 1,
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, 'invalid_note_scope');
+});
+
+test('Canvas Sticker source locations reverse-index top-level Notes across URLs', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const firstUrl = 'https://source-index.example/first';
+  const secondUrl = 'https://source-index.example/second';
+  await runtime.api.setParkedItems([
+    note(NOTE_ID, { attachment: false }),
+    note(SOURCE_ID, { attachment: false }),
+    {
+      kind: 'group',
+      id: GROUP_ID,
+      title: 'Stack',
+      color: 'blue',
+      collapsed: false,
+      note: '',
+      tags: [],
+      savedAt: Date.now(),
+      tabs: [],
+      notes: [note(TARGET_ID, { attachment: false })],
+    },
+  ]);
+  runtime.store.pageAnnotations = [
+    {
+      id: 'source-index-first',
+      url: firstUrl,
+      title: 'First page',
+      stickers: [{ noteId: NOTE_ID, x: 1, y: 2, w: 240, h: 180, z: 1 }],
+    },
+    {
+      id: 'source-index-duplicate',
+      url: firstUrl,
+      title: 'Duplicate record',
+      stickers: [{ noteId: NOTE_ID, x: 3, y: 4, w: 240, h: 180, z: 2 }],
+    },
+    {
+      id: 'source-index-second',
+      url: secondUrl,
+      title: 'Second page',
+      stickers: [
+        { noteId: NOTE_ID, x: 5, y: 6, w: 240, h: 180, z: 3 },
+        { noteId: SOURCE_ID, x: 7, y: 8, w: 240, h: 180, z: 4 },
+        { noteId: 'deleted-note', x: 9, y: 10, w: 240, h: 180, z: 5 },
+      ],
+    },
+  ];
+
+  const indexed = await runtime.api.getNotePageLocations();
+  assert.equal(indexed.ok, true);
+  const routed = await dispatchMessage(runtime, { type: 'GET_NOTE_PAGE_LOCATIONS' });
+  assert.equal(routed.ok, true);
+  assert.deepEqual(routed.locations, indexed.locations);
+  assert.deepEqual(JSON.parse(JSON.stringify(indexed.locations)), [
+    {
+      noteId: NOTE_ID,
+      pages: [
+        { url: firstUrl, title: 'First page' },
+        { url: secondUrl, title: 'Second page' },
+      ],
+    },
+    { noteId: SOURCE_ID, pages: [{ url: secondUrl, title: 'Second page' }] },
+  ]);
+
+  runtime.store.pageAnnotations = runtime.store.pageAnnotations.filter((entry) => entry.id !== 'source-index-duplicate');
+  assert.equal((await runtime.api.deletePageSticker(firstUrl, NOTE_ID)).removed, true);
+  const afterDetach = await runtime.api.getNotePageLocations();
+  assert.deepEqual(JSON.parse(JSON.stringify(afterDetach.locations[0].pages)), [{ url: secondUrl, title: 'Second page' }]);
+
+  assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
+  const afterDelete = await runtime.api.getNotePageLocations();
+  assert.equal(afterDelete.locations.some((entry) => entry.noteId === NOTE_ID), false);
+});
+
+test('Canvas Sticker source links always open a new tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const url = 'https://source-open.example/page';
+  runtime.runtime.openTabs.push({ id: 901, url, windowId: 1, active: true });
+
+  const result = await dispatchMessage(runtime, { type: 'OPEN_NEW_TAB_URL', url });
+  assert.equal(result.ok, true);
+  assert.equal(result.created, true);
+  assert.equal(runtime.runtime.createdTabs.length, 1);
+  assert.equal(runtime.runtime.createdTabs[0].url, url);
+  assert.equal(runtime.runtime.createdTabs[0].active, true);
+
+  const invalid = await runtime.api.openUrlInNewTab('');
+  assert.deepEqual(JSON.parse(JSON.stringify(invalid)), { ok: false, error: 'invalid_url' });
+});
+
+test('page Sticker editor and reminder requests bridge to the sender tab', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  const sender = { tab: { id: 77 }, frameId: 0 };
+  const placement = { x: 20, y: 40, w: 240, h: 180, z: 1, noteId: '' };
+  const editor = await dispatchMessage(runtime, {
+    type: 'OPEN_PAGE_STICKER_EDITOR',
+    url: 'https://page-sticker.example/',
+    noteId: '',
+    placement,
+  }, sender);
+  const reminder = await dispatchMessage(runtime, {
+    type: 'OPEN_PAGE_STICKER_REMINDER',
+    url: 'https://page-sticker.example/',
+    noteId: NOTE_ID,
+  }, sender);
+  assert.equal(editor.ok, true);
+  assert.equal(reminder.ok, true);
+  assert.equal(JSON.stringify(runtime.runtime.tabMessages), JSON.stringify([
+    {
+      tabId: 77,
+      message: {
+        type: 'OPEN_PAGE_STICKER_EDITOR',
+        url: 'https://page-sticker.example/',
+        noteId: '',
+        placement,
+      },
+    },
+    {
+      tabId: 77,
+      message: {
+        type: 'OPEN_PAGE_STICKER_REMINDER',
+        url: 'https://page-sticker.example/',
+        noteId: NOTE_ID,
+      },
+    },
+  ]));
 });
 
 test('CREATE_IMAGE_CARD stores a tab with cardSource image and no restorable URL', async () => {
@@ -1802,7 +2103,21 @@ test('append import remints note and attachment IDs and rewrites Markdown tokens
     parkedTabs: [],
     settings: {},
     tagCatalog: ['idea'],
+    pageAnnotations: [{
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      url: 'https://import-sticker.example/',
+      title: 'Imported Sticker',
+      favIconUrl: '',
+      note: '',
+      tags: [],
+      overlayVisible: true,
+      hasInk: false,
+      stickers: [{ noteId: NOTE_ID, x: 20, y: 40, w: 240, h: 180, z: 1 }],
+      updatedAt: Date.now(),
+    }],
   };
+  backup.parkedItems[0].contentMode = 'web';
+  backup.parkedItems[0].webSource = '<!doctype html><html><head><style>h1 { color: green; }</style></head><body><h1>Imported</h1><script>document.body.dataset.imported = "yes";</script></body></html>';
 
   assert.equal((await runtime.api.importBackup(backup, { mode: 'replace' })).ok, true);
   assert.equal((await runtime.api.importBackup(backup, { mode: 'append' })).ok, true);
@@ -1811,6 +2126,15 @@ test('append import remints note and attachment IDs and rewrites Markdown tokens
   assert.notEqual(notes[0].id, notes[1].id);
   assert.notEqual(notes[0].attachments[0].id, notes[1].attachments[0].id);
   assert.match(notes[1].markdown, new RegExp(`attachment://${notes[1].attachments[0].id}`));
+  assert.equal(notes[1].contentMode, 'web');
+  assert.equal(notes[1].webSource, backup.parkedItems[0].webSource);
+  const importedStickers = await runtime.api.getPageStickers('https://import-sticker.example/');
+  assert.equal(importedStickers.ok, true);
+  assert.equal(importedStickers.stickers.length, 2);
+  assert.deepEqual(
+    new Set(importedStickers.stickers.map((item) => item.note.id)),
+    new Set(notes.map((item) => item.id)),
+  );
   assert.equal(runtime.media.has(`n:${notes[0].id}:${notes[0].attachments[0].id}`), true);
   assert.equal(runtime.media.has(`n:${notes[1].id}:${notes[1].attachments[0].id}`), true);
 });
@@ -1947,7 +2271,7 @@ test('canvas initial center is reported once and does not follow Reset View', as
   const initial = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
   assert.equal(initial.ok, true);
   assert.equal(initial.needsInitialCenter, true);
-  assert.equal(runtime.store.canvasInitialCenterMigratedV1, false);
+  assert.equal(runtime.store.canvasInitialCenterMigratedV2, false);
 
   const centered = await dispatchMessage(runtime, {
     type: 'PATCH_CANVAS_LAYOUT',
@@ -1958,7 +2282,7 @@ test('canvas initial center is reported once and does not follow Reset View', as
     },
   });
   assert.equal(centered.ok, true);
-  assert.equal(runtime.store.canvasInitialCenterMigratedV1, true);
+  assert.equal(runtime.store.canvasInitialCenterMigratedV2, true);
 
   const reset = await dispatchMessage(runtime, {
     type: 'PATCH_CANVAS_LAYOUT',
@@ -1973,6 +2297,29 @@ test('canvas initial center is reported once and does not follow Reset View', as
   assert.equal(afterReset.needsInitialCenter, false);
   assert.equal(afterReset.layout.viewport.x, 0);
   assert.equal(afterReset.layout.viewport.y, 0);
+});
+
+test('canvas default layout retries initial centering after the legacy marker migration', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await runtime.api.setParkedItems([tab(ITEM_ID)]);
+  runtime.store.canvasInitialCenterMigratedV1 = true;
+  delete runtime.store.canvasInitialCenterMigratedV2;
+
+  const initial = await dispatchMessage(runtime, { type: 'GET_CANVAS_LAYOUT' });
+  assert.equal(initial.ok, true);
+  assert.equal(initial.needsInitialCenter, true);
+
+  const centered = await dispatchMessage(runtime, {
+    type: 'PATCH_CANVAS_LAYOUT',
+    baseRevision: initial.revision,
+    layout: {
+      ...initial.layout,
+      viewport: { x: 140, y: 90, zoom: 1 },
+    },
+  });
+  assert.equal(centered.ok, true);
+  assert.equal(runtime.store.canvasInitialCenterMigratedV2, true);
 });
 
 test('custom layout and imported viewport never request initial centering', async () => {
@@ -2010,7 +2357,7 @@ test('custom layout and imported viewport never request initial centering', asyn
   assert.equal(afterImport.layout.viewport.y, 700);
   const exported = await dispatchMessage(runtime, { type: 'EXPORT_BACKUP', mode: 'lite' });
   assert.equal(exported.ok, true);
-  assert.equal('canvasInitialCenterMigratedV1' in exported.backup, false);
+  assert.equal('canvasInitialCenterMigratedV2' in exported.backup, false);
 });
 
 test('canvas layout migrates the legacy default zoom only once', async () => {

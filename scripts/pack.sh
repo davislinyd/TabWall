@@ -37,6 +37,8 @@ zip -r "$OUT_ZIP" \
   mediaDb.js \
   backupBuild.js \
   noteMedia.js \
+  noteCodeSandbox.html \
+  noteCodeSandbox.js \
   vendor/libheif-bundle.js \
   parkWallpaper.js \
   canvasStore.js \
@@ -61,6 +63,9 @@ zip -r "$OUT_ZIP" \
   parkAppHelpers.js \
   parkHistory.js \
   parkAiUi.js \
+  pageStickerEditor.html \
+  pageStickerEditor.js \
+  pageStickerEditor.css \
   park.js \
   icons/icon16.png \
   icons/icon48.png \

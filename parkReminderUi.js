@@ -245,6 +245,11 @@
         return;
       }
       await env.loadList();
+      env.postToParent?.({
+        type: 'TABWALL_PAGE_STICKER_CHANGED',
+        url: '',
+        noteId: itemId,
+      });
       openRemindersBox();
     } finally {
       if (save) save.disabled = false;
@@ -260,6 +265,11 @@
       return;
     }
     await env.loadList();
+    env.postToParent?.({
+      type: 'TABWALL_PAGE_STICKER_CHANGED',
+      url: '',
+      noteId: itemId,
+    });
     openRemindersBox();
   }
 

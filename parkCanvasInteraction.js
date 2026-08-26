@@ -423,6 +423,33 @@
 
   }
 
+  function wireCanvasResizeHandle(node, item) {
+    ensureBound('wireCanvasResizeHandle');
+    const handle = node?.querySelector('[data-canvas-resize-handle]');
+    if (!handle || item?.kind !== 'note') return;
+    handle.tabIndex = 0;
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || event.isPrimary === false) return;
+      event.preventDefault();
+      event.stopPropagation();
+      env.canvasSelectNode(item.id, event);
+      beginCanvasPointer(event, 'resize', item.id);
+    });
+    handle.addEventListener('keydown', (event) => {
+      const steps = {
+        ArrowRight: [16, 0],
+        ArrowLeft: [-16, 0],
+        ArrowDown: [0, 16],
+        ArrowUp: [0, -16],
+      };
+      const delta = steps[event.key];
+      if (!delta) return;
+      event.preventDefault();
+      event.stopPropagation();
+      env.ensureCanvasStore()?.commitResize(item.id, delta[0], delta[1]);
+    });
+  }
+
   function wireCanvasNodeActions(node) {
     ensureBound('wireCanvasNodeActions');
 
@@ -431,6 +458,7 @@
       if (!item) return;
       node.dataset.canvasWired = '1';
       wireCanvasLinkHandles(node);
+      wireCanvasResizeHandle(node, item);
       node.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.detail === 0 || isCanvasControlTarget(event.target)) return;
         if (env.isMultiSelectModifier(event)) {
@@ -484,7 +512,11 @@
         env.canvasNodeClickSuppressUntil.delete(id);
         env.canvasSelectNode(id, event);
       }
-      const ids = kind === 'node' ? [...env.activeCanvasSelection()] : [];
+      const ids = kind === 'node'
+        ? [...env.activeCanvasSelection()]
+        : kind === 'resize'
+          ? [id]
+          : [];
       const searchPreview = kind === 'node' && env.isCanvasSearchPreviewActive();
       const searchViewportPreview = kind === 'pan'
         && Boolean(env.canvasSearchViewportState && env.isCanvasSearchPreviewActive());
@@ -608,6 +640,10 @@
       } else if (state.kind === 'pan' && state.moved && state.searchViewportPreview) {
         const searchContext = env.getCanvasSearchContext();
         env.renderCanvasMinimap(searchContext.items, env.canvasSearchLayoutFor(searchContext));
+      } else if (state.kind === 'resize' && state.moved) {
+        env.ensureCanvasStore()?.flush?.();
+        updateCanvasNodeSelection();
+        env.updateBatchBar();
       }
 
   }
@@ -649,7 +685,7 @@
       clearCanvasNodeTilt();
       return;
     }
-    if (env.canvasPointerState?.kind === 'node' && env.canvasPointerState.moved) {
+    if (['node', 'resize'].includes(env.canvasPointerState?.kind) && env.canvasPointerState.moved) {
       clearCanvasNodeTilt();
       return;
     }
@@ -685,6 +721,16 @@
         }
         env.ensureCanvasStore()?.previewPointer({ dx: dx / zoom, dy: dy / zoom, moved: state.moved });
         syncCanvasNodeDragFx(state, event);
+        return;
+      }
+      if (state.kind === 'resize') {
+        const zoom = env.canvasStoreSnapshot().layout.viewport.zoom || 1;
+        const scale = env.CANVAS_NODE_DISPLAY_SCALE || 1;
+        env.ensureCanvasStore()?.previewPointer({
+          dx: dx / (zoom * scale),
+          dy: dy / (zoom * scale),
+          moved: state.moved,
+        });
         return;
       }
       if (state.kind === 'pan') {
@@ -1285,6 +1331,7 @@
       }
       else if (action === 'copy') await env.copySavedLink(item);
       else if (action === 'members') env.openMembersBox(item);
+      else if (action === 'sources' && item.kind === 'note') await env.openCanvasNoteSources(item);
       else if (action === 'edit') {
         if (item.kind === 'note') env.openStickerNoteEditor(item);
         else env.openEditBox(item);
@@ -1301,7 +1348,7 @@
 
       return Boolean(
         target?.closest?.(
-          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits, .media-lock-overlay'
+          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, #canvasContextMenu, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-resize-handle, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits, .media-lock-overlay'
         )
       );
 
@@ -1312,7 +1359,7 @@
 
       return Boolean(
         target?.closest?.(
-          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
+          'button, input, select, textarea, label, a, [contenteditable="true"], .canvas-context-bar, .canvas-minimap, .canvas-zoom-controls, .canvas-node-actions, .canvas-resize-handle, .canvas-connection, .canvas-connection-hit, .canvas-link-handle, .search-hits'
         )
       );
 

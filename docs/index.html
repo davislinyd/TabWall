@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.49.1 使用者說明：儲存分頁與 Tab Group、未停車標註、頁面繪圖層、空間畫布、本機 AI agent、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.55.3 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.49.1</span>
+      <span>使用者說明 · v2.55.3</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -70,10 +70,10 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.49.1</span><span lang="en">Version 2.49.1</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.55.3</span><span lang="en">Version 2.55.3</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
-          <span class="chip"><span lang="zh-Hant">New Tab 即畫布</span><span lang="en">New Tab is the canvas</span></span>
+          <span class="chip"><span lang="zh-Hant">New Tab 可設定為畫布</span><span lang="en">New Tab can be the canvas</span></span>
         </div>
       </header>
       <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「AI」「提醒」「備份」「硬碟」「搜尋」或「快捷鍵」。</p>
@@ -114,8 +114,8 @@
             <span class="n">2</span>
             <h3 lang="zh-Hant">打開牆</h3>
             <h3 lang="en">Open the wall</h3>
-            <p lang="zh-Hant">開新分頁就會進入 TabWall；或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>，或在 popup 按「打開 TabWall 面板」。</p>
-            <p lang="en">A new tab opens TabWall. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>, or click Open TabWall in the popup.</p>
+            <p lang="zh-Hant">預設開新分頁會進入 TabWall；可在設定 → 一般關閉新分頁接管。或按 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>，或在 popup 按「打開 TabWall 面板」。</p>
+            <p lang="en">By default, a new tab opens TabWall; turn off New Tab takeover in Settings → General to keep the browser’s native page. Or press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>O</kbd>, or click Open TabWall in the popup.</p>
           </article>
           <article class="card">
             <span class="n">3</span>
@@ -154,8 +154,8 @@
           <article class="card">
             <h3 lang="zh-Hant">New Tab／獨立頁</h3>
             <h3 lang="en">New Tab / standalone</h3>
-            <p lang="zh-Hant">新分頁直接顯示空間畫布。受限頁（例如 <code>chrome://</code>）無法注入浮層時，會改開或聚焦獨立 TabWall 分頁。</p>
-            <p lang="en">New Tab opens the canvas. Restricted pages such as <code>chrome://</code> cannot host the overlay, so TabWall opens or focuses a standalone tab instead.</p>
+            <p lang="zh-Hant">新分頁是否顯示空間畫布可在設定 → 一般切換，預設開啟。受限頁（例如 <code>chrome://</code>）無法注入浮層時，會改開或聚焦獨立 TabWall 分頁。</p>
+            <p lang="en">Whether a new tab opens the canvas is configurable in Settings → General and is enabled by default. Restricted pages such as <code>chrome://</code> cannot host the overlay, so TabWall opens or focuses a standalone tab instead.</p>
           </article>
           <article class="card">
             <h3 lang="zh-Hant">網頁浮層</h3>
@@ -238,17 +238,17 @@ https://wiki.example.com
         <h3 lang="en">“Not parked” cards</h3>
         <p lang="zh-Hant">有備註、tags 或繪圖、且該 URL 尚未停車時，畫布／列表會出現虛線「未停車」卡。點擊會聚焦或開啟該網址；可編輯、停車或刪除。不能組成 Stack、不能上鎖或設提醒。</p>
         <p lang="en">If a URL has a note, tags, or ink and is not parked, the wall shows a dashed “Not parked” card. Click to focus or open the URL. You can edit, park, or delete it. Live cards cannot stack, lock, or use reminders.</p>
-        <p lang="zh-Hant">之後停車時，live tags 會與卡片聯集、備註接在後面；繪圖留在原頁圖層，不會變成 Sticker。</p>
-        <p lang="en">When you later park the tab, live tags are unioned and notes are appended. Drawings stay on the page layer; they do not become stickers.</p>
+        <p lang="zh-Hant">之後停車時，live tags 會與卡片聯集、備註接在後面；繪圖留在原頁圖層。Option／Alt+D 展開工具列後，Sticker 按鈕可在頁面點擊位置建立共用頂層 Note。</p>
+        <p lang="en">When you later park the tab, live tags are unioned and notes are appended. Drawings stay on the page layer. The Option/Alt+D toolbar also has Sticker, which creates a shared top-level Note at the clicked page position.</p>
         <h3 lang="zh-Hant">頁面繪圖層</h3>
         <h3 lang="en">Page drawing layer</h3>
         <p lang="zh-Hant">疊在網頁上的獨立圖層，不改頁面 DOM。一般網站可用 popup、或頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> 開關。<code>chrome://</code> 等受限頁不能畫。</p>
         <p lang="en">A separate overlay on the page; it does not change the page DOM. Toggle it from the popup or with <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> on a normal site. Restricted pages such as <code>chrome://</code> cannot host it.</p>
         <ul>
-          <li lang="zh-Hant">繪圖層平時完全隱藏；按頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> 會顯示單一可拖曳 pen icon，預設位於畫面右側中段。canvas 保持透明，只在繪圖工具啟用時接收輸入。左鍵雙擊 icon 展開工具列並進入 Pen，收合後只保留 icon 並回到 View。工具列在上下邊緣仍保持水平；左右側若水平空間不足才改成垂直排列。</li>
-          <li lang="en">The drawing layer is hidden by default. Press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> to show one draggable pen icon, defaulting to the right side at mid-height. The canvas stays transparent and captures input only while a drawing tool is active. Left double-click the icon to expand into Pen mode; collapsing leaves only the icon and returns to View. At the top or bottom it stays horizontal; it becomes vertical only when horizontal space is insufficient at the sides.</li>
-          <li lang="zh-Hant">工具：筆、直線、螢光直線（接近水平會吸直）、圓圈／橢圓（按住 Shift 為正圓）、方框、文字框、像素橡皮擦、檢視；圖形內部保持透明，圖案會跟著頁面捲動。沒有獨立「選」鈕；滑鼠移到物件上再左鍵即可選取、拖曳。文字框支援多行 Markdown 原文，離開編輯後會安全呈現標題、粗斜體、程式碼、列表、Markdown 超連結與純文字 <code>http(s)</code> URL；按 Esc 儲存並回到 View，View 或 Pen 模式下左鍵雙擊文字框可再次編輯，聚焦時不觸發頁面快捷鍵。Delete／Backspace 刪除選取；⌘Z／Ctrl+Z 或「復原」可 Undo（不跨重整）。</li>
-          <li lang="en">Tools: pen, straight line, highlighter (snaps near-horizontal), ellipse/circle (hold Shift for a true circle), rectangle, text box, pixel eraser, view. Shape interiors stay transparent and drawings follow page scrolling. There is no Pick button — hover an object and left-click to select and drag. Text boxes preserve multiline Markdown source and safely render headings, emphasis, code, lists, Markdown links, and plain <code>http(s)</code> URLs after editing; Esc saves and returns to View, and double-clicking a completed text box in View or Pen edits it again. Focused text boxes isolate page shortcuts. Delete/Backspace removes the selection; ⌘Z/Ctrl+Z or Undo reverts (not across reload).</li>
+          <li lang="zh-Hant">繪圖層平時完全隱藏；按頁面上的 <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> 會顯示單一可拖曳 pen icon，預設位於畫面右側中段。canvas 保持透明，只在繪圖工具啟用時接收輸入。單擊 icon 展開工具列並進入 Pen；按住左鍵移動會拖曳 icon，收合後只保留 icon 並回到 View。工具列在上下邊緣仍保持水平；左右側若水平空間不足才改成垂直排列。</li>
+          <li lang="en">The drawing layer is hidden by default. Press <kbd>⌥</kbd>/<kbd>Alt</kbd>+<kbd>D</kbd> to show one draggable pen icon, defaulting to the right side at mid-height. The canvas stays transparent and captures input only while a drawing tool is active. Single-click the icon to expand into Pen mode; hold the left button and move to drag the icon. Collapsing leaves only the icon and returns to View. At the top or bottom it stays horizontal; it becomes vertical only when horizontal space is insufficient at the sides.</li>
+<li lang="zh-Hant">工具：筆、直線、螢光直線、圓圈／橢圓、方框、文字框、Sticker、像素橡皮擦、檢視。Sticker 點擊頁面位置後直接在目前頁面的 overlay 開啟 editor；頁面支援多張、標題列拖曳、獨立縮放（160–640 × 120–560）、標題雙擊收合／展開、鉛筆按鈕或 body 雙擊編輯、提醒 badge 與解除目前 placement。</li>
+<li lang="en">Tools: pen, straight line, highlighter, ellipse/circle, rectangle, text box, Sticker, pixel eraser, view. Clicking Sticker then a page position opens an inline editor overlay on the current page; pages support multiple cards, header drag, independent resize (160–640 × 120–560), title double-click collapse/expand, pencil-button or body double-click editing, reminder badges, and detaching the current placement.</li>
           <li lang="zh-Hant">筆畫綁完整 URL，存在本機 IndexedDB；筆畫與文字完成操作後立即寫入，重新載入 extension 後仍保留。重整同一網址會維持圖層開或關。</li>
           <li lang="en">Ink is keyed by the full URL and stored in IndexedDB; completed strokes and text are written immediately and survive an extension reload. Reloading the same URL keeps the layer open or closed.</li>
         </ul>
@@ -286,8 +286,12 @@ https://wiki.example.com
         <h2 lang="en">Spatial canvas</h2>
         <p lang="zh-Hant">預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
         <p lang="en">The default view is an infinite canvas you can pan and zoom. Card previews are 16:10. At 100% zoom cards look about 10% larger; stored positions stay compatible.</p>
-        <p lang="zh-Hant">畫布視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。</p>
-        <p lang="en">The canvas viewport and zoom persist when switching between list and canvas or reopening TabWall; automatic centering runs only on first use.</p>
+        <p lang="zh-Hant">畫布視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。更新後若舊的預設視角旗標失效，會等卡片與 viewport 尺寸就緒後只修復一次；已有的自訂視角不會被覆寫。</p>
+        <p lang="en">The canvas viewport and zoom persist when switching between list and canvas or reopening TabWall. Automatic centering runs only on first use; after an update, a stale default-view marker is repaired once the cards and viewport have measurable sizes. Existing custom views are preserved.</p>
+        <figure class="diagram-card">
+          <img src="diagrams/canvas-sticker-flow.svg" alt="Sticker Notes and Canvas viewport architecture diagram" />
+          <figcaption><span lang="zh-Hant">頁面 Sticker、反向來源索引、本機資料與 Canvas 初始視角修正流程。</span><span lang="en">Page Stickers, the reverse source index, local data, and the safe initial Canvas viewport repair path.</span></figcaption>
+        </figure>
         <p lang="zh-Hant">滑鼠移到畫布或卡片網格的卡片上時，卡片會放大約 1.30 倍；拖曳與 Stack hover 會保留操作優先順序。Quiet／作業系統 reduced-motion 設定會抑制這個效果。</p>
         <p lang="en">Hovering a card on the Canvas or in the card grid enlarges it to about 1.30×. Dragging and Stack hover keep interaction priority. Quiet and OS reduced-motion settings suppress the effect.</p>
         <table>
@@ -337,8 +341,14 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">「新增 Sticker Note」或點空白畫布</td>
               <td lang="en">Sticker Note tool or empty-canvas click</td>
-              <td lang="zh-Hant">建立僅存在於畫布的便條，並打開左右分割編輯器。</td>
-              <td lang="en">Creates a canvas-only note and opens the split editor.</td>
+              <td lang="zh-Hant">建立 Canvas 便條，或從 Option／Alt+D 的頁面 Sticker 工具建立頁面 placement。</td>
+              <td lang="en">Creates a Canvas note, or a page placement from the Option/Alt+D Sticker tool.</td>
+            </tr>
+            <tr>
+              <td lang="zh-Hant">拖曳頂層 Sticker Note 右下角 handle</td>
+              <td lang="en">Drag a top-level Sticker Note resize handle</td>
+              <td lang="zh-Hant">個別調整 note 尺寸；寬度限制 160–640、高度限制 120–560，放開後只保存一次。</td>
+              <td lang="en">Resize that note independently; width is 160–640 and height is 120–560, with one save on release.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">拖曳卡片</td>
@@ -456,11 +466,17 @@ https://wiki.example.com
 
       <section class="chapter" id="notes">
         <h2>Sticker Note</h2>
-        <p lang="zh-Hant">便條只活在畫布上，用來寫脈絡、貼圖、跟分頁放在一起。可以加入 Stack，<strong>永遠不會還原成瀏覽器分頁</strong>。</p>
-        <p lang="en">Notes live only on the canvas — context, images, next to tabs. They can join Stacks and are <strong>never restored as browser tabs</strong>.</p>
+        <p lang="zh-Hant">頁面 Sticker 標題可雙擊收合／展開；收合不改變保存的位置與尺寸。鉛筆按鈕或 Sticker body 雙擊仍可開啟編輯器。Web 欄位也支援直接輸入 <code>&lt;h1&gt;test&lt;/h1&gt;</code> 這類 HTML fragment。</p>
+        <p lang="en">Double-click a page Sticker title to collapse or expand its body without changing the saved position or size. Use the pencil button or double-click the Sticker body to edit. The Web field also accepts HTML fragments such as <code>&lt;h1&gt;test&lt;/h1&gt;</code>.</p>
+        <p lang="zh-Hant">Sticker Note 可只放在 Canvas，也可從一般頁面的 Option／Alt+D → Sticker 建立頁面 placement；同一頂層 Note 可出現在多個 URL，頁面位置與 Canvas layout 分開保存。Canvas 會列出該 Note 所在的來源網頁，點擊會在新分頁開啟；進入編輯器時也會顯示可點擊的來源清單。上鎖時來源資訊會隱藏。Stack 內 note 仍不能建立頁面 Sticker 或提醒，且永遠不會還原成瀏覽器分頁。</p>
+        <p lang="en">A Sticker Note can live on the Canvas or be placed from a normal page through Option/Alt+D → Sticker. One top-level Note can appear on multiple URLs, with page placements independent from Canvas layout. Canvas lists the source pages and opens them in new tabs; the editor also shows a clickable source list. Locked Notes hide their source information. Stack notes cannot become page Stickers or use reminders, and are never restored as browser tabs.</p>
         <ul>
-          <li lang="zh-Hant">標題、標籤、安全 Markdown 預覽。</li>
-          <li lang="en">Title, tags, and a safe Markdown preview.</li>
+          <li lang="zh-Hant">標題、標籤，以及 Markdown 或 Web（單一完整 HTML 文件）內容模式；兩種模式切換時不會清除另一邊內容。</li>
+          <li lang="en">Title, tags, and Markdown or Web (one complete HTML document) content modes; switching modes keeps the other mode’s content.</li>
+          <li lang="zh-Hant">Web 預覽使用單一完整 HTML 文件輸入框，可包含 <code>&lt;style&gt;</code> 與 <code>&lt;script&gt;</code>；只有按下「預覽／執行」才更新，編輯器關閉時卸載 iframe。</li>
+          <li lang="en">Web preview uses one complete HTML document textarea, including <code>&lt;style&gt;</code> and <code>&lt;script&gt;</code>; it updates only after Preview/Run and unloads when the editor closes.</li>
+          <li lang="zh-Hant">編輯器與可見的頁面 Sticker 使用沒有 extension API、網路、popup、form 或外層導覽權限的 <code>sandbox="allow-scripts"</code>；頁面 Web Sticker 只在可視範圍 lazy mount，離開可視範圍或關閉圖層就卸載。Canvas／列表卡片永不建立 iframe。</li>
+          <li lang="en">The editor and visible page Stickers use <code>sandbox="allow-scripts"</code> without extension APIs, network access, popups, forms, or outer-page navigation. Page Web Stickers lazy-mount only while visible and unload when hidden or when the layer closes; Canvas and list cards never create an iframe.</li>
           <li lang="zh-Hant">最多 12 張本機圖片。新圖會轉成 WebP（不行就 PNG）；長邊 ≤ 4096px、總像素 ≤ 16MP；原始檔與輸出檔各 ≤ 24 MiB。</li>
           <li lang="en">Up to 12 local images. New files become WebP (PNG fallback); long edge ≤ 4096px, 16MP max, 24 MiB per source and output file.</li>
           <li lang="zh-Hant">GIF／SVG 會變成靜態圖。</li>
@@ -840,8 +856,8 @@ https://wiki.example.com
         </ol>
         <h3 lang="zh-Hant">畫布很空或卡片跑很遠</h3>
         <h3 lang="en">The canvas looks empty or cards are far away</h3>
-        <p lang="zh-Hant">新卡片會靠近既有群配置到下一個不重疊格。可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
-        <p lang="en">New cards land near the existing cluster in the next free cell. Use Arrange canvas, or double-click the middle mouse button to reset the view.</p>
+        <p lang="zh-Hant">新卡片會靠近既有群配置到下一個不重疊格。更新後若預設視角與卡片分離，請重新載入擴充功能並刷新 TabWall；系統會在幾何尺寸就緒後修復一次。仍異常時可用「畫布整理」重新棋盤／對齊，或雙擊中鍵重設視角。</p>
+        <p lang="en">New cards land near the existing cluster in the next free cell. If an update leaves the default view separated from the cards, reload the extension and refresh TabWall; the repair runs once after geometry is ready. If needed, use Arrange canvas or double-click the middle mouse button to reset the view.</p>
         <h3 lang="zh-Hant">擴充開關自己關掉／版本停在舊號</h3>
         <h3 lang="en">The extension toggle turns itself off / version stays old</h3>
         <p lang="zh-Hant">改過程式後，Edge 常把未封裝擴充標成「待重新載入」，卡片仍顯示上次成功載入的版號，重整管理頁開關會彈回關，且不一定有錯誤。請開著開發人員模式，按卡片或頁面頂端的<strong>重新載入</strong>（不要只撥開關，也<strong>不要移除</strong>，否則本機資料會沒）。成功後版號應與 <code>manifest.json</code> 一致。</p>
@@ -957,8 +973,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-    <p lang="zh-Hant">對應 TabWall <strong>2.49.1</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.49.1</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.55.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.55.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

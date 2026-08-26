@@ -68,6 +68,8 @@ function sampleNote({ id = NOTE_ID, attachment = true } = {}) {
     kind: 'note',
     id,
     title: '安全筆記',
+    contentMode: 'markdown',
+    webSource: '',
     markdown: attachment
       ? `# Heading\n\n![diagram](attachment://${ATTACHMENT_ID})\n\n[Open](https://example.com)`
       : 'Plain note',
@@ -493,6 +495,97 @@ test('safe Markdown renderer escapes XSS and rejects remote or dangerous images'
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
+test('v6 notes migrate legacy Web fields to the canonical single document', async () => {
+  const legacy = sampleBackup([sampleNote({ attachment: false })]);
+  legacy.version = 6;
+  delete legacy.parkedItems[0].contentMode;
+  delete legacy.parkedItems[0].webSource;
+  legacy.parkedItems[0].html = '<!doctype html><html><head></head><body><button>Run</button></body></html>';
+  legacy.parkedItems[0].css = 'button { color: red; }';
+  legacy.parkedItems[0].javascript = 'document.body.dataset.ready = "yes";';
+  const prepared = Build.prepareImportedBackup(legacy);
+  assert.equal(prepared.ok, true);
+  const migrated = prepared.backup.parkedItems[0];
+  assert.equal(migrated.contentMode, 'markdown');
+  assert.match(migrated.webSource, /<button>Run<\/button>/);
+  assert.match(migrated.webSource, /<style>[\s\S]*color: red/);
+  assert.match(migrated.webSource, /<script>[\s\S]*dataset\.ready/);
+  assert.equal('html' in migrated, false);
+  assert.equal('css' in migrated, false);
+  assert.equal('javascript' in migrated, false);
+  assert.equal(Build.validateBackup(prepared.backup).ok, true);
+
+  const exportedLegacy = sampleBackup([sampleNote({ attachment: false })]);
+  exportedLegacy.version = 6;
+  delete exportedLegacy.parkedItems[0].contentMode;
+  delete exportedLegacy.parkedItems[0].webSource;
+  exportedLegacy.parkedItems[0].html = '<!doctype html><html><body>Exported</body></html>';
+  const exported = JSON.parse(await Build.buildLiteBlob(exportedLegacy).blob.text());
+  const exportedNote = exported.parkedItems[0];
+  assert.equal(exported.version, 7);
+  assert.match(exportedNote.webSource, /Exported/);
+  assert.equal('html' in exportedNote, false);
+});
+
+test('single Web document round-trips and rejects unsafe shapes', async () => {
+  const web = sampleNote({ attachment: false });
+  web.contentMode = 'web';
+  web.webSource = '<!doctype html><html><head><style>button { color: red; }</style></head><body><button>Run</button><script>document.body.dataset.ready = "yes";</script></body></html>';
+  const backup = sampleBackup([web]);
+  const lite = Build.buildLiteBlob(backup);
+  const prepared = Build.prepareImportedBackup(JSON.parse(await lite.blob.text()));
+  assert.equal(prepared.ok, true);
+  assert.equal(prepared.backup.parkedItems[0].contentMode, 'web');
+  assert.equal(prepared.backup.parkedItems[0].webSource, web.webSource);
+  assert.equal('html' in prepared.backup.parkedItems[0], false);
+  assert.equal('css' in prepared.backup.parkedItems[0], false);
+  assert.equal('javascript' in prepared.backup.parkedItems[0], false);
+  assert.equal(Build.validateBackup(prepared.backup).ok, true);
+
+  const invalidMode = sampleNote({ attachment: false });
+  invalidMode.contentMode = 'mixed';
+  assert.equal(Build.validateBackup(sampleBackup([invalidMode])).error, 'invalid_note_content_mode');
+  const invalidControl = sampleNote({ attachment: false });
+  invalidControl.contentMode = 'web';
+  invalidControl.webSource = '<div>\u0000</div>';
+  assert.equal(Build.validateBackup(sampleBackup([invalidControl])).error, 'invalid_note_web_source');
+  const tooLong = sampleNote({ attachment: false });
+  tooLong.contentMode = 'web';
+  tooLong.webSource = 'x'.repeat(Build.LIMITS.MAX_NOTE_WEB_SOURCE_LENGTH + 1);
+  assert.equal(Build.validateBackup(sampleBackup([tooLong])).error, 'invalid_note_web_source');
+});
+
+test('v7 backup round-trips page Sticker placements and rejects non-top-level references', async () => {
+  const backup = sampleBackup([sampleNote({ attachment: false })]);
+  backup.pageAnnotations = [{
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    url: 'https://sticker.example/page',
+    title: 'Sticker page',
+    favIconUrl: '',
+    note: '',
+    tags: [],
+    overlayVisible: true,
+    hasInk: false,
+    stickers: [{ noteId: NOTE_ID, x: 24, y: 48, w: 320, h: 240, z: 2 }],
+    updatedAt: Date.now(),
+  }];
+  assert.equal(Build.validateBackup(backup).ok, true);
+  const lite = Build.buildLiteBlob(backup);
+  const imported = Build.prepareImportedBackup(JSON.parse(await lite.blob.text()));
+  assert.equal(imported.ok, true);
+  assert.deepEqual(imported.backup.pageAnnotations[0].stickers, backup.pageAnnotations[0].stickers);
+
+  const invalid = structuredClone(backup);
+  invalid.pageAnnotations[0].stickers[0].noteId = MEMBER_ID;
+  assert.equal(Build.validateBackup(invalid).error, 'invalid_page_annotations');
+  const noTopLevelNote = structuredClone(backup);
+  noTopLevelNote.parkedItems = [];
+  assert.equal(Build.validateBackup(noTopLevelNote).error, 'invalid_page_annotations');
+  const outOfBounds = structuredClone(backup);
+  outOfBounds.pageAnnotations[0].stickers[0].w = 100;
+  assert.equal(Build.validateBackup(outOfBounds).error, 'invalid_page_annotations');
+});
+
 test('full ZIP round-trip preserves note attachment bytes', async () => {
   const backup = sampleBackup([sampleNote()]);
   const built = Build.buildFullZipBlob(backup);
@@ -500,7 +593,7 @@ test('full ZIP round-trip preserves note attachment bytes', async () => {
   const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
   const path = `media/${NOTE_ID}_${ATTACHMENT_ID}.png`;
 
-  assert.equal(metadata.version, 5);
+  assert.equal(metadata.version, 7);
   assert.equal(metadata.parkedItems[0].attachments[0].data, path);
   assert.deepEqual([...files[path]], [1, 2, 3]);
   const hydrated = Build.rehydrateMedia(metadata.parkedItems, files, metadata.mediaMimes);

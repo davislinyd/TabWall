@@ -45,6 +45,24 @@ test('normalizePageAnnotation keeps exact URL identity and strips control chars'
   assert.equal(A.normalizePageAnnotation({ url: '' }), null);
 });
 
+test('page Sticker placements are bounded, deduplicated, and keep page records live', () => {
+  const A = loadAnnotate();
+  const ann = A.normalizePageAnnotation({
+    url: 'https://sticker.test/',
+    stickers: [
+      { noteId: 'note-a', x: -10, y: 20, w: 80, h: 900, z: 2 },
+      { noteId: 'note-a', x: 50, y: 60, w: 300, h: 200, z: 3 },
+      { noteId: 'note-b', x: 100, y: 120, w: 640, h: 560, z: 4 },
+    ],
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(ann.stickers)), [
+    { noteId: 'note-a', x: 0, y: 20, w: 160, h: 560, z: 2 },
+    { noteId: 'note-b', x: 100, y: 120, w: 640, h: 560, z: 4 },
+  ]);
+  assert.equal(A.pageAnnotationIsKeepable(ann), true);
+  assert.equal(A.toLiveWallItem(ann).stickerCount, 2);
+});
+
 test('merge live tags/notes unions tags and concatenates distinct notes', () => {
   const A = loadAnnotate();
   assert.equal(A.mergeAnnotationNotes('keep', ''), 'keep');

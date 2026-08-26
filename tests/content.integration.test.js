@@ -196,6 +196,17 @@ test('content shell replaces a stale reload marker instead of skipping injection
   assert.equal(typeof runtime.window.__tabWallInjected.dispose, 'function');
 });
 
+test('content bridge queues page Sticker editor and forwards page changes', () => {
+  assert.match(SOURCE, /OPEN_PAGE_STICKER_EDITOR/);
+  assert.match(SOURCE, /OPEN_PAGE_STICKER_REMINDER/);
+  assert.match(SOURCE, /pendingPageStickerEditor/);
+  assert.match(SOURCE, /TABWALL_PAGE_STICKER_SAVED/);
+  assert.match(SOURCE, /TABWALL_PAGE_STICKER_CHANGED/);
+  assert.match(SOURCE, /TABWALL_PAGE_STICKER_CANCEL/);
+  assert.match(SOURCE, /flushPendingPageStickerEditor/);
+  assert.match(SOURCE, /flushPendingPageStickerReminder/);
+});
+
 test('overlay quick save hides TabWall before capture and restores it after response', async () => {
   const runtime = createContentRuntime();
   runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });

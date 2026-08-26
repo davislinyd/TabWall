@@ -38,7 +38,9 @@ const TAG_CATALOG_KEY = 'tagCatalog';
 const CANVAS_LAYOUT_KEY = 'canvasLayout';
 const CANVAS_LAYOUT_REVISION_KEY = 'canvasLayoutRevision';
 const CANVAS_ZOOM_DEFAULT_MIGRATION_KEY = 'canvasZoomDefaultMigratedV1';
-const CANVAS_INITIAL_CENTER_MIGRATION_KEY = 'canvasInitialCenterMigratedV1';
+// V2 retries the one-time default-layout centering for profiles that were
+// marked migrated before the Canvas viewport had usable geometry.
+const CANVAS_INITIAL_CENTER_MIGRATION_KEY = 'canvasInitialCenterMigratedV2';
 const CANVAS_LAYOUT_VERSION = 1;
 const DATA_VERSION_KEY = 'dataVersion';
 const DATA_VERSION = Build?.FORMAT_VERSION || 4;
@@ -78,6 +80,7 @@ const DEFAULT_AUTO_SAVE_METADATA = {
 };
 
 const DEFAULT_SETTINGS = {
+  newTabOverride: true,
   afterSave: 'close',
   afterSaveGroup: 'close',
   saveGroupCapture: 'all',
@@ -102,6 +105,55 @@ let autoBackupRunning = false;
 /** Prevent rapid duplicate actions from Chrome commands */
 const actionLocks = new Map();
 const ACTION_DEBOUNCE_MS = 700;
+const NATIVE_NEW_TAB_URLS = new Set([
+  'chrome://newtab',
+  'chrome://newtab/',
+  'edge://newtab',
+  'edge://newtab/',
+]);
+const newTabRedirects = new Set();
+
+function isNativeNewTabUrl(url) {
+  return NATIVE_NEW_TAB_URLS.has(String(url || ''));
+}
+
+async function redirectNativeNewTab(tabOrId) {
+  let tab = tabOrId;
+  if (!tab || typeof tab !== 'object') {
+    try {
+      tab = await chrome.tabs.get(tabOrId);
+    } catch {
+      return false;
+    }
+  }
+  const tabId = tab?.id;
+  if (!Number.isInteger(tabId) || tab.incognito) return false;
+  if (!isNativeNewTabUrl(tab.pendingUrl || tab.url)) return false;
+  if (newTabRedirects.has(tabId)) return false;
+
+  newTabRedirects.add(tabId);
+  try {
+    const settings = await getSettings();
+    if (!settings.newTabOverride) return false;
+
+    let current;
+    try {
+      current = await chrome.tabs.get(tabId);
+    } catch {
+      return false;
+    }
+    if (!current || current.incognito || !isNativeNewTabUrl(current.pendingUrl || current.url)) {
+      return false;
+    }
+    await chrome.tabs.update(tabId, { url: getParkPageUrl() });
+    return true;
+  } catch (err) {
+    console.warn('[TabWall] new tab redirect failed:', err);
+    return false;
+  } finally {
+    newTabRedirects.delete(tabId);
+  }
+}
 
 function beginAction(name) {
   const now = Date.now();
@@ -174,12 +226,22 @@ chrome.tabs.onActivated?.addListener?.(({ tabId }) => {
   return refreshTabBadge(tabId).catch(() => {});
 });
 
+chrome.tabs.onCreated?.addListener?.((tab) => {
+  return redirectNativeNewTab(tab).catch(() => {});
+});
+
 chrome.tabs.onUpdated?.addListener?.((tabId, changeInfo, tab) => {
+  const observedTab = { ...(tab || {}), id: tabId };
+  if (changeInfo?.url) {
+    observedTab.url = changeInfo.url;
+    delete observedTab.pendingUrl;
+  }
+  const redirectPromise = redirectNativeNewTab(observedTab).catch(() => {});
   if (changeInfo?.url && typeof notifyPageAnnotationUrlChanged === 'function') {
     notifyPageAnnotationUrlChanged(tabId, changeInfo.url).catch(() => {});
   }
-  if (!changeInfo?.url && changeInfo?.status !== 'complete') return;
-  return refreshTabBadge(tab || tabId).catch(() => {});
+  if (!changeInfo?.url && changeInfo?.status !== 'complete') return redirectPromise;
+  return Promise.all([redirectPromise, refreshTabBadge(tab || tabId).catch(() => {})]);
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -618,6 +680,42 @@ async function createNote(raw, position = null) {
   return { ok: true, item: toStoredMeta(note) };
 }
 
+async function createNotePageSticker(raw, position = null, url = '', placement = {}) {
+  const pageApi = self.TabWallPageAnnotate;
+  if (!pageApi?.normalizePageSticker || !pageApi?.createPageSticker) {
+    return { ok: false, error: 'page_sticker_unavailable' };
+  }
+  const draft = normalizeNoteItem({ ...(raw || {}), kind: 'note' });
+  const pagePlacement = pageApi.normalizePageSticker({
+    ...(placement || {}),
+    noteId: draft.id,
+  });
+  if (!pagePlacement) return { ok: false, error: 'invalid_sticker' };
+
+  const created = await createNote(draft, position);
+  if (!created.ok) return created;
+  let attached;
+  try {
+    attached = await pageApi.createPageSticker(url, created.item.id, pagePlacement);
+  } catch (err) {
+    await deleteNote(created.item.id).catch(() => {});
+    return {
+      ok: false,
+      error: 'page_sticker_write_failed',
+      detail: String(err?.message || err),
+      rolledBack: true,
+    };
+  }
+  if (attached?.ok) return { ...created, pageSticker: attached };
+
+  await deleteNote(created.item.id).catch(() => {});
+  return {
+    ok: false,
+    error: attached?.error || 'page_sticker_write_failed',
+    rolledBack: true,
+  };
+}
+
 async function createImageCard(raw = {}, position = null) {
   const item = normalizeTabItem({
     ...(raw || {}),
@@ -771,6 +869,9 @@ async function deleteNote(noteId, groupId = '') {
     await Media.removeMany(Media.keysForItem(removed));
   } catch (err) {
     appLogPush('warn', 'note', 'attachment cleanup deferred', err?.message || err);
+  }
+  if (location.groupIndex == null && self.TabWallPageAnnotate?.removePageStickerReferences) {
+    await self.TabWallPageAnnotate.removePageStickerReferences(removed.id).catch(() => {});
   }
   return { ok: true, remaining: list.length };
 }
@@ -1792,9 +1893,12 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'RESTORE_GROUP_MEMBER',
   'UPDATE_GROUP_MEMBER',
   'CREATE_NOTE',
+  'CREATE_PAGE_STICKER',
   'CREATE_IMAGE_CARD',
   'UPDATE_NOTE',
   'DELETE_NOTE',
+  'UPDATE_PAGE_STICKER',
+  'DELETE_PAGE_STICKER',
   'DELETE_TAB',
   'DELETE_ITEM',
   'UPDATE_TAB',
@@ -1847,6 +1951,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true, ...(await getCanvasLayoutRecord()) };
       case 'GET_REMINDERS':
         return { ok: true, items: await listReminderItems() };
+      case 'GET_PAGE_STICKERS':
+        return self.TabWallPageAnnotate.getPageStickers(message.url);
+      case 'GET_NOTE_PAGE_LOCATIONS':
+        return self.TabWallPageAnnotate.getNotePageLocations();
+      case 'OPEN_PAGE_STICKER_EDITOR':
+      case 'OPEN_PAGE_STICKER_REMINDER': {
+        const tabId = sender?.tab?.id;
+        if (!Number.isInteger(tabId)) return { ok: false, error: 'no_tab' };
+        const payload = message.type === 'OPEN_PAGE_STICKER_EDITOR'
+          ? {
+            type: message.type,
+            url: message.url || '',
+            noteId: message.noteId || '',
+            placement: message.placement || null,
+          }
+          : {
+            type: message.type,
+            url: message.url || '',
+            noteId: message.noteId || '',
+          };
+        try {
+          const response = Number.isInteger(sender?.frameId)
+            ? await chrome.tabs.sendMessage(tabId, payload, { frameId: sender.frameId })
+            : await chrome.tabs.sendMessage(tabId, payload);
+          return response || { ok: true };
+        } catch (err) {
+          return { ok: false, error: 'page_sticker_bridge_failed', detail: String(err?.message || err) };
+        }
+      }
       case 'SET_REMINDER':
         return setReminder(message.id, message.reminder);
       case 'CLEAR_REMINDER':
@@ -1869,12 +2002,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       case 'CREATE_NOTE':
         return createNote(message.note || message.item, message.position);
+      case 'CREATE_PAGE_STICKER':
+        return createNotePageSticker(
+          message.note || message.item,
+          message.position,
+          message.url,
+          message.placement || message.sticker || {},
+        );
       case 'CREATE_IMAGE_CARD':
         return createImageCard(message.item || message, message.position);
       case 'UPDATE_NOTE':
         return updateNote(message.noteId || message.id, message.patch || message.note || {}, message.groupId || '');
       case 'DELETE_NOTE':
         return deleteNote(message.noteId || message.id, message.groupId || '');
+      case 'UPDATE_PAGE_STICKER':
+        return self.TabWallPageAnnotate.updatePageSticker(
+          message.url,
+          message.noteId || message.id,
+          message.placement || message.sticker || message.patch || {},
+        );
+      case 'DELETE_PAGE_STICKER':
+        return self.TabWallPageAnnotate.deletePageSticker(
+          message.url,
+          message.noteId || message.id,
+        );
       case 'DELETE_TAB':
       case 'DELETE_ITEM':
         return deleteItem(message.id);
@@ -1940,6 +2091,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       case 'OPEN_OR_FOCUS_URL':
         return openOrFocusUrl(message.url);
+      case 'OPEN_NEW_TAB_URL':
+        return openUrlInNewTab(message.url);
       case 'PARK_PAGE_ANNOTATION':
         return parkPageAnnotation(message.url);
       case 'GET_TAGS':
@@ -2152,6 +2305,7 @@ if (globalThis.__TABWALL_TEST__) {
     resolveSaveConflict,
     updateItem,
     createNote,
+    createNotePageSticker,
     createImageCard,
     updateNote,
     deleteNote,
@@ -2178,9 +2332,15 @@ if (globalThis.__TABWALL_TEST__) {
     toggleAnnotateOnActiveTab,
     notifyPageAnnotationUrlChanged,
     openOrFocusUrl,
+    openUrlInNewTab,
     parkPageAnnotation,
     getPageInk: self.TabWallPageAnnotate.getPageInk,
     putPageInk: self.TabWallPageAnnotate.putPageInk,
+    getPageStickers: self.TabWallPageAnnotate.getPageStickers,
+    getNotePageLocations: self.TabWallPageAnnotate.getNotePageLocations,
+    createPageSticker: self.TabWallPageAnnotate.createPageSticker,
+    updatePageSticker: self.TabWallPageAnnotate.updatePageSticker,
+    deletePageSticker: self.TabWallPageAnnotate.deletePageSticker,
   };
 }
 

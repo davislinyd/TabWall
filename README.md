@@ -23,6 +23,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
 - Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
+- [Canvas / Sticker architecture diagram](docs/diagrams/canvas-sticker-flow.svg) maps page placement, the reverse source index, local storage, and the one-time initial viewport repair gate. The repair waits for card and viewport geometry, then leaves existing custom views untouched.
 
 ### Local AI agent
 
@@ -69,7 +70,7 @@ Browser command defaults are declared in `manifest.json` and managed in Edge at 
 | `⌘⇧Z` / `Ctrl+⇧Z` / `Ctrl+Y` | Redo stack or connection |
 | `←` / `→` | Show the previous or next snapshot |
 
-The first four actions are Chrome commands with install-time suggested keys (Chromium allows at most four suggested keys). `open-ai` and `toggle-annotate` are extra commands without a default key; bind them in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) when needed. `Option/Alt+A` and `Option/Alt+D` are handled by the page content script. Alt+D shows the drawing layer as one draggable icon; left double-click expands the tools into Pen mode, and collapsing returns to View mode. Existing assignments, conflicts, and platform rules can leave commands unbound.
+The first four actions are Chrome commands with install-time suggested keys (Chromium allows at most four suggested keys). `open-ai` and `toggle-annotate` are extra commands without a default key; bind them in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) when needed. `Option/Alt+A` and `Option/Alt+D` are handled by the page content script. Alt+D shows the drawing layer as one draggable icon; a single click expands the tools into Pen mode, while holding the left button and moving drags the icon. The expanded toolbar also includes Sticker. Existing assignments, conflicts, and platform rules can leave commands unbound.
 
 Clicking the extension icon opens an action menu for saving the current tab or Tab Group with or without closing it, or opening the TabWall panel. Group actions are disabled when the current tab is not in a Tab Group.
 
@@ -81,15 +82,16 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 
 | Action | Result |
 |--------|--------|
-| Sticker Note tool / empty canvas click | Create a Canvas-only note and open the split editor |
+| Sticker Note tool / empty canvas click | Create a Canvas note and open the editor |
 | Click a thumbnail | Restore a tab or group; groups ask for confirmation first |
-| Click a note title or Edit | Edit title, tags, safe Markdown, and local image attachments |
+| Click a note title or Edit | Edit title, tags, Markdown or one complete HTML document, and local image attachments |
 | Click a title or metadata area | Copy the saved URL or the member URLs |
 | Click the pin control | Pin or unpin the top-level item; use the toolbar filter to show pinned items |
 | Select a node | Show the contextual actions; hold `Shift` / `Control` for multi-select |
 | Right-click empty canvas | Custom menu: sort by date, realign cards, export lite backup, add Sticker Note |
 | Right-click a card | Same actions as the card toolbar (restore and keep, snapshot, edit, copy, pin, delete—by kind) |
 | Drag a node | Move it on the canvas; positions are saved automatically |
+| Drag a top-level Sticker Note resize handle | Resize that note independently; width is 160–640 and height is 120–560, with one save on release |
 | Drag one node onto another | Stack the items into a group |
 | Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
 | Middle-mouse drag anywhere on the canvas | Pan the canvas without starting a selection; double-click resets the view |
@@ -100,7 +102,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Drag a connection line | The first and last thirds reconnect an endpoint; the middle third bends or lengthens the curve. The line uses a 16px near-hit area, and double-click resets its custom curve |
 | Restore a stack or group | Recreate its tabs as a Chrome Tab Group; notes remain Canvas-only |
 
-Canvas and grid cards enlarge to about `1.30×` while hovered. Dragging and Stack hover states keep their interaction priority, and Quiet / reduced-motion settings continue to suppress the visual effect. Canvas viewport position and zoom persist when switching between list and canvas or reopening TabWall; the automatic centering runs only on first use.
+Canvas and grid cards enlarge to about `1.30×` while hovered. Dragging and Stack hover states keep their interaction priority, and Quiet / reduced-motion settings continue to suppress the visual effect. Canvas viewport position and zoom persist when switching between list and canvas or reopening TabWall; automatic centering runs only on first use. After an update, a stale default layout is repaired once card and viewport geometry is ready, while an existing custom viewport is preserved.
 
 List view remains available as a dense and accessible fallback; canvas layout is independent from list ordering. If a canvas layout read is temporarily unavailable, loaded parked items still render in list view and remain usable until Canvas is available again.
 
@@ -117,15 +119,17 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 ### Features
 
-- **New Tab and restricted pages:** New Tab opens TabWall directly; browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green `✓` badge means the URL is parked; an orange `✎` means the drawing layer is open.
-- **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is hidden until Option/Alt+D and does not change the page DOM or paint a page-sized background. The shortcut reveals one draggable pen icon (default: right side, vertically centered); left double-click expands the tools into Pen mode, while the collapsed icon is View-only. The transparent canvas captures pointer input only while a drawing tool is active, and drawings follow the page when it scrolls. Tools include pen, straight line, highlighter, ellipse/circle (hold Shift for a true circle), rectangle, text, and eraser; shape interiors remain transparent. The panel stays horizontal at the top and bottom, and turns vertical only when horizontal space is insufficient at the sides. The selected tool is highlighted. Text boxes accept multiline Markdown source and render headings, emphasis, code, lists, Markdown links, and plain `http(s)` URLs safely after editing. Press Esc after editing to save and return to View; double-click a completed text box in View or Pen to edit it again. While a text box is focused, keyboard events stay inside the editor. Ink is written to local IndexedDB immediately and retained across extension reloads. Hover an object and left-click to select; ⌘Z/Ctrl+Z undoes drawing. `chrome://` pages cannot host the layer.
+- **Page Sticker interaction:** on the current page, double-click a Sticker title to collapse or expand its body. Use the pencil button or double-click the body to edit; collapse state is transient and does not change the saved placement.
+
+- **New Tab and restricted pages:** New Tab opens TabWall directly when enabled in Settings → General (enabled by default); when disabled, the browser’s native New Tab page remains. Browser-restricted pages use a standalone TabWall tab when an overlay cannot be injected. On a normal page the overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green `✓` badge means the URL is parked; an orange `✎` means the drawing layer is open.
+- **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is hidden until Option/Alt+D and does not change the page DOM or paint a page-sized background. The shortcut reveals one draggable pen icon (default: right side, vertically centered); a single click expands the tools into Pen mode, while holding the left button and moving drags the icon. The transparent canvas captures pointer input only while a drawing tool is active, and drawings follow the page when it scrolls. Tools include pen, straight line, highlighter, ellipse/circle (hold Shift for a true circle), rectangle, text, Sticker, and eraser; shape interiors remain transparent. Clicking Sticker then a page position opens an inline editor over the current page and places the saved Note there. Page Stickers support multiple cards, header drag, independent resize (160–640 × 120–560), title double-click collapse/expand, pencil-button or body double-click editing, reminder badges, and detaching only the current page placement. Visible Web cards lazy-mount the same isolated sandbox and unload when hidden; they cannot access extension APIs, network, popups, forms, or outer-page navigation. Text boxes accept multiline Markdown source and render headings, emphasis, code, lists, Markdown links, and plain `http(s)` URLs safely after editing. Ink is written to local IndexedDB immediately and retained across extension reloads. `chrome://` pages cannot host the layer.
 - **Local AI agent:** connect the external panel to a loopback `llama-server` endpoint, analyze the current page or saved tab metadata, and optionally call allowlisted local bridge tools. Context is automatically budgeted to the configured `contextSize`; no cloud endpoint is used by default.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable; the Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
 - **Custom display titles:** assign a custom display title to cards in the edit box. The card prominently displays the custom title while retaining the original title as a subtitle. Plain search and Option+/ search match both display and original titles.
 - **Card reminders:** set one-time or interval reminders on top-level tabs, groups, image cards, and Sticker Notes. Reminders use browser notifications, are included in backups, and can be reviewed from the bell panel; blank notification text falls back to the card title.
-- **Sticker Notes:** create Canvas-only notes with title, tags, safe Markdown preview, and up to 12 local image attachments. New images are normalized to WebP (PNG fallback), capped at 4096px on the long edge, 16MP, and 24 MiB per source/output file; GIF and SVG become static images. Notes can join Stacks but are never restored as browser tabs.
+- **Sticker Notes:** create notes on the Canvas or directly on a page through Option/Alt+D → Sticker. The page placement and Canvas position are independent, so one top-level Note can appear on multiple URLs. Canvas shows the source pages for each placed Note and opens them in new tabs; the Canvas editor also shows a clickable source list. Locked Notes hide that source information. Page Stickers support multiple cards, header drag, independent resize (160–640 × 120–560), title double-click collapse/expand, pencil-button or body double-click editing, reminder badges, and removing only the current page placement. Notes support title, tags, Markdown or Web mode, and up to 12 local image attachments. Web mode uses one complete HTML document textarea; include `<style>` and `<script>` in that document and press Preview/Run manually. Markdown and Web content stay separate. The editor and visible page Sticker use an isolated sandbox with no extension API, network access, popups, forms, or outer-page navigation; Canvas and list cards show only a static safe summary. Notes can join Stacks, but Stack notes cannot be page Stickers or reminders and are never restored as browser tabs.
 - Multi-selection and batch operations.
 - **Spatial Canvas:** arrange nodes freely with pan, zoom, lasso selection, snap-to-grid, minimap viewport dragging, persistent undirected connections, four-sided connection handles, and three-zone line editing with saved curve offsets. At 100%, cards render 10% larger while stored positions remain compatible. Right-click the empty canvas or a card for a custom context menu.
 - **Domain search:** `d` / `domain` + Tab matches hostnames on tabs and group member tabs only (not Sticker Notes).
@@ -204,6 +208,7 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 - 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
 - 畫布節點預覽固定使用 `16:10` 比例；座標與視角獨立儲存。
+- [Canvas／Sticker 架構圖](docs/diagrams/canvas-sticker-flow.svg) 展示頁面 placement、來源反向索引、本機儲存與初始視角修正閘門；修正會等卡片與 viewport 尺寸就緒後才執行，且不覆寫既有自訂視角。
 
 ### 本機 AI agent
 
@@ -250,7 +255,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `⌘⇧Z`／`Ctrl+⇧Z`／`Ctrl+Y` | 重做 Stack 或連線 |
 | `←`／`→` | 顯示上一張或下一張快照 |
 
-前四項是有安裝時建議鍵的瀏覽器 commands（Chromium 最多只能建議 4 組）。`open-ai` 與 `toggle-annotate` 沒有預設鍵，需要時請到 Edge 的 `edge://extensions/shortcuts`（Chrome：`chrome://extensions/shortcuts`）自行綁定。`Option/Alt+A` 與 `Option/Alt+D` 由頁面 content script 處理。Alt+D 只顯示一個可拖曳的繪圖 icon；左鍵雙擊會展開工具列並進入筆模式，收合後回到檢視模式。既有設定、衝突與平台規則都可能使命令保持未綁定。
+前四項是有安裝時建議鍵的瀏覽器 commands（Chromium 最多只能建議 4 組）。`open-ai` 與 `toggle-annotate` 沒有預設鍵，需要時請到 Edge 的 `edge://extensions/shortcuts`（Chrome：`chrome://extensions/shortcuts`）自行綁定。`Option/Alt+A` 與 `Option/Alt+D` 由頁面 content script 處理。Alt+D 只顯示一個可拖曳的繪圖 icon；單擊會展開工具列並進入筆模式，按住左鍵移動則拖曳 icon，收合後回到檢視模式。既有設定、衝突與平台規則都可能使命令保持未綁定。
 
 點擊 extension icon 會開啟操作選單，可選擇儲存目前分頁或 Tab Group 並保留／關閉分頁，或打開 TabWall 面板。目前分頁不在 Tab Group 時，Group 操作會停用。
 
@@ -262,15 +267,16 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 | 操作 | 結果 |
 |------|------|
-| Sticker Note 工具／點擊空白畫布 | 建立僅存在於 Canvas 的 note，並開啟左右分割編輯器 |
+| Sticker Note 工具／點擊空白畫布 | 建立 Canvas note，並開啟編輯器 |
 | 點擊縮圖 | 還原並保留分頁或群組卡片；群組會先要求確認 |
-| 點擊 note 標題或編輯 | 編輯標題、標籤、安全 Markdown 與本機圖片附件 |
+| 點擊 note 標題或編輯 | 編輯標題、標籤、Markdown 或單一完整 HTML 文件，以及本機圖片附件 |
 | 點擊標題或中繼資料區 | 複製已儲存網址或群組成員網址 |
 | 點擊固定控制項 | 固定／取消固定頂層項目；可用工具列篩選已固定項目 |
 | 選取節點 | 顯示上下文操作；按住 `Shift`／`Control` 可多選 |
 | 空白畫布右鍵 | 自訂選單：按日期排序、重新對齊卡片、匯出精簡備份、新增 Sticker Note |
 | 卡片右鍵 | 與卡片工具列相同操作（還原並保留／快照／編輯／複製／固定／刪除，依類型） |
 | 拖曳節點 | 在畫布上移動；位置會自動儲存 |
+| 拖曳頂層 Sticker Note 右下角 handle | 個別調整該 note 尺寸；寬 160–640、高 120–560，放開後只保存一次 |
 | 將節點拖到另一節點 | 將項目堆疊成群組 |
 | 使用平移／框選工具 | 平移畫布或框選多個節點 |
 | 在畫布任意處按住滑鼠中鍵拖曳 | 平移畫布且不會觸發選取；雙擊中鍵可重置視角 |
@@ -280,7 +286,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | 拖曳連線線段 | 前／後三分之一可重接端點，中間三分之一可彎曲或拉長線段；線段提供 16px 近距離命中範圍，雙擊可重設自訂曲線 |
 | 還原堆疊或群組 | 分頁成員重新建立或聚焦 Chrome Tab Group，原本的 Group 卡片與 note 保留 |
 
-畫布與卡片網格中的卡片在 hover 時會放大約 `1.30×`。拖曳與 Stack hover 會保留操作優先順序；Quiet／作業系統 reduced-motion 設定仍會抑制視覺效果。Canvas 視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。
+畫布與卡片網格中的卡片在 hover 時會放大約 `1.30×`。拖曳與 Stack hover 會保留操作優先順序；Quiet／作業系統 reduced-motion 設定仍會抑制視覺效果。Canvas 視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。更新後若舊的預設布局失效，會等卡片與 viewport 尺寸就緒後只修復一次，既有自訂視角不會被覆寫。
 
 列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。若 Canvas layout 暫時無法讀取，已載入的 parked items 仍會在列表顯示並可繼續使用，恢復後可再切回畫布。
 
@@ -297,15 +303,17 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 
 ### 功能
 
-- **New Tab 與受限頁面：** New Tab 直接顯示 TabWall；瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示綠色 `✓` 表示該網址已停車；橘色 `✎` 表示繪圖層開著。
-- **未停車標註與繪圖：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層平時完全隱藏，按 Option／Alt+D 顯示一個可拖曳的繪圖 icon（預設在畫面右側中段），canvas 保持透明且只在繪圖工具啟用時接收輸入，圖案會跟著頁面捲動；左鍵雙擊展開工具列並進入筆模式，收合後只顯示 icon 且回到檢視模式。工具包含筆、直線、螢光筆、圓圈／橢圓（按住 Shift 為正圓）、方框、文字與橡皮擦，圖形內部保持透明。上下邊緣維持水平，左右側只有在水平空間不足時才改成垂直排列；選取中的工具會高亮顯示。文字框支援多行 Markdown 原文，離開編輯後會安全呈現標題、粗斜體、程式碼、列表、Markdown 超連結與純文字 `http(s)` URL；輸入完成按 Esc 會儲存並回到 View，View 或 Pen 模式下左鍵雙擊文字框可再次編輯；文字框聚焦時不會觸發頁面快捷鍵。筆畫與文字會立即寫入本機 IndexedDB，重新載入 extension 後仍保留。<code>chrome://</code> 不能畫。
+- **頁面 Sticker 操作：** 在目前網頁雙擊 Sticker 標題可收合／展開內容；使用鉛筆按鈕或雙擊 body 編輯。收合狀態只存在目前頁面生命週期，不會改變保存的 placement。Web 欄位也支援直接輸入 `<h1>test</h1>` 這類 HTML fragment。
+
+- **New Tab 與受限頁面：** 可在設定 → 一般開啟或關閉以 TabWall 取代 New Tab（預設開啟）；關閉後使用瀏覽器原生新分頁。瀏覽器受限頁面無法注入浮層時，會改開啟或聚焦獨立 TabWall 分頁。一般網頁浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示綠色 `✓` 表示該網址已停車；橘色 `✎` 表示繪圖層開著。
+- **未停車標註、繪圖與頁面 Sticker：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層平時完全隱藏，按 Option／Alt+D 顯示一個可拖曳的繪圖 icon（預設在畫面右側中段），canvas 保持透明且只在繪圖工具啟用時接收輸入，圖案會跟著頁面捲動；單擊展開工具列並進入筆模式，按住左鍵移動則拖曳 icon。工具列的 Sticker 按鈕可在頁面點擊位置建立便條，並直接開啟頁面內 editor overlay。頁面 Sticker 與 Canvas 共用同一筆頂層 Note，可同時存在多張；標題列可拖曳、右下角可調整 160–640 × 120–560、標題雙擊可收合／展開，鉛筆按鈕或 body 雙擊可編輯、提醒 badge 可開啟提醒，移除頁面 placement 不會刪除 Canvas Note。工具包含筆、直線、螢光筆、圓圈／橢圓（按住 Shift 為正圓）、方框、文字、Sticker 與橡皮擦，圖形內部保持透明。選取中的工具會高亮顯示。文字框支援多行 Markdown 原文並安全呈現；頁面 Web Sticker 只在可視範圍 lazy mount sandbox，離開可視範圍或關閉圖層就卸載；sandbox 不提供 extension API、網路、popup、form 或導覽外層頁面。筆畫與文字會立即寫入本機 IndexedDB，重新載入 extension 後仍保留。<code>chrome://</code> 不能畫。
 - **本機 AI agent：** 外部 AI 面板可連線 loopback `llama-server`，分析目前分頁或已儲存分頁 metadata，並選擇性呼叫 allowlist 內的本機 bridge tools。系統會依 `contextSize` 自動控管 context，預設不連線雲端 endpoint。
 - **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片；背景啟用時會隱藏 Canvas 定位點，移除後恢復。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。
 - **卡片上鎖：** 可將分頁、群組、圖片卡、Sticker Note 或成員上鎖，以鎖頭遮罩隱藏縮圖與快照。解鎖狀態僅存在本次工作階段，重開分頁自動再鎖。支援 SHA-256 加鹽密碼保護或免密碼點擊解鎖；還原分頁不需解鎖。
 - **自訂顯示標題：** 在編輯盒中設定「顯示標題」，卡片主標題顯示自訂名稱，下方以小字保留原始標題；搜尋引擎與 Option+/ 全域搜尋同時支援搜尋顯示標題與原始標題。
 - **卡片提醒：** 可在頂層分頁、群組、圖片卡與 Sticker Note 設定一次性或 Interval 提醒，透過 browser notification 通知；提醒會包含在備份中，也可從頂端鈴鐺面板查詢。通知文字留空時會使用卡片標題。
-- **Sticker Note：** 建立僅限 Canvas 的 note，支援標題、標籤、安全 Markdown 預覽，以及最多 12 張本機圖片附件。新圖片會自動正規化為 WebP（不可用時退回 PNG），長邊上限 4096px、總像素 16MP，原始檔與儲存檔各不得超過 24 MiB；GIF／SVG 會靜態化。note 可加入 Stack，但不會還原成瀏覽器分頁。
+- **Sticker Note：** 可在 Canvas 建立，或在一般頁面按 Option／Alt+D → Sticker 後點擊位置建立。頁面 placement 與 Canvas 位置分開保存，同一頂層 Note 可放在多個 URL；Canvas 會列出該 Note 的來源網頁，點擊會在新分頁開啟；進入 Canvas 編輯器時也會顯示可點擊的來源清單。上鎖時隱藏來源資訊。頁面支援多張、標題列拖曳、獨立縮放（160–640 × 120–560）、標題雙擊收合／展開、鉛筆按鈕或 body 雙擊編輯、提醒 badge 與只移除目前頁面 placement。內容支援標題、標籤、Markdown 或 Web 模式，以及最多 12 張本機圖片附件；Web 模式使用一個完整 HTML 文件輸入框，可在其中放 `<style>` 與 `<script>`，按下「預覽／執行」才在隔離 sandbox 執行。Markdown 與 Web 內容分開保存。編輯器與可見的頁面 Sticker 都不能使用 extension API、網路、popup、form 或導覽外層頁面；Canvas／列表只顯示靜態安全摘要。note 可加入 Stack，但 Stack 內 note 不支援頁面 Sticker 或提醒，也不會還原成瀏覽器分頁。
 - 多選與批次操作。
 - **空間畫布：** 支援自由排列、平移、縮放、框選、點擊或拖曳 minimap 定位、吸附格線、無方向的持久連線、卡片四側連線 handle，以及保存曲線偏移的三段式線段編輯；100% 時卡片視覺尺寸放大 10%，儲存位置格式不變。空白畫布或卡片可右鍵開啟自訂選單。
 - **網域搜尋：** `d`／`domain` + Tab 只比對分頁與群組成員的 hostname（不含 Sticker Note）。

@@ -3,7 +3,7 @@
  */
 (function (global) {
   const FORMAT = 'tabwall-backup';
-  const FORMAT_VERSION = 5;
+  const FORMAT_VERSION = 7;
   const SUPPORTED_MIN_VERSION = 1;
   const LIMITS = Object.freeze({
     MAX_JSON_BYTES: 100 * 1024 * 1024,
@@ -18,6 +18,8 @@
     MAX_URL_LENGTH: 8192,
     MAX_TITLE_LENGTH: 2048,
     MAX_NOTE_LENGTH: 20000,
+    MAX_NOTE_CODE_TOTAL_LENGTH: 50000,
+    MAX_NOTE_WEB_SOURCE_LENGTH: 50000,
     MAX_NOTE_ATTACHMENTS: 12,
     MAX_NOTE_IMAGE_LONG_EDGE: 4096,
     MAX_NOTE_IMAGE_PIXELS: 16 * 1024 * 1024,
@@ -29,6 +31,14 @@
     MAX_ATTACHMENT_ALT_LENGTH: 2048,
     MAX_TAG_LENGTH: 128,
     MAX_FAVICON_LENGTH: 4096,
+    MAX_PAGE_ANNOTATIONS: 10000,
+    MAX_PAGE_STICKERS: 100,
+    MAX_PAGE_STICKER_COORDINATE: 10000000,
+    MAX_PAGE_STICKER_Z: 1000000,
+    MIN_PAGE_STICKER_WIDTH: 160,
+    MAX_PAGE_STICKER_WIDTH: 640,
+    MIN_PAGE_STICKER_HEIGHT: 120,
+    MAX_PAGE_STICKER_HEIGHT: 560,
   });
 
   const ALLOWED_GROUP_COLORS = new Set([
@@ -41,6 +51,29 @@
     'purple',
     'cyan',
   ]);
+
+  function composeLegacyWebSource(html, css, javascript) {
+    let source = typeof html === 'string' ? html : '';
+    const style = typeof css === 'string' && css
+      ? `<style>\n${css}\n</style>`
+      : '';
+    const script = typeof javascript === 'string' && javascript
+      ? `<script>\n${javascript}\n</script>`
+      : '';
+    if (style) {
+      const headClose = /<\/head>/i;
+      source = headClose.test(source)
+        ? source.replace(headClose, `${style}\n</head>`)
+        : `${source}${source ? '\n' : ''}${style}`;
+    }
+    if (script) {
+      const bodyClose = /<\/body>/i;
+      source = bodyClose.test(source)
+        ? source.replace(bodyClose, `${script}\n</body>`)
+        : `${source}${source ? '\n' : ''}${script}`;
+    }
+    return source;
+  }
 
   function validationError(error, detail = '') {
     return { ok: false, error, detail };
@@ -747,6 +780,17 @@
     const normalizeNote = (raw) => {
       const note = raw && typeof raw === 'object' ? { ...raw } : {};
       note.kind = 'note';
+      if (note.contentMode == null) {
+        note.contentMode = 'markdown';
+        warnings.defaultedFields++;
+      }
+      if (note.webSource == null) {
+        note.webSource = composeLegacyWebSource(note.html, note.css, note.javascript);
+        warnings.defaultedFields++;
+      }
+      delete note.html;
+      delete note.css;
+      delete note.javascript;
       if (backup.media === 'none' && Array.isArray(note.attachments)) {
         note.attachments = note.attachments.map((attachment) => ({
           ...attachment,
@@ -814,6 +858,13 @@
       return value;
     });
 
+    const pageAnnotations = Array.isArray(backup.pageAnnotations)
+      ? backup.pageAnnotations.map((annotation) => ({
+        ...(annotation && typeof annotation === 'object' ? annotation : {}),
+        stickers: Array.isArray(annotation?.stickers) ? annotation.stickers : [],
+      }))
+      : [];
+
     const countStoredOnly = (item) => {
       const urls = Array.isArray(item.tabs) ? item.tabs.map((member) => member.url) : [item.url];
       for (const url of urls) {
@@ -835,6 +886,7 @@
         ...backup,
         parkedItems: items,
         parkedTabs,
+        pageAnnotations,
       },
     };
   }
@@ -857,8 +909,37 @@
     );
   }
 
+  function canonicalizeNoteForExport(raw) {
+    const note = raw && typeof raw === 'object' ? { ...raw } : {};
+    if (note.contentMode == null) note.contentMode = 'markdown';
+    if (note.webSource == null) note.webSource = composeLegacyWebSource(note.html, note.css, note.javascript);
+    delete note.html;
+    delete note.css;
+    delete note.javascript;
+    return note;
+  }
+
+  function canonicalizeBackupForExport(backup) {
+    const source = backup && typeof backup === 'object' ? backup : {};
+    const items = (Array.isArray(source.parkedItems) ? source.parkedItems : []).map((item) => {
+      if (item?.kind === 'group') {
+        return {
+          ...item,
+          notes: (item.notes || []).map(canonicalizeNoteForExport),
+        };
+      }
+      return item?.kind === 'note' ? canonicalizeNoteForExport(item) : item;
+    });
+    return {
+      ...source,
+      parkedItems: items,
+      parkedTabs: items.filter((item) => item?.kind === 'tab').map(({ kind, ...rest }) => rest),
+    };
+  }
+
   function buildLiteBlob(backup, { auto = false, partial = false } = {}) {
-    const items = (backup?.parkedItems || []).map((item) => {
+    const canonical = canonicalizeBackupForExport(backup);
+    const items = (canonical.parkedItems || []).map((item) => {
       const clone = { ...item };
       const stripNote = (note) => ({
         ...note,
@@ -888,7 +969,7 @@
       return clone;
     });
     const liteBackup = {
-      ...backup,
+      ...canonical,
       parkedItems: items,
       parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...rest }) => rest),
       media: 'none',
@@ -913,26 +994,27 @@
   }
 
   function buildFullZipBlob(backup, { auto = false, partial = false } = {}) {
+    const canonical = canonicalizeBackupForExport(backup);
     const validation = validateBackup({
-      ...(backup || {}),
+      ...canonical,
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'inline',
     }, { allowStoredOnlyUrls: true });
     if (!validation.ok) throw new Error(validation.error);
-    const { items, files, mediaMimes } = collectMediaFiles(backup.parkedItems || []);
-    const wall = collectWallpaperMedia(backup.settings);
+    const { items, files, mediaMimes } = collectMediaFiles(canonical.parkedItems || []);
+    const wall = collectWallpaperMedia(canonical.settings);
     if (wall.file) {
       files.push(wall.file);
       mediaMimes[wall.file.name] = wall.mime;
     }
     const meta = {
-      ...backup,
+      ...canonical,
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'zip',
       mediaMimes,
-      settings: wall.settings || backup.settings,
+      settings: wall.settings || canonical.settings,
       parkedItems: items,
       parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...r }) => r),
     };
@@ -1070,6 +1152,10 @@
       if (reminderError) return reminderError;
     }
     if (!validateString(note.markdown, LIMITS.MAX_NOTE_LENGTH)) return 'invalid_markdown';
+    const hasContentMode = Object.prototype.hasOwnProperty.call(note, 'contentMode');
+    const contentMode = hasContentMode ? note.contentMode : 'markdown';
+    if (contentMode !== 'markdown' && contentMode !== 'web') return 'invalid_note_content_mode';
+    if (!validateString(note.webSource, LIMITS.MAX_NOTE_WEB_SOURCE_LENGTH)) return 'invalid_note_web_source';
     if (!validateTags(note.tags)) return 'invalid_tags';
     if (note.pinned != null && typeof note.pinned !== 'boolean') return 'invalid_pinned';
     if (!Number.isFinite(note.savedAt) || note.savedAt < 0 || note.savedAt > Date.now() + 86400000) {
@@ -1205,6 +1291,44 @@
     return true;
   }
 
+  function validatePageAnnotations(pageAnnotations, topLevelNoteIds) {
+    if (pageAnnotations == null) return true;
+    if (!Array.isArray(pageAnnotations) || pageAnnotations.length > LIMITS.MAX_PAGE_ANNOTATIONS) return false;
+    const noteIds = topLevelNoteIds instanceof Set ? topLevelNoteIds : new Set();
+    for (const annotation of pageAnnotations) {
+      if (!annotation || typeof annotation !== 'object' || Array.isArray(annotation)) return false;
+      if (!validateString(annotation.id, 128, { allowEmpty: false })) return false;
+      if (!validateString(annotation.url, LIMITS.MAX_URL_LENGTH, { allowEmpty: false })) return false;
+      if (!validateString(annotation.title || '', LIMITS.MAX_TITLE_LENGTH)) return false;
+      if (!validateString(annotation.favIconUrl || '', LIMITS.MAX_FAVICON_LENGTH)) return false;
+      if (!validateString(annotation.note || '', LIMITS.MAX_NOTE_LENGTH)) return false;
+      if (!validateTags(annotation.tags || [])) return false;
+      const stickers = annotation.stickers == null ? [] : annotation.stickers;
+      if (!Array.isArray(stickers) || stickers.length > LIMITS.MAX_PAGE_STICKERS) {
+        return false;
+      }
+      const seen = new Set();
+      for (const sticker of stickers) {
+        if (!sticker || typeof sticker !== 'object' || Array.isArray(sticker)) return false;
+        if (!validateString(sticker.noteId, 128, { allowEmpty: false }) || seen.has(sticker.noteId)) return false;
+        if (!noteIds.has(sticker.noteId)) return false;
+        seen.add(sticker.noteId);
+        const x = Number(sticker.x);
+        const y = Number(sticker.y);
+        const w = Number(sticker.w);
+        const h = Number(sticker.h);
+        const z = Number(sticker.z);
+        if (![x, y, w, h, z].every(Number.isFinite)
+          || x < 0 || x > LIMITS.MAX_PAGE_STICKER_COORDINATE
+          || y < 0 || y > LIMITS.MAX_PAGE_STICKER_COORDINATE
+          || w < LIMITS.MIN_PAGE_STICKER_WIDTH || w > LIMITS.MAX_PAGE_STICKER_WIDTH
+          || h < LIMITS.MIN_PAGE_STICKER_HEIGHT || h > LIMITS.MAX_PAGE_STICKER_HEIGHT
+          || z < 0 || z > LIMITS.MAX_PAGE_STICKER_Z) return false;
+      }
+    }
+    return true;
+  }
+
   function validateBackup(
     backup,
     { maxJsonBytes = LIMITS.MAX_JSON_BYTES, allowStoredOnlyUrls = false } = {}
@@ -1335,6 +1459,11 @@
         return validationError('invalid_canvas_layout');
       }
 
+      const topLevelNoteIds = new Set(items.filter((item) => item.kind === 'note').map((item) => item.id));
+      if (!validatePageAnnotations(backup.pageAnnotations, topLevelNoteIds)) {
+        return validationError('invalid_page_annotations');
+      }
+
       if (backup.tagCatalog != null) {
         if (!Array.isArray(backup.tagCatalog) || backup.tagCatalog.length > LIMITS.MAX_TAG_CATALOG) {
           return validationError('invalid_tag_catalog');
@@ -1360,6 +1489,7 @@
     FORMAT,
     FORMAT_VERSION,
     LIMITS,
+    composeLegacyWebSource,
     dataUrlToBytes,
     bytesToDataUrl,
     isHttpUrl,
@@ -1377,6 +1507,7 @@
     rehydrateWallpaper,
     prepareImportedBackup,
     validateBackup,
+    validatePageAnnotations,
     stamp,
     buildLiteBlob,
     estimateZipBytes,

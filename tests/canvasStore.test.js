@@ -119,6 +119,43 @@ test('node move snaps at commit while replay remains a delta', () => {
   assert.equal(store.getState().layout.positions.a.y, 120);
 });
 
+test('Sticker Note resize previews transiently, clamps, cancels, and commits once', () => {
+  const api = loadStore();
+  const tabStore = api.createCanvasStore({ items: [ITEM] });
+  assert.equal(tabStore.commitResize('a', 40, 40), false);
+  const store = api.createCanvasStore({
+    items: [{ id: 'note', kind: 'note' }],
+    layout: { positions: { note: { x: 10, y: 20, w: 220, h: 170, z: 0 } } },
+  });
+  store.beginPointer('resize', { pointerId: 1, ids: ['note'] });
+  store.previewPointer({ dx: 80, dy: 60, moved: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.positions.note)), { x: 10, y: 20, w: 300, h: 230, z: 0 });
+  assert.equal(store.getState().pendingOperations.length, 0);
+  store.finishPointer({ commit: true });
+  assert.equal(store.getState().pendingOperations.length, 1);
+  assert.equal(store.getState().pendingOperations[0].type, 'resize');
+  assert.equal(store.getState().pendingOperations[0].id, 'note');
+  assert.equal(store.getState().pendingOperations[0].dw, 80);
+  assert.equal(store.getState().pendingOperations[0].dh, 60);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.positions.note)), { x: 10, y: 20, w: 300, h: 230, z: 0 });
+
+  store.beginPointer('resize', { pointerId: 2, ids: ['note'] });
+  store.previewPointer({ dx: -1000, dy: -1000, moved: true });
+  assert.equal(store.getState().layout.positions.note.w, 160);
+  assert.equal(store.getState().layout.positions.note.h, 120);
+  store.cancelPointer();
+  assert.equal(store.getState().layout.positions.note.w, 300);
+  assert.equal(store.getState().layout.positions.note.h, 230);
+});
+
+test('resize operations replay after a remote revision conflict', () => {
+  const api = loadStore();
+  const store = api.createCanvasStore({ items: [{ id: 'note', kind: 'note' }] });
+  store.commitResize('note', 100, 40);
+  assert.equal(store.applyRemote({ positions: { note: { x: 30, y: 40, w: 200, h: 180, z: 0 } } }, 4), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().layout.positions.note)), { x: 30, y: 40, w: 300, h: 220, z: 0 });
+});
+
 test('zoom keeps the requested screen anchor and selection is reducer state', () => {
   const api = loadStore();
   const store = api.createCanvasStore({ items: [ITEM] });

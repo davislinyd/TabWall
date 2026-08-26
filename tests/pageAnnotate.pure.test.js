@@ -170,6 +170,18 @@ test('toolbar contract has one collapsed icon and no collapse control', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /data-act="hide"/);
 });
 
+test('collapsed drawing FAB opens on a click but stays draggable', () => {
+  const Ink = loadInk();
+  assert.equal(Ink.chromePointerUpAction('fab', false, 'pointerup'), 'toggle');
+  assert.equal(Ink.chromePointerUpAction('fab', true, 'pointerup'), 'drag');
+  assert.equal(Ink.chromePointerUpAction('fab', false, 'pointercancel'), 'drag');
+  assert.equal(Ink.chromePointerUpAction('bar', false, 'pointerup'), 'drag');
+  assert.match(PAGE_ANNOTATE_SOURCE, /function chromePointerUpAction\(target, moved, eventType = 'pointerup'\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /chromePointerUpAction\(target, moved, event\.type\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /fab\.addEventListener\('pointerup', onBarPointerUp\)/);
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /fab\.addEventListener\('dblclick', onChromeDoubleClick\)/);
+});
+
 test('canvas overlay stays transparent and only captures drawing input', () => {
   assert.match(PAGE_ANNOTATE_SOURCE, /:host \{ all: initial; background: transparent !important; \}/);
   assert.match(PAGE_ANNOTATE_SOURCE, /background: transparent !important;/);
@@ -319,6 +331,103 @@ test('canvas scroll transform keeps page coordinates aligned to the viewport', (
   const Ink = loadInk();
   assert.equal(Ink.canvasScrollTransform(24, 80), 'translate(-24px, -80px)');
   assert.equal(Ink.canvasScrollTransform('bad', null), 'translate(0px, 0px)');
+});
+
+test('page Sticker placement normalizes page CSS pixel bounds', () => {
+  const Ink = loadInk();
+  assert.deepEqual(JSON.parse(JSON.stringify(Ink.normalizePageStickerPlacement({
+    noteId: 'note-a',
+    x: -12,
+    y: 24.6,
+    w: 80,
+    h: 900,
+    z: 4.4,
+  }))), {
+    noteId: 'note-a',
+    x: 0,
+    y: 25,
+    w: 160,
+    h: 560,
+    z: 4,
+  });
+  assert.equal(Ink.normalizePageStickerPlacement({ x: 1, y: 2 }), null);
+  assert.equal(Ink.PAGE_STICKER_MIN_WIDTH, 160);
+  assert.equal(Ink.PAGE_STICKER_MAX_HEIGHT, 560);
+});
+
+test('page Sticker drag and resize previews clamp without mutating the source', () => {
+  const Ink = loadInk();
+  const original = { noteId: 'note-1', x: 12, y: 18, w: 240, h: 180, z: 3 };
+  const dragged = Ink.pageStickerPlacementForDelta(original, 'drag', -100, 24);
+  assert.deepEqual(JSON.parse(JSON.stringify(dragged)), { noteId: 'note-1', x: 0, y: 42, w: 240, h: 180, z: 3 });
+  const resized = Ink.pageStickerPlacementForDelta(original, 'resize', 1000, -1000);
+  assert.deepEqual(JSON.parse(JSON.stringify(resized)), { noteId: 'note-1', x: 12, y: 18, w: 640, h: 120, z: 3 });
+  assert.deepEqual(original, { noteId: 'note-1', x: 12, y: 18, w: 240, h: 180, z: 3 });
+});
+
+test('page Sticker collapse state toggles by note ID without mutating the source', () => {
+  const Ink = loadInk();
+  const initial = ['note-a'];
+  const expanded = Ink.pageStickerCollapsedNext(initial, 'note-a');
+  assert.deepEqual(Array.from(expanded), []);
+  assert.deepEqual(initial, ['note-a']);
+  const collapsed = Ink.pageStickerCollapsedNext(expanded, 'note-a');
+  assert.deepEqual(Array.from(collapsed), ['note-a']);
+  assert.deepEqual(Array.from(Ink.pageStickerCollapsedNext(collapsed, 'note-b')), ['note-a', 'note-b']);
+});
+
+test('page Sticker double-click action handles title, captured header, buttons, and body', () => {
+  const Ink = loadInk();
+  const node = (selectors) => ({ matches: (selector) => selectors.includes(selector) });
+  const event = (targetSelectors, pathSelectors) => ({
+    target: { closest: (selector) => targetSelectors.includes(selector) ? {} : null },
+    composedPath: () => pathSelectors.map((selectors) => node(selectors)),
+  });
+
+  assert.equal(Ink.pageStickerDblClickAction(event(['.page-sticker-title'], [['.page-sticker-title'], ['.page-sticker-header']])), 'collapse');
+  assert.equal(Ink.pageStickerDblClickAction(event(['.page-sticker-header'], [['.page-sticker-header']])), 'collapse');
+  assert.equal(Ink.pageStickerDblClickAction(event(['button'], [['button'], ['.page-sticker-header']])), 'ignore');
+  assert.equal(Ink.pageStickerDblClickAction(event(['.page-sticker-body'], [['.page-sticker-body']])), 'edit');
+});
+
+test('page Sticker runtime contract uses a tool, lazy sandbox, and one release update', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /data-tool="sticker"/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /type: 'GET_PAGE_STICKERS'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /PAGE_STICKER_EDITOR_ORIGIN/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pageStickerEditor\.html/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /TABWALL_PAGE_STICKER_EDITOR_INIT/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /TABWALL_PAGE_STICKER_EDITOR_SAVED/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /tool = 'sticker';\s+syncChrome\(\);/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /type: 'UPDATE_PAGE_STICKER'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /sandbox.*allow-scripts/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /IntersectionObserver/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /setPointerCapture/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /requestAnimationFrame/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pointercancel/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /is-resizing/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /if \(!interaction\.moved\) return/);
+});
+
+test('page Sticker title toggles transient collapse without replacing editor entry points', () => {
+  assert.match(PAGE_ANNOTATE_SOURCE, /function pageStickerEventMatches\(event, selector\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /function pageStickerDblClickAction\(event\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pageStickerEventMatches\(event, '\.page-sticker-header'\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /const action = pageStickerDblClickAction\(event\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /action === 'collapse'[\s\S]*?togglePageStickerCollapsed\(card, sticker\);[\s\S]*?\}, true\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /card\.classList\.toggle\('is-collapsed', isCollapsed\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /body\.hidden = isCollapsed/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /resize\.hidden = isCollapsed/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /if \(isCollapsed\) unmountPageStickerFrame\(card\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /stickerObserver\.unobserve\(card\);\s+stickerObserver\.observe\(card\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /title\.setAttribute\('aria-expanded', String\(!isCollapsed\)\)/);
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /title\.addEventListener\('dblclick'/);
+  assert.doesNotMatch(PAGE_ANNOTATE_SOURCE, /header\.addEventListener\('dblclick'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pageStickerCollapsedIds = new Set\(\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /pageStickerCollapseUrl = ''/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /requestPageStickerEditor\(sticker\.noteId, sticker\)/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /card\.addEventListener\('dblclick'/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\.page-sticker-card\.is-collapsed[\s\S]*?height: auto !important/);
+  assert.match(PAGE_ANNOTATE_SOURCE, /\.page-sticker-card\.is-collapsed \.page-sticker-body,[\s\S]*?display: none/);
 });
 
 test('highlight lines snap near-horizontal and keep steep diagonals', () => {

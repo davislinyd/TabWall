@@ -680,6 +680,8 @@
         kind: 'note',
         title: typeof item?.title === 'string' && item.title ? item.title : env.t('noteUntitled'),
         markdown: typeof item?.markdown === 'string' ? item.markdown : '',
+        contentMode: item?.contentMode === 'web' ? 'web' : 'markdown',
+        webSource: typeof item?.webSource === 'string' ? item.webSource : '',
         pinned: Boolean(item?.pinned),
         savedAt: Number(item?.savedAt) || Date.now(),
         tags: Array.isArray(item?.tags) ? item.tags : [],
@@ -1091,6 +1093,8 @@
         reminder: item.reminder || null,
         favIconUrl: item.favIconUrl,
         markdown: item.kind === 'note' ? item.markdown : undefined,
+        contentMode: item.kind === 'note' ? (item.contentMode === 'web' ? 'web' : 'markdown') : undefined,
+        webSource: item.kind === 'note' ? item.webSource : undefined,
         attachments: item.kind === 'note'
           ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
           : undefined,

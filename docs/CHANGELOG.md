@@ -11,6 +11,95 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.55.3 — 2026-08-27
+
+- 補充 Canvas／Sticker 的架構圖與 GitHub Pages／README 排錯說明，標示頁面 placement、來源反向索引、本機資料與初始視角修正路徑。
+- 文件明確說明失效的預設視角會等卡片與 viewport 尺寸就緒後只修復一次，既有自訂視角不會被覆寫。
+- 重新產生 `dist/TabWall-2.55.3.zip`。
+
+## 2.55.2 — 2026-08-26
+
+- 修正 Canvas 初次載入時可能沿用失效的預設視角旗標，導致卡片與目前 viewport 分離；現在會在卡片與 viewport 尺寸就緒後重新置中，且保留使用者已有的自訂視角。
+- 重新產生 `dist/TabWall-2.55.2.zip`。
+
+## 2.55.1 — 2026-08-26
+
+- Canvas Sticker Note 編輯器現在顯示該 Note 的來源網頁清單；來源連結會固定在新分頁開啟。
+- Canvas 上的來源網頁按鈕與多來源清單改為固定建立新分頁，不會改動或聚焦既有分頁。
+- 重新產生 `dist/TabWall-2.55.1.zip`。
+
+## 2.55.0 — 2026-08-26
+
+- Canvas Sticker Note 現在會顯示所有頁面 placement 的來源網頁；單一來源可直接開啟或聚焦，多個來源可從清單選擇。
+- 上鎖且尚未解鎖的 Note 隱藏來源網頁資訊；來源索引由既有 `pageAnnotations` 推導，不改 Note schema 或 backup format。
+- 重新產生 `dist/TabWall-2.55.0.zip`。
+
+## 2.54.4 — 2026-08-26
+
+- 修正 Markdown 編輯模式仍顯示 Single HTML 文件與 Web 預覽區的問題；Markdown 模式現在只顯示 Markdown 編輯內容。
+- 繪圖層收合 FAB 改為單擊開啟工具面板；按住左鍵移動仍只拖曳 FAB，不會誤開面板。
+- 重新產生 `dist/TabWall-2.54.4.zip`。
+
+## 2.54.3 — 2026-08-26
+
+- 修正頁面 Sticker 標題列使用 pointer capture 後，雙擊事件 target 變成 header 而誤開啟編輯器的問題；現在標題文字與非按鈕標題列都會收合／展開。
+- Reminder、鉛筆、解除 placement 按鈕與 body 雙擊編輯行為維持不變。
+- 重新產生 `dist/TabWall-2.54.3.zip`。
+
+## 2.54.2 — 2026-08-26
+
+- 修正頁面 Sticker 標題雙擊事件冒泡順序；標題事件現在於 card 捕獲階段攔截，只會收合／展開，不會進入編輯器。
+- 重新產生 `dist/TabWall-2.54.2.zip`。
+
+## 2.54.1 — 2026-08-26
+
+- 修正頁面 Sticker 標題雙擊仍開啟編輯器的問題；標題文字現在只負責收合／展開，編輯保留由鉛筆按鈕或 body 雙擊觸發。
+- 重新產生 `dist/TabWall-2.54.1.zip`。
+
+## 2.54.0 — 2026-08-26
+
+- 頁面 Sticker 標題可雙擊收合／展開；收合只影響目前頁面生命週期，保留原始位置與尺寸，Reminder、拖曳、鉛筆按鈕與 body 雙擊編輯仍可使用。
+- 修正 Web Sticker sandbox 初始化順序；`<h1>test</h1>` 等 HTML fragment 會在 body 建立後正常顯示，並保留 HTML/CSS/JavaScript 執行與錯誤回報的安全限制。
+- 更新使用者文件，重新產生 `dist/TabWall-2.54.0.zip`。
+
+## 2.53.0 — 2026-08-26
+
+- 頁面 Sticker 新增獨立的 extension-origin editor iframe；Option/Alt+D → Sticker 後直接在目前網頁的 Shadow DOM overlay 編輯，不再開啟 TabWall 主介面。保留 Markdown、單一 HTML 文件、附件、鎖定與手動 Preview/Run。
+- Sticker 拖曳與縮放改用 pointer capture 與 `requestAnimationFrame` 合併更新；拖曳期間只更新卡片 DOM，放開後只提交一次 placement，取消則恢復原尺寸且不寫入背景。
+- 新增 page Sticker editor 資源與 session/origin 驗證 bridge；延續 `sandbox="allow-scripts"`、sandbox CSP、無 extension API／網路／外層導覽限制。
+- 重新產生 `dist/TabWall-2.53.0.zip`。
+
+## 2.52.1 — 2026-08-26
+
+- 修正 Option/Alt+D 頁面 Sticker 點擊後沒有開啟編輯器的問題；page annotation 會將編輯與提醒訊息轉送到同頁的 content script，轉送失敗時保留 Sticker 工具狀態。
+- 重新產生 `dist/TabWall-2.52.1.zip`。
+
+## 2.52.0 — 2026-08-26
+
+- Web Sticker Note 改為單一完整 HTML 文件輸入框；Markdown 與 Web 內容分開保存，Preview/Run 才會執行。
+- Option/Alt+D 繪圖工具新增 Sticker；頁面 Sticker 與 Canvas 共用頂層 Note，但頁面位置、尺寸與 Canvas layout 分開保存，支援多張、拖曳、縮放、雙擊編輯、提醒與解除目前頁面 placement。
+- 頁面 Web Sticker 使用可視範圍 lazy mount 的 `sandbox="allow-scripts"` 預覽；禁止 extension API、網路、popup、form 與外層導覽。Canvas／列表只顯示靜態摘要。
+- Backup format 升至 7；v6 的 HTML/CSS/JavaScript 欄位會合併遷移為 `webSource`，並保存 page placement。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.52.0.zip`。
+
+## 2.51.1 — 2026-08-26
+
+- 修正 Chrome／Edge 載入擴充功能時的 sandbox CSP Manifest schema；改用 `content_security_policy.sandbox`，並重新產生 `dist/TabWall-2.51.1.zip`。
+
+## 2.51.0 — 2026-08-26
+
+- Sticker Note 新增 Markdown／Web 內容模式；Web 模式提供 HTML、CSS、JavaScript 三分頁，內容保留在各自欄位，只有按下「預覽／執行」才更新預覽。
+- Web 預覽改由獨立 sandbox iframe 執行，禁止 extension API、網路、popup、form 與外層導覽；關閉編輯器或切回 Markdown 會卸載 iframe，Canvas 卡片只顯示靜態程式碼摘要。
+- 頂層 Sticker Note 支援個別調整寬高（160–640 × 120–560）；resize 預覽沿用 Canvas zoom，放開後只提交一次並寫入既有 layout。Stack 內 note 不顯示 resize handle，提醒範圍與原 API 不變。
+- Note backup format 由 5 升至 6；舊 note 自動遷移為 Markdown 模式，Web 三段程式碼欄位支援匯入、匯出、搜尋與 keyed render。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.51.0.zip`。
+
+## 2.50.0 — 2026-08-26
+
+- 新增一般設定「使用 TabWall 取代瀏覽器的新分頁」；預設開啟，關閉後下一個新分頁使用 Chrome／Edge 原生頁面。
+- 移除固定 New Tab manifest override，改由 Service Worker 依設定動態導向；目前已開啟的 TabWall 頁面不會因切換而跳轉。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.50.0.zip`。
+
 ## 2.49.1 — 2026-08-19
 
 - 修正自動備份過早觸發：資料、標籤與 Canvas 寫入不再於固定排程前建立備份下載。

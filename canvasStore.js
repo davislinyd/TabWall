@@ -206,6 +206,17 @@
       }
       return next;
     }
+    if (op.type === 'resize') {
+      const id = String(op.id || '');
+      if (!id || !(items || []).some((item) => item?.kind === 'note' && item.id === id)) return next;
+      const current = next.positions[id] || defaultPosition(0);
+      next.positions[id] = {
+        ...current,
+        w: finite(current.w + (Number(op.dw) || 0), 160, 640, current.w),
+        h: finite(current.h + (Number(op.dh) || 0), 120, 560, current.h),
+      };
+      return next;
+    }
     if (op.type === 'setPositions') {
       for (const [id, position] of Object.entries(op.positions || {})) {
         next.positions[id] = clonePosition(position, next.positions[id] || defaultPosition(0));
@@ -383,6 +394,7 @@
         .map((operation) => {
           const next = cloneOperation(operation);
           if (next.type === 'move') next.ids = (next.ids || []).filter((id) => validIds.has(String(id)));
+          if (next.type === 'resize' && !validIds.has(String(next.id || ''))) return null;
           if (next.type === 'setPositions') {
             next.positions = Object.fromEntries(
               Object.entries(next.positions || {}).filter(([id]) => validIds.has(String(id)))
@@ -393,6 +405,7 @@
           }
           return next;
         })
+        .filter(Boolean)
         .filter((operation) => operation.type !== 'move' || operation.ids.length)
         .filter((operation) => operation.type !== 'setPositions' || Object.keys(operation.positions).length);
       state.baseLayout = normalizeLayout(state.baseLayout, state.items);
@@ -498,6 +511,9 @@
     }
 
     function beginPointer(kind, details = {}) {
+      if (kind === 'resize' && !(details.ids || []).some((id) => state.items.some((item) => item?.kind === 'note' && item.id === String(id)))) {
+        return false;
+      }
       state.interaction = {
         kind,
         pointerId: details.pointerId,
@@ -510,6 +526,7 @@
         moved: false,
       };
       emit({ type: 'POINTER_BEGIN', kind });
+      return true;
     }
 
     function previewPointer(details = {}) {
@@ -527,6 +544,16 @@
           dx,
           dy,
         }, state.items);
+      } else if (interaction.kind === 'resize') {
+        const id = Object.keys(interaction.startPositions)[0];
+        if (id) {
+          state.layout = applyOperation(interaction.startLayout, {
+            type: 'resize',
+            id,
+            dw: dx,
+            dh: dy,
+          }, state.items);
+        }
       }
       state.viewport = { ...state.layout.viewport };
       emit({ type: 'POINTER_PREVIEW', kind: interaction.kind, dx, dy });
@@ -561,6 +588,18 @@
           snap: Boolean(snap),
           grid: GRID_SIZE,
         };
+      } else if (interaction.kind === 'resize') {
+        const id = Object.keys(interaction.startPositions)[0];
+        const start = id ? interaction.startPositions[id] : null;
+        const current = id ? state.layout.positions[id] : null;
+        if (id && start && current) {
+          operation = {
+            type: 'resize',
+            id,
+            dw: current.w - start.w,
+            dh: current.h - start.h,
+          };
+        }
       }
       recomputeLayout();
       if (operation) commitOperation(operation);
@@ -595,6 +634,12 @@
 
     function commitMove(ids, dx, dy, shouldSnap = false) {
       return commitOperation({ type: 'move', ids: [...ids], dx, dy, snap: Boolean(shouldSnap), grid: GRID_SIZE });
+    }
+
+    function commitResize(id, dw, dh) {
+      const noteId = String(id || '');
+      if (!state.items.some((item) => item?.kind === 'note' && item.id === noteId)) return false;
+      return commitOperation({ type: 'resize', id: noteId, dw, dh });
     }
 
     function commitZoom(zoom, anchor = null) {
@@ -698,6 +743,7 @@
       cancelPointer,
       commitPan,
       commitMove,
+      commitResize,
       commitZoom,
       commitPositions,
       commitConnections,
@@ -714,6 +760,10 @@
     DEFAULT_VIEWPORT,
     DEFAULT_RETRY_DELAYS,
     MAX_CURVE_OFFSET,
+    MIN_CARD_WIDTH: 160,
+    MAX_CARD_WIDTH: 640,
+    MIN_CARD_HEIGHT: 120,
+    MAX_CARD_HEIGHT: 560,
     normalizeLayout,
     normalizeConnections,
     normalizeCurveOffset,

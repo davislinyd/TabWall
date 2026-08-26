@@ -8,6 +8,17 @@
 
   const MAX_SEARCH_REGEX_LENGTH = 512;
 
+  function noteContentParts(note) {
+    if (!note || note.kind !== 'note') return [];
+    return [
+      note.title || '',
+      note.displayTitle || '',
+      note.markdown || '',
+      note.contentMode || '',
+      note.webSource || '',
+    ];
+  }
+
   /** @type {{ raw: string, re: RegExp|null, err: string|null }} */
   let compiledSearch = { raw: '', re: null, err: null };
   /** @type {{ raw: string, or: string[][] }} */
@@ -110,7 +121,7 @@
         parts.push(m.title || '', m.displayTitle || '', m.url || '', domainOf(m.url));
       }
       for (const note of item.notes || []) {
-        parts.push(note.title || '', note.displayTitle || '', note.markdown || '', ...(note.tags || []));
+        parts.push(...noteContentParts(note), ...(note.tags || []));
       }
       return parts.join(' ');
     }
@@ -131,10 +142,10 @@
       if (item.kind === 'group') {
         const parts = [item.note || ''];
         for (const m of item.tabs || []) parts.push(m.note || '');
-        for (const note of item.notes || []) parts.push(note.title || '', note.displayTitle || '', note.markdown || '');
+        for (const note of item.notes || []) parts.push(...noteContentParts(note));
         return parts.join(' ');
       }
-      if (item.kind === 'note') return [item.title || '', item.displayTitle || '', item.markdown || ''].join(' ');
+      if (item.kind === 'note') return noteContentParts(item).join(' ');
       return item.note || '';
     }
     if (item.kind === 'group') {
@@ -155,18 +166,16 @@
         );
       }
       for (const note of item.notes || []) {
-        parts.push(note.title || '', note.displayTitle || '', note.markdown || '', ...(Array.isArray(note.tags) ? note.tags : []));
+        parts.push(...noteContentParts(note), ...(Array.isArray(note.tags) ? note.tags : []));
         for (const attachment of note.attachments || []) parts.push(attachment.name || '', attachment.alt || '');
       }
       return parts.join(' ');
     }
     if (item.kind === 'note') {
       if (scope === 'tag') return (item.tags || []).join(' ');
-      if (scope === 'note') return [item.title || '', item.displayTitle || '', item.markdown || ''].join(' ');
+      if (scope === 'note') return noteContentParts(item).join(' ');
       return [
-        item.title || '',
-        item.displayTitle || '',
-        item.markdown || '',
+        ...noteContentParts(item),
         ...(Array.isArray(item.tags) ? item.tags : []),
         ...(item.attachments || []).flatMap((attachment) => [attachment.name || '', attachment.alt || '']),
       ].join(' ');
@@ -296,14 +305,14 @@
       return domainOf(member.url);
     }
     if (scope === 'group') {
-      if (member.kind === 'note') return [member.title || '', member.markdown || ''].join(' ');
+      if (member.kind === 'note') return noteContentParts(member).join(' ');
       return [member.title || '', member.url || '', domainOf(member.url)].join(' ');
     }
     if (scope === 'tag') {
       return (Array.isArray(member.tags) ? member.tags : []).join(' ');
     }
     if (scope === 'note') {
-      return member.kind === 'note' ? [member.title || '', member.markdown || ''].join(' ') : member.note || '';
+      return member.kind === 'note' ? noteContentParts(member).join(' ') : member.note || '';
     }
     return [
       member.title || '',
@@ -330,13 +339,13 @@
       ].join(' ');
     }
     if (scope === 'note') {
-      return [group.note || '', ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || ''])].join(' ');
+      return [group.note || '', ...(group.notes || []).flatMap(noteContentParts)].join(' ');
     }
     return [
       group.title || '',
       group.note || '',
       ...(Array.isArray(group.tags) ? group.tags : []),
-      ...(group.notes || []).flatMap((note) => [note.title || '', note.markdown || '', ...(note.tags || [])]),
+      ...(group.notes || []).flatMap((note) => [...noteContentParts(note), ...(note.tags || [])]),
     ].join(' ');
   }
 

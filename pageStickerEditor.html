@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TabWall Sticker Note</title>
+  <link rel="stylesheet" href="pageStickerEditor.css" />
+</head>
+<body>
+  <main id="stickerNoteBox" class="sticker-note-box" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stickerNoteHeading">
+    <div class="sticker-note-drag" id="stickerNoteDrag">
+      <h1 id="stickerNoteHeading" data-i18n="noteEditHeading">編輯 Sticker Note</h1>
+      <button type="button" class="icon-close" id="stickerNoteCloseX" data-i18n-title="close" data-i18n-aria-label="close">×</button>
+    </div>
+    <div class="sticker-note-body">
+      <div class="sticker-note-fields">
+        <label>
+          <span data-i18n="noteTitlePh">Note 標題</span>
+          <input id="stickerNoteTitle" type="text" maxlength="2048" autocomplete="off" data-i18n-placeholder="noteTitlePh" placeholder="Note 標題" />
+        </label>
+        <label class="edit-lock-toggle">
+          <input id="stickerNoteLockEnabled" type="checkbox" />
+          <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
+        </label>
+        <div id="stickerNoteLockFields" class="edit-lock-fields" hidden>
+          <label>
+            <input id="stickerNoteHideOriginalTitle" type="checkbox" />
+            <span data-i18n="hideOriginalTitle">隱藏原始標題（僅顯示自訂標題）</span>
+          </label>
+          <label>
+            <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+            <input id="stickerNoteLockPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            <span data-i18n="lockPasswordConfirm">確認密碼</span>
+            <input id="stickerNoteLockPasswordConfirm" type="password" autocomplete="new-password" />
+          </label>
+          <p class="hint" data-i18n="lockPasswordHint">不設密碼則點一下即可解鎖。密碼無法加密本機快照。</p>
+        </div>
+        <div class="edit-field">
+          <span data-i18n="tags">Tags</span>
+          <span class="hint" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+          <div class="tag-input" id="stickerNoteTagInput">
+            <div class="chips" id="stickerNoteChips"></div>
+            <input id="stickerNoteTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+          </div>
+        </div>
+        <div class="sticker-note-mode" role="group" aria-label="Note content mode">
+          <button type="button" class="btn active" id="stickerNoteModeMarkdown" data-note-mode="markdown" data-i18n="noteMarkdownMode">Markdown</button>
+          <button type="button" class="btn" id="stickerNoteModeWeb" data-note-mode="web" data-i18n="noteWebMode">HTML/CSS/JS</button>
+        </div>
+        <div id="stickerNoteMarkdownPane">
+          <label class="sticker-note-markdown-label">
+            <span data-i18n="noteMarkdownMode">Markdown</span>
+            <textarea id="stickerNoteMarkdown" data-i18n-placeholder="noteMarkdownPh" placeholder="以 Markdown 撰寫…" spellcheck="true"></textarea>
+          </label>
+          <div id="stickerNoteDrop" class="sticker-note-drop" tabindex="0">
+            <button type="button" class="btn" data-i18n="noteAttachAdd">插入圖片</button>
+            <span data-i18n="noteAttachDrop">拖曳或貼上圖片到這裡</span>
+            <input id="stickerNoteFile" type="file" accept="image/*" multiple hidden />
+          </div>
+          <div id="stickerNoteMediaStatus" class="status" role="status" aria-live="polite"></div>
+          <div>
+            <div class="section-title" data-i18n="noteAttachments">圖片附件</div>
+            <div id="stickerNoteAttachments" class="sticker-note-attachments"></div>
+          </div>
+        </div>
+        <div id="stickerNoteWebPane" class="sticker-note-web-pane" hidden>
+          <label class="sticker-note-code-field">
+            <span data-i18n="noteWebSourceLabel">Single HTML 文件</span>
+            <textarea id="stickerNoteWebSource" maxlength="50000" data-i18n-placeholder="noteWebSourcePh" placeholder="輸入完整 HTML 文件，可包含 &lt;style&gt; 與 &lt;script&gt;…" spellcheck="false"></textarea>
+          </label>
+          <button type="button" class="btn primary" id="stickerNoteCodePreview" data-i18n="noteCodePreview">預覽／執行</button>
+          <div id="stickerNoteCodeStatus" class="status" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="sticker-note-preview-pane">
+        <div class="section-title" data-i18n="notePreview">即時預覽</div>
+        <div id="stickerNotePreview" class="sticker-note-preview" aria-live="polite"></div>
+        <div id="stickerNoteCodePreviewPane" class="sticker-note-code-preview-pane" hidden>
+          <iframe id="stickerNoteCodePreviewFrame" title="Sticker Note code preview" sandbox="allow-scripts" hidden></iframe>
+          <div id="stickerNoteCodePreviewHint" class="code-preview-hint" data-i18n="noteCodePreviewHint">按下「預覽／執行」後才會執行程式碼。</div>
+        </div>
+      </div>
+    </div>
+    <div class="sticker-note-actions">
+      <button type="button" class="btn" id="stickerNoteCancel" data-i18n="noteCancel">取消編輯</button>
+      <button type="button" class="btn primary" id="stickerNoteSave" data-i18n="noteSave">儲存 Note</button>
+    </div>
+  </main>
+
+  <script src="mediaDb.js"></script>
+  <script src="backupBuild.js"></script>
+  <script src="noteMedia.js"></script>
+  <script src="parkI18n.js"></script>
+  <script src="parkStickerUi.js"></script>
+  <script src="pageStickerEditor.js"></script>
+</body>
+</html>

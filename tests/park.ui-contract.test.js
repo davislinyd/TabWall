@@ -20,6 +20,8 @@ const IMPORT_EXPORT_SOURCE = fs.readFileSync(new URL('../parkImportExport.js', i
 const STICKER_UI_SOURCE = fs.readFileSync(new URL('../parkStickerUi.js', import.meta.url), 'utf8');
 const HTML_MARKUP = fs.readFileSync(new URL('../park.html', import.meta.url), 'utf8');
 const CSS_SOURCE = fs.readFileSync(new URL('../park.css', import.meta.url), 'utf8');
+const SANDBOX_HTML_SOURCE = fs.readFileSync(new URL('../noteCodeSandbox.html', import.meta.url), 'utf8');
+const SANDBOX_JS_SOURCE = fs.readFileSync(new URL('../noteCodeSandbox.js', import.meta.url), 'utf8');
 // Markup + external CSS (styles moved out of park.html in v2.29.1).
 const HTML_SOURCE = `${HTML_MARKUP}\n${CSS_SOURCE}`;
 const STORE_SOURCE = fs.readFileSync(new URL('../canvasStore.js', import.meta.url), 'utf8');
@@ -177,6 +179,11 @@ test('list rendering uses the extracted media observer instead of a stale global
 test('Canvas wallpaper, camera restore, and minimap click-to-locate contracts are wired', () => {
   assert.match(CSS_SOURCE, /body\.has-wallpaper \.canvas-viewport[\s\S]*?background-image:\s*none;/);
   assert.match(CANVAS_CHROME_SOURCE, /const shouldRun = Boolean\(env\.canvasNeedsInitialCenter\);/);
+  const initialCenterSource = extractFnSource(CANVAS_CHROME_SOURCE, 'centerCanvasInitialView');
+  assert.match(initialCenterSource, /if \(!env\.allTabs\.length\) \{\s*return;/);
+  assert.match(initialCenterSource, /if \(!bounds\) \{\s*return;/);
+  assert.match(initialCenterSource, /const store = env\.ensureCanvasStore\?\.\(\);/);
+  assert.match(initialCenterSource, /store\.commitViewport\(viewport\);\s*env\.canvasNeedsInitialCenter = false;/);
   assert.doesNotMatch(CANVAS_CHROME_SOURCE, /isUnsetCanvasZoom/);
   assert.match(SETTINGS_UI_SOURCE, /env\.ensureCanvasStore\(\)\?\.flush\?\.\(\)\.catch\?\./);
   assert.match(CANVAS_IX_SOURCE, /function handleCanvasMinimapPointerDown\(event\)/);
@@ -322,7 +329,7 @@ test('Canvas context menu covers blank canvas and single-card node actions', () 
   }
 });
 
-test('Canvas Sticker Note exposes placement, split editing, attachments, and safe actions', () => {
+test('Sticker Note exposes placement, single-document Web editing, attachments, and safe actions', () => {
   assert.match(HTML_SOURCE, /id="canvasAddNoteBtn"[^>]*data-canvas-tool="note"/);
   for (const id of [
     'stickerNoteBox',
@@ -334,9 +341,24 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
     'stickerNoteAttachments',
     'stickerNoteMediaStatus',
     'stickerNotePreview',
+    'stickerNoteModeMarkdown',
+    'stickerNoteModeWeb',
+    'stickerNoteMarkdownPane',
+    'stickerNoteWebPane',
+    'stickerNoteWebSource',
+    'stickerNoteCodePreview',
+    'stickerNoteCodeStatus',
+    'stickerNoteCodePreviewPane',
+    'stickerNoteCodePreviewFrame',
     'stickerNoteSave',
     'stickerNoteCancel',
+    'stickerNotePageSources',
+    'stickerNotePageSourcesHint',
+    'stickerNotePageSourcesList',
   ]) {
+    assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
+  }
+  for (const id of ['canvasNoteSourcesDialog', 'canvasNoteSourcesTitle', 'canvasNoteSourcesHint', 'canvasNoteSourcesList', 'canvasNoteSourcesClose']) {
     assert.match(HTML_SOURCE, new RegExp(`id="${id}"`));
   }
   assert.match(HTML_SOURCE, /class="sticker-note-body"/);
@@ -345,6 +367,25 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(PARK_BEHAVIOR_FLAT, /function armCanvasNotePlacement\(\)/);
   assert.match(STICKER_UI_SOURCE, /function placeStickerNoteAt\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /function placeStickerNoteAt\(/);
+  assert.match(WORKSPACE_UI_SOURCE, /GET_NOTE_PAGE_LOCATIONS/);
+  assert.match(WORKSPACE_UI_SOURCE, /function normalizeNotePageLocationRows\(/);
+  assert.match(WORKSPACE_UI_SOURCE, /function openCanvasNoteSources\(/);
+  assert.match(WORKSPACE_UI_SOURCE, /OPEN_NEW_TAB_URL/);
+  assert.match(STICKER_UI_SOURCE, /function renderStickerNotePageSources\(/);
+  assert.match(STICKER_UI_SOURCE, /Array\.isArray\(source\?\.pageLocations\)/);
+  assert.match(STICKER_UI_SOURCE, /renderStickerNotePageSources\(source\)/);
+  assert.match(STICKER_UI_SOURCE, /renderStickerNotePageSources\(null\)/);
+  assert.match(STICKER_UI_SOURCE, /type: 'OPEN_NEW_TAB_URL'/);
+  assert.match(CANVAS_RENDER_SOURCE, /function notePageLocations\(/);
+  assert.match(CANVAS_RENDER_SOURCE, /item\?\.kind !== 'note' \|\| call\('isMediaLocked', item\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /data-canvas-node-action="sources"/);
+  assert.match(CANVAS_RENDER_SOURCE, /pageLocations: item\.kind === 'note'/);
+  assert.match(CANVAS_IX_SOURCE, /action === 'sources'/);
+  assert.match(I18N_SOURCE, /notePageSourcesCount:/);
+  assert.match(CSS_SOURCE, /\.canvas-note-source\s*\{/);
+  assert.match(CSS_SOURCE, /\.canvas-note-source-row\s*\{/);
+  assert.match(CSS_SOURCE, /\.sticker-note-page-sources\[hidden\][\s\S]*?display: none !important/);
+  assert.match(CSS_SOURCE, /\.sticker-note-page-source\s*\{/);
   assert.match(STICKER_UI_SOURCE, /type: 'CREATE_NOTE'/);
   assert.match(PARK_BEHAVIOR_FLAT, /type: 'UPDATE_NOTE'/);
   assert.match(PARK_BEHAVIOR_FLAT, /type: 'DELETE_NOTE'/);
@@ -355,6 +396,8 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteDrop\?\.addEventListener\('drop'/);
   assert.match(HTML_SOURCE, /<script src="noteMedia\.js"><\/script>/);
   assert.match(HTML_SOURCE, /<script src="parkWallpaper\.js"><\/script>/);
+  assert.match(CSS_SOURCE, /\.sticker-note-web-pane\[hidden\][\s\S]*?display: none !important/);
+  assert.match(CSS_SOURCE, /\.sticker-note-code-preview-pane\[hidden\][\s\S]*?display: none !important/);
   assert.match(PARK_SOURCE, /const NoteMedia = self\.TabWallNoteMedia/);
   assert.match(PARK_SOURCE, /const Wallpaper = self\.TabWallWallpaper/);
   assert.match(STICKER_UI_SOURCE, /await env\.NoteMedia\.normalizeBlob\(file\)/);
@@ -366,6 +409,51 @@ test('Canvas Sticker Note exposes placement, split editing, attachments, and saf
   assert.match(PARK_BEHAVIOR_FLAT, /const observeStickerAttachment = MediaUi\.observeStickerAttachment/);
   assert.match(PARK_BEHAVIOR_FLAT, /const pruneAttachmentUrlCache = MediaUi\.pruneAttachmentUrlCache/);
   assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteMediaBusy/);
+  assert.match(STICKER_UI_SOURCE, /function setStickerNoteContentMode\(/);
+  assert.match(STICKER_UI_SOURCE, /function runStickerNoteCodePreview\(/);
+  assert.match(STICKER_UI_SOURCE, /webSource: env\.stickerNoteWebSource/);
+  assert.match(STICKER_UI_SOURCE, /type: 'CREATE_PAGE_STICKER'/);
+  assert.match(PARK_SOURCE, /TABWALL_OPEN_PAGE_STICKER_EDITOR/);
+  assert.match(STICKER_UI_SOURCE, /TABWALL_PAGE_STICKER_SAVED/);
+  assert.match(STICKER_UI_SOURCE, /frame\.contentWindow\?\.postMessage/);
+  assert.match(STICKER_UI_SOURCE, /frame\.remove\(\)/);
+  assert.match(PARK_BEHAVIOR_FLAT, /stickerNoteCodePreview\?\.addEventListener\('click'/);
+  assert.match(HTML_SOURCE, /<iframe id="stickerNoteCodePreviewFrame"[^>]*sandbox="allow-scripts"/);
+  assert.match(SANDBOX_HTML_SOURCE, /<iframe id="preview" sandbox="allow-scripts"/);
+  assert.match(SANDBOX_HTML_SOURCE, /connect-src 'none'/);
+  assert.doesNotMatch(SANDBOX_HTML_SOURCE, /allow-same-origin|allow-popups|allow-forms|allow-top-navigation/);
+  assert.match(SANDBOX_JS_SOURCE, /querySelectorAll\("script"\)/);
+  assert.match(SANDBOX_JS_SOURCE, /javascript\|vbscript/);
+  for (const field of ['contentMode', 'markdown', 'webSource']) {
+    assert.match(CANVAS_RENDER_SOURCE, new RegExp(`${field}: item\\.kind === 'note'`));
+    assert.match(APP_HELPERS_SOURCE, new RegExp(`${field}: item\\.kind === 'note'`));
+  }
+  assert.doesNotMatch(CANVAS_RENDER_SOURCE, /html: item\.kind === 'note'/);
+  assert.doesNotMatch(APP_HELPERS_SOURCE, /javascript: item\.kind === 'note'/);
+  assert.match(I18N_SOURCE, /noteMarkdownMode:/);
+  assert.match(I18N_SOURCE, /noteWebMode:/);
+  assert.match(I18N_SOURCE, /canvasResizeNote:/);
+  const manifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  assert.deepEqual(manifest.sandbox?.pages, ['noteCodeSandbox.html']);
+  assert.equal(manifest.sandbox?.content_security_policy, undefined);
+  assert.match(manifest.content_security_policy?.sandbox || '', /sandbox allow-scripts/);
+  assert.ok(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes('noteCodeSandbox.html')));
+  assert.ok(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes('noteCodeSandbox.js')));
+});
+
+test('Top-level Sticker Notes expose isolated independent resize operations', () => {
+  assert.match(CANVAS_RENDER_SOURCE, /if \(item\.kind === 'note' && node\)/);
+  assert.match(CANVAS_RENDER_SOURCE, /handle\.dataset\.canvasResizeHandle = 'true'/);
+  assert.match(CANVAS_IX_SOURCE, /function wireCanvasResizeHandle\(/);
+  assert.match(CANVAS_IX_SOURCE, /beginCanvasPointer\(event, 'resize', item\.id\)/);
+  assert.match(CANVAS_IX_SOURCE, /env\.ensureCanvasStore\(\)\?\.commitResize\(item\.id/);
+  assert.match(CANVAS_IX_SOURCE, /dx \/ \(zoom \* scale\)/);
+  assert.match(STORE_SOURCE, /if \(op\.type === 'resize'\)/);
+  assert.match(STORE_SOURCE, /w: finite\(current\.w \+ \(Number\(op\.dw\)/);
+  assert.match(STORE_SOURCE, /h: finite\(current\.h \+ \(Number\(op\.dh\)/);
+  assert.match(STORE_SOURCE, /function commitResize\(/);
+  assert.match(CSS_SOURCE, /\.canvas-resize-handle\s*\{/);
+  assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_NODE_DISPLAY_SCALE/);
 });
 
 test('Top-level actions are consolidated in the header', () => {
@@ -618,6 +706,16 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.match(HTML_SOURCE, /id="autoBackupStatus"[\s\S]*?<\/div>\s*<\/div>\s*<div class="settings-footer"/);
   assert.doesNotMatch(HTML_SOURCE, /id="autoBackupOnChange"/);
   assert.doesNotMatch(SETTINGS_UI_SOURCE, /autoBackupOnChange/);
+});
+
+test('New Tab takeover exposes a localized opt-in setting with persistence', () => {
+  assert.match(HTML_SOURCE, /id="settingsNewTabOverride"[^>]*checked/);
+  assert.match(PARK_BEHAVIOR_FLAT, /newTabOverride:\s*true/);
+  assert.match(SETTINGS_UI_SOURCE, /saveSettings\(\{\s*newTabOverride:/);
+  for (const key of ['newTabOverrideTitle', 'newTabOverrideHint', 'newTabOverrideLabel']) {
+    assert.match(I18N_SOURCE, new RegExp(`${key}:`));
+  }
+  assert.match(PARK_BEHAVIOR_FLAT, /settings\.newTabOverride/);
 });
 
 test('Automatic note and tag save rules expose a localized settings editor', () => {

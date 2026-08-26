@@ -11,6 +11,7 @@
   function formatSavedAt(...args) { return env.formatSavedAt(...args); }
   function iconSvg(...args) { return env.iconSvg(...args); }
   function itemTitle(...args) { return env.itemTitle(...args); }
+  function domainOf(...args) { return env.domainOf(...args); }
 
 
   function renderMembersList(group) {
@@ -943,6 +944,81 @@
 
   }
 
+  function normalizeNotePageLocationRows(result) {
+    const byNoteId = new Map();
+    if (!result?.ok || !Array.isArray(result.locations)) return byNoteId;
+    for (const row of result.locations) {
+      const noteId = typeof row?.noteId === 'string' ? row.noteId.trim() : '';
+      if (!noteId || !Array.isArray(row.pages)) continue;
+      const seen = new Set();
+      const pages = [];
+      for (const page of row.pages) {
+        const url = typeof page?.url === 'string' ? page.url.trim() : '';
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        pages.push({
+          url,
+          title: typeof page.title === 'string' && page.title.trim() ? page.title.trim() : url,
+        });
+      }
+      if (pages.length) byNoteId.set(noteId, pages);
+    }
+    return byNoteId;
+  }
+
+  function attachNotePageLocations(items, result) {
+    const byNoteId = normalizeNotePageLocationRows(result);
+    return (items || []).map((item) => item?.kind === 'note'
+      ? { ...item, pageLocations: byNoteId.get(item.id) || [] }
+      : item);
+  }
+
+  async function openCanvasNoteSources(item) {
+    ensureBound('openCanvasNoteSources');
+    if (!item || item.kind !== 'note' || env.isMediaLocked?.(item)) return;
+    const pages = Array.isArray(item.pageLocations) ? item.pageLocations : [];
+    if (!pages.length) return;
+    if (!env.canvasNoteSourcesDialog || !env.canvasNoteSourcesList) return;
+    const openPage = async (url) => {
+      const result = await env.sendMessage({ type: 'OPEN_NEW_TAB_URL', url });
+      if (!result?.ok) env.showCopyToast(env.t('notePageSourceOpenFailed'));
+      return result;
+    };
+    if (pages.length === 1) {
+      await openPage(pages[0].url);
+      return;
+    }
+    closeAllFloatsExcept('canvasNoteSources');
+    if (env.canvasNoteSourcesTitle) env.canvasNoteSourcesTitle.textContent = env.t('notePageSources');
+    if (env.canvasNoteSourcesHint) env.canvasNoteSourcesHint.textContent = env.t('notePageSourcesCount', { n: pages.length });
+    env.canvasNoteSourcesList.innerHTML = pages.map((page) => {
+      const title = page.title || page.url;
+      const domain = domainOf(page.url) || page.url;
+      return `<button type="button" class="canvas-note-source-row" data-note-page-url="${escapeAttr(page.url)}">
+        <span class="canvas-note-source-row-title">${escapeHtml(title)}</span>
+        <span class="canvas-note-source-row-url">${escapeHtml(domain)}</span>
+      </button>`;
+    }).join('');
+    env.canvasNoteSourcesList.querySelectorAll('[data-note-page-url]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const result = await openPage(button.dataset.notePageUrl || '');
+        if (result?.ok) closeCanvasNoteSources();
+      });
+    });
+    env.canvasNoteSourcesDialog.classList.add('open');
+    env.canvasNoteSourcesDialog.setAttribute('aria-hidden', 'false');
+    env.syncFloatBackdrop();
+    env.canvasNoteSourcesClose?.focus({ preventScroll: true });
+  }
+
+  function closeCanvasNoteSources(sync = true) {
+    ensureBound('closeCanvasNoteSources');
+    env.canvasNoteSourcesDialog?.classList.remove('open');
+    env.canvasNoteSourcesDialog?.setAttribute('aria-hidden', 'true');
+    if (env.canvasNoteSourcesList) env.canvasNoteSourcesList.innerHTML = '';
+    if (sync) env.syncFloatBackdrop();
+  }
+
   async function loadList() {
     ensureBound('loadList');
 
@@ -961,10 +1037,11 @@
 
     try {
       const generation = ++env.canvasLoadGeneration;
-      const [itemsResult, layoutResult, liveResult] = await Promise.allSettled([
+      const [itemsResult, layoutResult, liveResult, locationsResult] = await Promise.allSettled([
         env.sendMessage({ type: 'GET_PARKED_ITEMS' }),
         env.sendMessage({ type: 'GET_CANVAS_LAYOUT' }),
         env.sendMessage({ type: 'LIST_PAGE_ANNOTATIONS' }),
+        env.sendMessage({ type: 'GET_NOTE_PAGE_LOCATIONS' }),
       ]);
       if (generation !== env.canvasLoadGeneration) return false;
 
@@ -988,7 +1065,8 @@
       const liveRaw = liveResult.status === 'fulfilled' && liveResult.value?.ok && Array.isArray(liveResult.value.items)
         ? liveResult.value.items
         : [];
-      const parkedItems = env.normalizeParkedList(raw);
+      const locationsResponse = locationsResult.status === 'fulfilled' ? locationsResult.value : null;
+      const parkedItems = attachNotePageLocations(env.normalizeParkedList(raw), locationsResponse);
       const liveItems = liveRaw.length ? env.normalizeParkedList(liveRaw) : [];
       const nextItems = liveItems.length ? [...liveItems, ...parkedItems] : parkedItems;
       if (!Array.isArray(nextItems)) throw new Error('invalid_normalized_items');
@@ -1663,7 +1741,8 @@
         (env.dedupeBox && env.dedupeBox.classList.contains('open')) ||
         (env.remindersBox && env.remindersBox.classList.contains('open')) ||
         (env.importPickBox && env.importPickBox.classList.contains('open')) ||
-        (env.canvasStackDialog && env.canvasStackDialog.classList.contains('open'))
+        (env.canvasStackDialog && env.canvasStackDialog.classList.contains('open')) ||
+        (env.canvasNoteSourcesDialog && env.canvasNoteSourcesDialog.classList.contains('open'))
       );
 
   }
@@ -1696,6 +1775,7 @@
       if (except !== 'reminders') env.closeRemindersBox?.();
       if (except !== 'importPick') env.closeImportPickBox(false);
       if (except !== 'canvasStack') env.closeCanvasStackDialog();
+      if (except !== 'canvasNoteSources') closeCanvasNoteSources(false);
       syncFloatBackdrop();
 
   }
@@ -1995,6 +2075,8 @@
     showLightboxEntry,
     openLightbox,
     openCanvasGroupLightbox,
+    openCanvasNoteSources,
+    closeCanvasNoteSources,
     navigateLightbox,
     closeLightbox,
     backToGroupOverview,

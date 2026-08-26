@@ -266,6 +266,15 @@
       </div>
     </div>
 
+    <div id="canvasNoteSourcesDialog" class="canvas-stack-dialog canvas-note-sources-dialog" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="canvasNoteSourcesTitle">
+      <h2 id="canvasNoteSourcesTitle" data-i18n="notePageSources">來源網頁</h2>
+      <p id="canvasNoteSourcesHint" data-i18n="notePageSourcesHint">此 Sticker Note 放置於下列網頁。</p>
+      <div id="canvasNoteSourcesList" class="canvas-note-source-list"></div>
+      <div class="canvas-dialog-actions">
+        <button type="button" class="btn" id="canvasNoteSourcesClose" data-i18n="close">關閉</button>
+      </div>
+    </div>
+
     <div id="batchBar" aria-hidden="true">
       <span class="batch-count" id="batchCount">0</span>
       <button type="button" class="btn primary" id="batchRestore" data-i18n="batchRestore">還原並保留卡片</button>
@@ -347,6 +356,18 @@
           <button type="button" class="settings-nav-btn" data-settings-section="diagnostic" data-i18n="settingsDiagnostic">診斷</button>
         </nav>
       <div class="float-body" id="settings">
+        <div class="settings-block" data-settings-section="general">
+          <h2 data-i18n="newTabOverrideTitle">新分頁</h2>
+          <p class="hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)" data-i18n="newTabOverrideHint">
+            開啟後，新分頁會導向 TabWall；關閉後，下一個新分頁使用瀏覽器原生頁面。目前頁面不會自動切換。
+          </p>
+          <div class="settings-row">
+            <label class="inline">
+              <input type="checkbox" id="settingsNewTabOverride" checked />
+              <span data-i18n="newTabOverrideLabel">使用 TabWall 取代瀏覽器的新分頁</span>
+            </label>
+          </div>
+        </div>
         <div class="settings-block" data-settings-section="general">
           <h2 data-i18n="afterSaveTitle">儲存分頁後的行為</h2>
           <div class="radios">
@@ -1077,24 +1098,47 @@
               <input id="stickerNoteTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
             </div>
           </div>
-          <label class="sticker-note-markdown-label">
-            <span>Markdown</span>
-            <textarea id="stickerNoteMarkdown" data-i18n-placeholder="noteMarkdownPh" placeholder="以 Markdown 撰寫…" spellcheck="true"></textarea>
-          </label>
-          <div id="stickerNoteDrop" class="sticker-note-drop" tabindex="0">
-            <button type="button" class="btn" data-i18n="noteAttachAdd">插入圖片</button>
-            <span data-i18n="noteAttachDrop">拖曳或貼上圖片到這裡</span>
-            <input id="stickerNoteFile" type="file" accept="image/*" multiple hidden />
+          <div id="stickerNotePageSources" class="sticker-note-page-sources" hidden>
+            <div class="sticker-note-section-title" data-i18n="notePageSources">來源網頁</div>
+            <div id="stickerNotePageSourcesHint" class="hint" data-i18n="notePageSourcesHint">此 Sticker Note 放置於下列網頁。</div>
+            <div id="stickerNotePageSourcesList" class="sticker-note-page-sources-list"></div>
           </div>
-          <div id="stickerNoteMediaStatus" class="sticker-note-media-status" role="status" aria-live="polite"></div>
-          <div>
-            <div class="sticker-note-section-title" data-i18n="noteAttachments">圖片附件</div>
-            <div id="stickerNoteAttachments" class="sticker-note-attachments"></div>
+          <div class="sticker-note-mode" role="group" aria-label="Note content mode">
+            <button type="button" class="btn active" id="stickerNoteModeMarkdown" data-note-mode="markdown" data-i18n="noteMarkdownMode">Markdown</button>
+            <button type="button" class="btn" id="stickerNoteModeWeb" data-note-mode="web" data-i18n="noteWebMode">HTML/CSS/JS</button>
+          </div>
+          <div id="stickerNoteMarkdownPane">
+            <label class="sticker-note-markdown-label">
+              <span data-i18n="noteMarkdownMode">Markdown</span>
+              <textarea id="stickerNoteMarkdown" data-i18n-placeholder="noteMarkdownPh" placeholder="以 Markdown 撰寫…" spellcheck="true"></textarea>
+            </label>
+            <div id="stickerNoteDrop" class="sticker-note-drop" tabindex="0">
+              <button type="button" class="btn" data-i18n="noteAttachAdd">插入圖片</button>
+              <span data-i18n="noteAttachDrop">拖曳或貼上圖片到這裡</span>
+              <input id="stickerNoteFile" type="file" accept="image/*" multiple hidden />
+            </div>
+            <div id="stickerNoteMediaStatus" class="sticker-note-media-status" role="status" aria-live="polite"></div>
+            <div>
+              <div class="sticker-note-section-title" data-i18n="noteAttachments">圖片附件</div>
+              <div id="stickerNoteAttachments" class="sticker-note-attachments"></div>
+            </div>
+          </div>
+          <div id="stickerNoteWebPane" class="sticker-note-web-pane" hidden>
+            <label class="sticker-note-code-field">
+              <span data-i18n="noteWebSourceLabel">Single HTML 文件</span>
+              <textarea id="stickerNoteWebSource" maxlength="50000" data-i18n-placeholder="noteWebSourcePh" placeholder="輸入完整 HTML 文件，可包含 &lt;style&gt; 與 &lt;script&gt;…" spellcheck="false"></textarea>
+            </label>
+            <button type="button" class="btn primary sticker-note-code-run" id="stickerNoteCodePreview" data-i18n="noteCodePreview">預覽／執行</button>
+            <div id="stickerNoteCodeStatus" class="sticker-note-code-status" role="status" aria-live="polite"></div>
           </div>
         </div>
         <div class="sticker-note-preview-pane">
           <div class="sticker-note-section-title" data-i18n="notePreview">即時預覽</div>
           <div id="stickerNotePreview" class="sticker-note-preview" aria-live="polite"></div>
+          <div id="stickerNoteCodePreviewPane" class="sticker-note-code-preview-pane" hidden>
+            <iframe id="stickerNoteCodePreviewFrame" title="Sticker Note code preview" sandbox="allow-scripts" hidden></iframe>
+            <div id="stickerNoteCodePreviewHint" class="sticker-note-code-preview-hint" data-i18n="noteCodePreviewHint">按下「預覽／執行」後才會執行程式碼。</div>
+          </div>
         </div>
       </div>
       <div class="sticker-note-actions">

@@ -33,6 +33,8 @@
   let pendingConflict = null;
   /** @type {object|null} */
   let pendingPreSave = null;
+  let pendingPageStickerEditor = null;
+  let pendingPageStickerReminder = null;
   let iframeReady = false;
   let previousActiveElement = null;
 
@@ -84,6 +86,8 @@
     iframeReady = false;
     pendingConflict = null;
     pendingPreSave = null;
+    pendingPageStickerEditor = null;
+    pendingPageStickerReminder = null;
     restorePreviousFocus();
   }
 
@@ -130,6 +134,26 @@
   function flushPendingPreSave() {
     if (!pendingPreSave || !iframeReady) return;
     postToPark({ type: 'TABWALL_PRESAVE_EDIT', preSave: pendingPreSave });
+  }
+
+  function flushPendingPageStickerEditor() {
+    if (!pendingPageStickerEditor || !iframeReady) return;
+    const payload = pendingPageStickerEditor;
+    pendingPageStickerEditor = null;
+    postToPark({
+      type: 'TABWALL_OPEN_PAGE_STICKER_EDITOR',
+      ...payload,
+    });
+  }
+
+  function flushPendingPageStickerReminder() {
+    if (!pendingPageStickerReminder || !iframeReady) return;
+    const payload = pendingPageStickerReminder;
+    pendingPageStickerReminder = null;
+    postToPark({
+      type: 'TABWALL_OPEN_PAGE_STICKER_REMINDER',
+      ...payload,
+    });
   }
 
   function waitForPaint() {
@@ -287,6 +311,8 @@
       }
       flushPendingConflict();
       flushPendingPreSave();
+      flushPendingPageStickerEditor();
+      flushPendingPageStickerReminder();
     });
 
     keyHandler = (e) => {
@@ -333,10 +359,30 @@
       if (event.data?.type === 'TABWALL_PRESAVE_CANCEL') {
         cancelPreSave();
       }
+      if (event.data?.type === 'TABWALL_PAGE_STICKER_SAVED') {
+        window.postMessage({
+          type: 'TABWALL_PAGE_STICKER_CHANGED',
+          url: event.data.url || '',
+          noteId: event.data.noteId || '',
+        }, '*');
+        destroy();
+      }
+      if (event.data?.type === 'TABWALL_PAGE_STICKER_CHANGED') {
+        window.postMessage({
+          type: 'TABWALL_PAGE_STICKER_CHANGED',
+          url: event.data.url || '',
+          noteId: event.data.noteId || '',
+        }, '*');
+      }
+      if (event.data?.type === 'TABWALL_PAGE_STICKER_CANCEL') {
+        destroy();
+      }
       if (event.data?.type === 'TABWALL_PARK_READY') {
         iframeReady = true;
         flushPendingConflict();
         flushPendingPreSave();
+        flushPendingPageStickerEditor();
+        flushPendingPageStickerReminder();
       }
     };
     window.addEventListener('message', messageHandler);
@@ -356,6 +402,18 @@
     pendingPreSave = preSave || null;
     ensureOpen();
     if (iframeReady) flushPendingPreSave();
+  }
+
+  function showPageStickerEditor(payload) {
+    pendingPageStickerEditor = payload || null;
+    ensureOpen();
+    if (iframeReady) flushPendingPageStickerEditor();
+  }
+
+  function showPageStickerReminder(payload) {
+    pendingPageStickerReminder = payload || null;
+    ensureOpen();
+    if (iframeReady) flushPendingPageStickerReminder();
   }
 
   function toggle() {
@@ -398,6 +456,31 @@
     if (message?.type === 'SHOW_PRESAVE_EDIT') {
       try {
         showPreSaveEdit(message.preSave);
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+      return false;
+    }
+    if (message?.type === 'OPEN_PAGE_STICKER_EDITOR') {
+      try {
+        showPageStickerEditor({
+          url: message.url || '',
+          noteId: message.noteId || '',
+          placement: message.placement || null,
+        });
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+      return false;
+    }
+    if (message?.type === 'OPEN_PAGE_STICKER_REMINDER') {
+      try {
+        showPageStickerReminder({
+          url: message.url || '',
+          noteId: message.noteId || '',
+        });
         sendResponse({ ok: true });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });

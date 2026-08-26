@@ -640,6 +640,9 @@ async function deleteItem(id) {
   } catch (err) {
     appLogPush('warn', 'delete', 'media cleanup deferred', err?.message || err);
   }
+  if (item.kind === 'note' && self.TabWallPageAnnotate?.removePageStickerReferences) {
+    await self.TabWallPageAnnotate.removePageStickerReferences(item.id).catch(() => {});
+  }
   return { ok: true, remaining: next.length };
 }
 

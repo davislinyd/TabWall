@@ -221,22 +221,22 @@
       }
       const zoom = canvasSixCardZoom(width);
       if (!env.allTabs.length) {
-        env.canvasNeedsInitialCenter = false;
         return;
       }
       const bounds = env.canvasBoundsForItems(env.allTabs, state.layout);
       if (!bounds) {
-        env.canvasNeedsInitialCenter = false;
         return;
       }
-      env.canvasNeedsInitialCenter = false;
       const viewport = {
         x: (bounds.minX + bounds.maxX) / 2 - width / (2 * zoom),
         y: (bounds.minY + bounds.maxY) / 2 - height / (2 * zoom),
         zoom,
       };
-      if (env.canvasSearchViewportState) env.ensureCanvasStore()?.previewViewport(viewport);
-      else env.canvasStore?.commitViewport(viewport);
+      const store = env.ensureCanvasStore?.();
+      if (!store) return;
+      if (env.canvasSearchViewportState) store.previewViewport(viewport);
+      else store.commitViewport(viewport);
+      env.canvasNeedsInitialCenter = false;
 
   }
 

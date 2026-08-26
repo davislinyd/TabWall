@@ -14,6 +14,14 @@
   const CHROME_GAP = 8;
   const FALLBACK_TOOLBAR_WIDTH = 560;
   const FALLBACK_TOOLBAR_HEIGHT = 40;
+  const PAGE_STICKER_MIN_WIDTH = 160;
+  const PAGE_STICKER_MAX_WIDTH = 640;
+  const PAGE_STICKER_MIN_HEIGHT = 120;
+  const PAGE_STICKER_MAX_HEIGHT = 560;
+  const PAGE_STICKER_MAX_COORDINATE = 10000000;
+  const PAGE_STICKER_MAX_Z = 1000000;
+  const PAGE_STICKER_DEFAULT_WIDTH = 240;
+  const PAGE_STICKER_DEFAULT_HEIGHT = 180;
   const COLORS = ['#c97858', '#1f2937', '#dc2626', '#2563eb', '#16a34a', '#eab308'];
   const CHROME_KEY = 'pageAnnotateChrome';
   const DEFAULT_CHROME_INSET = 24;
@@ -31,6 +39,83 @@
 
   function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
+  }
+
+  function normalizePageStickerPlacement(raw) {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const noteId = safeText(source.noteId, 128).trim();
+    if (!noteId) return null;
+    const number = (value, min, max, fallback) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? clamp(Math.round(n), min, max) : fallback;
+    };
+    return {
+      noteId,
+      x: number(source.x, 0, PAGE_STICKER_MAX_COORDINATE, 0),
+      y: number(source.y, 0, PAGE_STICKER_MAX_COORDINATE, 0),
+      w: number(source.w, PAGE_STICKER_MIN_WIDTH, PAGE_STICKER_MAX_WIDTH, PAGE_STICKER_DEFAULT_WIDTH),
+      h: number(source.h, PAGE_STICKER_MIN_HEIGHT, PAGE_STICKER_MAX_HEIGHT, PAGE_STICKER_DEFAULT_HEIGHT),
+      z: number(source.z, 0, PAGE_STICKER_MAX_Z, 0),
+    };
+  }
+
+  function normalizePageStickerViews(list) {
+    const seen = new Set();
+    return (Array.isArray(list) ? list : [])
+      .map((value) => {
+        const placement = normalizePageStickerPlacement(value);
+        if (!placement || seen.has(placement.noteId)) return null;
+        seen.add(placement.noteId);
+        return { ...value, ...placement, note: value?.note || null };
+      })
+      .filter(Boolean);
+  }
+
+  function pageStickerPlacementForDelta(raw, mode, dx = 0, dy = 0) {
+    const source = normalizePageStickerPlacement(raw);
+    if (!source) return null;
+    const deltaX = Number(dx);
+    const deltaY = Number(dy);
+    const x = Number.isFinite(deltaX) ? deltaX : 0;
+    const y = Number.isFinite(deltaY) ? deltaY : 0;
+    if (mode === 'resize') {
+      return normalizePageStickerPlacement({
+        ...source,
+        w: source.w + x,
+        h: source.h + y,
+      });
+    }
+    return normalizePageStickerPlacement({
+      ...source,
+      x: source.x + x,
+      y: source.y + y,
+    });
+  }
+
+  function pageStickerCollapsedNext(ids, noteId) {
+    const next = new Set(Array.isArray(ids) || ids instanceof Set ? ids : []);
+    const id = safeText(noteId, 128).trim();
+    if (!id) return next;
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  }
+
+  function pageStickerEventMatches(event, selector) {
+    if (event?.target?.closest?.(selector)) return true;
+    const path = typeof event?.composedPath === 'function' ? event.composedPath() : [];
+    return path.some((entry) => entry?.matches?.(selector));
+  }
+
+  function pageStickerDblClickAction(event) {
+    if (pageStickerEventMatches(event, 'button') || pageStickerEventMatches(event, 'iframe')) return 'ignore';
+    if (pageStickerEventMatches(event, '.page-sticker-title')
+      || pageStickerEventMatches(event, '.page-sticker-header')) return 'collapse';
+    return 'edit';
+  }
+
+  function chromePointerUpAction(target, moved, eventType = 'pointerup') {
+    return target === 'fab' && eventType === 'pointerup' && moved !== true ? 'toggle' : 'drag';
   }
 
   function safeHexColor(value, fallback) {
@@ -681,6 +766,17 @@
     clampChromeAnchor,
     resolveChromeLayout,
     canvasScrollTransform,
+    normalizePageStickerPlacement,
+    normalizePageStickerViews,
+    pageStickerPlacementForDelta,
+    pageStickerCollapsedNext,
+    pageStickerEventMatches,
+    pageStickerDblClickAction,
+    chromePointerUpAction,
+    PAGE_STICKER_MIN_WIDTH,
+    PAGE_STICKER_MAX_WIDTH,
+    PAGE_STICKER_MIN_HEIGHT,
+    PAGE_STICKER_MAX_HEIGHT,
     DEFAULT_COLLAPSED: true,
   };
 
@@ -703,6 +799,7 @@
   }
 
   const ROOT_ID = 'tabwall-annotate-root';
+  const PAGE_STICKER_EDITOR_ORIGIN = new URL(chrome.runtime.getURL('pageStickerEditor.html')).origin;
   const zh = /zh/i.test(navigator.language || '');
   const copy = zh
     ? {
@@ -713,6 +810,12 @@
       circle: '圓圈',
       rectangle: '方框',
       text: '字',
+      sticker: '貼紙',
+      stickerEdit: '編輯貼紙',
+      stickerDetach: '從此頁移除貼紙',
+      stickerReminder: '貼紙提醒',
+      stickerLocked: '此 Note 已上鎖',
+      stickerWeb: 'Web 預覽',
       eraser: '擦',
       view: '檢視',
       del: '刪除',
@@ -730,6 +833,12 @@
       circle: 'Circle',
       rectangle: 'Box',
       text: 'Text',
+      sticker: 'Sticker',
+      stickerEdit: 'Edit Sticker',
+      stickerDetach: 'Remove Sticker from this page',
+      stickerReminder: 'Sticker reminder',
+      stickerLocked: 'This Note is locked',
+      stickerWeb: 'Web preview',
       eraser: 'Erase',
       view: 'View',
       del: 'Delete',
@@ -749,6 +858,7 @@
   let chromeHandle = null;
   let fab = null;
   let textLayer = null;
+  let stickerLayer = null;
   let hoverId = '';
   let textEditor = null;
   let visible = false;
@@ -768,10 +878,22 @@
   let parkBlocked = false;
   let runtimeHandler = null;
   let keyHandler = null;
+  let pageMessageHandler = null;
   let resizeObserver = null;
   let mutationObserver = null;
   let barPos = { x: null, y: null, collapsed: true };
   let dragBar = null;
+  let pageStickers = [];
+  let pageStickerCollapsedIds = new Set();
+  let pageStickerCollapseUrl = '';
+  let stickerObserver = null;
+  let stickerInteraction = null;
+  let stickerEditorLayer = null;
+  let stickerEditorFrame = null;
+  let stickerEditorMessageHandler = null;
+  let stickerEditorSessionId = '';
+  let stickerEditorRequest = null;
+  let stickerEditorInitSent = false;
   let lastToggleAt = 0;
 
   function pageUrl() {
@@ -951,6 +1073,10 @@
       textLayer.style.width = `${w}px`;
       textLayer.style.height = `${h}px`;
     }
+    if (stickerLayer) {
+      stickerLayer.style.width = String(w) + 'px';
+      stickerLayer.style.height = String(h) + 'px';
+    }
     const nextW = Math.max(1, Math.round(w * dpr));
     const nextH = Math.max(1, Math.round(h * dpr));
     if (canvas.width !== nextW || canvas.height !== nextH) {
@@ -966,6 +1092,499 @@
     if (canvas) canvas.style.transform = transform;
     if (textLayer) textLayer.style.transform = transform;
     if (textEditor) textEditor.style.transform = transform;
+    if (stickerLayer) stickerLayer.style.transform = transform;
+  }
+
+  function pageStickerById(noteId) {
+    return pageStickers.find((sticker) => sticker.noteId === noteId) || null;
+  }
+
+  function syncPageStickerCollapseScope() {
+    const url = pageUrl();
+    if (url === pageStickerCollapseUrl) return;
+    pageStickerCollapsedIds = new Set();
+    pageStickerCollapseUrl = url;
+  }
+
+  function pageStickerCardPlacement(card, placement) {
+    if (!card || !placement) return;
+    card.style.left = String(placement.x) + 'px';
+    card.style.top = String(placement.y) + 'px';
+    card.style.width = String(placement.w) + 'px';
+    card.style.height = String(placement.h) + 'px';
+    card.style.zIndex = String(placement.z || 0);
+  }
+
+  function unmountPageStickerFrame(card) {
+    const frame = card?.querySelector?.('iframe[data-sticker-frame]');
+    if (!frame) return;
+    frame.remove();
+    const body = card.querySelector('.page-sticker-body');
+    if (body && body.dataset.rendered === 'web') {
+      body.textContent = copy.stickerWeb;
+      body.dataset.rendered = 'placeholder';
+    }
+  }
+
+  function mountPageStickerFrame(card, sticker) {
+    const note = sticker?.note;
+    if (!card || !note || card.classList.contains('is-collapsed') || !visible || parkBlocked
+      || note.contentMode !== 'web' || note.locked) return;
+    if (card.querySelector('iframe[data-sticker-frame]')) return;
+    const frame = document.createElement('iframe');
+    frame.dataset.stickerFrame = 'true';
+    frame.title = note.title || copy.sticker;
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.src = chrome.runtime.getURL('noteCodeSandbox.html');
+    const requestId = newObjectId();
+    frame.addEventListener('load', () => {
+      frame.contentWindow?.postMessage({
+        type: 'tabwall-note-code-render',
+        requestId,
+        webSource: note.webSource || '',
+      }, '*');
+    }, { once: true });
+    const body = card.querySelector('.page-sticker-body');
+    if (body) {
+      body.replaceChildren(frame);
+      body.dataset.rendered = 'web';
+    }
+  }
+
+  function observePageStickerCard(card, sticker) {
+    if (!card || !sticker || card.classList.contains('is-collapsed') || !visible || parkBlocked) return;
+    if (stickerObserver) {
+      stickerObserver.unobserve(card);
+      stickerObserver.observe(card);
+    }
+    else mountPageStickerFrame(card, sticker);
+  }
+
+  function setPageStickerLayerVisibility() {
+    if (!stickerLayer) return;
+    stickerLayer.hidden = !visible || parkBlocked;
+    if (stickerLayer.hidden) {
+      stickerObserver?.disconnect();
+      stickerLayer.querySelectorAll('iframe[data-sticker-frame]').forEach((frame) => frame.remove());
+      return;
+    }
+    stickerLayer.querySelectorAll('[data-page-sticker-id]').forEach((card) => {
+      observePageStickerCard(card, pageStickerById(card.dataset.pageStickerId));
+    });
+  }
+
+  function applyPageStickerCollapsed(card, sticker, collapsed) {
+    if (!card || !sticker) return;
+    const isCollapsed = collapsed === true;
+    card.classList.toggle('is-collapsed', isCollapsed);
+    card.dataset.collapsed = isCollapsed ? 'true' : 'false';
+    card.setAttribute('aria-expanded', String(!isCollapsed));
+    const title = card.querySelector('.page-sticker-title');
+    if (title) title.setAttribute('aria-expanded', String(!isCollapsed));
+    const body = card.querySelector('.page-sticker-body');
+    if (body) body.hidden = isCollapsed;
+    const resize = card.querySelector('.page-sticker-resize');
+    if (resize) resize.hidden = isCollapsed;
+    if (isCollapsed) unmountPageStickerFrame(card);
+    else observePageStickerCard(card, sticker);
+  }
+
+  function togglePageStickerCollapsed(card, sticker) {
+    const noteId = sticker?.noteId || card?.dataset?.pageStickerId || '';
+    if (!noteId) return;
+    pageStickerCollapsedIds = pageStickerCollapsedNext(pageStickerCollapsedIds, noteId);
+    applyPageStickerCollapsed(card, sticker, pageStickerCollapsedIds.has(noteId));
+  }
+
+  function pageStickerEditorParentOrigin() {
+    try {
+      return location.origin === 'null' ? '' : location.origin;
+    } catch {
+      return '';
+    }
+  }
+
+  function postPageStickerEditorInit() {
+    if (stickerEditorInitSent || !stickerEditorFrame || !stickerEditorSessionId || !stickerEditorRequest) return;
+    stickerEditorInitSent = true;
+    stickerEditorFrame.contentWindow?.postMessage({
+      type: 'TABWALL_PAGE_STICKER_EDITOR_INIT',
+      sessionId: stickerEditorSessionId,
+      parentOrigin: pageStickerEditorParentOrigin(),
+      ...stickerEditorRequest,
+    }, PAGE_STICKER_EDITOR_ORIGIN);
+  }
+
+  function closePageStickerEditor({ notifyChild = true } = {}) {
+    const frame = stickerEditorFrame;
+    if (notifyChild && frame?.contentWindow && stickerEditorSessionId) {
+      frame.contentWindow.postMessage({
+        type: 'TABWALL_PAGE_STICKER_EDITOR_CLOSE',
+        sessionId: stickerEditorSessionId,
+      }, PAGE_STICKER_EDITOR_ORIGIN);
+    }
+    if (stickerEditorMessageHandler) {
+      window.removeEventListener('message', stickerEditorMessageHandler);
+      stickerEditorMessageHandler = null;
+    }
+    stickerEditorLayer?.replaceChildren();
+    if (stickerEditorLayer) {
+      stickerEditorLayer.hidden = true;
+      stickerEditorLayer.setAttribute('aria-hidden', 'true');
+    }
+    stickerEditorFrame = null;
+    stickerEditorSessionId = '';
+    stickerEditorRequest = null;
+    stickerEditorInitSent = false;
+  }
+
+  function handlePageStickerEditorMessage(event) {
+    const frame = stickerEditorFrame;
+    const data = event?.data;
+    if (!frame || event.source !== frame.contentWindow || event.origin !== PAGE_STICKER_EDITOR_ORIGIN || !data) return;
+    if (data.type === 'TABWALL_PAGE_STICKER_EDITOR_LOADED') {
+      postPageStickerEditorInit();
+      return;
+    }
+    if (String(data.sessionId || '') !== stickerEditorSessionId) return;
+    if (data.type === 'TABWALL_PAGE_STICKER_EDITOR_READY') {
+      frame.focus?.();
+      return;
+    }
+    if (data.type === 'TABWALL_PAGE_STICKER_EDITOR_SAVED') {
+      closePageStickerEditor({ notifyChild: false });
+      loadForCurrentUrl();
+      return;
+    }
+    if (data.type === 'TABWALL_PAGE_STICKER_EDITOR_CANCELLED') {
+      closePageStickerEditor({ notifyChild: false });
+      return;
+    }
+    if (data.type === 'TABWALL_PAGE_STICKER_EDITOR_ERROR') {
+      closePageStickerEditor({ notifyChild: false });
+      tool = 'sticker';
+      syncChrome();
+    }
+  }
+
+  function openPageStickerEditor(noteId, placement) {
+    const sticker = noteId ? pageStickerById(noteId) : null;
+    if (noteId && !sticker) return false;
+    if (!stickerEditorLayer) return false;
+    closePageStickerEditor();
+    stickerEditorSessionId = newObjectId();
+    stickerEditorRequest = {
+      url: pageUrl(),
+      noteId: noteId || '',
+      note: noteId ? sticker?.note || null : null,
+      placement: noteId ? placement : { ...placement, noteId: '' },
+    };
+    stickerEditorMessageHandler = handlePageStickerEditorMessage;
+    window.addEventListener('message', stickerEditorMessageHandler);
+    stickerEditorLayer.hidden = false;
+    stickerEditorLayer.setAttribute('aria-hidden', 'false');
+    const frame = document.createElement('iframe');
+    frame.className = 'page-sticker-editor-frame';
+    frame.title = copy.stickerEdit;
+    frame.src = chrome.runtime.getURL('pageStickerEditor.html');
+    frame.addEventListener('load', postPageStickerEditorInit, { once: true });
+    stickerEditorFrame = frame;
+    stickerEditorLayer.appendChild(frame);
+    return true;
+  }
+
+  function requestPageStickerEditor(noteId, placement = null) {
+    const sticker = noteId ? pageStickerById(noteId) : null;
+    const next = normalizePageStickerPlacement({
+      ...(placement || sticker || {}),
+      noteId: noteId || placement?.noteId || 'pending',
+    });
+    if (!next) return;
+    if (!openPageStickerEditor(noteId, next)) {
+      tool = 'sticker';
+      syncChrome();
+      return;
+    }
+    tool = 'view';
+    setToolbarCollapsed(true, { render: false });
+    syncChrome();
+  }
+
+  function requestPageStickerReminder(noteId) {
+    if (!noteId) return;
+    sendRuntime({
+      type: 'OPEN_PAGE_STICKER_REMINDER',
+      url: pageUrl(),
+      noteId,
+    });
+  }
+
+  function detachPageSticker(noteId) {
+    if (!noteId) return;
+    sendRuntime({
+      type: 'DELETE_PAGE_STICKER',
+      url: pageUrl(),
+      noteId,
+    }).then((result) => {
+      if (!result?.ok) return;
+      pageStickers = pageStickers.filter((sticker) => sticker.noteId !== noteId);
+      renderPageStickers();
+    });
+  }
+
+  function beginPageStickerInteraction(event, card, mode) {
+    if (!card || event.button !== 0) return;
+    const placement = pageStickerById(card.dataset.pageStickerId);
+    if (!placement) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerTarget = event.currentTarget;
+    try {
+      pointerTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // The window-level listener remains the fallback for browsers without capture.
+    }
+    stickerInteraction = {
+      mode,
+      card,
+      noteId: placement.noteId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      original: { ...placement },
+      preview: { ...placement },
+      latestX: event.clientX,
+      latestY: event.clientY,
+      moved: false,
+      pointerTarget,
+      frameHandle: null,
+    };
+    card.classList.toggle('is-resizing', mode === 'resize');
+    card.style.willChange = mode === 'resize' ? 'width, height' : 'left, top';
+  }
+
+  function pageStickerInteractionPreview(interaction) {
+    return pageStickerPlacementForDelta(
+      interaction.original,
+      interaction.mode,
+      interaction.latestX - interaction.startX,
+      interaction.latestY - interaction.startY,
+    ) || { ...interaction.original };
+  }
+
+  function applyPageStickerInteraction(interaction) {
+    if (!interaction || stickerInteraction !== interaction) return;
+    const next = pageStickerInteractionPreview(interaction);
+    interaction.preview = next;
+    pageStickerCardPlacement(interaction.card, next);
+  }
+
+  function cancelPageStickerFrame(interaction) {
+    const handle = interaction?.frameHandle;
+    if (!handle) return;
+    if (handle.kind === 'raf' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(handle.id);
+    } else {
+      window.clearTimeout(handle.id);
+    }
+    interaction.frameHandle = null;
+  }
+
+  function schedulePageStickerFrame(interaction) {
+    if (!interaction || interaction.frameHandle) return;
+    const callback = () => {
+      interaction.frameHandle = null;
+      applyPageStickerInteraction(interaction);
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      interaction.frameHandle = { kind: 'raf', id: window.requestAnimationFrame(callback) };
+    } else {
+      interaction.frameHandle = { kind: 'timeout', id: window.setTimeout(callback, 16) };
+    }
+  }
+
+  function flushPageStickerFrame(interaction) {
+    if (!interaction) return;
+    cancelPageStickerFrame(interaction);
+    applyPageStickerInteraction(interaction);
+  }
+
+  function releasePageStickerPointer(interaction) {
+    try {
+      interaction?.pointerTarget?.releasePointerCapture?.(interaction.pointerId);
+    } catch {
+      // Best effort; the interaction is already finalized.
+    }
+    interaction?.card?.classList.remove('is-resizing');
+    if (interaction?.card) interaction.card.style.willChange = '';
+  }
+
+  function onPageStickerPointerMove(event) {
+    const interaction = stickerInteraction;
+    if (!interaction || event.pointerId !== interaction.pointerId) return;
+    interaction.latestX = event.clientX;
+    interaction.latestY = event.clientY;
+    if (Math.abs(event.clientX - interaction.startX) > 1 || Math.abs(event.clientY - interaction.startY) > 1) {
+      interaction.moved = true;
+    }
+    schedulePageStickerFrame(interaction);
+  }
+
+  function onPageStickerPointerUp(event) {
+    const interaction = stickerInteraction;
+    if (!interaction || event.pointerId !== interaction.pointerId) return;
+    stickerInteraction = null;
+    if (event.type === 'pointercancel') {
+      cancelPageStickerFrame(interaction);
+      pageStickerCardPlacement(interaction.card, interaction.original);
+      releasePageStickerPointer(interaction);
+      return;
+    }
+    flushPageStickerFrame(interaction);
+    releasePageStickerPointer(interaction);
+    if (!interaction.moved) return;
+    const placement = interaction.preview;
+    pageStickers = pageStickers.map((item) => item.noteId === placement.noteId ? placement : item);
+    sendRuntime({
+      type: 'UPDATE_PAGE_STICKER',
+      url: pageUrl(),
+      noteId: placement.noteId,
+      placement,
+    }).then((result) => {
+      if (!result?.ok) loadForCurrentUrl();
+    });
+  }
+
+  function renderPageStickers() {
+    if (!stickerLayer) return;
+    const page = pageSize();
+    stickerLayer.style.width = String(page.w) + 'px';
+    stickerLayer.style.height = String(page.h) + 'px';
+    stickerObserver?.disconnect();
+    stickerLayer.replaceChildren();
+    for (const sticker of normalizePageStickerViews(pageStickers)) {
+      const note = sticker.note || {};
+      const card = document.createElement('article');
+      card.className = 'page-sticker-card';
+      card.dataset.pageStickerId = sticker.noteId;
+      card.tabIndex = 0;
+      card.setAttribute('role', 'article');
+      card.setAttribute('aria-expanded', String(!pageStickerCollapsedIds.has(sticker.noteId)));
+      pageStickerCardPlacement(card, sticker);
+
+      const header = document.createElement('div');
+      header.className = 'page-sticker-header';
+      header.title = copy.sticker;
+      const title = document.createElement('span');
+      title.className = 'page-sticker-title';
+      title.textContent = note.displayTitle || note.title || copy.sticker;
+      title.setAttribute('role', 'button');
+      title.setAttribute('tabindex', '0');
+      title.setAttribute('aria-expanded', String(!pageStickerCollapsedIds.has(sticker.noteId)));
+      header.appendChild(title);
+      if (note.reminder) {
+        const reminder = document.createElement('button');
+        reminder.type = 'button';
+        reminder.className = 'page-sticker-reminder';
+        reminder.title = note.reminder.message || copy.stickerReminder;
+        reminder.setAttribute('aria-label', reminder.title);
+        reminder.textContent = '⏰';
+        reminder.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          requestPageStickerReminder(sticker.noteId);
+        });
+        header.appendChild(reminder);
+      }
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'page-sticker-action';
+      edit.title = copy.stickerEdit;
+      edit.setAttribute('aria-label', copy.stickerEdit);
+      edit.textContent = '✎';
+      edit.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        requestPageStickerEditor(sticker.noteId, sticker);
+      });
+      header.appendChild(edit);
+      const detach = document.createElement('button');
+      detach.type = 'button';
+      detach.className = 'page-sticker-action';
+      detach.title = copy.stickerDetach;
+      detach.setAttribute('aria-label', copy.stickerDetach);
+      detach.textContent = '×';
+      detach.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        detachPageSticker(sticker.noteId);
+      });
+      header.appendChild(detach);
+      header.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('button')) return;
+        beginPageStickerInteraction(event, card, 'drag');
+      });
+      title.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        togglePageStickerCollapsed(card, sticker);
+      });
+
+      const body = document.createElement('div');
+      body.className = 'page-sticker-body';
+      if (note.locked) {
+        body.textContent = copy.stickerLocked;
+        body.dataset.locked = 'true';
+      } else if (note.contentMode === 'web') {
+        body.textContent = copy.stickerWeb;
+        body.dataset.rendered = 'placeholder';
+      } else {
+        appendMarkdownBlocks(body, note.markdown || '');
+      }
+      const resize = document.createElement('button');
+      resize.type = 'button';
+      resize.className = 'page-sticker-resize';
+      resize.title = copy.sticker;
+      resize.setAttribute('aria-label', copy.sticker);
+      resize.textContent = '↘';
+      resize.addEventListener('pointerdown', (event) => beginPageStickerInteraction(event, card, 'resize'));
+
+      card.addEventListener('dblclick', (event) => {
+        const action = pageStickerDblClickAction(event);
+        if (action === 'collapse') {
+          event.preventDefault();
+          event.stopPropagation();
+          togglePageStickerCollapsed(card, sticker);
+          return;
+        }
+        if (action !== 'edit') return;
+        event.preventDefault();
+        requestPageStickerEditor(sticker.noteId, sticker);
+      }, true);
+      card.append(header, body, resize);
+      stickerLayer.appendChild(card);
+      applyPageStickerCollapsed(card, sticker, pageStickerCollapsedIds.has(sticker.noteId));
+    }
+    syncCanvasScroll();
+    setPageStickerLayerVisibility();
+  }
+
+  function onPageStickerToolPointerDown(event) {
+    if (!visible || parkBlocked || tool !== 'sticker' || event.button !== 0) return;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    if (path.includes(toolbar) || path.includes(stickerLayer)) return;
+    const point = pointerToDoc(event);
+    const z = pageStickers.reduce((max, sticker) => Math.max(max, Number(sticker.z) || 0), 0) + 1;
+    event.preventDefault();
+    event.stopPropagation();
+    requestPageStickerEditor('', {
+      x: point.x,
+      y: point.y,
+      w: PAGE_STICKER_DEFAULT_WIDTH,
+      h: PAGE_STICKER_DEFAULT_HEIGHT,
+      z,
+    });
   }
 
   function capturing() {
@@ -1107,6 +1726,7 @@
     canvas.style.display = visible ? 'block' : 'none';
     canvas.style.pointerEvents = capturing() ? 'auto' : 'none';
     if (textLayer) textLayer.hidden = !visible || parkBlocked;
+    setPageStickerLayerVisibility();
     const chromeLabel = barPos.collapsed ? copy.expandTools : copy.collapseTools;
     for (const handle of [chromeHandle, fab]) {
       if (!handle) continue;
@@ -1291,14 +1911,18 @@
   }
 
   async function loadForCurrentUrl() {
+    syncPageStickerCollapseScope();
     closeTextEditor({ save: false });
+    closePageStickerEditor();
     inkLoaded = false;
-    const [view, ink, hint] = await Promise.all([
+    const [view, ink, hint, stickers] = await Promise.all([
       sendRuntime({ type: 'GET_PAGE_ANNOTATION', url: pageUrl() }),
       sendRuntime({ type: 'GET_PAGE_INK', url: pageUrl() }),
       readOpenHint(),
+      sendRuntime({ type: 'GET_PAGE_STICKERS', url: pageUrl() }),
     ]);
     if (ink?.ok) objects = normalizeObjects(ink.strokes);
+    pageStickers = stickers?.ok ? normalizePageStickerViews(stickers.stickers) : [];
     inkLoaded = Boolean(ink?.ok);
     const stored = view?.ok ? view.annotation?.overlayVisible === true : null;
     visible = resolveOverlayVisible(stored, hint);
@@ -1308,6 +1932,7 @@
     hoverId = '';
     dragObj = null;
     syncCanvasSize();
+    renderPageStickers();
     syncChrome();
   }
 
@@ -1332,6 +1957,7 @@
 
   function setVisible(next) {
     visible = Boolean(next);
+    if (!visible) closePageStickerEditor();
     setToolbarCollapsed(true, { render: false });
     syncChrome();
     persistOverlayVisible(visible);
@@ -1545,9 +2171,12 @@
 
   function onBarPointerUp(event) {
     if (!dragBar || event.pointerId !== dragBar.pointerId) return;
+    const target = dragBar.target;
+    const moved = dragBar.moved === true;
     dragBar = null;
     clampBar();
     scheduleChromePersist();
+    if (chromePointerUpAction(target, moved, event.type) === 'toggle') toggleToolbar();
   }
 
   function onChromeDoubleClick(event) {
@@ -1635,6 +2264,126 @@
       }
       .text-render.is-editable a { pointer-events: auto; }
       .markdown-blank { min-height: 1.3em; }
+      .sticker-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 2;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .page-sticker-editor-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        padding: 12px;
+        background: rgba(15, 23, 42, .22);
+        pointer-events: auto;
+      }
+      .page-sticker-editor-frame {
+        width: min(960px, calc(100vw - 24px));
+        height: min(820px, calc(100vh - 24px));
+        border: 0;
+        border-radius: 14px;
+        background: transparent;
+        box-shadow: 0 26px 70px rgba(0, 0, 0, .4);
+      }
+      .page-sticker-card {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 160px;
+        min-height: 120px;
+        border: 1px solid rgba(111, 80, 55, .38);
+        border-radius: 10px;
+        background: rgba(255, 248, 210, .96);
+        color: #352a1d;
+        box-shadow: 0 7px 18px rgba(36, 27, 16, .18);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        pointer-events: auto;
+        user-select: none;
+        contain: layout paint;
+      }
+      .page-sticker-card.is-resizing .page-sticker-body,
+      .page-sticker-card.is-resizing iframe {
+        pointer-events: none;
+      }
+      .page-sticker-card.is-collapsed {
+        height: auto !important;
+        min-height: 0;
+      }
+      .page-sticker-card.is-collapsed .page-sticker-body,
+      .page-sticker-card.is-collapsed .page-sticker-resize {
+        display: none;
+      }
+      .page-sticker-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 30px;
+        padding: 5px 6px 5px 9px;
+        border-bottom: 1px solid rgba(111, 80, 55, .2);
+        background: rgba(255, 239, 166, .72);
+        cursor: grab;
+        touch-action: none;
+      }
+      .page-sticker-header:active { cursor: grabbing; }
+      .page-sticker-title {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .page-sticker-action,
+      .page-sticker-reminder,
+      .page-sticker-resize {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        opacity: .7;
+      }
+      .page-sticker-action:hover,
+      .page-sticker-reminder:hover { opacity: 1; }
+      .page-sticker-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: calc(100% - 30px);
+        overflow: auto;
+        padding: 9px 11px 13px;
+        user-select: text;
+      }
+      .page-sticker-body iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: 80px;
+        border: 0;
+        background: #fff;
+      }
+      .page-sticker-body[data-locked="true"] {
+        display: grid;
+        place-items: center;
+        color: #7b6250;
+      }
+      .page-sticker-resize {
+        position: absolute;
+        right: 2px;
+        bottom: 1px;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        cursor: nwse-resize;
+        font-size: 13px;
+        line-height: 18px;
+        touch-action: none;
+      }
       .fab {
         position: fixed;
         z-index: 3;
@@ -1763,6 +2512,21 @@
     textLayer.className = 'text-layer';
     textLayer.hidden = true;
 
+    stickerLayer = document.createElement('div');
+    stickerLayer.className = 'sticker-layer';
+    stickerLayer.hidden = true;
+    if (typeof IntersectionObserver === 'function') {
+      stickerObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          const card = entry.target;
+          const sticker = pageStickerById(card.dataset.pageStickerId);
+          if (!sticker) continue;
+          if (entry.isIntersecting) mountPageStickerFrame(card, sticker);
+          else unmountPageStickerFrame(card);
+        }
+      }, { root: null, rootMargin: '120px' });
+    }
+
     toolbar = document.createElement('div');
     toolbar.className = 'bar';
     toolbar.setAttribute('role', 'toolbar');
@@ -1777,6 +2541,7 @@
         <button type="button" data-tool="circle">${copy.circle}</button>
         <button type="button" data-tool="rect">${copy.rectangle}</button>
         <button type="button" data-tool="text">${copy.text}</button>
+        <button type="button" data-tool="sticker">${copy.sticker}</button>
         <button type="button" data-tool="eraser">${copy.eraser}</button>
         <button type="button" data-tool="view">${copy.view}</button>
         <div class="palette">
@@ -1839,17 +2604,24 @@
     fab.addEventListener('pointermove', onBarPointerMove);
     fab.addEventListener('pointerup', onBarPointerUp);
     fab.addEventListener('pointercancel', onBarPointerUp);
-    fab.addEventListener('dblclick', onChromeDoubleClick);
     fab.addEventListener('keydown', onChromeKeyDown);
 
-    shadow.append(style, canvas, textLayer, toolbar, fab);
+    shadow.append(style, canvas, textLayer, stickerLayer, toolbar, fab);
+    stickerEditorLayer = document.createElement('div');
+    stickerEditorLayer.className = 'page-sticker-editor-layer';
+    stickerEditorLayer.hidden = true;
+    stickerEditorLayer.setAttribute('aria-hidden', 'true');
+    shadow.appendChild(stickerEditorLayer);
     rootEl.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483645;pointer-events:none;background:transparent;';
     document.documentElement.appendChild(rootEl);
   }
 
   function syncParkBlock() {
     parkBlocked = Boolean(document.getElementById('tabwall-root'));
-    if (parkBlocked) closeTextEditor({ save: true });
+    if (parkBlocked) {
+      closeTextEditor({ save: true });
+      closePageStickerEditor();
+    }
     syncChrome();
   }
 
@@ -1909,6 +2681,7 @@
   }
 
   function flushBeforeUnload() {
+    closePageStickerEditor();
     writeOpenHint(visible);
     if (inkLoaded) {
       schedulePersist();
@@ -1918,6 +2691,7 @@
   }
 
   function dispose() {
+    closePageStickerEditor();
     window.clearTimeout(persistTimer);
     if (inkLoaded) schedulePersist();
     window.clearTimeout(chromeTimer);
@@ -1931,6 +2705,16 @@
     }
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
+    stickerObserver?.disconnect();
+    stickerObserver = null;
+    pageStickerCollapsedIds.clear();
+    pageStickerCollapseUrl = '';
+    cancelPageStickerFrame(stickerInteraction);
+    stickerInteraction = null;
+    window.removeEventListener('pointermove', onPageStickerPointerMove, true);
+    window.removeEventListener('pointerup', onPageStickerPointerUp, true);
+    window.removeEventListener('pointercancel', onPageStickerPointerUp, true);
+    document.removeEventListener('pointerdown', onPageStickerToolPointerDown, true);
     if (runtimeHandler) {
       try {
         chrome.runtime.onMessage.removeListener(runtimeHandler);
@@ -1938,6 +2722,7 @@
         // ignore
       }
     }
+    if (pageMessageHandler) window.removeEventListener('message', pageMessageHandler);
     rootEl?.remove();
     rootEl = null;
     if (global[MARKER]?.dispose === dispose) delete global[MARKER];
@@ -1990,8 +2775,21 @@
       sendResponse({ ok: true, open: visible });
       return false;
     }
+    if (message?.type === 'PAGE_STICKER_CHANGED') {
+      loadForCurrentUrl().then(() => sendResponse({ ok: true }));
+      return true;
+    }
     return false;
   };
   chrome.runtime.onMessage.addListener(runtimeHandler);
+  pageMessageHandler = (event) => {
+    if (event.source !== window || event.data?.type !== 'TABWALL_PAGE_STICKER_CHANGED') return;
+    if (!event.data.url || event.data.url === pageUrl()) loadForCurrentUrl();
+  };
+  window.addEventListener('message', pageMessageHandler);
+  window.addEventListener('pointermove', onPageStickerPointerMove, true);
+  window.addEventListener('pointerup', onPageStickerPointerUp, true);
+  window.addEventListener('pointercancel', onPageStickerPointerUp, true);
+  document.addEventListener('pointerdown', onPageStickerToolPointerDown, true);
   global[MARKER] = { dispose, toggle: toggleVisible };
 })(typeof self !== 'undefined' ? self : globalThis);

@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "mode": "architecture",
+  "template_type": "architecture",
+  "style": 1,
+  "quality_profile": "showcase",
+  "width": 1200,
+  "height": 720,
+  "title": "Sticker Notes & Canvas Viewport",
+  "subtitle": "page placement, source locations, and safe one-time initial centering",
+  "containers": [
+    {
+      "id": "surfaces",
+      "x": 40,
+      "y": 105,
+      "width": 1120,
+      "height": 130,
+      "label": "USER SURFACES",
+      "stroke": "#bfdbfe",
+      "fill": "#eff6ff"
+    },
+    {
+      "id": "runtime",
+      "x": 40,
+      "y": 295,
+      "width": 1120,
+      "height": 155,
+      "label": "EXTENSION RUNTIME",
+      "stroke": "#c4b5fd",
+      "fill": "#faf5ff"
+    },
+    {
+      "id": "storage",
+      "x": 40,
+      "y": 510,
+      "width": 1120,
+      "height": 105,
+      "label": "LOCAL DATA + VIEWPORT STATE",
+      "stroke": "#bbf7d0",
+      "fill": "#f0fdf4"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "page-surface",
+      "kind": "rect",
+      "x": 100,
+      "y": 155,
+      "width": 250,
+      "height": 58,
+      "label": "Page Sticker overlay",
+      "sublabel": "inline editor + sandbox",
+      "fill": "#dbeafe",
+      "stroke": "#2563eb",
+      "flat": true
+    },
+    {
+      "id": "canvas-surface",
+      "kind": "double_rect",
+      "x": 850,
+      "y": 155,
+      "width": 250,
+      "height": 58,
+      "label": "Canvas + source list",
+      "sublabel": "static cards + minimap",
+      "fill": "#ede9fe",
+      "stroke": "#7c3aed"
+    },
+    {
+      "id": "page-runtime",
+      "kind": "rect",
+      "x": 100,
+      "y": 350,
+      "width": 250,
+      "height": 60,
+      "label": "pageAnnotate",
+      "sublabel": "placement + editor bridge",
+      "fill": "#fef3c7",
+      "stroke": "#d97706",
+      "flat": true
+    },
+    {
+      "id": "background-runtime",
+      "kind": "double_rect",
+      "x": 475,
+      "y": 342,
+      "width": 250,
+      "height": 76,
+      "label": "Background service worker",
+      "sublabel": "note API + reverse index + V2 gate",
+      "fill": "#dcfce7",
+      "stroke": "#16a34a"
+    },
+    {
+      "id": "canvas-runtime",
+      "kind": "rect",
+      "x": 850,
+      "y": 350,
+      "width": 250,
+      "height": 60,
+      "label": "Canvas UI",
+      "sublabel": "layout store + initial view",
+      "fill": "#ede9fe",
+      "stroke": "#7c3aed",
+      "flat": true
+    },
+    {
+      "id": "local-data",
+      "kind": "rect",
+      "x": 475,
+      "y": 533,
+      "width": 250,
+      "height": 60,
+      "label": "Local data",
+      "sublabel": "storage.local + IndexedDB",
+      "fill": "#dcfce7",
+      "stroke": "#16a34a",
+      "flat": true
+    }
+  ],
+  "arrows": [
+    {
+      "id": "page-to-runtime",
+      "source": "page-surface",
+      "target": "page-runtime",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "edit / save"
+    },
+    {
+      "id": "canvas-to-runtime",
+      "source": "canvas-surface",
+      "target": "canvas-runtime",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "read",
+      "label": "load / interact"
+    },
+    {
+      "id": "page-to-background",
+      "source": "page-runtime",
+      "target": "background-runtime",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "write",
+      "label": "page placement"
+    },
+    {
+      "id": "background-to-canvas",
+      "source": "background-runtime",
+      "target": "canvas-runtime",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "layout + sources"
+    },
+    {
+      "id": "background-to-storage",
+      "source": "background-runtime",
+      "target": "local-data",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "data",
+      "label": "notes / layout / media"
+    }
+  ],
+  "legend_orientation": "horizontal",
+  "legend_x": 55,
+  "legend_y": 660,
+  "legend_locked": false,
+  "legend": [
+    { "flow": "control", "label": "UI control" },
+    { "flow": "read", "label": "read / render" },
+    { "flow": "write", "label": "placement write" },
+    { "flow": "data", "label": "local data" }
+  ],
+  "footer": "TabWall 2.55.3 · local-first MV3 architecture",
+  "footer_x": 55,
+  "footer_y": 700
+}

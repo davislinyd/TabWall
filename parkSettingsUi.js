@@ -246,6 +246,7 @@
     if (merged.defaultViewMode === 'cards') merged.defaultViewMode = 'canvas';
     if (merged.defaultViewMode !== 'list') merged.defaultViewMode = 'canvas';
     if (merged.locale !== 'en') merged.locale = 'zh';
+    merged.newTabOverride = merged.newTabOverride !== false;
     merged.sortBy = env.normalizeSortBy(merged.sortBy);
     // Local shortcut settings were removed; discard the legacy field on the next write.
     delete merged.shortcuts;
@@ -468,6 +469,7 @@
     }
     applyViewMode(env.settings.viewMode);
     applyCardCols(env.settings.cardCols);
+    if (env.settingsNewTabOverride) env.settingsNewTabOverride.checked = env.settings.newTabOverride !== false;
     env.canvasSnapToGrid = env.settings.canvasSnap !== false;
     const canvasSnapInput = document.getElementById('settingsCanvasSnap');
     if (canvasSnapInput) canvasSnapInput.checked = env.canvasSnapToGrid;
@@ -906,6 +908,10 @@
       
     env.settingsPreSaveEdit?.addEventListener('change', async () => {
       await saveSettings({ preSaveEdit: env.settingsPreSaveEdit.checked });
+    });
+
+    env.settingsNewTabOverride?.addEventListener('change', async () => {
+      await saveSettings({ newTabOverride: env.settingsNewTabOverride.checked });
     });
       
     env.settingsEl.querySelectorAll('input[name="afterSaveGroup"]').forEach((input) => {

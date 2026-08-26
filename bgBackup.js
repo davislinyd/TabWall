@@ -246,6 +246,7 @@ function normalizeSettings(raw) {
     ...(merged.autoBackup || {}),
   });
   merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
+  merged.newTabOverride = merged.newTabOverride !== false;
   if (self.TabWallAi?.normalizeAiSettings) {
     merged.ai = self.TabWallAi.normalizeAiSettings(merged.ai);
   }
@@ -640,6 +641,40 @@ function remintItemIds(items) {
   });
 }
 
+function remapImportedPageAnnotations(pageAnnotations, items, { append = false } = {}) {
+  const topLevelIds = new Set((items || [])
+    .filter((item) => item?.kind === 'note')
+    .map((item) => item.id));
+  const sourceToReminted = new Map((items || [])
+    .filter((item) => item?.kind === 'note' && item.__stageItemId)
+    .map((item) => [item.__stageItemId, item.id]));
+  return (Array.isArray(pageAnnotations) ? pageAnnotations : [])
+    .map((raw) => {
+      const annotation = self.TabWallPageAnnotate?.normalizePageAnnotation?.(raw);
+      if (!annotation) return null;
+      const stickers = (annotation.stickers || [])
+        .map((sticker) => {
+          const noteId = append
+            ? sourceToReminted.get(sticker.noteId)
+            : (topLevelIds.has(sticker.noteId) ? sticker.noteId : '');
+          return noteId ? { ...sticker, noteId } : null;
+        })
+        .filter(Boolean);
+      return self.TabWallPageAnnotate.normalizePageAnnotation({ ...annotation, stickers });
+    })
+    .filter(Boolean);
+}
+
+function mergeImportedPageAnnotations(existing, incoming) {
+  const stickers = new Map((existing?.stickers || []).map((sticker) => [sticker.noteId, sticker]));
+  for (const sticker of incoming?.stickers || []) stickers.set(sticker.noteId, sticker);
+  return self.TabWallPageAnnotate.normalizePageAnnotation({
+    ...(existing || {}),
+    ...(incoming || {}),
+    stickers: [...stickers.values()],
+  });
+}
+
 async function persistInlineMediaToIdb(items, { preserveMissingAttachments = false } = {}) {
   const writtenKeys = new Set();
   try {
@@ -948,6 +983,7 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
   if (append) {
     items = remintItemIds(items);
   }
+  const importedPageAnnotations = remapImportedPageAnnotations(backup.pageAnnotations, items, { append });
 
   let writtenKeys;
   let metadataCommitted = false;
@@ -964,6 +1000,7 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
       ...backup,
       media: 'idb',
       parkedItems: items,
+      pageAnnotations: importedPageAnnotations,
       canvasLayout: append ? undefined : backup.canvasLayout,
       parkedTabs: items
         .filter((item) => item.kind === 'tab')
@@ -1000,9 +1037,10 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
         if (Array.isArray(backup.pageAnnotations) && self.TabWallPageAnnotate) {
           const existingLive = await self.TabWallPageAnnotate.getPageAnnotationsList();
           const byUrl = new Map(existingLive.map((ann) => [ann.url, ann]));
-          for (const raw of backup.pageAnnotations) {
-            const next = self.TabWallPageAnnotate.normalizePageAnnotation(raw);
-            if (next) byUrl.set(next.url, next);
+          for (const next of importedPageAnnotations) {
+            if (!next) continue;
+            const merged = mergeImportedPageAnnotations(byUrl.get(next.url), next);
+            if (merged) byUrl.set(next.url, merged);
           }
           await chrome.storage.local.set({
             [self.TabWallPageAnnotate.PAGE_ANNOTATIONS_KEY]: [...byUrl.values()],
@@ -1027,9 +1065,7 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
         canvasInitialCenterMigrated: true,
       });
       if (self.TabWallPageAnnotate) {
-        const incomingLive = (Array.isArray(backup.pageAnnotations) ? backup.pageAnnotations : [])
-          .map((raw) => self.TabWallPageAnnotate.normalizePageAnnotation(raw))
-          .filter(Boolean);
+        const incomingLive = importedPageAnnotations;
         await chrome.storage.local.set({
           [self.TabWallPageAnnotate.PAGE_ANNOTATIONS_KEY]: incomingLive,
         });

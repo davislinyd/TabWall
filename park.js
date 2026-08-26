@@ -47,6 +47,7 @@ const DEFAULT_AUTO_SAVE_METADATA = {
 };
 
 const DEFAULT_SETTINGS = {
+  newTabOverride: true,
   afterSave: 'close',
   afterSaveGroup: 'close',
   preSaveEdit: true,
@@ -203,6 +204,11 @@ const canvasStackDialog = document.getElementById('canvasStackDialog');
 const canvasStackTitle = document.getElementById('canvasStackTitle');
 const canvasStackConfirm = document.getElementById('canvasStackConfirm');
 const canvasStackCancel = document.getElementById('canvasStackCancel');
+const canvasNoteSourcesDialog = document.getElementById('canvasNoteSourcesDialog');
+const canvasNoteSourcesTitle = document.getElementById('canvasNoteSourcesTitle');
+const canvasNoteSourcesHint = document.getElementById('canvasNoteSourcesHint');
+const canvasNoteSourcesList = document.getElementById('canvasNoteSourcesList');
+const canvasNoteSourcesClose = document.getElementById('canvasNoteSourcesClose');
 const canvasAddNoteBtn = document.getElementById('canvasAddNoteBtn');
 const stickerNoteBox = document.getElementById('stickerNoteBox');
 const stickerNoteDrag = document.getElementById('stickerNoteDrag');
@@ -213,6 +219,16 @@ const stickerNoteHideOriginalTitle = document.getElementById('stickerNoteHideOri
 const stickerNoteLockPassword = document.getElementById('stickerNoteLockPassword');
 const stickerNoteLockPasswordConfirm = document.getElementById('stickerNoteLockPasswordConfirm');
 const stickerNoteMarkdown = document.getElementById('stickerNoteMarkdown');
+const stickerNoteModeMarkdown = document.getElementById('stickerNoteModeMarkdown');
+const stickerNoteModeWeb = document.getElementById('stickerNoteModeWeb');
+const stickerNoteMarkdownPane = document.getElementById('stickerNoteMarkdownPane');
+const stickerNoteWebPane = document.getElementById('stickerNoteWebPane');
+const stickerNoteWebSource = document.getElementById('stickerNoteWebSource');
+const stickerNoteCodePreview = document.getElementById('stickerNoteCodePreview');
+const stickerNoteCodeStatus = document.getElementById('stickerNoteCodeStatus');
+const stickerNoteCodePreviewPane = document.getElementById('stickerNoteCodePreviewPane');
+const stickerNoteCodePreviewFrame = document.getElementById('stickerNoteCodePreviewFrame');
+const stickerNoteCodePreviewHint = document.getElementById('stickerNoteCodePreviewHint');
 const stickerNotePreview = document.getElementById('stickerNotePreview');
 const stickerNoteFile = document.getElementById('stickerNoteFile');
 const stickerNoteAttachments = document.getElementById('stickerNoteAttachments');
@@ -223,6 +239,9 @@ const stickerNoteCancel = document.getElementById('stickerNoteCancel');
 const stickerNoteCloseX = document.getElementById('stickerNoteCloseX');
 const stickerNoteChips = document.getElementById('stickerNoteChips');
 const stickerNoteTagDraft = document.getElementById('stickerNoteTagDraft');
+const stickerNotePageSources = document.getElementById('stickerNotePageSources');
+const stickerNotePageSourcesHint = document.getElementById('stickerNotePageSourcesHint');
+const stickerNotePageSourcesList = document.getElementById('stickerNotePageSourcesList');
 const countEl = document.getElementById('count');
 const loadStatusEl = document.getElementById('loadStatus');
 const searchEl = document.getElementById('search');
@@ -307,6 +326,7 @@ const preSaveError = document.getElementById('preSaveError');
 const preSaveCancel = document.getElementById('preSaveCancel');
 const preSaveConfirm = document.getElementById('preSaveConfirm');
 const settingsPreSaveEdit = document.getElementById('settingsPreSaveEdit');
+const settingsNewTabOverride = document.getElementById('settingsNewTabOverride');
 const dedupeBox = document.getElementById('dedupeBox');
 const dedupeDrag = document.getElementById('dedupeDrag');
 const dedupeCloseX = document.getElementById('dedupeCloseX');
@@ -475,6 +495,8 @@ const membersDelete = document.getElementById('membersDelete');
 
 /** @type {Array<any>} */
 let allTabs = []; // ParkItem[] (kind tab | group | note)
+let pendingPageStickerRequest = null;
+let pendingPageStickerReminderId = '';
 const sessionUnlockedIds = new Set();
 /** Store-owned read projection; canvas mutations must go through canvasStore. */
 let canvasLayout = {
@@ -661,6 +683,7 @@ function bindPanelModules() {
     "CANVAS_LAYOUT_VERSION": () => CANVAS_LAYOUT_VERSION,
     "CANVAS_MIDDLE_CLICK_DELAY": () => CANVAS_MIDDLE_CLICK_DELAY,
     "CANVAS_NODE_CLICK_DELAY": () => CANVAS_NODE_CLICK_DELAY,
+    "CANVAS_NODE_DISPLAY_SCALE": () => CANVAS_NODE_DISPLAY_SCALE,
     "CANVAS_RAIL_COLLAPSE_THRESHOLD": () => CANVAS_RAIL_COLLAPSE_THRESHOLD,
     "CANVAS_RAIL_COLLAPSED_WIDTH": () => CANVAS_RAIL_COLLAPSED_WIDTH,
     "CANVAS_RAIL_KEYBOARD_STEP": () => CANVAS_RAIL_KEYBOARD_STEP,
@@ -713,6 +736,11 @@ function bindPanelModules() {
     "canvasStackConfirm": () => canvasStackConfirm,
     "canvasStackDialog": () => canvasStackDialog,
     "canvasStackTitle": () => canvasStackTitle,
+    "canvasNoteSourcesDialog": () => canvasNoteSourcesDialog,
+    "canvasNoteSourcesTitle": () => canvasNoteSourcesTitle,
+    "canvasNoteSourcesHint": () => canvasNoteSourcesHint,
+    "canvasNoteSourcesList": () => canvasNoteSourcesList,
+    "canvasNoteSourcesClose": () => canvasNoteSourcesClose,
     "CanvasStoreApi": () => CanvasStoreApi,
     "canvasStoreSnapshot": () => canvasStoreSnapshot,
     "canvasTargetAt": () => canvasTargetAt,
@@ -741,6 +769,7 @@ function bindPanelModules() {
     "closeAiBox": () => closeAiBox,
     "closeCanvasContextMenu": () => closeCanvasContextMenu,
     "closeCanvasStackDialog": () => closeCanvasStackDialog,
+    "closeCanvasNoteSources": () => closeCanvasNoteSources,
     "closeCanvasZoomMenu": () => closeCanvasZoomMenu,
     "closeImportPickBox": () => closeImportPickBox,
     "closeQuickMenus": () => closeQuickMenus,
@@ -912,6 +941,7 @@ function bindPanelModules() {
     "openCanvasContextMenu": () => openCanvasContextMenu,
     "openCanvasGroupLightbox": () => openCanvasGroupLightbox,
     "openCanvasStackDialog": () => openCanvasStackDialog,
+    "openCanvasNoteSources": () => openCanvasNoteSources,
     "openConflictModal": () => openConflictModal,
     "openDedupeBtn": () => openDedupeBtn,
     "openBatchEdit": () => openBatchEdit,
@@ -996,6 +1026,7 @@ function bindPanelModules() {
     "settingsAiEnabled": () => settingsAiEnabled,
     "settingsAiModel": () => settingsAiModel,
     "settingsNav": () => settingsNav,
+    "settingsNewTabOverride": () => settingsNewTabOverride,
     "settingsPreSaveEdit": () => settingsPreSaveEdit,
     "settingsSaveStatus": () => settingsSaveStatus,
     "showCopyToast": () => showCopyToast,
@@ -1009,10 +1040,23 @@ function bindPanelModules() {
     "stickerNoteChips": () => stickerNoteChips,
     "stickerNoteDrop": () => stickerNoteDrop,
     "stickerNoteMarkdown": () => stickerNoteMarkdown,
+    "stickerNoteModeMarkdown": () => stickerNoteModeMarkdown,
+    "stickerNoteModeWeb": () => stickerNoteModeWeb,
+    "stickerNoteMarkdownPane": () => stickerNoteMarkdownPane,
+    "stickerNoteWebPane": () => stickerNoteWebPane,
+    "stickerNoteWebSource": () => stickerNoteWebSource,
+    "stickerNoteCodePreview": () => stickerNoteCodePreview,
+    "stickerNoteCodeStatus": () => stickerNoteCodeStatus,
+    "stickerNoteCodePreviewPane": () => stickerNoteCodePreviewPane,
+    "stickerNoteCodePreviewFrame": () => stickerNoteCodePreviewFrame,
+    "stickerNoteCodePreviewHint": () => stickerNoteCodePreviewHint,
     "stickerNoteMediaStatus": () => stickerNoteMediaStatus,
     "stickerNotePreview": () => stickerNotePreview,
     "stickerNoteSave": () => stickerNoteSave,
     "stickerNoteTagDraft": () => stickerNoteTagDraft,
+    "stickerNotePageSources": () => stickerNotePageSources,
+    "stickerNotePageSourcesHint": () => stickerNotePageSourcesHint,
+    "stickerNotePageSourcesList": () => stickerNotePageSourcesList,
     "stickerNoteTitle": () => stickerNoteTitle,
     "stickerNoteLockEnabled": () => stickerNoteLockEnabled,
     "stickerNoteLockFields": () => stickerNoteLockFields,
@@ -1350,6 +1394,16 @@ window.addEventListener('message', (event) => {
     if (preSaveConfirm) preSaveConfirm.disabled = false;
     if (preSaveCancel) preSaveCancel.disabled = false;
     if (preSaveError) preSaveError.textContent = t('presaveFailed');
+  }
+  if (event.data?.type === 'TABWALL_OPEN_PAGE_STICKER_EDITOR') {
+    pendingPageStickerRequest = event.data;
+    flushPendingPageStickerRequest();
+    return;
+  }
+  if (event.data?.type === 'TABWALL_OPEN_PAGE_STICKER_REMINDER') {
+    const item = allTabs.find((entry) => entry.kind === 'note' && entry.id === event.data.noteId);
+    if (item) openReminderEditor(item);
+    else pendingPageStickerReminderId = event.data.noteId || '';
   }
 });
 
@@ -1730,7 +1784,13 @@ setupFloatDrag(helpDrag, helpBox);
 
 setupFloatDrag(aiDrag, aiBox);
 
+canvasNoteSourcesClose?.addEventListener('click', () => closeCanvasNoteSources());
+
 floatBackdrop.addEventListener('click', () => {
+  if (canvasNoteSourcesDialog?.classList.contains('open')) {
+    closeCanvasNoteSources();
+    return;
+  }
   if (canvasStackDialog?.classList.contains('open')) {
     closeCanvasStackDialog();
     return;
@@ -1847,6 +1907,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (canvasConnectionSourceId || selectedCanvasConnectionId) {
       clearCanvasConnectionSelection();
+      return;
+    }
+    if (canvasNoteSourcesDialog?.classList.contains('open')) {
+      closeCanvasNoteSources();
       return;
     }
     if (canvasStackDialog?.classList.contains('open')) {
@@ -2665,6 +2729,11 @@ stickerNoteTitle?.addEventListener('input', () => {
   StickerUi.syncStickerNoteLockFields?.();
 });
 stickerNoteMarkdown?.addEventListener('input', renderStickerNotePreview);
+stickerNoteModeMarkdown?.addEventListener('click', () => StickerUi.setStickerNoteContentMode('markdown'));
+stickerNoteModeWeb?.addEventListener('click', () => StickerUi.setStickerNoteContentMode('web'));
+stickerNoteWebSource?.addEventListener('input', () => StickerUi.markStickerNoteCodeDirty());
+stickerNoteCodePreview?.addEventListener('click', () => StickerUi.runStickerNoteCodePreview());
+window.addEventListener('message', (event) => StickerUi.handleStickerNoteCodeMessage?.(event));
 stickerNoteTagDraft?.addEventListener('keydown', (event) => {
   if ((event.key === 'Enter' || event.key === 'Tab') && stickerNoteTagDraft.value.trim()) {
     event.preventDefault();
@@ -3143,6 +3212,10 @@ function openCanvasStackDialog(...args) { return CanvasChrome.openCanvasStackDia
 
 function closeCanvasStackDialog(...args) { return CanvasChrome.closeCanvasStackDialog(...args); }
 
+function openCanvasNoteSources(...args) { return WorkspaceUi.openCanvasNoteSources(...args); }
+
+function closeCanvasNoteSources(...args) { return WorkspaceUi.closeCanvasNoteSources(...args); }
+
 async function createCanvasStackFromSelection(...args) { return await CanvasChrome.createCanvasStackFromSelection(...args); }
 
 async function canvasAction(...args) { return await CanvasChrome.canvasAction(...args); }
@@ -3281,6 +3354,29 @@ function renderGrid(...args) { return ListUi.renderGrid(...args); }
 
 let loadListTimer = null;
 
+function flushPendingPageStickerRequest() {
+  const request = pendingPageStickerRequest;
+  if (!request) return;
+  const note = request.noteId
+    ? allTabs.find((item) => item.kind === 'note' && item.id === request.noteId)
+    : null;
+  if (request.noteId && !note) return;
+  pendingPageStickerRequest = null;
+  openStickerNoteEditor(note, {
+    position: null,
+    pageUrl: request.url || '',
+    pagePlacement: request.placement || null,
+  });
+}
+
+function flushPendingPageStickerReminder() {
+  if (!pendingPageStickerReminderId) return;
+  const item = allTabs.find((entry) => entry.kind === 'note' && entry.id === pendingPageStickerReminderId);
+  if (!item) return;
+  pendingPageStickerReminderId = '';
+  openReminderEditor(item);
+}
+
 async function loadList(...args) {
   const result = await WorkspaceUi.loadList(...args);
   try {
@@ -3288,6 +3384,8 @@ async function loadList(...args) {
   } catch (err) {
     uiLog('warn', 'reminders', 'refresh failed', err?.message || err);
   }
+  flushPendingPageStickerRequest();
+  flushPendingPageStickerReminder();
   return result;
 }
 
@@ -3310,6 +3408,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (suppressSettingsOnChanged) return;
     settings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
     delete settings.shortcuts;
+    settings.newTabOverride = settings.newTabOverride !== false;
     settings.cardCols = clampCols(settings.cardCols);
     settings.searchRegex = Boolean(settings.searchRegex);
     settings.canvasSnap = settings.canvasSnap !== false;

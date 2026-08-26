@@ -11,6 +11,15 @@
     MAX_TAG_LENGTH: 128,
     MAX_TAGS: 100,
   };
+  const PAGE_STICKER_LIMITS = Object.freeze({
+    MAX_COUNT: 100,
+    MIN_WIDTH: 160,
+    MAX_WIDTH: 640,
+    MIN_HEIGHT: 120,
+    MAX_HEIGHT: 560,
+    MAX_COORDINATE: 10000000,
+    MAX_Z_INDEX: 1000000,
+  });
 
   function limits() {
     return typeof DATA_LIMITS === 'object' && DATA_LIMITS ? DATA_LIMITS : FALLBACK_LIMITS;
@@ -56,6 +65,39 @@
     return `live-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  function clampPageStickerNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(number)));
+  }
+
+  function normalizePageSticker(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const noteId = annotateSafeText(src.noteId, 128).trim();
+    if (!noteId) return null;
+    return {
+      noteId,
+      x: clampPageStickerNumber(src.x, 0, PAGE_STICKER_LIMITS.MAX_COORDINATE, 0),
+      y: clampPageStickerNumber(src.y, 0, PAGE_STICKER_LIMITS.MAX_COORDINATE, 0),
+      w: clampPageStickerNumber(src.w, PAGE_STICKER_LIMITS.MIN_WIDTH, PAGE_STICKER_LIMITS.MAX_WIDTH, 240),
+      h: clampPageStickerNumber(src.h, PAGE_STICKER_LIMITS.MIN_HEIGHT, PAGE_STICKER_LIMITS.MAX_HEIGHT, 180),
+      z: clampPageStickerNumber(src.z, 0, PAGE_STICKER_LIMITS.MAX_Z_INDEX, 0),
+    };
+  }
+
+  function normalizePageStickers(value) {
+    const seen = new Set();
+    const result = [];
+    for (const raw of Array.isArray(value) ? value : []) {
+      const sticker = normalizePageSticker(raw);
+      if (!sticker || seen.has(sticker.noteId)) continue;
+      seen.add(sticker.noteId);
+      result.push(sticker);
+      if (result.length >= PAGE_STICKER_LIMITS.MAX_COUNT) break;
+    }
+    return result;
+  }
+
   function normalizePageAnnotation(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
     const cap = limits();
@@ -70,6 +112,7 @@
       tags: annotateTags(src.tags),
       overlayVisible: src.overlayVisible === true,
       hasInk: src.hasInk === true,
+      stickers: normalizePageStickers(src.stickers),
       updatedAt: annotateTimestamp(src.updatedAt),
     };
   }
@@ -79,7 +122,8 @@
   }
 
   function pageAnnotationIsKeepable(ann) {
-    return Boolean(ann && (pageAnnotationHasMeta(ann) || ann.hasInk || ann.overlayVisible));
+    return Boolean(ann && (pageAnnotationHasMeta(ann) || ann.hasInk || ann.overlayVisible
+      || (Array.isArray(ann.stickers) && ann.stickers.length)));
   }
 
   function mergeAnnotationNotes(a, b) {
@@ -124,7 +168,7 @@
 
   function liveWallVisible(ann, parkedItems) {
     if (!ann) return false;
-    if (!pageAnnotationHasMeta(ann) && !ann.hasInk) return false;
+    if (!pageAnnotationHasMeta(ann) && !ann.hasInk && !(ann.stickers || []).length) return false;
     return !findParkedTabForUrl(ann.url, parkedItems);
   }
 
@@ -151,6 +195,7 @@
       tags: Array.isArray(ann.tags) ? ann.tags.slice() : [],
       hasInk: ann.hasInk === true,
       overlayVisible: ann.overlayVisible === true,
+      stickerCount: Array.isArray(ann.stickers) ? ann.stickers.length : 0,
       savedAt: ann.updatedAt || Date.now(),
     };
   }
@@ -358,9 +403,169 @@
     return { ok: true, annotation: kept, strokeCount: Array.isArray(strokes) ? strokes.length : 0 };
   }
 
+  function pageStickerNoteProjection(note) {
+    if (!note || note.kind !== 'note') return null;
+    const projection = {
+      kind: 'note',
+      id: note.id,
+      title: note.title || 'Sticker note',
+      displayTitle: note.displayTitle || '',
+      markdown: note.markdown || '',
+      contentMode: note.contentMode === 'web' ? 'web' : 'markdown',
+      webSource: note.webSource || '',
+      tags: Array.isArray(note.tags) ? note.tags.slice() : [],
+      pinned: Boolean(note.pinned),
+      savedAt: note.savedAt || Date.now(),
+      attachments: (note.attachments || []).map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name || 'image',
+        alt: attachment.alt || '',
+        mime: attachment.mime || 'image/jpeg',
+        size: Number.isFinite(Number(attachment.size)) ? Number(attachment.size) : 0,
+        width: Number.isFinite(Number(attachment.width)) ? Number(attachment.width) : 0,
+        height: Number.isFinite(Number(attachment.height)) ? Number(attachment.height) : 0,
+        hasData: Boolean(attachment.hasData),
+      })),
+      locked: Boolean(note.locked),
+      lockHash: note.lockHash || '',
+      hideOriginalTitle: Boolean(note.hideOriginalTitle),
+    };
+    const reminder = typeof normalizeReminder === 'function' ? normalizeReminder(note.reminder) : null;
+    if (reminder) projection.reminder = reminder;
+    return projection;
+  }
+
+  function findTopLevelStickerNote(items, noteId) {
+    const id = String(noteId || '');
+    const topLevel = (items || []).find((item) => item?.kind === 'note' && item.id === id);
+    if (topLevel) return { note: topLevel };
+    const nested = (items || []).some((item) => item?.kind === 'group'
+      && (item.notes || []).some((note) => note?.id === id));
+    return nested ? { error: 'invalid_note_scope' } : { error: 'not_found' };
+  }
+
+  async function getPageStickers(url) {
+    const key = annotateUrlKey(url);
+    if (!key) return { ok: false, error: 'invalid_url', url: '', stickers: [] };
+    const annotation = await getPageAnnotation(key);
+    const items = typeof getParkedItems === 'function' ? await getParkedItems() : [];
+    const stickers = [];
+    for (const placement of annotation?.stickers || []) {
+      const found = findTopLevelStickerNote(items, placement.noteId);
+      if (!found.note) continue;
+      const note = pageStickerNoteProjection(found.note);
+      if (note) stickers.push({ ...placement, note });
+    }
+    return { ok: true, url: key, stickers, annotationId: annotation?.id || '' };
+  }
+
+  async function ensurePageStickerNote(noteId) {
+    const items = typeof getParkedItems === 'function' ? await getParkedItems() : [];
+    const found = findTopLevelStickerNote(items, noteId);
+    return found.note ? { ok: true, note: found.note } : { ok: false, error: found.error };
+  }
+
+  async function writePageSticker(url, noteId, placement, { requireExisting = false } = {}) {
+    const key = annotateUrlKey(url);
+    if (!key) return { ok: false, error: 'invalid_url' };
+    const noteResult = await ensurePageStickerNote(noteId);
+    if (!noteResult.ok) return noteResult;
+    const nextPlacement = normalizePageSticker({ ...placement, noteId });
+    if (!nextPlacement) return { ok: false, error: 'invalid_sticker' };
+    const existing = await getPageAnnotation(key);
+    const current = normalizePageStickers(existing?.stickers);
+    const index = current.findIndex((item) => item.noteId === nextPlacement.noteId);
+    if (requireExisting && index < 0) return { ok: false, error: 'not_found' };
+    if (index >= 0) current[index] = nextPlacement;
+    else current.push(nextPlacement);
+    if (current.length > PAGE_STICKER_LIMITS.MAX_COUNT) {
+      return { ok: false, error: 'too_many_stickers' };
+    }
+    const next = normalizePageAnnotation({
+      ...(existing || { url: key, id: newAnnotationId() }),
+      url: key,
+      stickers: current,
+      updatedAt: Date.now(),
+    });
+    const kept = await replacePageAnnotation(key, next);
+    return { ...(await getPageStickers(key)), upserted: true, annotation: kept };
+  }
+
+  async function createPageSticker(url, noteId, placement) {
+    return writePageSticker(url, noteId, placement);
+  }
+
+  async function updatePageSticker(url, noteId, patch) {
+    return writePageSticker(url, noteId, patch, { requireExisting: true });
+  }
+
+  async function deletePageSticker(url, noteId) {
+    const key = annotateUrlKey(url);
+    if (!key) return { ok: false, error: 'invalid_url' };
+    const noteResult = await ensurePageStickerNote(noteId);
+    if (!noteResult.ok) return noteResult;
+    const existing = await getPageAnnotation(key);
+    const current = normalizePageStickers(existing?.stickers);
+    const next = current.filter((item) => item.noteId !== String(noteId || ''));
+    if (next.length === current.length) return { ok: true, removed: false, ...(await getPageStickers(key)) };
+    const kept = await replacePageAnnotation(key, normalizePageAnnotation({
+      ...existing,
+      url: key,
+      stickers: next,
+      updatedAt: Date.now(),
+    }));
+    return { ...(await getPageStickers(key)), removed: true, annotation: kept };
+  }
+
+  async function removePageStickerReferences(noteId) {
+    const id = String(noteId || '');
+    if (!id) return { ok: true, removed: 0 };
+    const list = await getPageAnnotationsList();
+    let removed = 0;
+    const next = list.map((annotation) => {
+      const stickers = (annotation.stickers || []).filter((item) => item.noteId !== id);
+      removed += (annotation.stickers || []).length - stickers.length;
+      return stickers.length === (annotation.stickers || []).length
+        ? annotation
+        : normalizePageAnnotation({ ...annotation, stickers, updatedAt: Date.now() });
+    });
+    if (removed) await setPageAnnotationsList(next);
+    return { ok: true, removed };
+  }
+
+  async function getNotePageLocations() {
+    const [items, annotations] = await Promise.all([
+      typeof getParkedItems === 'function' ? getParkedItems() : [],
+      getPageAnnotationsList(),
+    ]);
+    const topLevelNoteIds = new Set((items || [])
+      .filter((item) => item?.kind === 'note' && item.id)
+      .map((item) => item.id));
+    const byNoteId = new Map();
+    for (const annotation of annotations || []) {
+      for (const sticker of annotation.stickers || []) {
+        if (!topLevelNoteIds.has(sticker.noteId)) continue;
+        const pages = byNoteId.get(sticker.noteId) || [];
+        if (pages.some((page) => page.url === annotation.url)) continue;
+        pages.push({
+          url: annotation.url,
+          title: annotation.title || annotation.url,
+        });
+        byNoteId.set(sticker.noteId, pages);
+      }
+    }
+    return {
+      ok: true,
+      locations: [...byNoteId.entries()].map(([noteId, pages]) => ({ noteId, pages })),
+    };
+  }
+
   const api = {
     PAGE_ANNOTATIONS_KEY,
+    PAGE_STICKER_LIMITS,
     normalizePageAnnotation,
+    normalizePageSticker,
+    normalizePageStickers,
     pageAnnotationHasMeta,
     pageAnnotationIsKeepable,
     mergeAnnotationNotes,
@@ -380,6 +585,13 @@
     collectLiveTagNames,
     getPageInk,
     putPageInk,
+    pageStickerNoteProjection,
+    getPageStickers,
+    createPageSticker,
+    updatePageSticker,
+    deletePageSticker,
+    removePageStickerReferences,
+    getNotePageLocations,
   };
 
   global.TabWallPageAnnotate = api;
@@ -421,6 +633,17 @@ async function openOrFocusUrl(url) {
       return { ok: true, tabId: match.id, focused: true };
     }
     const created = await chrome.tabs.create({ url: key });
+    return { ok: true, tabId: created?.id, created: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function openUrlInNewTab(url) {
+  const key = typeof normalizeUrlKey === 'function' ? normalizeUrlKey(url) : String(url || '');
+  if (!key) return { ok: false, error: 'invalid_url' };
+  try {
+    const created = await chrome.tabs.create({ url: key, active: true });
     return { ok: true, tabId: created?.id, created: true };
   } catch (err) {
     return { ok: false, error: String(err) };

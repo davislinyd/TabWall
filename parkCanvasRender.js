@@ -133,10 +133,41 @@ function canvasThumbHtml(item) {
 }
 
 function safeNotePreviewHtml(note, className = 'canvas-note-preview') {
+  if (note?.contentMode === 'web') {
+    const source = typeof note.webSource === 'string' && note.webSource.trim()
+      ? note.webSource
+      : '';
+    const preview = source.split(/\r?\n/).find((line) => line.trim()) || t('noteWebEmpty');
+    return '<div class="' + escapeHtml(className) + ' canvas-note-code-preview">'
+      + '<span class="note-code-badge">' + escapeHtml(t('noteWebMode')) + '</span>'
+      + '<pre><code>' + escapeHtml(preview.slice(0, 240)) + '</code></pre></div>';
+  }
   const rendered = Build()?.renderSafeMarkdown
     ? Build().renderSafeMarkdown(note?.markdown || '', note?.attachments || [])
     : escapeHtml(note?.markdown || '');
   return `<div class="${className}">${rendered || `<span class="note-preview">—</span>`}</div>`;
+}
+
+function notePageLocations(item) {
+  if (item?.kind !== 'note' || call('isMediaLocked', item)) return [];
+  return Array.isArray(item.pageLocations)
+    ? item.pageLocations.filter((page) => typeof page?.url === 'string' && page.url)
+    : [];
+}
+
+function notePageSourceLabel(page) {
+  const domain = domainOf(page?.url) || page?.url || '';
+  const title = typeof page?.title === 'string' ? page.title.trim() : '';
+  return title && title !== domain ? `${domain}／${title}` : domain;
+}
+
+function canvasNotePageSourcesHtml(item) {
+  const pages = notePageLocations(item);
+  if (!pages.length) return '';
+  const label = pages.length === 1
+    ? `${t('notePageSource')}: ${notePageSourceLabel(pages[0])}`
+    : `${t('notePageSources')}: ${t('notePageSourcesCount', { n: pages.length })}`;
+  return `<button type="button" class="canvas-note-source" data-canvas-node-action="sources" title="${escapeAttr(pages.length === 1 ? pages[0].url : t('notePageSources'))}" aria-label="${escapeAttr(label)}">${iconSvg('restore')}<span>${escapeHtml(label)}</span></button>`;
 }
 
 function canvasNodeActionEntries(item) {
@@ -157,13 +188,16 @@ function canvasNodeActionEntries(item) {
     ];
   }
   if (item.kind === 'note') {
-    return [
+    const sourceEntry = notePageLocations(item).length
+      ? { action: 'sources', label: t('notePageSources'), icon: 'restore' }
+      : null;
+    return [sourceEntry,
       { action: 'edit', label: t('edit'), icon: 'edit' },
       { action: 'reminder', label: t('reminderAction'), icon: 'reminder' },
       lockEntry,
       { action: 'pin', label: t(item.pinned ? 'unpin' : 'pin'), icon: 'pin' },
       { action: 'delete', label: t('delete'), icon: 'delete' },
-    ];
+    ].filter(Boolean);
   }
   if (item.kind === 'live') {
     return [
@@ -242,6 +276,7 @@ function canvasNodeHtml(item) {
           return original ? `<div class="title-original" title="${escapeAttr(original)}">${escapeHtml(original)}</div>` : '';
         })()}
         <div class="canvas-node-meta">${escapeHtml(meta)}</div>
+        ${isNote ? canvasNotePageSourcesHtml(item) : ''}
         ${isNote && !call('isMediaLocked', item) ? safeNotePreviewHtml(item) : !isNote && item.note ? `<div class="canvas-node-note">${escapeHtml(item.note)}</div>` : ''}
         ${item.tags?.length ? `<div class="canvas-node-tags">${item.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ')}</div>` : ''}
       </div>
@@ -622,6 +657,11 @@ function canvasNodeRenderKey(item) {
     reminder: item.reminder || null,
     favIconUrl: item.favIconUrl,
     markdown: item.kind === 'note' ? item.markdown : undefined,
+    contentMode: item.kind === 'note' ? (item.contentMode === 'web' ? 'web' : 'markdown') : undefined,
+    webSource: item.kind === 'note' ? item.webSource : undefined,
+    pageLocations: item.kind === 'note'
+      ? (item.pageLocations || []).map((page) => [page.url, page.title])
+      : undefined,
     attachments: item.kind === 'note'
       ? (item.attachments || []).map((attachment) => [attachment.id, attachment.name, attachment.alt, attachment.hasData])
       : undefined,
@@ -644,6 +684,8 @@ function canvasNodeRenderKey(item) {
         note.displayTitle || '',
         Boolean(note.hideOriginalTitle),
         note.markdown,
+        note.contentMode,
+        note.webSource,
         note.tags,
         note.attachments?.length,
       ])
@@ -671,6 +713,16 @@ function createCanvasNodeElement(item, renderKey = canvasNodeRenderKey(item), se
   const wrapper = document.createElement('div');
   wrapper.innerHTML = canvasNodeHtml(item);
   const node = wrapper.firstElementChild;
+  if (item.kind === 'note' && node) {
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'canvas-resize-handle';
+    handle.dataset.canvasResizeHandle = 'true';
+    handle.title = t('canvasResizeNote');
+    handle.setAttribute('aria-label', t('canvasResizeNote'));
+    handle.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M5 19 19 5M11 19h8V11"></path></svg>';
+    node.appendChild(handle);
+  }
   if (item.kind === 'group') {
     appendGroupSearchHits(node, item, searchContext?.groupMatches?.get(item.id) || null, canvasSearchHitKey(searchContext));
   }

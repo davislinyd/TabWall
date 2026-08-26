@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" data-generator="fireworks-tech-graph" data-schema-version="1" data-text-metrics="heuristic-v1" data-style-id="1" data-visual-theme="Flat Icon" data-diagram-type="architecture" data-motion-scene="" data-semantic-profile="generic" data-semantic-valid="true" data-quality-profile="showcase" data-max-bends-per-edge="2" data-max-total-bends="8" data-max-route-stretch="1.35" data-max-bridged-crossings="0" data-min-node-gap="40.0" data-min-container-gutter="20.0" data-min-label-clearance="4.0" data-min-segment-length="16.0">
+  <defs>
+    <marker id="arrowA" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowB" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10b981"/>
+    </marker>
+    <marker id="arrowC" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowE" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f97316"/>
+    </marker>
+    <marker id="arrowF" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowG" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444"/>
+    </marker>
+    <marker id="arrowH" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+    </marker>
+    <filter id="shadowSoft" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <filter id="shadowGlass" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+    <style>
+    text { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', 'Microsoft JhengHei', 'SimHei', sans-serif; }
+    .title { font-size: 30px; font-weight: 700; fill: #111827; }
+    .subtitle { font-size: 14px; font-weight: 500; fill: #6b7280; }
+    .section { font-size: 13px; font-weight: 700; fill: #2563eb; letter-spacing: 1.4px; }
+    .section-sub { font-size: 12px; font-weight: 500; fill: #94a3b8; }
+    .node-title { font-weight: 700; fill: #111827; }
+    .node-sub { font-size: 12px; font-weight: 500; fill: #6b7280; }
+    .node-type { font-size: 12px; font-weight: 700; fill: #9ca3af; letter-spacing: 0.08em; }
+    .arrow-label { font-size: 12px; font-weight: 600; fill: #6b7280; }
+    .legend { font-size: 12px; font-weight: 500; fill: #6b7280; }
+    .footnote { font-size: 12px; font-weight: 500; fill: #94a3b8; }
+    .metric-label { font-size: 8.5px; font-weight: 700; fill: #94a3b8; text-transform: uppercase; }
+    .metric-value { font-size: 9.5px; font-weight: 700; fill: #111827; }
+    </style>
+  </defs>
+  <rect data-graph-role="background" width="1200.0" height="720.0" fill="#ffffff"/>
+  <text x="600.0" y="56" text-anchor="middle" class="title">Sticker Notes &amp; Canvas Viewport</text>
+  <text x="600.0" y="82" text-anchor="middle" class="subtitle">page placement, source locations, and safe one-time initial centering</text>
+  <g id="surfaces" data-graph-role="container" data-container-id="surfaces" data-semantic-role="boundary" data-graph-bounds="40,105,1160,235">
+  <rect data-graph-role="container" x="40.0" y="105.0" width="1120.0" height="130.0" rx="16.0" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="58.0" y="129.0" class="section">USER SURFACES</text>
+    <rect id="surfaces-header" data-graph-role="reserved" data-reserved-kind="container-header" x="48" y="111" width="125.16" height="30" fill="none" stroke="none"/>
+  </g>
+  <g id="runtime" data-graph-role="container" data-container-id="runtime" data-semantic-role="boundary" data-graph-bounds="40,295,1160,450">
+  <rect data-graph-role="container" x="40.0" y="295.0" width="1120.0" height="155.0" rx="16.0" fill="#faf5ff" stroke="#c4b5fd" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="58.0" y="319.0" class="section">EXTENSION RUNTIME</text>
+    <rect id="runtime-header" data-graph-role="reserved" data-reserved-kind="container-header" x="48" y="301" width="151.68" height="30" fill="none" stroke="none"/>
+  </g>
+  <g id="storage" data-graph-role="container" data-container-id="storage" data-semantic-role="boundary" data-graph-bounds="40,510,1160,615">
+  <rect data-graph-role="container" x="40.0" y="510.0" width="1120.0" height="105.0" rx="16.0" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="58.0" y="534.0" class="section">LOCAL DATA + VIEWPORT STATE</text>
+    <rect id="storage-header" data-graph-role="reserved" data-reserved-kind="container-header" x="48" y="516" width="221.88" height="30" fill="none" stroke="none"/>
+  </g>
+  <path id="page-to-runtime" data-graph-role="edge" data-edge-id="page-to-runtime" data-source="page-surface" data-target="page-runtime" data-edge-kind="flow" data-topic-id="" data-flow="control" data-motion-role="" data-motion-stage="" data-motion-order="" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 225,213 L 225,350" fill="none" stroke="#7c3aed" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowA)"/>
+  <path id="canvas-to-runtime" data-graph-role="edge" data-edge-id="canvas-to-runtime" data-source="canvas-surface" data-target="canvas-runtime" data-edge-kind="flow" data-topic-id="" data-flow="read" data-motion-role="" data-motion-stage="" data-motion-order="" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 975,213 L 975,350" fill="none" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowC)"/>
+  <path id="page-to-background" data-graph-role="edge" data-edge-id="page-to-background" data-source="page-runtime" data-target="background-runtime" data-edge-kind="flow" data-topic-id="" data-flow="write" data-motion-role="" data-motion-stage="" data-motion-order="" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 350,380 L 475,380" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowB)"/>
+  <path id="background-to-canvas" data-graph-role="edge" data-edge-id="background-to-canvas" data-source="background-runtime" data-target="canvas-runtime" data-edge-kind="flow" data-topic-id="" data-flow="read" data-motion-role="" data-motion-stage="" data-motion-order="" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 725,380 L 850,380" fill="none" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowC)"/>
+  <path id="background-to-storage" data-graph-role="edge" data-edge-id="background-to-storage" data-source="background-runtime" data-target="local-data" data-edge-kind="flow" data-topic-id="" data-flow="data" data-motion-role="" data-motion-stage="" data-motion-order="" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 600,418 L 600,533" fill="none" stroke="#f97316" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowE)"/>
+  <g id="node-page-surface" data-graph-role="node" data-node-id="page-surface" data-semantic-role="rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="100,155,350,213">
+  <rect x="100.0" y="155.0" width="250.0" height="58.0" rx="10.0" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/>
+  <text x="225.0" y="184.0" text-anchor="middle" class="node-title" font-size="18.0">Page Sticker overlay</text>
+  <text x="225.0" y="206.0" text-anchor="middle" class="node-sub">inline editor + sandbox</text>
+  </g>
+  <g id="node-canvas-surface" data-graph-role="node" data-node-id="canvas-surface" data-semantic-role="double_rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="850,155,1100,213">
+  <rect x="850.0" y="155.0" width="250.0" height="58.0" rx="10.0" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.0" filter="url(#shadowSoft)"/>
+  <rect x="856.0" y="161.0" width="238.0" height="46.0" rx="7.0" fill="none" stroke="#7c3aed" stroke-width="1.2" opacity="0.65"/>
+  <text x="975.0" y="184.0" text-anchor="middle" class="node-title" font-size="18.0">Canvas + source list</text>
+  <text x="975.0" y="206.0" text-anchor="middle" class="node-sub">static cards + minimap</text>
+  </g>
+  <g id="node-page-runtime" data-graph-role="node" data-node-id="page-runtime" data-semantic-role="rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="100,350,350,410">
+  <rect x="100.0" y="350.0" width="250.0" height="60.0" rx="10.0" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+  <text x="225.0" y="380.0" text-anchor="middle" class="node-title" font-size="18.0">pageAnnotate</text>
+  <text x="225.0" y="402.0" text-anchor="middle" class="node-sub">placement + editor bridge</text>
+  </g>
+  <g id="node-background-runtime" data-graph-role="node" data-node-id="background-runtime" data-semantic-role="double_rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="475,342,725,418">
+  <rect x="475.0" y="342.0" width="250.0" height="76.0" rx="10.0" fill="#dcfce7" stroke="#16a34a" stroke-width="2.0" filter="url(#shadowSoft)"/>
+  <rect x="481.0" y="348.0" width="238.0" height="64.0" rx="7.0" fill="none" stroke="#16a34a" stroke-width="1.2" opacity="0.65"/>
+  <text x="600.0" y="380.0" text-anchor="middle" class="node-title" font-size="14.62">Background service worker</text>
+  <text x="600.0" y="402.0" text-anchor="middle" class="node-sub">note API + reverse index + V2 gate</text>
+  </g>
+  <g id="node-canvas-runtime" data-graph-role="node" data-node-id="canvas-runtime" data-semantic-role="rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="850,350,1100,410">
+  <rect x="850.0" y="350.0" width="250.0" height="60.0" rx="10.0" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.8"/>
+  <text x="975.0" y="380.0" text-anchor="middle" class="node-title" font-size="18.0">Canvas UI</text>
+  <text x="975.0" y="402.0" text-anchor="middle" class="node-sub">layout store + initial view</text>
+  </g>
+  <g id="node-local-data" data-graph-role="node" data-node-id="local-data" data-semantic-role="rect" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="475,533,725,593">
+  <rect x="475.0" y="533.0" width="250.0" height="60.0" rx="10.0" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+  <text x="600.0" y="563.0" text-anchor="middle" class="node-title" font-size="18.0">Local data</text>
+  <text x="600.0" y="585.0" text-anchor="middle" class="node-sub">storage.local + IndexedDB</text>
+  </g>
+  <g id="page-to-runtime-label" data-graph-role="label" data-owner="page-to-runtime" data-graph-bounds="139.84,267.5,222,287.5">
+  <rect x="139.84" y="267.5" width="82.16" height="20" rx="6" fill="#ffffff" opacity="0.94"/>
+  <text x="180.92" y="281.5" text-anchor="middle" class="arrow-label">edit / save</text>
+  </g>
+  <g id="canvas-to-runtime-label" data-graph-role="label" data-owner="canvas-to-runtime" data-graph-bounds="865.12,267.5,972,287.5">
+  <rect x="865.12" y="267.5" width="106.88" height="20" rx="6" fill="#ffffff" opacity="0.94"/>
+  <text x="918.56" y="281.5" text-anchor="middle" class="arrow-label">load / interact</text>
+  </g>
+  <g id="page-to-background-label" data-graph-role="label" data-owner="page-to-background" data-graph-bounds="359.66,349,465.34,369">
+  <rect x="359.66" y="349.0" width="105.67999999999999" height="20" rx="6" fill="#ffffff" opacity="0.94"/>
+  <text x="412.5" y="363.0" text-anchor="middle" class="arrow-label">page placement</text>
+  </g>
+  <g id="background-to-canvas-label" data-graph-role="label" data-owner="background-to-canvas" data-graph-bounds="729.02,349,845.98,369">
+  <rect x="729.02" y="349.0" width="116.96000000000001" height="20" rx="6" fill="#ffffff" opacity="0.94"/>
+  <text x="787.5" y="363.0" text-anchor="middle" class="arrow-label">layout + sources</text>
+  </g>
+  <g id="background-to-storage-label" data-graph-role="label" data-owner="background-to-storage" data-graph-bounds="446.68,461.5,597,481.5">
+  <rect x="446.68" y="461.5" width="150.32000000000002" height="20" rx="6" fill="#ffffff" opacity="0.94"/>
+  <text x="521.84" y="475.5" text-anchor="middle" class="arrow-label">notes / layout / media</text>
+  </g>
+  <g id="legend" data-graph-role="legend">
+    <rect id="legend-zone" data-graph-role="reserved" data-reserved-kind="legend" x="48" y="636" width="576.16" height="46" rx="10" fill="none" stroke="none"/>
+    <line data-graph-role="decoration" x1="58.0" y1="650.0" x2="88.0" y2="650.0" stroke="#7c3aed" stroke-width="2.4" marker-end="url(#arrowA)"/>
+    <text data-graph-role="decoration" x="98.0" y="654.0" class="legend">UI control</text>
+    <line data-graph-role="decoration" x1="186.72" y1="650.0" x2="216.72" y2="650.0" stroke="#2563eb" stroke-width="2.4" marker-end="url(#arrowC)"/>
+    <text data-graph-role="decoration" x="226.72" y="654.0" class="legend">read / render</text>
+    <line data-graph-role="decoration" x1="339.91999999999996" y1="650.0" x2="369.91999999999996" y2="650.0" stroke="#10b981" stroke-width="2.4" marker-end="url(#arrowB)"/>
+    <text data-graph-role="decoration" x="379.91999999999996" y="654.0" class="legend">placement write</text>
+    <line data-graph-role="decoration" x1="503.43999999999994" y1="650.0" x2="533.4399999999999" y2="650.0" stroke="#f97316" stroke-width="2.4" marker-end="url(#arrowE)"/>
+    <text data-graph-role="decoration" x="543.4399999999999" y="654.0" class="legend">local data</text>
+  </g>
+  <g id="footer" data-graph-role="reserved" data-graph-bounds="55,688,370,704">
+  <text x="55.0" y="700.0" class="footnote">TabWall 2.55.3 · local-first MV3 architecture</text>
+  </g>
+</svg>

@@ -18,6 +18,98 @@
     if (!env) throw new Error('TabWallStickerUi.' + name + ' used before bind()');
   }
 
+  function setStickerNoteCodeStatus(message = '', isError = false) {
+    ensureBound('setStickerNoteCodeStatus');
+    if (!env.stickerNoteCodeStatus) return;
+    env.stickerNoteCodeStatus.textContent = message;
+    env.stickerNoteCodeStatus.classList.toggle('error', Boolean(isError));
+  }
+
+  function syncStickerNoteContentMode() {
+    ensureBound('syncStickerNoteContentMode');
+    const mode = env.stickerNoteContext?.contentMode === 'web' ? 'web' : 'markdown';
+    env.stickerNoteModeMarkdown?.classList.toggle('active', mode === 'markdown');
+    env.stickerNoteModeWeb?.classList.toggle('active', mode === 'web');
+    env.stickerNoteModeMarkdown?.setAttribute('aria-pressed', mode === 'markdown' ? 'true' : 'false');
+    env.stickerNoteModeWeb?.setAttribute('aria-pressed', mode === 'web' ? 'true' : 'false');
+    if (env.stickerNoteMarkdownPane) env.stickerNoteMarkdownPane.hidden = mode !== 'markdown';
+    if (env.stickerNoteWebPane) env.stickerNoteWebPane.hidden = mode !== 'web';
+    if (env.stickerNotePreview) env.stickerNotePreview.hidden = mode !== 'markdown';
+    if (env.stickerNoteCodePreviewPane) env.stickerNoteCodePreviewPane.hidden = mode !== 'web';
+  }
+
+  function setStickerNoteContentMode(mode) {
+    ensureBound('setStickerNoteContentMode');
+    if (!env.stickerNoteContext) return;
+    env.stickerNoteContext.contentMode = mode === 'web' ? 'web' : 'markdown';
+    if (env.stickerNoteContext.contentMode !== 'web') unloadStickerNoteCodePreview();
+    syncStickerNoteContentMode();
+    renderStickerNotePreview();
+  }
+
+  function unloadStickerNoteCodePreview() {
+    ensureBound('unloadStickerNoteCodePreview');
+    const frame = env.stickerNoteCodePreviewFrame;
+    if (!frame) return;
+    frame.dataset.loaded = 'false';
+    frame.removeAttribute('src');
+    frame.remove();
+    if (env.stickerNoteCodePreviewHint) env.stickerNoteCodePreviewHint.hidden = false;
+    setStickerNoteCodeStatus('');
+  }
+
+  function runStickerNoteCodePreview() {
+    ensureBound('runStickerNoteCodePreview');
+    if (env.stickerNoteContext?.contentMode !== 'web' || !env.stickerNoteCodePreviewFrame) return;
+    const frame = env.stickerNoteCodePreviewFrame;
+    if (!frame.isConnected && env.stickerNoteCodePreviewPane) {
+      env.stickerNoteCodePreviewPane.appendChild(frame);
+    }
+    const requestId = stickerNoteUuid();
+    const hasPreviewDocument = frame.getAttribute('src') === 'noteCodeSandbox.html' && frame.dataset.loaded === 'true';
+    frame.dataset.requestId = requestId;
+    frame.dataset.loaded = hasPreviewDocument ? 'true' : 'false';
+    frame.hidden = false;
+    if (env.stickerNoteCodePreviewHint) env.stickerNoteCodePreviewHint.hidden = true;
+    setStickerNoteCodeStatus(env.t('noteCodePreviewRunning'));
+    const send = () => {
+      frame.dataset.loaded = 'true';
+      frame.contentWindow?.postMessage({
+        type: 'tabwall-note-code-render',
+        requestId,
+        webSource: env.stickerNoteWebSource?.value || '',
+      }, '*');
+    };
+    if (frame.getAttribute('src') !== 'noteCodeSandbox.html') {
+      frame.addEventListener('load', send, { once: true });
+      frame.setAttribute('src', 'noteCodeSandbox.html');
+    } else if (hasPreviewDocument) {
+      send();
+    } else {
+      frame.addEventListener('load', send, { once: true });
+    }
+  }
+
+  function markStickerNoteCodeDirty() {
+    ensureBound('markStickerNoteCodeDirty');
+    if (env.stickerNoteContext?.contentMode === 'web') {
+      setStickerNoteCodeStatus(env.t('noteCodePreviewStale'));
+    }
+  }
+
+  function handleStickerNoteCodeMessage(event) {
+    ensureBound('handleStickerNoteCodeMessage');
+    const frame = env.stickerNoteCodePreviewFrame;
+    const data = event?.data;
+    if (!frame || event.source !== frame.contentWindow || !data || data.type !== 'tabwall-note-code-status') return;
+    if (String(data.requestId || '') !== String(frame.dataset.requestId || '')) return;
+    const isError = data.status === 'error';
+    setStickerNoteCodeStatus(
+      isError ? env.t('noteCodePreviewError', { message: data.message || env.t('noteCodePreviewUnknownError') }) : data.status === 'running' ? env.t('noteCodePreviewRunning') : env.t('noteCodePreviewReady'),
+      isError
+    );
+  }
+
   function stickerNoteUuid() {
     ensureBound('stickerNoteUuid');
 
@@ -59,6 +151,8 @@
       title: original,
       ...(displayTitle ? { displayTitle } : {}),
       markdown: env.stickerNoteMarkdown?.value || '',
+      contentMode: env.stickerNoteContext?.contentMode === 'web' ? 'web' : 'markdown',
+      webSource: env.stickerNoteWebSource?.value || '',
       tags: [...env.stickerNoteTagList],
       pinned: Boolean(env.stickerNoteContext?.pinned),
       savedAt: env.stickerNoteContext?.savedAt || Date.now(),
@@ -170,6 +264,8 @@
   function renderStickerNotePreview() {
     ensureBound('renderStickerNotePreview');
 
+    syncStickerNoteContentMode();
+    if (env.stickerNoteContext?.contentMode === 'web') return;
     if (!env.stickerNotePreview) return;
     const note = stickerNoteDraftRecord();
     env.stickerNotePreview.innerHTML = env.Build?.renderSafeMarkdown
@@ -225,7 +321,42 @@
     renderStickerNoteTags();
     renderStickerNoteAttachments();
     renderStickerNotePreview();
-      
+  }
+
+  function renderStickerNotePageSources(source = null) {
+    ensureBound('renderStickerNotePageSources');
+
+    const box = env.stickerNotePageSources;
+    const list = env.stickerNotePageSourcesList;
+    if (!box || !list) return;
+    list.replaceChildren();
+    const pages = !env.isMediaLocked?.(source) && Array.isArray(source?.pageLocations)
+      ? source.pageLocations.filter((page) => typeof page?.url === 'string' && page.url)
+      : [];
+    box.hidden = pages.length === 0;
+    if (!pages.length) return;
+    if (env.stickerNotePageSourcesHint) {
+      env.stickerNotePageSourcesHint.textContent = env.t('notePageSourcesCount', { n: pages.length });
+    }
+    for (const page of pages) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'sticker-note-page-source';
+      button.title = page.url;
+      button.dataset.stickerNotePageUrl = page.url;
+      const title = document.createElement('span');
+      title.className = 'sticker-note-page-source-title';
+      title.textContent = page.title || page.url;
+      const domain = document.createElement('span');
+      domain.className = 'sticker-note-page-source-url';
+      domain.textContent = env.domainOf(page.url) || page.url;
+      button.append(title, domain);
+      button.addEventListener('click', async () => {
+        const result = await env.sendMessage({ type: 'OPEN_NEW_TAB_URL', url: page.url });
+        if (!result?.ok) env.showCopyToast(env.t('notePageSourceOpenFailed'));
+      });
+      list.appendChild(button);
+    }
   }
 
   function removeStickerNoteAttachment(id) {
@@ -304,7 +435,12 @@
       
   }
 
-  function openStickerNoteEditor(note = null, { groupId = '', position = null } = {}) {
+  function openStickerNoteEditor(note = null, {
+    groupId = '',
+    position = null,
+    pageUrl = '',
+    pagePlacement = null,
+  } = {}) {
     ensureBound('openStickerNoteEditor');
 
     if (!env.stickerNoteBox) return;
@@ -314,6 +450,8 @@
       id: stickerNoteUuid(),
       title: env.t('noteUntitled'),
       markdown: '',
+      contentMode: 'markdown',
+      webSource: '',
       tags: [],
       pinned: false,
       savedAt: Date.now(),
@@ -324,10 +462,13 @@
       id: source.id,
       groupId,
       position,
+      pageUrl,
+      pagePlacement,
       pinned: Boolean(source.pinned),
       savedAt: source.savedAt,
       originalTitle: source.title || env.t('noteUntitled'),
       hasPassword: Boolean(source.lockHash),
+      contentMode: source.contentMode === 'web' ? 'web' : 'markdown',
     };
     env.stickerNoteTagList = [...(source.tags || [])];
     env.stickerNoteDraftAttachments = (source.attachments || []).map((attachment) => ({
@@ -344,6 +485,10 @@
     if (env.stickerNoteLockPasswordConfirm) env.stickerNoteLockPasswordConfirm.value = '';
     syncStickerNoteLockFields();
     env.stickerNoteMarkdown.value = source.markdown || '';
+    if (env.stickerNoteWebSource) env.stickerNoteWebSource.value = source.webSource || '';
+    renderStickerNotePageSources(source);
+    unloadStickerNoteCodePreview();
+    syncStickerNoteContentMode();
     env.stickerNoteTagDraft.value = '';
     setStickerNoteMediaBusy(false);
     setStickerNoteMediaStatus('');
@@ -358,17 +503,22 @@
       
   }
 
-  function closeStickerNoteEditor() {
+  function closeStickerNoteEditor({ notifyPage = true } = {}) {
     ensureBound('closeStickerNoteEditor');
 
     if (!env.stickerNoteBox) return;
+    const pageContext = env.stickerNoteContext?.pageUrl
+      ? { ...env.stickerNoteContext }
+      : null;
     const wasPlacement = env.stickerNoteContext?.mode === 'create';
+    unloadStickerNoteCodePreview();
     env.stickerNoteDraftAttachments.forEach((attachment) => {
       if (attachment.blob && attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
     });
     env.stickerNoteDraftAttachments = [];
     env.stickerNoteTagList = [];
     env.stickerNoteContext = null;
+    renderStickerNotePageSources(null);
     env.stickerNoteUsageRequest++;
     setStickerNoteMediaBusy(false);
     setStickerNoteMediaStatus('');
@@ -376,6 +526,13 @@
     env.stickerNoteBox.setAttribute('aria-hidden', 'true');
     if (wasPlacement) env.resetCanvasNotePlacement();
     env.syncFloatBackdrop();
+    if (notifyPage && pageContext) {
+      env.postToParent?.({
+        type: 'TABWALL_PAGE_STICKER_CANCEL',
+        url: pageContext.pageUrl,
+        noteId: pageContext.id || '',
+      });
+    }
       
   }
 
@@ -405,8 +562,19 @@
         await env.Media.putAttachment(key, attachment.blob);
         writtenKeys.push(key);
       }
+      const pageContext = env.stickerNoteContext.pageUrl
+        ? { ...env.stickerNoteContext }
+        : null;
       const res = env.stickerNoteContext.mode === 'create'
-        ? await env.sendMessage({ type: 'CREATE_NOTE', note, position: env.stickerNoteContext.position })
+        ? pageContext
+          ? await env.sendMessage({
+              type: 'CREATE_PAGE_STICKER',
+              note,
+              position: env.stickerNoteContext.position,
+              url: pageContext.pageUrl,
+              placement: pageContext.pagePlacement,
+            })
+          : await env.sendMessage({ type: 'CREATE_NOTE', note, position: env.stickerNoteContext.position })
         : await env.sendMessage({
             type: 'UPDATE_NOTE',
             noteId: note.id,
@@ -414,8 +582,15 @@
             patch: note,
           });
       if (!res?.ok) throw new Error(res?.error || 'note_save_failed');
-      closeStickerNoteEditor();
       await env.loadList();
+      if (pageContext) {
+        env.postToParent?.({
+          type: 'TABWALL_PAGE_STICKER_SAVED',
+          url: pageContext.pageUrl,
+          noteId: res.item?.id || note.id,
+        });
+      }
+      closeStickerNoteEditor({ notifyPage: false });
     } catch (err) {
       if (writtenKeys.length) await env.Media.removeMany(writtenKeys).catch(() => {});
       console.warn('[TabWall] sticker note save failed:', err);
@@ -449,12 +624,19 @@
     commitStickerNoteTagDraft,
     renderStickerNotePreview,
     renderStickerNoteAttachments,
+    renderStickerNotePageSources,
     refreshStickerNoteEditor,
     removeStickerNoteAttachment,
     addStickerNoteFiles,
     openStickerNoteEditor,
     closeStickerNoteEditor,
     saveStickerNote,
-    placeStickerNoteAt
+    placeStickerNoteAt,
+    setStickerNoteCodeStatus,
+    syncStickerNoteContentMode,
+    setStickerNoteContentMode,
+    runStickerNoteCodePreview,
+    markStickerNoteCodeDirty,
+    handleStickerNoteCodeMessage
   };
 })(typeof self !== 'undefined' ? self : globalThis);

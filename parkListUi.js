@@ -325,7 +325,11 @@
             return m ? env.mediaKeyForMember(item.id, m.id) : '';
           })()
         : isNote || isLive ? '' : env.mediaKeyForItem(item);
-      const note = isNote ? (item.markdown || '') : item.note || '';
+      const note = isNote
+        ? item.contentMode === 'web'
+          ? (typeof item.webSource === 'string' && item.webSource.trim() ? item.webSource : env.t('noteWebEmpty'))
+          : (item.markdown || '')
+        : item.note || '';
       const tags = Array.isArray(item.tags) ? item.tags : [];
       const color = isGroup ? env.GROUP_COLORS[item.color] || env.GROUP_COLORS.grey : null;
       const storedOnlyCount = env.countStoredOnlyUrls(item);

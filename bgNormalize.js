@@ -101,8 +101,18 @@ function normalizeGroupItem(raw) {
 function normalizeNoteItem(raw, { allowReminder = true } = {}) {
   raw = raw && typeof raw === 'object' ? raw : {};
   const reminder = allowReminder ? normalizeReminder(raw.reminder) : null;
+  const backupBuild = globalThis.TabWallBackupBuild;
+  const legacySource = typeof backupBuild?.composeLegacyWebSource === 'function'
+    ? backupBuild.composeLegacyWebSource(raw.html, raw.css, raw.javascript)
+    : [raw.html, raw.css && `<style>\n${raw.css}\n</style>`, raw.javascript && `<script>\n${raw.javascript}\n</script>`]
+      .filter(Boolean)
+      .join('\n');
+  const webSource = safeText(
+    typeof raw.webSource === 'string' ? raw.webSource : legacySource,
+    backupBuild?.LIMITS?.MAX_NOTE_WEB_SOURCE_LENGTH || backupBuild?.LIMITS?.MAX_NOTE_CODE_TOTAL_LENGTH || 50000,
+  );
   const attachments = Array.isArray(raw.attachments)
-    ? raw.attachments.slice(0, Build?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12).map((value) => {
+    ? raw.attachments.slice(0, backupBuild?.LIMITS?.MAX_NOTE_ATTACHMENTS || 12).map((value) => {
         value = value && typeof value === 'object' ? value : {};
         const mime = typeof value.mime === 'string' && /^image\//i.test(value.mime)
           ? value.mime.slice(0, 128)
@@ -128,6 +138,8 @@ function normalizeNoteItem(raw, { allowReminder = true } = {}) {
     id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
     title: safeText(raw.title || 'Sticker note', DATA_LIMITS.MAX_TITLE_LENGTH) || 'Sticker note',
     markdown: safeText(raw.markdown, DATA_LIMITS.MAX_NOTE_LENGTH),
+    contentMode: raw.contentMode === 'web' ? 'web' : 'markdown',
+    webSource,
     tags: normalizeTags(raw.tags),
     pinned: Boolean(raw.pinned),
     savedAt: safeTimestamp(raw.savedAt),
@@ -340,6 +352,8 @@ function toStoredMeta(item, { includeReminder = true } = {}) {
       id: item.id,
       title: item.title || 'Sticker note',
       markdown: item.markdown || '',
+      contentMode: item.contentMode === 'web' ? 'web' : 'markdown',
+      webSource: item.webSource || '',
       tags: Array.isArray(item.tags) ? item.tags : [],
       pinned: Boolean(item.pinned),
       savedAt: item.savedAt || Date.now(),
