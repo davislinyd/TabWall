@@ -18,6 +18,17 @@ function createElement(tagName) {
     setAttribute(name, value) {
       this.attributes[name] = String(value);
     },
+    getAttribute(name) {
+      return Object.prototype.hasOwnProperty.call(this.attributes, name)
+        ? this.attributes[name]
+        : null;
+    },
+    hasAttribute(name) {
+      return Object.prototype.hasOwnProperty.call(this.attributes, name);
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
     addEventListener(type, listener) {
       listeners.set(type, listener);
     },
@@ -68,6 +79,13 @@ function createContentRuntime({ marker = false } = {}) {
   const documentListeners = new Map();
   const frameQueue = [];
   const root = createElement('html');
+  const head = createElement('head');
+  head.querySelectorAll = (selector) => {
+    if (selector !== 'link[rel~="icon"]') return [];
+    return head.children.filter((child) => (
+      child.tagName === 'LINK' && child.attributes.rel?.split(/\s+/).includes('icon')
+    ));
+  };
   const runtimeListeners = [];
   const sentMessages = [];
   const focusCalls = [];
@@ -100,6 +118,7 @@ function createContentRuntime({ marker = false } = {}) {
   };
   const documentObject = {
     documentElement: root,
+    head,
     activeElement: previousFocus,
     addEventListener(type, listener) {
       documentListeners.set(type, listener);
@@ -187,6 +206,58 @@ test('closing the overlay restores the page element that had focus', () => {
   assert.equal(runtime.focusCalls.length, 1);
   assert.equal(runtime.focusCalls[0].preventScroll, true);
   assert.equal(runtime.root, undefined);
+});
+
+test('overlay temporarily replaces the page favicon and restores the original link', () => {
+  const runtime = createContentRuntime();
+  const original = runtime.document.createElement('link');
+  original.setAttribute('rel', 'icon');
+  original.setAttribute('href', 'https://example.com/favicon.ico');
+  const alternate = runtime.document.createElement('link');
+  alternate.setAttribute('rel', 'shortcut icon');
+  alternate.setAttribute('href', 'https://example.com/favicon-32.png');
+  runtime.document.head.appendChild(original);
+  runtime.document.head.appendChild(alternate);
+
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.equal(runtime.document.head.children.length, 2);
+  assert.equal(original.attributes.href, 'https://tabwall.test/icons/icon16.png');
+  assert.equal(alternate.attributes.href, 'https://tabwall.test/icons/icon16.png');
+
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.deepEqual(runtime.document.head.children, [original, alternate]);
+  assert.equal(original.attributes.href, 'https://example.com/favicon.ico');
+  assert.equal(alternate.attributes.href, 'https://example.com/favicon-32.png');
+});
+
+test('overlay injects a temporary favicon when the page has no icon link', () => {
+  const runtime = createContentRuntime();
+
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.equal(runtime.document.head.children.length, 1);
+  const temporary = runtime.document.head.children[0];
+  assert.equal(temporary.attributes.rel, 'icon');
+  assert.equal(temporary.attributes.type, 'image/png');
+  assert.equal(temporary.attributes.href, 'https://tabwall.test/icons/icon16.png');
+  assert.equal(temporary.attributes['data-tabwall-temporary-favicon'], '1');
+
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.equal(runtime.document.head.children.length, 0);
+});
+
+test('all overlay open paths share temporary favicon cleanup, including reload disposal', () => {
+  const runtime = createContentRuntime();
+
+  runtime.dispatchRuntime({ type: 'OPEN_PARK' });
+  assert.equal(runtime.document.head.children.length, 1);
+  runtime.window.__tabWallInjected.dispose();
+  assert.equal(runtime.document.head.children.length, 0);
+
+  runtime.dispatchRuntime({ type: 'OPEN_PARK' });
+  runtime.dispatchRuntime({ type: 'OPEN_PARK' });
+  assert.equal(runtime.document.head.children.length, 1);
+  runtime.dispatchRuntime({ type: 'TOGGLE_PARK' });
+  assert.equal(runtime.document.head.children.length, 0);
 });
 
 test('content shell replaces a stale reload marker instead of skipping injection', () => {

@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.58.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.59.2 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
   <meta property="og:url" content="https://davislinyd.github.io/TabWall/" />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABg0lEQVR42u3csQ2DMBRFUU+SiiY9XZZhhmyTAViBNkNkFSpSQE8iIYrof8fnSq9H9ilcUYokSZIkSdIPu1xvq30OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoNqGcVmjdnQJ/esRNgAAAAAAAAD4twdb5IXXBGC/FA9LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAlAFbxf4ccIgAOEgADwAAwAAwAA+Dk3s8uzY6+db5PaQYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAcAN9XWgkAAAAAAIBmAfh3T0UPNgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABJkiRJkpS2DbtXox22lvgJAAAAAElFTkSuQmCC" />
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABmJLR0QA/wD/AP+gvaeTAAAEJklEQVR4nO3dT2hcVRTH8d95Y5o0SpNImaEtKIZiwY2UIkJ3gisXrhQR7MKFKP4FN9m40FUFEUvpxqIbBQXXghsRBJd14aJqmTdSHHgvY+ZPNFgJM3nHhUUq6dyGmXffvb7z+6zDnUPeN+cmk0AAIiIiIiIiIrrVoJeeHeadjdBz+JCEHiBm/f61E8M8/UQU30mCM6Hn8eGu0APEKMuy5SX56zVM9C0I7gk9j08M4BaqKsPN9CmRG+8BuD/0PFVgADf1884jo17ngoicDT1LlcwH0O9fO5GMG+ch+hwACT1P1cwGYOmedzEXgMV73sVUAFbveRcTAVi/512ifSOo2+0e1qtXD81zRpZly8O8s5FMGj9DcA41efiqVxayLFsu46zoAtjaun5skLffvnth99fhyqHmLGeoqgzy9tNLyY0fIfouUI9v8nY20+Yw72yMeqvpYuPPh8s4M5orYDtLzxSCN7A3eRYiM89Vx3t+9Fv7tBby0hg4B9HDZZ4dNABttxe3j8gzqvpmAcxVdN3ueVVtjHrpEwJ5XQs87ut1ggSwtXX9WDIZvzgSeQWKo/M+r0HefkgmcgWCUr86QtjZTJtjledHvc7LgNynnl+v0gDKWvP7JFiB/r8fvs817+I9gDLXfN1UteZdvAVQ9pqvk6rXvEvpAXhb8zUQas27lPKAuOani2HNu8wVANf8dDGteZeZAxhstj+QvcmrXPP7DfPOxhj6DkQXQ89yJzO/FSyQRxHRO4kxufkHpNE/fCDC3wVQtRiAcQzAOAZgHAMwjgEYxwCMYwDGMQDjGIBxDMA4BmAcAzCOARjHAIxjAMYxAOMYgHEMwDgGYBwDMI4BGMcAjGMAxjEA4xiAcQzAOAZgHAMwjgEYxwCMYwDGMQDjGIBxDMA4BmAcAzCOARjHAIxjAMYxAOMYgHEMwDgGYBwDMI4BGMcAjGMAxjEA4xiAcQzAOAZwUIo/Qo/gAwNwKwT4GtAnV1vrL4Qexgf+16/b2wHweVEUF44ef/Cn0MP4xAD+K4XKR7KUfLi29sB26GGqwAD+WfPfKPTiWuvklyIS6z/59MJyAGbWvIvFAMyteRcrAZhe8y51D4Br/g7qGgDX/AHVKQCu+RnEGkAB4Ktice/3g3zwBI1flpLi1ErzZOp5rlh8izG6ZRwUWwAz3dmt1noPQM/fWFHYheILSZL311rrP5R1aCwB8M6eLlfVywtaXDpy/FS/7MNDBsA720XwvQAXV5vdz0Qem/h6mRAB8Eez6byseZfKAlCgLSofc83fltc17+I7gH/X/L1c8/tVtOZdfAXANT9d5WvepdQAuOadgq15lzIC4Jp3iWDNu8wRgOwAeplrfj9V7ELxaSxr3gtVbYSeIVb83BARERERERERERERERERERERERERERERURX+BiFA5XOWepRZAAAAAElFTkSuQmCC" />
   <link rel="stylesheet" href="site.css" />
 </head>
 <body>
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.58.0</span>
+      <span>使用者說明 · v2.59.2</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,7 +71,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.58.0</span><span lang="en">Version 2.58.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.59.2</span><span lang="en">Version 2.59.2</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 可設定為畫布</span><span lang="en">New Tab can be the canvas</span></span>
@@ -179,8 +179,8 @@
           <article class="card">
             <h3 lang="zh-Hant">網頁浮層</h3>
             <h3 lang="en">Page overlay</h3>
-            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。浮層佔視窗 98%，其餘 2% 是原頁模糊框。圖示右下角綠色勾代表這個網址已停車；繪圖層開啟時改為橘色小筆 <code>✎</code>。</p>
-            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. The overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. A green check on the icon means this URL is parked; an orange <code>✎</code> means the drawing layer is open.</p>
+            <p lang="zh-Hant">一般網站可用 Chrome 快捷鍵開關畫布、儲存分頁或群組。浮層佔視窗 98%，其餘 2% 是原頁模糊框。浮層開啟期間，瀏覽器分頁會暫時顯示與 TabWall 頁面相同的三條斜線 logo；關閉浮層或 extension 清理後恢復原 favicon。圖示右下角綠色勾代表這個網址已停車；繪圖層開啟時改為橘色小筆 <code>✎</code>。</p>
+            <p lang="en">On normal websites, Chrome shortcuts toggle the canvas or park a tab or group. The overlay fills 98% of the viewport; the remaining 2% is a blurred frame of the host page. While it is open, the browser tab temporarily shows the same three-panel logo as the TabWall page; closing the overlay or extension cleanup restores the original favicon. A green check on the icon means this URL is parked; an orange <code>✎</code> means the drawing layer is open.</p>
           </article>
         </div>
       </section>
@@ -1028,8 +1028,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.58.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.58.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.59.2</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.59.2</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

@@ -21,6 +21,7 @@
   }
 
   const ROOT_ID = 'tabwall-root';
+  const TEMPORARY_FAVICON_ATTR = 'data-tabwall-temporary-favicon';
   const EXTENSION_ORIGIN = new URL(chrome.runtime.getURL('park.html')).origin;
   let isOpen = false;
   let rootEl = null;
@@ -37,6 +38,73 @@
   let pendingPageStickerReminder = null;
   let iframeReady = false;
   let previousActiveElement = null;
+  /** @type {{ iconUrl: string, links: Array<{ element: Element, hadHref: boolean, href: string|null }>, injected: Element|null }|null} */
+  let temporaryFaviconState = null;
+
+  function installTemporaryFavicon() {
+    if (temporaryFaviconState) return;
+    const head = document.head;
+    if (!head || typeof head.appendChild !== 'function') return;
+    const state = { iconUrl: '', links: [], injected: null };
+    try {
+      state.iconUrl = chrome.runtime.getURL('icons/icon16.png');
+      const links = typeof head.querySelectorAll === 'function'
+        ? Array.from(head.querySelectorAll('link[rel~="icon"]'))
+        : [];
+      state.links = links.map((element) => ({
+        element,
+        hadHref: element.hasAttribute('href'),
+        href: element.getAttribute('href'),
+      }));
+      for (const { element } of state.links) {
+        element.setAttribute('href', state.iconUrl);
+      }
+      if (state.links.length === 0) {
+        const link = document.createElement('link');
+        link.setAttribute('rel', 'icon');
+        link.setAttribute('type', 'image/png');
+        link.setAttribute('href', state.iconUrl);
+        link.setAttribute(TEMPORARY_FAVICON_ATTR, '1');
+        head.appendChild(link);
+        state.injected = link;
+      }
+      temporaryFaviconState = state;
+    } catch {
+      restoreFaviconState(state);
+      // Favicon replacement is best-effort and must not block the overlay.
+    }
+  }
+
+  function restoreFaviconState(state) {
+    if (!state) return;
+    if (state.injected) {
+      try {
+        state.injected.remove();
+      } catch {
+        // The page may have removed the temporary link already.
+      }
+    }
+    for (const snapshot of state.links) {
+      try {
+        if (snapshot.element.getAttribute('href') !== state.iconUrl) continue;
+        if (snapshot.hadHref) snapshot.element.setAttribute('href', snapshot.href || '');
+        else snapshot.element.removeAttribute('href');
+      } catch {
+        // The page may have removed or replaced the original link.
+      }
+    }
+  }
+
+  function restoreTemporaryFavicon() {
+    const state = temporaryFaviconState;
+    temporaryFaviconState = null;
+    if (!state) return;
+    try {
+      restoreFaviconState(state);
+    } catch {
+      // Favicon cleanup must not block the overlay teardown.
+    }
+  }
 
   function restorePreviousFocus() {
     const target = previousActiveElement;
@@ -54,6 +122,7 @@
   }
 
   function destroy() {
+    restoreTemporaryFavicon();
     if (pendingConflict) {
       try {
         chrome.runtime.sendMessage({ type: 'RESOLVE_SAVE_CONFLICT', decision: 'cancel' }, () => {});
@@ -297,6 +366,7 @@
     shell.appendChild(panel);
     shadow.append(style, shell);
     document.documentElement.appendChild(rootEl);
+    installTemporaryFavicon();
 
     shell.addEventListener('click', (e) => {
       if (e.target === shell) destroy();

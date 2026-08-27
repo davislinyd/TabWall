@@ -11,6 +11,12 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.59.2 — 2026-08-27
+
+- 統一 TabWall 頁面左上角 logo、extension icon、瀏覽器分頁 favicon 與 overlay 臨時 favicon，全部使用頁面三條斜線 logo 與深色 Workbench 米白色 `#eee8dc`。
+- Overlay 開啟期間會暫時替換原頁 favicon；透過快捷鍵、Escape、關閉按鈕、背景遮罩關閉，或 extension reload 清理後，恢復原頁 favicon。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.59.2.zip`。
+
 ## 2.57.0 — 2026-08-27
 
 - 新增 GitHub stable Release 更新檢查：安裝／瀏覽器啟動時立即檢查，之後每 24 小時檢查一次。

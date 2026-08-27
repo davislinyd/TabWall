@@ -16,7 +16,7 @@ test('AI panel exposes local endpoint, bridge, sources, and confirmation control
   assert.match(html, /id="aiBridgeToken"/);
   assert.match(html, /id="aiBridgeToken"[^>]*autocomplete="new-password"/);
   assert.match(html, /data-settings-section="ai"/);
-  assert.equal(manifest.version, '2.58.0');
+  assert.equal(manifest.version, '2.59.2');
   assert.ok(manifest.web_accessible_resources[0].resources.includes('parkAiUi.js'));
   assert.deepEqual(manifest.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js', 'pageAnnotate.js']);
 });

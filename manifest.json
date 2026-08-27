@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.58.0",
+  "version": "2.59.2",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -54,6 +54,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "icons/icon16.png",
         "park.html",
         "park.css",
         "park.js",

@@ -526,7 +526,8 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.58.0');
+  assert.equal(MANIFEST.version, '2.59.2');
+  assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
   assert.match(PACK_SOURCE, /\bwebhookCore\.js/);
