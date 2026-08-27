@@ -33,6 +33,14 @@ test('page Sticker editor is a standalone extension-origin document', () => {
   assert.match(CSS, /\.sticker-note-box\.open/);
   assert.match(CSS, /\.sticker-note-web-pane\[hidden\][\s\S]*?display: none !important/);
   assert.match(CSS, /\.sticker-note-code-preview-pane\[hidden\][\s\S]*?display: none !important/);
+  assert.match(HTML, /<div class="edit-lock-options">[\s\S]*?id="stickerNoteLockEnabled"[\s\S]*?id="stickerNoteHideOriginalTitle"/);
+  assert.match(HTML, /<div class="edit-lock-passwords">[\s\S]*?for="stickerNoteLockPassword"[\s\S]*?id="stickerNoteLockPassword"[\s\S]*?for="stickerNoteLockPasswordConfirm"[\s\S]*?id="stickerNoteLockPasswordConfirm"/);
+  assert.match(CSS, /\.sticker-note-mode \.btn\.active\s*\{[\s\S]*?background:\s*var\(--accent\);[\s\S]*?color:\s*#fff;/);
+  assert.match(CSS, /\.sticker-note-fields \.tag-input > input\s*\{[\s\S]*?width:\s*auto;[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/);
+  assert.match(CSS, /\.edit-lock-passwords\s*\{[\s\S]*?grid-template-columns:\s*max-content minmax\(0, 1fr\)/);
+  assert.match(STICKER_UI, /hideLabel\.hidden = !locked/);
+  assert.match(STICKER_UI, /const canHide = locked;/);
+  assert.match(STICKER_UI, /stickerNoteHideOriginalTitle\.disabled = !canHide/);
 });
 
 test('page Sticker editor bridge authenticates the parent session and lifecycle', () => {

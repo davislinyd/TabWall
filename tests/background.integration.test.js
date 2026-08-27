@@ -526,7 +526,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.59.2');
+  assert.equal(MANIFEST.version, '2.59.4');
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
@@ -2068,6 +2068,23 @@ test('note CRUD persists fixed metadata and cleans attachment media', async () =
   assert.equal(updatedTag?.count, 1);
   assert.equal((await runtime.api.deleteNote(NOTE_ID)).ok, true);
   assert.equal(runtime.store.parkedItems.length, 0);
+});
+
+test('Sticker Note lock can persist hide original title without display title', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+
+  const created = await runtime.api.createNote(note(NOTE_ID, { attachment: false }));
+  assert.equal(created.ok, true);
+  const updated = await runtime.api.updateNote(NOTE_ID, {
+    locked: true,
+    hideOriginalTitle: true,
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(updated.item.locked, true);
+  assert.equal(updated.item.hideOriginalTitle, true);
+  const listed = (await runtime.api.getParkedItems()).find((item) => item.id === NOTE_ID);
+  assert.equal(listed?.hideOriginalTitle, true);
 });
 
 test('page Stickers share top-level Notes, preserve independent reminders, and detach safely', async () => {

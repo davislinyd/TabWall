@@ -6653,7 +6653,51 @@ html[data-theme='dark'] .canvas-node.canvas-note {
 #stickerNoteMarkdown { min-height: 230px; resize: vertical; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .sticker-note-mode, .sticker-note-code-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .sticker-note-mode .btn, .sticker-note-code-tabs .btn { min-height: 30px; padding: 5px 9px; font-size: 11px; }
-.sticker-note-mode .btn.active, .sticker-note-code-tabs .btn.active { border-color: var(--accent); color: var(--accent); }
+.sticker-note-mode .btn.active, .sticker-note-code-tabs .btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.sticker-note-fields .edit-lock-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.sticker-note-fields .edit-lock-options label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sticker-note-fields .edit-lock-options input { flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
+.sticker-note-fields .edit-lock-option[hidden] { display: none; }
+.sticker-note-fields .edit-lock-passwords {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.sticker-note-fields .edit-lock-passwords label { min-width: 0; color: var(--muted); font-size: 12px; }
+.sticker-note-fields .edit-lock-passwords input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg, rgba(255,255,255,.04));
+  color: var(--text);
+  padding: 9px 10px;
+}
+.sticker-note-fields .tag-input > input {
+  flex: 1 1 100px;
+  min-width: 80px;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 4px;
+}
 .sticker-note-web-pane { display: flex; flex-direction: column; gap: 9px; min-height: 0; }
 .sticker-note-web-pane[hidden],
 .sticker-note-code-preview-pane[hidden],

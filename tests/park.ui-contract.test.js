@@ -396,6 +396,14 @@ test('Sticker Note exposes placement, single-document Web editing, attachments, 
   assert.match(HTML_SOURCE, /class="sticker-note-body"/);
   assert.match(HTML_SOURCE, /type="file" accept="image\/\*" multiple hidden/);
   assert.match(HTML_SOURCE, /\.sticker-note-body\s*\{[\s\S]*?grid-template-columns:\s*minmax\(320px, 1fr\) minmax\(280px, 1fr\)/);
+  assert.match(HTML_SOURCE, /<div class="edit-lock-options">[\s\S]*?id="stickerNoteLockEnabled"[\s\S]*?id="stickerNoteHideOriginalTitle"/);
+  assert.match(HTML_SOURCE, /<div class="edit-lock-passwords">[\s\S]*?for="stickerNoteLockPassword"[\s\S]*?id="stickerNoteLockPassword"[\s\S]*?for="stickerNoteLockPasswordConfirm"[\s\S]*?id="stickerNoteLockPasswordConfirm"/);
+  assert.match(CSS_SOURCE, /\.sticker-note-mode \.btn\.active[\s\S]*?background:\s*var\(--accent\)[\s\S]*?color:\s*#fff/);
+  assert.match(CSS_SOURCE, /\.sticker-note-fields \.tag-input > input\s*\{[\s\S]*?width:\s*auto;[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/);
+  assert.match(CSS_SOURCE, /\.sticker-note-fields \.edit-lock-passwords\s*\{[\s\S]*?grid-template-columns:\s*max-content minmax\(0, 1fr\)/);
+  assert.match(STICKER_UI_SOURCE, /hideLabel\.hidden = !locked/);
+  assert.match(STICKER_UI_SOURCE, /const canHide = locked;/);
+  assert.match(STICKER_UI_SOURCE, /stickerNoteHideOriginalTitle\.disabled = !canHide/);
   assert.match(PARK_BEHAVIOR_FLAT, /function armCanvasNotePlacement\(\)/);
   assert.match(STICKER_UI_SOURCE, /function placeStickerNoteAt\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /function placeStickerNoteAt\(/);

@@ -107,14 +107,58 @@ button { color: inherit; }
 .sticker-note-fields textarea { padding: 9px 10px; }
 
 .edit-lock-toggle { flex-direction: row !important; align-items: center; }
+.edit-lock-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.edit-lock-options label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.edit-lock-options input { flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
+.edit-lock-option[hidden] { display: none; }
 .edit-lock-fields { display: grid; gap: 8px; padding: 9px; border: 1px solid var(--border); border-radius: 8px; }
 .edit-lock-fields[hidden] { display: none; }
+.edit-lock-passwords {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.edit-lock-passwords label { min-width: 0; color: var(--muted); font-size: 12px; }
+.edit-lock-passwords input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 9px 10px;
+}
 .hint, .status, .code-preview-hint { color: var(--muted); font-size: 11px; }
 .edit-lock-fields .hint { margin: 0; }
 
 .edit-field { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
 .tag-input { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 5px; }
 .tag-input input { flex: 1 1 100px; min-width: 80px; border: 0; outline: 0; background: transparent; color: var(--text); padding: 4px; }
+.sticker-note-fields .tag-input > input {
+  flex: 1 1 100px;
+  min-width: 80px;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 4px;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 999px; background: rgba(127, 127, 127, .1); font-size: 11px; }
 .chip button { border: 0; background: transparent; cursor: pointer; padding: 0 2px; }
@@ -131,6 +175,7 @@ button { color: inherit; }
 .btn:hover { border-color: var(--accent); }
 .btn.active, .btn.primary { border-color: var(--accent); color: var(--accent); }
 .btn.primary { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.sticker-note-mode .btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
 
 #stickerNoteMarkdown, #stickerNoteWebSource {
   min-height: 230px;

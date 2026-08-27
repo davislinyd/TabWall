@@ -1099,23 +1099,27 @@
             <span data-i18n="noteTitlePh">Note 標題</span>
             <input id="stickerNoteTitle" type="text" maxlength="2048" autocomplete="off" data-i18n-placeholder="noteTitlePh" placeholder="Note 標題" />
           </label>
-          <label class="edit-lock-toggle">
-            <input id="stickerNoteLockEnabled" type="checkbox" />
-            <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
-          </label>
-          <div id="stickerNoteLockFields" class="edit-lock-fields" hidden>
-            <label>
+          <div class="edit-lock-options">
+            <label class="edit-lock-toggle">
+              <input id="stickerNoteLockEnabled" type="checkbox" />
+              <span data-i18n="lockCard">上鎖（隱藏縮圖與快照）</span>
+            </label>
+            <label class="edit-lock-option" hidden>
               <input id="stickerNoteHideOriginalTitle" type="checkbox" />
               <span data-i18n="hideOriginalTitle">隱藏原始標題（僅顯示自訂標題）</span>
             </label>
-            <label>
-              <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+          </div>
+          <div id="stickerNoteLockFields" class="edit-lock-fields" hidden>
+            <div class="edit-lock-passwords">
+              <label for="stickerNoteLockPassword">
+                <span data-i18n="lockPassword">解鎖密碼（可選）</span>
+              </label>
               <input id="stickerNoteLockPassword" type="password" autocomplete="new-password" />
-            </label>
-            <label>
-              <span data-i18n="lockPasswordConfirm">確認密碼</span>
+              <label for="stickerNoteLockPasswordConfirm">
+                <span data-i18n="lockPasswordConfirm">確認密碼</span>
+              </label>
               <input id="stickerNoteLockPasswordConfirm" type="password" autocomplete="new-password" />
-            </label>
+            </div>
             <p class="hint" data-i18n="lockPasswordHint">不設密碼則點一下即可解鎖。密碼無法加密本機快照。</p>
           </div>
           <div class="edit-field">

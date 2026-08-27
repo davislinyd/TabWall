@@ -186,13 +186,14 @@ function normalizeLockFields(raw) {
 
 function storedTitleLockFields(item) {
   if (!item || typeof item !== 'object') return {};
+  const canHideOriginalTitle = item.kind === 'note' || Boolean(item.displayTitle);
   return {
     ...(item.displayTitle ? { displayTitle: item.displayTitle } : {}),
     ...(item.locked ? { locked: true } : {}),
     ...(item.locked && item.lockSalt && item.lockHash
       ? { lockSalt: item.lockSalt, lockHash: item.lockHash }
       : {}),
-    ...(item.locked && item.displayTitle && item.hideOriginalTitle
+    ...(item.locked && canHideOriginalTitle && item.hideOriginalTitle
       ? { hideOriginalTitle: true }
       : {}),
   };
@@ -237,7 +238,8 @@ function applyLockPatch(item, patch) {
 
 function applyHideOriginalTitlePatch(item, patch) {
   if (!item || typeof patch?.hideOriginalTitle !== 'boolean') return;
-  if (!patch.hideOriginalTitle || !item.locked || !item.displayTitle) {
+  const canHideOriginalTitle = item.kind === 'note' || Boolean(item.displayTitle);
+  if (!patch.hideOriginalTitle || !item.locked || !canHideOriginalTitle) {
     delete item.hideOriginalTitle;
     return;
   }
@@ -247,13 +249,14 @@ function applyHideOriginalTitlePatch(item, patch) {
 function withTitleLockFields(item, raw) {
   const displayTitle = normalizeDisplayTitle(raw?.displayTitle, item.title);
   const lockFields = normalizeLockFields(raw);
+  const canHideOriginalTitle = item.kind === 'note' || Boolean(displayTitle);
   const normalized = {
     ...item,
     ...(displayTitle ? { displayTitle } : {}),
     ...lockFields,
   };
   if (!displayTitle) delete normalized.displayTitle;
-  if (lockFields.locked && displayTitle && raw?.hideOriginalTitle === true) {
+  if (lockFields.locked && canHideOriginalTitle && raw?.hideOriginalTitle === true) {
     normalized.hideOriginalTitle = true;
   } else {
     delete normalized.hideOriginalTitle;

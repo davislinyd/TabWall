@@ -165,14 +165,11 @@
   function syncStickerNoteLockFields() {
     ensureBound('syncStickerNoteLockFields');
     const locked = Boolean(env.stickerNoteLockEnabled?.checked);
-    const typed = String(env.stickerNoteTitle?.value || '').trim();
-    const original = String(env.stickerNoteContext?.originalTitle || '').trim();
-    const hasCustomDisplayTitle = Boolean(
-      env.stickerNoteContext?.mode === 'edit' && typed && typed !== original
-    );
     if (env.stickerNoteLockFields) env.stickerNoteLockFields.hidden = !locked;
     if (env.stickerNoteHideOriginalTitle) {
-      const canHide = locked && hasCustomDisplayTitle;
+      const hideLabel = env.stickerNoteHideOriginalTitle.closest?.('label');
+      if (hideLabel) hideLabel.hidden = !locked;
+      const canHide = locked;
       env.stickerNoteHideOriginalTitle.disabled = !canHide;
       if (!canHide) env.stickerNoteHideOriginalTitle.checked = false;
     }
@@ -479,7 +476,7 @@
     env.stickerNoteTitle.value = (source.displayTitle || source.title || env.t('noteUntitled'));
     if (env.stickerNoteLockEnabled) env.stickerNoteLockEnabled.checked = Boolean(source.locked);
     if (env.stickerNoteHideOriginalTitle) {
-      env.stickerNoteHideOriginalTitle.checked = Boolean(source.locked && source.displayTitle && source.hideOriginalTitle);
+      env.stickerNoteHideOriginalTitle.checked = Boolean(source.locked && source.hideOriginalTitle);
     }
     if (env.stickerNoteLockPassword) env.stickerNoteLockPassword.value = '';
     if (env.stickerNoteLockPasswordConfirm) env.stickerNoteLockPasswordConfirm.value = '';
