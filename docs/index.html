@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.57.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.58.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.57.0</span>
+      <span>使用者說明 · v2.58.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,7 +71,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.57.0</span><span lang="en">Version 2.57.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.58.0</span><span lang="en">Version 2.58.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 可設定為畫布</span><span lang="en">New Tab can be the canvas</span></span>
@@ -815,8 +815,8 @@ https://wiki.example.com
         </ul>
         <h3 lang="zh-Hant">自動備份</h3>
         <h3 lang="en">Automatic backup</h3>
-        <p lang="zh-Hant">寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。依固定排程備份；資料變更會在下一次排程納入，不會因每次寫入提前下載。保留 1–99 份。開新分頁只在間隔已到期時才補跑，不會每次開牆就下載。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
-        <p lang="en">Writes into a subfolder of Chrome’s download location (not always <code>Downloads</code> — see <code>chrome://settings/downloads</code>). Runs on a fixed schedule; data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies. Opening a new tab only catch-up backups if the interval is already overdue. TabWall recognizes its own files and deletes older ones. Nothing is uploaded.</p>
+        <p lang="zh-Hant">寫入 Chrome「下載位置」底下你指定的子資料夾（不一定是 <code>Downloads</code>，請看 <code>chrome://settings/downloads</code>）。可設定每日本機時間 00:00–23:30，每半小時一個選項；資料變更會在下一次排程納入，不會因每次寫入提前下載。保留 1–99 份。若錯過指定時段，Service Worker 恢復或開啟新分頁時會補備一次。TabWall 會辨識自己寫出的備份並刪舊檔。不上傳。</p>
+        <p lang="en">Writes into a subfolder of Chrome’s download location (not always <code>Downloads</code> — see <code>chrome://settings/downloads</code>). Choose a daily local time from 00:00–23:30 in 30-minute steps; data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies. If the scheduled time is missed, the Service Worker or a newly opened tab catches up once. TabWall recognizes its own files and deletes older ones. Nothing is uploaded.</p>
       </section>
 
       <section class="chapter" id="storage">
@@ -1028,8 +1028,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.57.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.57.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.58.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.58.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

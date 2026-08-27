@@ -526,7 +526,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.57.0');
+  assert.equal(MANIFEST.version, '2.58.0');
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
   assert.match(PACK_SOURCE, /\bwebhookCore\.js/);
@@ -1451,8 +1451,8 @@ function releasePayload(version, id = `release-${version}`) {
 }
 
 test('GitHub release checks run on install and startup without notifications or auto-open', async () => {
-  const runtime = createRuntime({ manifestVersion: '2.57.0' });
-  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0'));
+  const runtime = createRuntime({ manifestVersion: '2.58.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.59.0'));
   await runtime.ready;
 
   await runtime.chrome.runtime.onInstalled.listeners[0]();
@@ -1465,10 +1465,10 @@ test('GitHub release checks run on install and startup without notifications or 
   assert.equal(runtime.runtime.fetchCalls[0][1].headers.Accept, 'application/vnd.github+json');
 
   let status = await runtime.api.getReleaseUpdateStatus();
-  assert.equal(status.currentVersion, '2.57.0');
+  assert.equal(status.currentVersion, '2.58.0');
   assert.equal(status.hasNewerRelease, true);
   assert.equal(status.noticePending, true);
-  assert.equal(status.latestRelease.version, '2.58.0');
+  assert.equal(status.latestRelease.version, '2.59.0');
   assert.equal(runtime.notificationCalls.length, 0);
   assert.equal(runtime.runtime.createdTabs.length, 0);
 
@@ -1482,11 +1482,11 @@ test('GitHub release checks run on install and startup without notifications or 
 
 test('GitHub release status distinguishes same, older, and newer stable releases', async () => {
   for (const [version, expected] of [
-    ['2.57.0', false],
-    ['2.56.9', false],
-    ['2.58.0', true],
+    ['2.58.0', false],
+    ['2.57.9', false],
+    ['2.59.0', true],
   ]) {
-    const runtime = createRuntime({ manifestVersion: '2.57.0' });
+    const runtime = createRuntime({ manifestVersion: '2.58.0' });
     runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload(version));
     await runtime.ready;
     const result = await runtime.api.checkReleaseUpdate();
@@ -1497,15 +1497,15 @@ test('GitHub release status distinguishes same, older, and newer stable releases
 });
 
 test('GitHub release notices are dismissed by release key and return for a new release', async () => {
-  const runtime = createRuntime({ manifestVersion: '2.57.0' });
-  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0', 'release-258'));
+  const runtime = createRuntime({ manifestVersion: '2.58.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.59.0', 'release-259'));
   await runtime.ready;
   const first = await runtime.api.checkReleaseUpdate();
   assert.equal(first.noticePending, true);
 
   const dismissed = await dispatchMessage(runtime, {
     type: 'DISMISS_RELEASE_UPDATE',
-    releaseKey: 'release-258',
+    releaseKey: 'release-259',
   });
   assert.equal(dismissed.ok, true);
   assert.equal(dismissed.noticePending, false);
@@ -1514,15 +1514,15 @@ test('GitHub release notices are dismissed by release key and return for a new r
   const sameRelease = await runtime.api.checkReleaseUpdate();
   assert.equal(sameRelease.noticePending, false);
 
-  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.59.0', 'release-259'));
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.60.0', 'release-260'));
   const newRelease = await runtime.api.checkReleaseUpdate();
   assert.equal(newRelease.noticePending, true);
-  assert.equal(newRelease.latestRelease.key, 'release-259');
+  assert.equal(newRelease.latestRelease.key, 'release-260');
 });
 
 test('GitHub release check failures and invalid releases preserve the last valid state', async () => {
-  const runtime = createRuntime({ manifestVersion: '2.57.0' });
-  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0', 'release-good'));
+  const runtime = createRuntime({ manifestVersion: '2.58.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.59.0', 'release-good'));
   await runtime.ready;
   await runtime.api.checkReleaseUpdate();
   const before = JSON.parse(JSON.stringify(runtime.store.releaseUpdate));
@@ -3716,62 +3716,108 @@ test('auto-backup pruning only deletes exact folder and mode names', async () =>
   assert.deepEqual(runtime.removedDownloads, [2]);
 });
 
-test('autoBackupShouldRun only permits due periodic backups', async () => {
+test('autoBackupShouldRun only permits due daily backups', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   assert.equal(typeof runtime.api.autoBackupShouldRun, 'function');
   const shouldRun = runtime.api.autoBackupShouldRun;
   const normalize = runtime.api.normalizeAutoBackup;
-  const intervalOf = runtime.api.autoBackupIntervalMinutes;
-  const now = Date.now();
-  const intervalMin = 60;
+  const scheduledAtFor = (hour, minute, dayOffset = 0) => {
+    const date = new Date(2026, 7, 27 + dayOffset, hour, minute, 0, 0);
+    return date.getTime();
+  };
+  const before = scheduledAtFor(9, 29);
+  const slot = scheduledAtFor(9, 30);
+  const after = scheduledAtFor(9, 31);
   const ab = normalize({
     enabled: true,
     mode: 'full',
     onChange: true,
-    intervalUnit: 'minute',
-    intervalValue: intervalMin,
-    dirtyAt: now - 5000,
-    lastSuccessAt: now - 1000,
+    scheduleHour: 9,
+    scheduleMinute: 30,
+    dirtyAt: 123,
+    lastSuccessAt: 0,
   });
-  assert.equal(intervalOf(ab), intervalMin);
+  assert.equal(ab.scheduleHour, 9);
+  assert.equal(ab.scheduleMinute, 30);
   assert.equal(Object.prototype.hasOwnProperty.call(ab, 'onChange'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(ab, 'dirtyAt'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(ab, 'intervalUnit'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(ab, 'intervalValue'), false);
 
-  // Recent success blocks every automatic path before the interval expires.
-  for (const reason of ['schedule', 'local']) {
-    const result = shouldRun(ab, { reason });
-    assert.equal(result.run, false);
-    assert.equal(result.skipReason, 'not_due');
-  }
-  const legacyOnchange = shouldRun(ab, { reason: 'onchange' });
-  assert.equal(legacyOnchange.run, false);
-  assert.equal(legacyOnchange.skipReason, 'onchange_disabled');
-
-  // First enable: schedule may run once the alarm fires; New Tab must not
-  const firstEnable = normalize({
+  const legacy = normalize({
     enabled: true,
     intervalUnit: 'hour',
     intervalValue: 24,
-    lastSuccessAt: 0,
+    intervalHours: 24,
+    lastSuccessAt: scheduledAtFor(14, 49),
   });
-  assert.equal(shouldRun(firstEnable, { reason: 'schedule' }).run, true);
-  assert.equal(shouldRun(firstEnable, { reason: 'local' }).run, false);
-  assert.equal(shouldRun(firstEnable, { reason: 'local' }).skipReason, 'not_due');
-  assert.equal(shouldRun(firstEnable, { reason: 'onchange' }).run, false);
+  assert.equal(legacy.scheduleHour, 14);
+  assert.equal(legacy.scheduleMinute, 30);
+  assert.equal(normalize({}).scheduleHour, 0);
+  assert.equal(normalize({}).scheduleMinute, 0);
+  assert.equal(normalize({ scheduleHour: 24, scheduleMinute: 15 }).scheduleHour, 23);
+  assert.equal(normalize({ scheduleHour: 24, scheduleMinute: 15 }).scheduleMinute, 0);
 
-  // Schedule due after interval
-  const due = normalize({
-    ...ab,
-    lastSuccessAt: now - (intervalMin + 1) * 60 * 1000,
-  });
-  assert.equal(shouldRun(due, { reason: 'schedule' }).run, true);
-  assert.equal(shouldRun(due, { reason: 'local' }).run, true);
-  assert.equal(shouldRun(due, { reason: 'onchange' }).run, false);
-  assert.equal(shouldRun(due, { reason: 'onchange' }).skipReason, 'onchange_disabled');
+  assert.equal(shouldRun(ab, { reason: 'schedule', now: before }).run, false);
+  assert.equal(shouldRun(ab, { reason: 'schedule', now: after }).run, true);
+  for (const reason of ['resume', 'local']) {
+    const result = shouldRun(ab, { reason, now: after });
+    assert.equal(result.run, false);
+    assert.equal(result.skipReason, 'not_due');
+  }
+
+  // A successful backup after today's slot blocks every automatic path.
+  const successful = normalize({ ...ab, lastSuccessAt: after });
+  for (const reason of ['schedule', 'resume', 'local']) {
+    const result = shouldRun(successful, { reason, now: after });
+    assert.equal(result.run, false);
+    assert.equal(result.skipReason, 'not_due');
+  }
+  const legacyOnchange = shouldRun(successful, { reason: 'onchange', now: after });
+  assert.equal(legacyOnchange.run, false);
+  assert.equal(legacyOnchange.skipReason, 'onchange_disabled');
+
+  // A missed slot can be recovered, but first-enable still waits for its alarm.
+  const missed = normalize({ ...ab, lastSuccessAt: scheduledAtFor(8, 0) });
+  for (const reason of ['schedule', 'resume', 'local']) {
+    assert.equal(shouldRun(missed, { reason, now: after }).run, true);
+  }
+  assert.equal(shouldRun(missed, { reason: 'onchange', now: after }).run, false);
+  assert.equal(shouldRun(missed, { reason: 'onchange', now: after }).skipReason, 'onchange_disabled');
+  assert.equal(runtime.api.nextAutoBackupAt(ab, before), slot);
+  assert.equal(runtime.api.nextAutoBackupAt(ab, after), scheduledAtFor(9, 30, 1));
 
   // Manual always runs when forced even if just backed up
-  assert.equal(shouldRun(ab, { force: true, reason: 'manual' }).run, true);
+  assert.equal(shouldRun(successful, { force: true, reason: 'manual', now: after }).run, true);
+});
+
+test('auto-backup alarms use the next local daily slot and clear legacy alarms', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      scheduleHour: 23,
+      scheduleMinute: 30,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: 0,
+      lastError: '',
+    },
+  };
+  runtime.alarmStore.set('tabwall-auto-backup-onchange', {
+    name: 'tabwall-auto-backup-onchange',
+    delayInMinutes: 0.5,
+  });
+  const result = await dispatchMessage(runtime, { type: 'AUTO_BACKUP_SYNC_ALARMS' });
+  assert.equal(result.ok, true);
+  const alarm = runtime.alarmStore.get('tabwall-auto-backup-schedule');
+  assert.equal(alarm.when, runtime.api.nextAutoBackupAt(runtime.store.settings.autoBackup));
+  assert.equal(Object.prototype.hasOwnProperty.call(alarm, 'periodInMinutes'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(alarm, 'delayInMinutes'), false);
+  assert.equal(runtime.alarmStore.has('tabwall-auto-backup-onchange'), false);
 });
 
 test('data writes do not create legacy auto-backup change alarms', async () => {
@@ -3782,8 +3828,8 @@ test('data writes do not create legacy auto-backup change alarms', async () => {
       enabled: true,
       mode: 'lite',
       onChange: true,
-      intervalUnit: 'hour',
-      intervalValue: 24,
+      scheduleHour: 23,
+      scheduleMinute: 30,
       maxKeep: 5,
       subfolder: 'TabWall-Backups',
       folderPath: '',
@@ -3820,8 +3866,8 @@ test('PATCH_SETTINGS ignores removed auto-backup change fields and keeps clocks'
       enabled: true,
       mode: 'lite',
       onChange: true,
-      intervalUnit: 'hour',
-      intervalValue: 24,
+      scheduleHour: 23,
+      scheduleMinute: 30,
       maxKeep: 5,
       subfolder: 'TabWall-Backups',
       folderPath: '/Downloads/TabWall-Backups',
@@ -3844,8 +3890,8 @@ test('PATCH_SETTINGS ignores removed auto-backup change fields and keeps clocks'
         enabled: true,
         mode: 'full',
         onChange: true,
-        intervalUnit: 'hour',
-        intervalValue: 24,
+        scheduleHour: 23,
+        scheduleMinute: 30,
         maxKeep: 5,
         subfolder: 'TabWall-Backups',
         folderPath: '',

@@ -12,18 +12,6 @@ function clampInt(n, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.round(v)));
 }
 
-function normalizeIntervalUnit(u) {
-  if (u === 'minute' || u === 'minutes') return 'minute';
-  if (u === 'day' || u === 'days') return 'day';
-  return 'hour';
-}
-
-function intervalValueBounds(unit) {
-  if (unit === 'minute') return { min: 10, max: 1440, fallback: 60 };
-  if (unit === 'day') return { min: 1, max: 7, fallback: 1 };
-  return { min: 1, max: 168, fallback: 24 };
-}
-
 /** Sanitize relative path under Chrome's download directory. */
 function sanitizeSubfolder(raw) {
   let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/');
@@ -41,14 +29,17 @@ function sanitizeSubfolder(raw) {
 
 function normalizeAutoBackup(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
-  let unit = normalizeIntervalUnit(o.intervalUnit);
-  // Migrate legacy intervalHours
-  let valueRaw = o.intervalValue;
-  if (valueRaw == null && o.intervalHours != null) {
-    unit = 'hour';
-    valueRaw = o.intervalHours;
-  }
-  const bounds = intervalValueBounds(unit);
+  const legacyTime = legacyAutoBackupSchedule(o.lastSuccessAt);
+  const scheduleHour = clampInt(
+    o.scheduleHour == null ? legacyTime.scheduleHour : o.scheduleHour,
+    0,
+    23,
+    legacyTime.scheduleHour
+  );
+  const scheduleMinute = normalizeAutoBackupScheduleMinute(
+    o.scheduleMinute == null ? legacyTime.scheduleMinute : o.scheduleMinute,
+    legacyTime.scheduleMinute
+  );
   // Prefer subfolder; legacy folderName was FS handle basename — use as subfolder hint if no subfolder
   const subfolder = sanitizeSubfolder(
     o.subfolder != null && String(o.subfolder).trim() !== ''
@@ -58,8 +49,8 @@ function normalizeAutoBackup(raw) {
   return {
     enabled: Boolean(o.enabled),
     mode: o.mode === 'full' ? 'full' : 'lite',
-    intervalUnit: unit,
-    intervalValue: clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
+    scheduleHour,
+    scheduleMinute,
     maxKeep: clampInt(o.maxKeep, 1, 99, 5),
     subfolder,
     folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
@@ -68,12 +59,48 @@ function normalizeAutoBackup(raw) {
   };
 }
 
-/** Period in minutes for chrome.alarms */
-function autoBackupIntervalMinutes(ab) {
+function legacyAutoBackupSchedule(lastSuccessAt) {
+  const ts = Number(lastSuccessAt);
+  if (!Number.isFinite(ts) || ts <= 0) {
+    return { scheduleHour: 0, scheduleMinute: 0 };
+  }
+  const date = new Date(ts);
+  return {
+    scheduleHour: date.getHours(),
+    scheduleMinute: date.getMinutes() >= 30 ? 30 : 0,
+  };
+}
+
+function normalizeAutoBackupScheduleMinute(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback === 30 ? 30 : 0;
+  return n === 30 ? 30 : 0;
+}
+
+function autoBackupScheduledAtForDate(ab, dateLike = Date.now()) {
   const n = normalizeAutoBackup(ab);
-  if (n.intervalUnit === 'minute') return n.intervalValue;
-  if (n.intervalUnit === 'day') return n.intervalValue * 24 * 60;
-  return n.intervalValue * 60;
+  const date = dateLike instanceof Date ? new Date(dateLike.getTime()) : new Date(Number(dateLike));
+  if (!Number.isFinite(date.getTime())) return 0;
+  date.setHours(n.scheduleHour, n.scheduleMinute, 0, 0);
+  return date.getTime();
+}
+
+function nextAutoBackupAt(ab, now = Date.now()) {
+  const nowMs = Number(now);
+  const current = new Date(Number.isFinite(nowMs) ? nowMs : Date.now());
+  let scheduledAt = autoBackupScheduledAtForDate(ab, current);
+  if (!scheduledAt || scheduledAt <= current.getTime()) {
+    current.setDate(current.getDate() + 1);
+    scheduledAt = autoBackupScheduledAtForDate(ab, current);
+  }
+  return scheduledAt;
+}
+
+function dueAutoBackupScheduleAt(ab, now = Date.now()) {
+  const nowMs = Number(now);
+  const current = new Date(Number.isFinite(nowMs) ? nowMs : Date.now());
+  const scheduledAt = autoBackupScheduledAtForDate(ab, current);
+  return scheduledAt && current.getTime() >= scheduledAt ? scheduledAt : 0;
 }
 
 function dirnameOfLocalPath(filePath) {
@@ -244,10 +271,7 @@ function normalizeSettings(raw) {
   merged.webhookProfiles = self.TabWallWebhookCore?.normalizeProfiles
     ? self.TabWallWebhookCore.normalizeProfiles(merged.webhookProfiles)
     : [];
-  merged.autoBackup = normalizeAutoBackup({
-    ...DEFAULT_AUTO_BACKUP,
-    ...(merged.autoBackup || {}),
-  });
+  merged.autoBackup = normalizeAutoBackup(merged.autoBackup);
   merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
   merged.newTabOverride = merged.newTabOverride !== false;
   if (self.TabWallAi?.normalizeAiSettings) {
@@ -293,8 +317,8 @@ async function patchSettings(partial) {
     const nextAb = next.autoBackup;
     if (
       nextAb.enabled !== prev.enabled ||
-      nextAb.intervalUnit !== prev.intervalUnit ||
-      nextAb.intervalValue !== prev.intervalValue
+      nextAb.scheduleHour !== prev.scheduleHour ||
+      nextAb.scheduleMinute !== prev.scheduleMinute
     ) {
       await syncAutoBackupAlarms(nextAb);
     }
@@ -317,26 +341,18 @@ async function syncAutoBackupAlarms(autoBackup) {
   await chrome.alarms.clear(AUTO_BACKUP_ALARM);
   await chrome.alarms.clear(LEGACY_AUTO_BACKUP_ONCHANGE_ALARM);
   if (!ab.enabled) return;
-  const periodInMinutes = Math.max(10, autoBackupIntervalMinutes(ab));
-  // Align first fire with lastSuccessAt so re-sync (settings write / SW wake)
-  // does not restart the full period from "now".
-  let delayInMinutes = periodInMinutes;
-  if (ab.lastSuccessAt) {
-    const elapsedMin = (Date.now() - ab.lastSuccessAt) / 60000;
-    delayInMinutes = Math.max(1, periodInMinutes - elapsedMin);
-  }
+  const scheduledAt = nextAutoBackupAt(ab);
   await chrome.alarms.create(AUTO_BACKUP_ALARM, {
-    delayInMinutes: Math.min(delayInMinutes, periodInMinutes),
-    periodInMinutes,
+    when: scheduledAt,
   });
 }
 
 /**
  * Gate for non-manual auto-backup paths. Manual (reason === 'manual') always
- * proceeds when force or enabled. schedule and local (New Tab catch-up) only
- * proceed when the configured periodic backup is due.
+ * proceeds when force or enabled. schedule, resume, and local (New Tab
+ * catch-up) only proceed when today's configured backup time is due.
  * @param {object} ab normalizeAutoBackup result
- * @param {{ force?: boolean, reason?: string }} opts
+ * @param {{ force?: boolean, reason?: string, now?: number }} opts
  * @returns {{ run: boolean, skipReason?: string }}
  */
 function autoBackupShouldRun(ab, opts = {}) {
@@ -352,31 +368,26 @@ function autoBackupShouldRun(ab, opts = {}) {
 
   if (!normalized.enabled) return { run: false, skipReason: 'disabled' };
 
-  const intervalMs = Math.max(10, autoBackupIntervalMinutes(normalized)) * 60 * 1000;
-  const now = Date.now();
-  const sinceOk = normalized.lastSuccessAt ? now - normalized.lastSuccessAt : Infinity;
-  const dueSchedule = !normalized.lastSuccessAt || sinceOk >= intervalMs;
+  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
+  const scheduledAt = dueAutoBackupScheduleAt(normalized, now);
+  const dueSchedule = Boolean(scheduledAt) &&
+    (!normalized.lastSuccessAt || normalized.lastSuccessAt < scheduledAt);
 
   if (reason === 'onchange') {
     return { run: false, skipReason: 'onchange_disabled' };
   }
 
-  if (reason === 'schedule') {
+  if (reason === 'schedule' || reason === 'resume' || reason === 'local') {
+    // First-enable and New Tab / resume catch-up wait for the scheduled alarm
+    // when there has never been a successful automatic backup.
+    if (reason !== 'schedule' && !normalized.lastSuccessAt) {
+      return { run: false, skipReason: 'not_due' };
+    }
     if (!dueSchedule) return { run: false, skipReason: 'not_due' };
     return { run: true };
   }
 
-  // New Tab / park catch-up: only recover a missed periodic backup.
-  // First-enable (!lastSuccessAt) waits for the schedule alarm. park.html is
-  // also the New Tab page, so treating that state as due downloads a file on
-  // tab open.
-  if (reason === 'local') {
-    const overdue = normalized.lastSuccessAt > 0 && sinceOk >= intervalMs;
-    if (!overdue) return { run: false, skipReason: 'not_due' };
-    return { run: true };
-  }
-
-  // Any other automatic reason follows the periodic schedule.
+  // Any other automatic reason follows the daily schedule.
   if (!dueSchedule) return { run: false, skipReason: 'not_due' };
   return { run: true };
 }

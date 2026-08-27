@@ -153,7 +153,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
 - **Restore and keep:** restoring a tab, group, or group member opens or focuses the browser tab while keeping the TabWall card, notes, tags, thumbnails, and snapshots. Use Delete when the card should be removed.
 - **Group restore:** ask for confirmation before restoring a complete group; matching open tabs are reused and regrouped, while note members and stored-only URLs remain in the kept card.
-- **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Backups run on a fixed schedule; data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies.
+- **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Choose a daily local backup time from 00:00–23:30 in 30-minute steps; missed schedules are caught up when the Service Worker resumes or TabWall opens. Data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
 - **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
 - **Desktop workbench:** the interface uses a fixed 1200px desktop layout. Narrow windows keep the full desktop geometry and expose horizontal scrolling; there is no mobile reflow or touch toolbar.
@@ -342,7 +342,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
 - **群組還原：** 還原完整群組前會要求確認；會重用相同 URL 的開啟分頁並重新分組，note 與不可直接還原的 URL 會保留在原 Group 卡片。
 - **還原並保留：** 還原分頁、Group 或 Group 成員會保留 TabWall 卡片、備註、標籤、縮圖與快照；要移除記錄請使用 Delete。
-- **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，依固定排程執行；資料變更會在下一次排程納入，不會因每次寫入提前下載，並保留 1–99 份備份。
+- **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可選擇每日本機時間 00:00–23:30（每半小時）；錯過時段會在 Service Worker 恢復或開啟 TabWall 時補備。資料變更會在下一次排程納入，不會因每次寫入提前下載，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
 - **桌面工作台：** 固定 1200px 桌面幾何；窄視窗保留完整版面並使用水平捲動，不重新排版為手機工具列。

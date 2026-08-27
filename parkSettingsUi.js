@@ -165,35 +165,21 @@
       
   }
 
-  function normalizeIntervalUnit(u) {
-    ensureBound('normalizeIntervalUnit');
-
-    if (u === 'minute' || u === 'minutes') return 'minute';
-    if (u === 'day' || u === 'days') return 'day';
-    return 'hour';
-      
-  }
-
-  function intervalValueBounds(unit) {
-    ensureBound('intervalValueBounds');
-
-    if (unit === 'minute') return { min: 10, max: 1440, fallback: 60 };
-    if (unit === 'day') return { min: 1, max: 7, fallback: 1 };
-    return { min: 1, max: 168, fallback: 24 };
-      
-  }
-
   function normalizeAutoBackup(raw) {
     ensureBound('normalizeAutoBackup');
 
     const o = raw && typeof raw === 'object' ? raw : {};
-    let unit = normalizeIntervalUnit(o.intervalUnit);
-    let valueRaw = o.intervalValue;
-    if (valueRaw == null && o.intervalHours != null) {
-      unit = 'hour';
-      valueRaw = o.intervalHours;
-    }
-    const bounds = intervalValueBounds(unit);
+    const legacyTime = legacyAutoBackupSchedule(o.lastSuccessAt);
+    const scheduleHour = env.clampInt(
+      o.scheduleHour == null ? legacyTime.scheduleHour : o.scheduleHour,
+      0,
+      23,
+      legacyTime.scheduleHour
+    );
+    const scheduleMinute = normalizeAutoBackupScheduleMinute(
+      o.scheduleMinute == null ? legacyTime.scheduleMinute : o.scheduleMinute,
+      legacyTime.scheduleMinute
+    );
     const subfolder = sanitizeSubfolder(
       o.subfolder != null && String(o.subfolder).trim() !== ''
         ? o.subfolder
@@ -202,8 +188,8 @@
     return {
       enabled: Boolean(o.enabled),
       mode: o.mode === 'full' ? 'full' : 'lite',
-      intervalUnit: unit,
-      intervalValue: env.clampInt(valueRaw, bounds.min, bounds.max, bounds.fallback),
+      scheduleHour,
+      scheduleMinute,
       maxKeep: env.clampInt(o.maxKeep, 1, 99, 5),
       subfolder,
       folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
@@ -213,27 +199,22 @@
       
   }
 
-  function autoBackupIntervalMinutes(ab) {
-    ensureBound('autoBackupIntervalMinutes');
-
-    const n = normalizeAutoBackup(ab);
-    if (n.intervalUnit === 'minute') return n.intervalValue;
-    if (n.intervalUnit === 'day') return n.intervalValue * 24 * 60;
-    return n.intervalValue * 60;
-      
+  function legacyAutoBackupSchedule(lastSuccessAt) {
+    const ts = Number(lastSuccessAt);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return { scheduleHour: 0, scheduleMinute: 0 };
+    }
+    const date = new Date(ts);
+    return {
+      scheduleHour: date.getHours(),
+      scheduleMinute: date.getMinutes() >= 30 ? 30 : 0,
+    };
   }
 
-  function syncIntervalInputBounds() {
-    ensureBound('syncIntervalInputBounds');
-
-    if (!env.autoBackupIntervalValueEl || !env.autoBackupIntervalUnitEl) return;
-    const unit = normalizeIntervalUnit(env.autoBackupIntervalUnitEl.value);
-    const bounds = intervalValueBounds(unit);
-    env.autoBackupIntervalValueEl.min = String(bounds.min);
-    env.autoBackupIntervalValueEl.max = String(bounds.max);
-    const v = env.clampInt(env.autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
-    env.autoBackupIntervalValueEl.value = String(v);
-      
+  function normalizeAutoBackupScheduleMinute(value, fallback = 0) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback === 30 ? 30 : 0;
+    return n === 30 ? 30 : 0;
   }
 
   async function loadSettings() {
@@ -254,10 +235,7 @@
     merged.webhookProfiles = env.Webhook?.normalizeProfiles
       ? env.Webhook.normalizeProfiles(merged.webhookProfiles)
       : [];
-    merged.autoBackup = normalizeAutoBackup({
-      ...env.DEFAULT_AUTO_BACKUP,
-      ...(merged.autoBackup || {}),
-    });
+    merged.autoBackup = normalizeAutoBackup(merged.autoBackup);
     merged.autoSaveMetadata = normalizeAutoSaveMetadata(merged.autoSaveMetadata);
     merged.ai = normalizeAiSettings(merged.ai);
     merged.canvasSnap = merged.canvasSnap !== false;
@@ -284,10 +262,6 @@
       for (const key of Object.keys(patch.autoBackup)) {
         if (key === 'lastSuccessAt' || key === 'dirtyAt' || key === 'lastError') continue;
         if (Object.prototype.hasOwnProperty.call(merged, key)) allowed[key] = merged[key];
-      }
-      if (patch.autoBackup.intervalUnit != null || patch.autoBackup.intervalValue != null) {
-        allowed.intervalUnit = merged.intervalUnit;
-        allowed.intervalValue = merged.intervalValue;
       }
       if (patch.autoBackup.subfolder != null) allowed.subfolder = merged.subfolder;
       patch.autoBackup = allowed;
@@ -775,12 +749,8 @@
     const ab = normalizeAutoBackup(env.settings.autoBackup);
     env.settings.autoBackup = ab;
     if (env.autoBackupEnabledEl) env.autoBackupEnabledEl.checked = ab.enabled;
-    if (env.autoBackupIntervalUnitEl) env.autoBackupIntervalUnitEl.value = ab.intervalUnit;
-    if (env.autoBackupIntervalValueEl) {
-      env.autoBackupIntervalValueEl.value = String(ab.intervalValue);
-      syncIntervalInputBounds();
-      env.autoBackupIntervalValueEl.value = String(ab.intervalValue);
-    }
+    if (env.autoBackupScheduleHourEl) env.autoBackupScheduleHourEl.value = String(ab.scheduleHour);
+    if (env.autoBackupScheduleMinuteEl) env.autoBackupScheduleMinuteEl.value = String(ab.scheduleMinute);
     if (env.autoBackupMaxKeepEl) env.autoBackupMaxKeepEl.value = String(ab.maxKeep);
     if (env.autoBackupSubfolderEl && document.activeElement !== env.autoBackupSubfolderEl) {
       env.autoBackupSubfolderEl.value = ab.subfolder;
@@ -1147,21 +1117,15 @@
       await saveSettings({ autoBackup: { subfolder, folderPath: '' } });
       syncAutoBackupUi();
     });
-    env.autoBackupIntervalUnitEl?.addEventListener('change', async () => {
-      const unit = normalizeIntervalUnit(env.autoBackupIntervalUnitEl.value);
-      const bounds = intervalValueBounds(unit);
-      const value = env.clampInt(env.autoBackupIntervalValueEl?.value, bounds.min, bounds.max, bounds.fallback);
-      if (env.autoBackupIntervalValueEl) env.autoBackupIntervalValueEl.value = String(value);
-      syncIntervalInputBounds();
-      await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
-    });
-    env.autoBackupIntervalValueEl?.addEventListener('change', async () => {
-      const unit = normalizeIntervalUnit(env.autoBackupIntervalUnitEl?.value || 'hour');
-      const bounds = intervalValueBounds(unit);
-      const value = env.clampInt(env.autoBackupIntervalValueEl.value, bounds.min, bounds.max, bounds.fallback);
-      env.autoBackupIntervalValueEl.value = String(value);
-      await saveSettings({ autoBackup: { intervalUnit: unit, intervalValue: value } });
-    });
+    const saveAutoBackupSchedule = async () => {
+      const scheduleHour = env.clampInt(env.autoBackupScheduleHourEl?.value, 0, 23, 0);
+      const scheduleMinute = Number(env.autoBackupScheduleMinuteEl?.value) === 30 ? 30 : 0;
+      if (env.autoBackupScheduleHourEl) env.autoBackupScheduleHourEl.value = String(scheduleHour);
+      if (env.autoBackupScheduleMinuteEl) env.autoBackupScheduleMinuteEl.value = String(scheduleMinute);
+      await saveSettings({ autoBackup: { scheduleHour, scheduleMinute } });
+    };
+    env.autoBackupScheduleHourEl?.addEventListener('change', saveAutoBackupSchedule);
+    env.autoBackupScheduleMinuteEl?.addEventListener('change', saveAutoBackupSchedule);
     env.autoBackupMaxKeepEl?.addEventListener('change', async () => {
       const maxKeep = env.clampInt(env.autoBackupMaxKeepEl.value, 1, 99, 5);
       env.autoBackupMaxKeepEl.value = String(maxKeep);
@@ -1399,11 +1363,7 @@
     normalizeAiSettings,
     newAutoSaveMetadataRule,
     sanitizeSubfolder,
-    normalizeIntervalUnit,
-    intervalValueBounds,
     normalizeAutoBackup,
-    autoBackupIntervalMinutes,
-    syncIntervalInputBounds,
     loadSettings,
     saveSettings,
     applyTheme,

@@ -746,6 +746,14 @@ test('Spatial Canvas state and settings use shared persistence contracts', () =>
   assert.doesNotMatch(railCss, /overflow-y:\s*auto/);
   assert.match(HTML_SOURCE, /\.canvas-stack-index\s*\{[\s\S]*?overflow-y: auto;/);
   assert.match(HTML_SOURCE, /id="autoBackupStatus"[\s\S]*?<\/div>\s*<\/div>\s*<div class="settings-footer"/);
+  for (let hour = 0; hour <= 23; hour += 1) {
+    const label = String(hour).padStart(2, '0');
+    assert.match(HTML_SOURCE, new RegExp(`option value="${hour}">${label}<\\/option>`));
+  }
+  assert.match(HTML_SOURCE, /id="autoBackupScheduleHour"/);
+  assert.match(HTML_SOURCE, /id="autoBackupScheduleMinute"[\s\S]*?option value="0">00<\/option>[\s\S]*?option value="30">30<\/option>/);
+  assert.doesNotMatch(HTML_SOURCE, /autoBackupInterval/);
+  assert.doesNotMatch(SETTINGS_UI_SOURCE, /autoBackupInterval/);
   assert.doesNotMatch(HTML_SOURCE, /id="autoBackupOnChange"/);
   assert.doesNotMatch(SETTINGS_UI_SOURCE, /autoBackupOnChange/);
 });

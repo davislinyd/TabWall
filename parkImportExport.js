@@ -82,6 +82,7 @@
       });
       env.settings = await env.loadSettings();
       env.syncAutoBackupUi();
+      if (res?.skipped) return res;
       if (res?.ok) {
         if (env.autoBackupStatusEl) {
           env.autoBackupStatusEl.textContent = env.t('autoBackupOk', {
@@ -106,11 +107,10 @@
 
     const ab = env.normalizeAutoBackup(env.settings.autoBackup);
     if (!ab.enabled) return;
-    // park.html is the New Tab page — only recover a missed periodic backup.
-    // First-enable and on-change dirty are handled by the SW alarms.
+    // park.html is the New Tab page — let the Service Worker decide whether
+    // today's local-time schedule is overdue.
+    // First-enable is held back by the background gate.
     if (!ab.lastSuccessAt) return;
-    const intervalMs = Math.max(10, env.autoBackupIntervalMinutes(ab)) * 60 * 1000;
-    if (Date.now() - ab.lastSuccessAt < intervalMs) return;
     await runLocalAutoBackup({ force: false });
       
   }

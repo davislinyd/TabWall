@@ -469,7 +469,7 @@ const I18N = {
     manualAddSkipped: '（略過 {n} 行）',
     autoBackupTitle: '自動備份',
     autoBackupHint:
-      '寫入「瀏覽器設定的下載位置」下的子資料夾（不一定是 Downloads；可在 chrome://settings/downloads 查看）。不上傳。',
+      '寫入「瀏覽器設定的下載位置」下的子資料夾（不一定是 Downloads；可在 chrome://settings/downloads 查看）。可設定每日備份時間（00:00–23:30，每半小時）；不上傳。',
     autoBackupEnable: '啟用自動備份',
     autoBackupSubfolder: '下載位置子資料夾',
     autoBackupSubfolderHint: '相對於 Chrome 下載位置，例如 TabWall-Backups',
@@ -479,10 +479,9 @@ const I18N = {
     autoBackupMode: '格式',
     autoBackupModeLite: '精簡 JSON',
     autoBackupModeFull: '完整 ZIP',
-    autoBackupEvery: '每',
-    autoBackupUnitMinute: '分鐘',
-    autoBackupUnitHour: '小時',
-    autoBackupUnitDay: '天',
+    autoBackupSchedule: '備份時間',
+    autoBackupHour: '小時',
+    autoBackupMinute: '分鐘',
     autoBackupMaxKeep: '最多保留',
     autoBackupMaxKeepUnit: '份',
     autoBackupNow: '立即備份',
@@ -574,7 +573,7 @@ const I18N = {
     helpSelectBody: '點「選擇」進入複選，勾選多張卡片後可批次還原並保留卡片、附加 note／tags、或刪除。',
     helpBackupTitle: '備份',
     helpBackupBody:
-      '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾。',
+      '精簡 JSON 不含截圖；完整 ZIP 含圖片。還原（覆蓋）取代全部；匯入（附加）只新增。可手動貼 URL 建卡；#GROUP:名稱 包住多行可建群組。自動備份寫入下載目錄子資料夾，並依設定的每日時間執行。',
     helpStorageTitle: '硬碟用量',
     helpStorageBody:
       '網址、標題、備註、標籤與設定存在 chrome.storage；截圖、Sticker 附件與自訂背景存在 IndexedDB（通常是最大一塊）。下載資料夾裡的自動備份不算擴充儲存。設定／編輯器顯示的 Sticker 用量只含 Note 附件，不含分頁截圖。',
@@ -1077,7 +1076,7 @@ const I18N = {
     manualAddSkipped: '({n} line(s) skipped)',
     autoBackupTitle: 'Auto backup',
     autoBackupHint:
-      'Writes under Chrome’s configured download location (not always ~/Downloads — see chrome://settings/downloads). Never uploaded.',
+      'Writes under Chrome’s configured download location (not always ~/Downloads — see chrome://settings/downloads). Choose a daily local time from 00:00–23:30 in 30-minute steps. Never uploaded.',
     autoBackupEnable: 'Enable auto backup',
     autoBackupSubfolder: 'Subfolder under download location',
     autoBackupSubfolderHint: 'Relative to Chrome’s download location, e.g. TabWall-Backups',
@@ -1087,10 +1086,9 @@ const I18N = {
     autoBackupMode: 'Format',
     autoBackupModeLite: 'Lite JSON',
     autoBackupModeFull: 'Full ZIP',
-    autoBackupEvery: 'Every',
-    autoBackupUnitMinute: 'minutes',
-    autoBackupUnitHour: 'hours',
-    autoBackupUnitDay: 'days',
+    autoBackupSchedule: 'Backup time',
+    autoBackupHour: 'Hour',
+    autoBackupMinute: 'Minute',
     autoBackupMaxKeep: 'Keep at most',
     autoBackupMaxKeepUnit: 'copies',
     autoBackupNow: 'Backup now',
@@ -1182,7 +1180,7 @@ const I18N = {
     helpSelectBody: 'Turn on Select, pick cards, then batch restore and keep cards, append notes / tags, or delete.',
     helpBackupTitle: 'Backup',
     helpBackupBody:
-      'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder.',
+      'Lite JSON omits screenshots; full ZIP includes images. Restore (replace) overwrites all; import (append) only adds. Paste URLs to create cards; wrap with #GROUP:Name for groups. Auto-backup uses a Downloads subfolder and runs at its configured daily time.',
     helpStorageTitle: 'Disk usage',
     helpStorageBody:
       'URLs, titles, notes, tags, and settings live in chrome.storage. Screenshots, sticker attachments, and the custom wallpaper live in IndexedDB (usually the bulk). Auto-backups in Downloads are not extension storage. The sticker usage meter counts note attachments only, not tab screenshots.',

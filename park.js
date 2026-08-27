@@ -24,8 +24,8 @@ const CANVAS_CONNECTION_HIT_WIDTH = 16;
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
   mode: 'lite',
-  intervalUnit: 'hour',
-  intervalValue: 24,
+  scheduleHour: 0,
+  scheduleMinute: 0,
   maxKeep: 5,
   subfolder: 'TabWall-Backups',
   folderPath: '',
@@ -397,8 +397,8 @@ diagLogClearBtn?.addEventListener('click', async () => {
 const autoBackupEnabledEl = document.getElementById('autoBackupEnabled');
 const autoBackupSubfolderEl = document.getElementById('autoBackupSubfolder');
 const autoBackupLocationLabelEl = document.getElementById('autoBackupLocationLabel');
-const autoBackupIntervalValueEl = document.getElementById('autoBackupIntervalValue');
-const autoBackupIntervalUnitEl = document.getElementById('autoBackupIntervalUnit');
+const autoBackupScheduleHourEl = document.getElementById('autoBackupScheduleHour');
+const autoBackupScheduleMinuteEl = document.getElementById('autoBackupScheduleMinute');
 const autoBackupMaxKeepEl = document.getElementById('autoBackupMaxKeep');
 const autoBackupNowBtn = document.getElementById('autoBackupNowBtn');
 const autoBackupShowFolderBtn = document.getElementById('autoBackupShowFolderBtn');
@@ -661,13 +661,12 @@ function bindPanelModules() {
     "AUTO_SAVE_METADATA_OPERATORS": () => AUTO_SAVE_METADATA_OPERATORS,
     "autoBackupEnabledEl": () => autoBackupEnabledEl,
     "autoBackupErrorText": () => autoBackupErrorText,
-    "autoBackupIntervalMinutes": () => autoBackupIntervalMinutes,
-    "autoBackupIntervalUnitEl": () => autoBackupIntervalUnitEl,
-    "autoBackupIntervalValueEl": () => autoBackupIntervalValueEl,
     "autoBackupLocationLabelEl": () => autoBackupLocationLabelEl,
     "autoBackupMaxKeepEl": () => autoBackupMaxKeepEl,
     "autoBackupNowBtn": () => autoBackupNowBtn,
     "autoBackupShowFolderBtn": () => autoBackupShowFolderBtn,
+    "autoBackupScheduleHourEl": () => autoBackupScheduleHourEl,
+    "autoBackupScheduleMinuteEl": () => autoBackupScheduleMinuteEl,
     "autoBackupStatusEl": () => autoBackupStatusEl,
     "autoBackupSubfolderEl": () => autoBackupSubfolderEl,
     "autoSaveMetadataAddRuleBtn": () => autoSaveMetadataAddRuleBtn,
@@ -1699,15 +1698,7 @@ function newAutoSaveMetadataRule(...args) { return SettingsUi.newAutoSaveMetadat
 
 function sanitizeSubfolder(...args) { return SettingsUi.sanitizeSubfolder(...args); }
 
-function normalizeIntervalUnit(...args) { return SettingsUi.normalizeIntervalUnit(...args); }
-
-function intervalValueBounds(...args) { return SettingsUi.intervalValueBounds(...args); }
-
 function normalizeAutoBackup(...args) { return SettingsUi.normalizeAutoBackup(...args); }
-
-function autoBackupIntervalMinutes(...args) { return SettingsUi.autoBackupIntervalMinutes(...args); }
-
-function syncIntervalInputBounds(...args) { return SettingsUi.syncIntervalInputBounds(...args); }
 
 async function loadSettings(...args) { return await SettingsUi.loadSettings(...args); }
 
@@ -3518,10 +3509,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     settings.webhookProfiles = Webhook?.normalizeProfiles
       ? Webhook.normalizeProfiles(settings.webhookProfiles)
       : [];
-    settings.autoBackup = normalizeAutoBackup({
-      ...DEFAULT_AUTO_BACKUP,
-      ...(settings.autoBackup || {}),
-    });
+    settings.autoBackup = normalizeAutoBackup(settings.autoBackup);
     settings.autoSaveMetadata = normalizeAutoSaveMetadata(settings.autoSaveMetadata);
     settings.ai = SettingsUi.normalizeAiSettings
       ? SettingsUi.normalizeAiSettings(settings.ai)

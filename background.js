@@ -73,8 +73,8 @@ const DATA_LIMITS = Build?.LIMITS || {
 const DEFAULT_AUTO_BACKUP = {
   enabled: false,
   mode: 'lite',
-  intervalUnit: 'hour', // minute | hour | day
-  intervalValue: 24,
+  scheduleHour: 0,
+  scheduleMinute: 0,
   maxKeep: 5,
   subfolder: 'TabWall-Backups', // under Chrome download directory
   folderPath: '', // absolute dir after last successful backup
@@ -227,7 +227,18 @@ async function getParkedUrlIndex() {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_BACKUP_ALARM) {
-    enqueueMutation(() => runAutoBackup({ reason: 'schedule' })).catch(() => {});
+    enqueueMutation(async () => {
+      try {
+        await runAutoBackup({ reason: 'schedule' });
+      } finally {
+        try {
+          const settings = await getSettings();
+          await syncAutoBackupAlarms(settings.autoBackup);
+        } catch (err) {
+          console.warn('[TabWall] auto-backup alarm resync failed:', err);
+        }
+      }
+    }).catch(() => {});
   } else if (alarm.name === RELEASE_UPDATE_ALARM) {
     enqueueMutation(() => checkReleaseUpdate({ reason: 'schedule' })).catch((err) => {
       console.warn('[TabWall] release check failed:', err);
@@ -273,12 +284,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     const nextAb = normalizeAutoBackup(changes.settings.newValue?.autoBackup);
     const prevAb = normalizeAutoBackup(changes.settings.oldValue?.autoBackup);
-    // Only re-create the periodic alarm when schedule-relevant fields change.
-    // lastSuccessAt / folderPath writes must not reset the periodic delay.
+    // Only re-create the alarm when schedule-relevant fields change.
+    // lastSuccessAt / folderPath writes must not reset the daily schedule.
     const scheduleChanged =
       nextAb.enabled !== prevAb.enabled ||
-      nextAb.intervalUnit !== prevAb.intervalUnit ||
-      nextAb.intervalValue !== prevAb.intervalValue;
+      nextAb.scheduleHour !== prevAb.scheduleHour ||
+      nextAb.scheduleMinute !== prevAb.scheduleMinute;
     if (scheduleChanged) {
       tasks.push(syncAutoBackupAlarms(nextAb));
     }
@@ -307,7 +318,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Restore schedule after SW wake / install
 chrome.runtime.onInstalled.addListener(() => {
   return Promise.all([
-    getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    getSettings().then(async (s) => {
+      await syncAutoBackupAlarms(s.autoBackup);
+      return enqueueMutation(() => runAutoBackup({ reason: 'resume' }));
+    }),
     syncReminderAlarmsForItems(),
     syncReleaseCheckAlarm(),
     enqueueMutation(() => checkReleaseUpdate({ reason: 'install' })),
@@ -316,7 +330,10 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 chrome.runtime.onStartup?.addListener?.(() => {
   return Promise.all([
-    getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
+    getSettings().then(async (s) => {
+      await syncAutoBackupAlarms(s.autoBackup);
+      return enqueueMutation(() => runAutoBackup({ reason: 'resume' }));
+    }),
     syncReminderAlarmsForItems(),
     syncReleaseCheckAlarm(),
     enqueueMutation(() => checkReleaseUpdate({ reason: 'startup' })),
@@ -2305,7 +2322,8 @@ if (globalThis.__TABWALL_TEST__) {
     autoBackupShouldRun,
     runAutoBackup,
     normalizeAutoBackup,
-    autoBackupIntervalMinutes,
+    autoBackupScheduledAtForDate,
+    nextAutoBackupAt,
     getSettings,
     stackItems,
     createStack,

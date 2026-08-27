@@ -65,8 +65,8 @@ test('panel bind accessors return and mutate real values without eval', () => {
     autoBackup: {
       enabled: false,
       mode: 'lite',
-      intervalUnit: 'hour',
-      intervalValue: 24,
+      scheduleHour: 0,
+      scheduleMinute: 0,
       maxKeep: 5,
       subfolder: 'TabWall-Backups',
       folderPath: '',
@@ -96,8 +96,8 @@ test('panel bind accessors return and mutate real values without eval', () => {
       return {
         enabled: false,
         mode: 'lite',
-        intervalUnit: 'hour',
-        intervalValue: 24,
+        scheduleHour: 0,
+        scheduleMinute: 0,
         maxKeep: 5,
         subfolder: 'TabWall-Backups',
         folderPath: '',
@@ -122,9 +122,10 @@ test('panel bind accessors return and mutate real values without eval', () => {
   StickerUi.bind(env);
 
   // Pure normalize should run via env.DEFAULT_AUTO_BACKUP getter (no eval).
-  const ab = SettingsUi.normalizeAutoBackup({ enabled: true, intervalValue: 2, intervalUnit: 'hour' });
+  const ab = SettingsUi.normalizeAutoBackup({ enabled: true, scheduleHour: 9, scheduleMinute: 30 });
   assert.equal(ab.enabled, true);
-  assert.equal(ab.intervalValue, 2);
+  assert.equal(ab.scheduleHour, 9);
+  assert.equal(ab.scheduleMinute, 30);
 
   // Mutation through env.settings setter path used by panel bodies.
   env.settings = { ...env.settings, locale: 'en' };
