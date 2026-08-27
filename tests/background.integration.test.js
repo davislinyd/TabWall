@@ -9,7 +9,7 @@ const NOTE_MEDIA_SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta
 const BACKGROUND_SOURCE = fs.readFileSync(new URL('../background.js', import.meta.url), 'utf8');
 const PACK_SOURCE = fs.readFileSync(new URL('../scripts/pack.sh', import.meta.url), 'utf8');
 const BG_MODULE_SOURCES = Object.fromEntries(
-  ['webhookCore.js', 'bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js'].map((name) => [
+  ['webhookCore.js', 'bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js', 'bgUpdate.js'].map((name) => [
     name,
     fs.readFileSync(new URL(`../${name}`, import.meta.url), 'utf8'),
   ])
@@ -43,7 +43,7 @@ function event() {
   };
 }
 
-function createRuntime() {
+function createRuntime({ manifestVersion = '2.13.0' } = {}) {
   const store = Object.create(null);
   const sessionStore = Object.create(null);
   const media = new Map();
@@ -114,7 +114,7 @@ function createRuntime() {
       onInstalled: event(),
       onStartup: event(),
       lastError: null,
-      getManifest: () => ({ version: '2.13.0' }),
+      getManifest: () => ({ version: manifestVersion }),
       getURL: (path) => `chrome-extension://test/${path}`,
     },
     commands: { onCommand: event(), async getAll() { return []; } },
@@ -526,7 +526,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.56.0');
+  assert.equal(MANIFEST.version, '2.57.0');
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
   assert.match(PACK_SOURCE, /\bwebhookCore\.js/);
@@ -535,7 +535,8 @@ test('New Tab takeover is configurable through the dynamic background route', as
   assert.match(BACKGROUND_SOURCE, /bgBackup\.js/);
   assert.match(BACKGROUND_SOURCE, /bgRestore\.js/);
   assert.match(BACKGROUND_SOURCE, /bgUndo\.js/);
-  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js', 'bgAi\.js', 'bgPageAnnotate\.js'\)/);
+  assert.match(BACKGROUND_SOURCE, /importScripts\('bgNormalize\.js', 'bgLayout\.js', 'bgBackup\.js', 'bgRestore\.js', 'bgUndo\.js', 'bgReminders\.js', 'bgAi\.js', 'bgPageAnnotate\.js', 'bgUpdate\.js'\)/);
+  assert.match(PACK_SOURCE, /\bbgUpdate\.js/);
   assert.equal(MANIFEST.action?.default_popup, 'popup.html');
   assert.equal(Object.keys(MANIFEST.commands || {}).length, 6);
   assert.equal(MANIFEST.commands?.['save-keep']?.suggested_key?.default, 'Alt+Shift+S');
@@ -1430,6 +1431,124 @@ function webhookResponse(status = 200, body = '') {
     async text() { return body; },
   };
 }
+
+function releaseResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() { return payload; },
+  };
+}
+
+function releasePayload(version, id = `release-${version}`) {
+  return {
+    id,
+    tag_name: `v${version}`,
+    name: `TabWall ${version}`,
+    html_url: `https://github.com/davislinyd/TabWall/releases/tag/v${version}`,
+    published_at: '2026-08-27T00:00:00Z',
+  };
+}
+
+test('GitHub release checks run on install and startup without notifications or auto-open', async () => {
+  const runtime = createRuntime({ manifestVersion: '2.57.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0'));
+  await runtime.ready;
+
+  await runtime.chrome.runtime.onInstalled.listeners[0]();
+  const alarm = runtime.alarmStore.get('tabwall-release-check');
+  assert.equal(alarm.periodInMinutes, 24 * 60);
+  assert.equal(alarm.delayInMinutes, 24 * 60);
+  assert.equal(runtime.runtime.fetchCalls.length, 1);
+  assert.equal(runtime.runtime.fetchCalls[0][0], 'https://api.github.com/repos/davislinyd/TabWall/releases/latest');
+  assert.equal(runtime.runtime.fetchCalls[0][1].credentials, 'omit');
+  assert.equal(runtime.runtime.fetchCalls[0][1].headers.Accept, 'application/vnd.github+json');
+
+  let status = await runtime.api.getReleaseUpdateStatus();
+  assert.equal(status.currentVersion, '2.57.0');
+  assert.equal(status.hasNewerRelease, true);
+  assert.equal(status.noticePending, true);
+  assert.equal(status.latestRelease.version, '2.58.0');
+  assert.equal(runtime.notificationCalls.length, 0);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+
+  await runtime.chrome.runtime.onStartup.listeners[0]();
+  assert.equal(runtime.runtime.fetchCalls.length, 2);
+  status = await runtime.api.getReleaseUpdateStatus();
+  assert.equal(status.noticePending, true);
+  assert.equal(runtime.notificationCalls.length, 0);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+});
+
+test('GitHub release status distinguishes same, older, and newer stable releases', async () => {
+  for (const [version, expected] of [
+    ['2.57.0', false],
+    ['2.56.9', false],
+    ['2.58.0', true],
+  ]) {
+    const runtime = createRuntime({ manifestVersion: '2.57.0' });
+    runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload(version));
+    await runtime.ready;
+    const result = await runtime.api.checkReleaseUpdate();
+    assert.equal(result.ok, true);
+    assert.equal(result.hasNewerRelease, expected, version);
+    assert.equal(result.noticePending, expected, version);
+  }
+});
+
+test('GitHub release notices are dismissed by release key and return for a new release', async () => {
+  const runtime = createRuntime({ manifestVersion: '2.57.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0', 'release-258'));
+  await runtime.ready;
+  const first = await runtime.api.checkReleaseUpdate();
+  assert.equal(first.noticePending, true);
+
+  const dismissed = await dispatchMessage(runtime, {
+    type: 'DISMISS_RELEASE_UPDATE',
+    releaseKey: 'release-258',
+  });
+  assert.equal(dismissed.ok, true);
+  assert.equal(dismissed.noticePending, false);
+  assert.equal(runtime.runtime.createdTabs.length, 0);
+
+  const sameRelease = await runtime.api.checkReleaseUpdate();
+  assert.equal(sameRelease.noticePending, false);
+
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.59.0', 'release-259'));
+  const newRelease = await runtime.api.checkReleaseUpdate();
+  assert.equal(newRelease.noticePending, true);
+  assert.equal(newRelease.latestRelease.key, 'release-259');
+});
+
+test('GitHub release check failures and invalid releases preserve the last valid state', async () => {
+  const runtime = createRuntime({ manifestVersion: '2.57.0' });
+  runtime.runtime.fetchImpl = async () => releaseResponse(releasePayload('2.58.0', 'release-good'));
+  await runtime.ready;
+  await runtime.api.checkReleaseUpdate();
+  const before = JSON.parse(JSON.stringify(runtime.store.releaseUpdate));
+
+  runtime.runtime.fetchImpl = async () => { throw new Error('offline'); };
+  let result = await runtime.api.checkReleaseUpdate();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'network_error');
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.releaseUpdate)), before);
+
+  runtime.runtime.fetchImpl = async () => releaseResponse({ message: 'rate limited' }, 503);
+  result = await runtime.api.checkReleaseUpdate();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'http_503');
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.releaseUpdate)), before);
+
+  runtime.runtime.fetchImpl = async () => releaseResponse({
+    id: 'release-invalid',
+    tag_name: 'latest',
+    html_url: 'https://github.com/davislinyd/TabWall/releases/tag/latest',
+  });
+  result = await runtime.api.checkReleaseUpdate();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'invalid_release');
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.store.releaseUpdate)), before);
+});
 
 test('card reminders create, list, clear, and sync one-shot alarms', async () => {
   const runtime = createRuntime();

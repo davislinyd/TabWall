@@ -3,6 +3,7 @@
  */
 
 const SETTINGS_KEY = 'settings';
+const RELEASE_UPDATE_STORAGE_KEY = 'releaseUpdate';
 const CANVAS_LAYOUT_VERSION = 1;
 const DEFAULT_CANVAS_VIEWPORT = Object.freeze({ x: 0, y: 0, zoom: 1 });
 const CANVAS_NODE_CLICK_DELAY = 300;
@@ -1324,6 +1325,8 @@ let selectedIds = new Set();
 /** @type {string|null} */
 let lastAnchorId = null;
 let copyToastTimer = null;
+let releaseUpdateStatus = null;
+let releaseUpdateActionPromise = null;
 
 function canvasStoreSnapshot(...args) { return AppHelpers.canvasStoreSnapshot(...args); }
 
@@ -1434,6 +1437,89 @@ function t(key, vars) {
   return s;
 }
 
+function currentManifestVersion() {
+  try {
+    return String(chrome.runtime.getManifest().version || '').trim() || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+function renderReleaseUpdateBadge(status = releaseUpdateStatus) {
+  if (!versionBadge) return;
+  const currentVersion = status?.currentVersion || currentManifestVersion();
+  const latestVersion = status?.latestRelease?.version;
+  const pending = Boolean(status?.noticePending && latestVersion && status.latestRelease?.url);
+  const label = pending
+    ? t('releaseBadgeUpdate', { version: latestVersion })
+    : t('releaseBadgeCurrent', { version: currentVersion });
+  versionBadge.textContent = pending
+    ? `v${currentVersion} → v${latestVersion}`
+    : `v${currentVersion}`;
+  versionBadge.classList.toggle('has-update', pending);
+  versionBadge.dataset.updateAvailable = pending ? 'true' : 'false';
+  versionBadge.title = label;
+  versionBadge.setAttribute('aria-label', label);
+}
+
+async function loadReleaseUpdateStatus() {
+  const result = await sendMessage({ type: 'GET_RELEASE_UPDATE' });
+  if (result?.currentVersion || result?.latestRelease) {
+    releaseUpdateStatus = result;
+    renderReleaseUpdateBadge();
+  }
+  return result;
+}
+
+async function handleVersionBadgeClick() {
+  if (releaseUpdateActionPromise) return releaseUpdateActionPromise;
+  releaseUpdateActionPromise = (async () => {
+    const pending = releaseUpdateStatus?.noticePending && releaseUpdateStatus.latestRelease;
+    if (pending?.url && pending.key) {
+      const opened = await sendMessage({ type: 'OPEN_NEW_TAB_URL', url: pending.url });
+      if (!opened?.ok) {
+        showCopyToast(t('releaseOpenFailed'));
+        return;
+      }
+      const dismissed = await sendMessage({
+        type: 'DISMISS_RELEASE_UPDATE',
+        releaseKey: pending.key,
+      });
+      if (dismissed?.ok) {
+        releaseUpdateStatus = dismissed;
+        renderReleaseUpdateBadge();
+      } else {
+        uiLog('warn', 'release', 'dismiss failed', dismissed?.error || 'unknown');
+      }
+      return;
+    }
+
+    showCopyToast(t('releaseChecking'));
+    const result = await sendMessage({ type: 'CHECK_RELEASE_UPDATE' });
+    if (result?.currentVersion || result?.latestRelease) {
+      releaseUpdateStatus = result;
+      renderReleaseUpdateBadge();
+    }
+    if (!result?.ok) {
+      showCopyToast(t('releaseCheckFailed'));
+    } else if (result.noticePending && result.latestRelease?.version) {
+      showCopyToast(t('releaseAvailable', { version: result.latestRelease.version }));
+    } else {
+      showCopyToast(t('releaseUpToDate'));
+    }
+  })()
+    .catch((err) => {
+      uiLog('warn', 'release', 'check failed', err?.message || err);
+      showCopyToast(t('releaseCheckFailed'));
+    })
+    .finally(() => {
+      releaseUpdateActionPromise = null;
+      versionBadge?.removeAttribute('aria-busy');
+    });
+  versionBadge?.setAttribute('aria-busy', 'true');
+  return releaseUpdateActionPromise;
+}
+
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
@@ -1469,6 +1555,7 @@ function applyI18n() {
   if (typeof refreshChromeCommandLabels === 'function') refreshChromeCommandLabels();
   if (typeof syncSearchRegexUi === 'function') syncSearchRegexUi();
   if (typeof renderAutoSaveMetadataRules === 'function') renderAutoSaveMetadataRules();
+  renderReleaseUpdateBadge();
 }
 
 async function closeStandaloneTab(...args) { return await AppHelpers.closeStandaloneTab(...args); }
@@ -1788,6 +1875,10 @@ helpBtn.addEventListener('click', (e) => {
 });
 helpCloseX.addEventListener('click', () => closeHelpBox());
 setupFloatDrag(helpDrag, helpBox);
+
+versionBadge?.addEventListener('click', () => {
+  handleVersionBadgeClick();
+});
 
 setupFloatDrag(aiDrag, aiBox);
 
@@ -3401,6 +3492,11 @@ function scheduleLoadList(...args) { return AppHelpers.scheduleLoadList(...args)
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.parkedTabs || changes.parkedItems || changes.pageAnnotations) scheduleLoadList();
+  if (changes[RELEASE_UPDATE_STORAGE_KEY]) {
+    loadReleaseUpdateStatus().catch((err) => {
+      uiLog('warn', 'release', 'storage sync failed', err?.message || err);
+    });
+  }
   if (changes.canvasLayout || changes.canvasLayoutRevision) {
     const layout = changes.canvasLayout?.newValue;
     const revision = changes.canvasLayoutRevision?.newValue;
@@ -3448,6 +3544,9 @@ initSettingsUi()
   })
   .then(async () => {
     if (Media?.openDb) Media.openDb().catch(() => {});
+    loadReleaseUpdateStatus().catch((err) => {
+      uiLog('warn', 'release', 'status load failed', err?.message || err);
+    });
     try {
       await loadList();
       ReminderUi?.handleFocusFromUrl?.();

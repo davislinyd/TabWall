@@ -1432,6 +1432,7 @@ html[data-theme='light'] .group-badge {
 }
 
 #versionBadge {
+  appearance: none;
   position: fixed;
   left: 16px;
   bottom: 16px;
@@ -1441,11 +1442,24 @@ html[data-theme='light'] .group-badge {
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--muted);
+  font: inherit;
   font-size: 11px;
   font-weight: 600;
+  text-align: left;
   box-shadow: var(--shadow);
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
   opacity: 0.9;
+}
+
+#versionBadge.has-update {
+  color: var(--accent);
+}
+
+#versionBadge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .tag-input {
@@ -5989,7 +6003,8 @@ body.canvas-mode main {
   flex: 0 0 auto;
   align-self: stretch;
   padding: 0 12px 2px;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .canvas-rail-edge {

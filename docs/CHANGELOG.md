@@ -11,6 +11,15 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.57.0 — 2026-08-27
+
+- 新增 GitHub stable Release 更新檢查：安裝／瀏覽器啟動時立即檢查，之後每 24 小時檢查一次。
+- Canvas rail 版本 badge 會顯示目前版本與新版；點擊後開啟 GitHub Release 頁面，成功開啟後同一 release 不再重複提示。
+- 更新流程只通知，不使用 Chrome system notification，也不會自動下載、安裝或替換擴充功能；使用者仍需手動更新與重新載入。
+- 更新檢查只保存必要 release metadata，不會傳送或備份已儲存的分頁、網址、備註、標籤與截圖資料。
+- 更新 README、GitHub Pages 使用者手冊與隱私政策，說明每日 GitHub API 檢查與手動更新流程。
+- 重新產生 `dist/TabWall-2.57.0.zip`。
+
 ## 2.56.0 — 2026-08-27
 
 - 新增 Webhook reminder profiles：可自訂 HTTP／HTTPS URL、headers 與 body，提醒可同時選取多個 profile。

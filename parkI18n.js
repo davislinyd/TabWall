@@ -7,6 +7,13 @@
 const I18N = {
   zh: {
     appName: 'TabWall',
+    releaseChecking: '正在檢查 GitHub 更新…',
+    releaseAvailable: '發現新版 v{version}；點擊版本標籤開啟 Release。',
+    releaseUpToDate: '目前已是最新版本。',
+    releaseCheckFailed: '無法檢查 GitHub 更新。',
+    releaseOpenFailed: '無法開啟 Release 頁面。',
+    releaseBadgeUpdate: '有新版 v{version} 可用；點擊開啟 Release',
+    releaseBadgeCurrent: '目前版本 v{version}；點擊檢查 GitHub 更新',
     aiTitle: 'AI',
     settingsAi: 'AI',
     aiSettingsTitle: '本機 AI',
@@ -608,6 +615,13 @@ const I18N = {
   },
   en: {
     appName: 'TabWall',
+    releaseChecking: 'Checking GitHub for updates…',
+    releaseAvailable: 'Version v{version} is available; click the version badge to open the Release.',
+    releaseUpToDate: 'TabWall is up to date.',
+    releaseCheckFailed: 'Unable to check GitHub for updates.',
+    releaseOpenFailed: 'Unable to open the Release page.',
+    releaseBadgeUpdate: 'Version v{version} is available; click to open the Release',
+    releaseBadgeCurrent: 'Current version v{version}; click to check GitHub for updates',
     aiTitle: 'AI',
     settingsAi: 'AI',
     aiSettingsTitle: 'Local AI',

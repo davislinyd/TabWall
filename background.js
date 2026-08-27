@@ -4,11 +4,29 @@
  */
 importScripts('mediaDb.js', 'backupBuild.js', 'noteMedia.js', 'webhookCore.js');
 // Domain slices (shared SW global scope — function decls resolve across files)
-importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js');
+importScripts('bgNormalize.js', 'bgLayout.js', 'bgBackup.js', 'bgRestore.js', 'bgUndo.js', 'bgReminders.js', 'bgAi.js', 'bgPageAnnotate.js', 'bgUpdate.js');
 
 const Media = self.TabWallMediaDB;
 const Build = self.TabWallBackupBuild;
 const NoteMedia = self.TabWallNoteMedia;
+const ReleaseUpdate = self.TabWallReleaseUpdate;
+const RELEASE_UPDATE_ALARM = ReleaseUpdate.ALARM_NAME;
+
+function getReleaseUpdateStatus(...args) {
+  return ReleaseUpdate.getReleaseUpdateStatus(...args);
+}
+
+function checkReleaseUpdate(...args) {
+  return ReleaseUpdate.checkReleaseUpdate(...args);
+}
+
+function dismissReleaseUpdate(...args) {
+  return ReleaseUpdate.dismissReleaseUpdate(...args);
+}
+
+function syncReleaseCheckAlarm(...args) {
+  return ReleaseUpdate.syncReleaseCheckAlarm(...args);
+}
 
 // ─── App diagnostic log (ring buffer) ──────────────────────────────
 const APP_LOG_MAX = 300;
@@ -210,6 +228,10 @@ async function getParkedUrlIndex() {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_BACKUP_ALARM) {
     enqueueMutation(() => runAutoBackup({ reason: 'schedule' })).catch(() => {});
+  } else if (alarm.name === RELEASE_UPDATE_ALARM) {
+    enqueueMutation(() => checkReleaseUpdate({ reason: 'schedule' })).catch((err) => {
+      console.warn('[TabWall] release check failed:', err);
+    });
   } else if (String(alarm?.name || '').startsWith(REMINDER_ALARM_PREFIX)) {
     enqueueMutation(() => handleReminderAlarm(alarm)).catch((err) => {
       console.warn('[TabWall] reminder alarm failed:', err);
@@ -287,6 +309,8 @@ chrome.runtime.onInstalled.addListener(() => {
   return Promise.all([
     getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
     syncReminderAlarmsForItems(),
+    syncReleaseCheckAlarm(),
+    enqueueMutation(() => checkReleaseUpdate({ reason: 'install' })),
     refreshActiveTabBadge(),
   ]).catch(() => {});
 });
@@ -294,6 +318,8 @@ chrome.runtime.onStartup?.addListener?.(() => {
   return Promise.all([
     getSettings().then((s) => syncAutoBackupAlarms(s.autoBackup)),
     syncReminderAlarmsForItems(),
+    syncReleaseCheckAlarm(),
+    enqueueMutation(() => checkReleaseUpdate({ reason: 'startup' })),
     refreshActiveTabBadge(),
   ]).catch(() => {});
 });
@@ -1934,6 +1960,8 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'DELETE_PAGE_ANNOTATION',
   'PUT_PAGE_INK',
   'PARK_PAGE_ANNOTATION',
+  'CHECK_RELEASE_UPDATE',
+  'DISMISS_RELEASE_UPDATE',
 ]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1953,6 +1981,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true, ...(await getCanvasLayoutRecord()) };
       case 'GET_REMINDERS':
         return { ok: true, items: await listReminderItems() };
+      case 'GET_RELEASE_UPDATE':
+        return getReleaseUpdateStatus();
+      case 'CHECK_RELEASE_UPDATE':
+        return checkReleaseUpdate({ reason: 'manual' });
+      case 'DISMISS_RELEASE_UPDATE':
+        return dismissReleaseUpdate(message.releaseKey);
       case 'GET_PAGE_STICKERS':
         return self.TabWallPageAnnotate.getPageStickers(message.url);
       case 'GET_NOTE_PAGE_LOCATIONS':
@@ -2333,6 +2367,10 @@ if (globalThis.__TABWALL_TEST__) {
     testWebhookProfile,
     handleReminderAlarm,
     handleReminderNotificationClick,
+    getReleaseUpdateStatus,
+    checkReleaseUpdate,
+    dismissReleaseUpdate,
+    syncReleaseCheckAlarm,
     handleCommandAction,
     toggleAnnotateOnActiveTab,
     notifyPageAnnotationUrlChanged,

@@ -606,6 +606,16 @@ test('Canvas rail is resizable, collapsible, and the header mark is a stacked-pa
   assert.match(PARK_BEHAVIOR_FLAT, /const CANVAS_RAIL_COLLAPSED_WIDTH = 34/);
   const canvasRailSource = HTML_SOURCE.match(/<aside id="canvasRail"[\s\S]*?<\/aside>/)?.[0] || '';
   assert.match(canvasRailSource, /class="canvas-rail-content"[\s\S]*?id="versionBadge"/);
+  assert.match(HTML_MARKUP, /<button id="versionBadge"[^>]*type="button"/);
+  assert.match(PARK_SOURCE, /versionBadge\?\.addEventListener\('click'/);
+  assert.match(PARK_SOURCE, /GET_RELEASE_UPDATE/);
+  assert.match(PARK_SOURCE, /OPEN_NEW_TAB_URL/);
+  assert.match(PARK_SOURCE, /DISMISS_RELEASE_UPDATE/);
+  assert.match(PARK_SOURCE, /changes\[RELEASE_UPDATE_STORAGE_KEY\]/);
+  assert.match(I18N_SOURCE, /releaseBadgeUpdate:/);
+  assert.match(I18N_SOURCE, /releaseCheckFailed:/);
+  assert.match(CSS_SOURCE, /#versionBadge\.has-update\s*\{/);
+  assert.match(CSS_SOURCE, /#versionBadge:focus-visible\s*\{/);
   assert.doesNotMatch(PARK_SOURCE, /--canvas-version-left/);
   assert.doesNotMatch(HTML_SOURCE, /body\.canvas-mode #versionBadge/);
   assert.match(WORKBENCH_CSS, /#versionBadge\s*\{[\s\S]*?position:\s*static;[\s\S]*?align-self:\s*stretch;/);

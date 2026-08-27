@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.56.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.57.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、未停車標註、頁面繪圖與 Sticker、空間畫布、本機 AI agent、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線本機 AI agent。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.56.0</span>
+      <span>使用者說明 · v2.57.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,11 +71,12 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.56.0</span><span lang="en">Version 2.56.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.57.0</span><span lang="en">Version 2.57.0</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
           <span class="chip"><span lang="zh-Hant">New Tab 可設定為畫布</span><span lang="en">New Tab can be the canvas</span></span>
           <span class="chip"><span lang="zh-Hant">提醒可呼叫 Webhook</span><span lang="en">Reminders can call webhooks</span></span>
+          <span class="chip"><span lang="zh-Hant">每日檢查 GitHub Release</span><span lang="en">Daily GitHub release check</span></span>
         </div>
       </header>
       <p class="empty-find" id="emptyFind">手冊中沒有符合的段落。試試「AI」「提醒」「備份」「硬碟」「搜尋」或「快捷鍵」。</p>
@@ -141,6 +142,10 @@
         </div>
         <p lang="zh-Hant">畫布上的「說明」按鈕可隨時打開精簡版提示。本手冊是完整版。</p>
         <p lang="en">The in-app Help button shows a short version. This page is the full guide.</p>
+        <div class="callout ok">
+          <p lang="zh-Hant">Canvas rail 底部的版本 badge 會在安裝／瀏覽器啟動時檢查 GitHub stable Release，之後每 24 小時檢查一次。沒有新版時點擊可手動檢查；有待處理新版時點擊會開啟 Release 頁面。下載、安裝與擴充功能重新載入都必須手動完成。</p>
+          <p lang="en">The version badge at the bottom of the Canvas rail checks the GitHub stable Release on install and browser startup, then every 24 hours. Click it to check manually when no update is known; when an update is pending, click it to open the Release page. Downloading, installing, and reloading the extension remain manual.</p>
+        </div>
       </section>
 
       <section class="chapter" id="entries">
@@ -854,6 +859,8 @@ https://wiki.example.com
         <ul>
           <li lang="zh-Hant">沒有 TabWall 雲端帳號，也不把牆上傳到 TabWall 自有伺服器。</li>
           <li lang="en">There is no TabWall cloud account, and the wall is not uploaded to TabWall servers.</li>
+          <li lang="zh-Hant">更新檢查只向公開 GitHub API 請求 release tag、版本與 Release URL；不會傳送已儲存的網址、標題、備註、標籤、截圖或其它分頁資料。更新 metadata 不會進入備份。</li>
+          <li lang="en">The update check requests only public GitHub release metadata such as the tag, version, and Release URL. It does not send saved URLs, titles, notes, tags, screenshots, or other tab data; update metadata is not included in backups.</li>
           <li lang="zh-Hant">網址、標題、note、tags、未停車標註中繼、排序存在 <code>chrome.storage.local</code>。</li>
           <li lang="en">URLs, titles, notes, tags, live-annotation metadata, and order live in <code>chrome.storage.local</code>.</li>
           <li lang="zh-Hant">提醒的模式、下一次時間、間隔與通知文字也存在 <code>chrome.storage.local</code>；瀏覽器通知只在本機排程與發送。</li>
@@ -1021,8 +1028,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.56.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.56.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.57.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.57.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·
