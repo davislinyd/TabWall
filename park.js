@@ -31,6 +31,7 @@ const DEFAULT_AUTO_BACKUP = {
   folderPath: '',
   lastSuccessAt: 0,
   lastError: '',
+  lastErrorDetail: '',
 };
 
 const AUTO_SAVE_METADATA_MAX_RULES = 50;
@@ -131,6 +132,8 @@ function countStoredOnlyUrls(...args) { return AppHelpers.countStoredOnlyUrls(..
 function formatImportWarnings(...args) { return ImportExport.formatImportWarnings(...args); }
 
 function formatBackupError(...args) { return ImportExport.formatBackupError(...args); }
+
+function formatBackupErrorLog(...args) { return ImportExport.formatBackupErrorLog(...args); }
 
 function formatNoteBytes(...args) { return AppHelpers.formatNoteBytes(...args); }
 
@@ -2362,22 +2365,29 @@ exportLiteBtn.addEventListener('click', () => {
 
 exportFullBtn.addEventListener('click', async () => {
   backupStatus.textContent = t('backupExporting');
-  uiLog('info', 'export', 'full start');
+  uiLog('info', 'export', 'full start', 'phase=export');
   let hydrated = [];
+  let phase = 'export';
   try {
     // Meta only over the wire — hydrate images in this page from IDB
     const res = await sendMessage({ type: 'EXPORT_BACKUP', mode: 'full' });
     if (!res.ok || !res.backup) {
       const err = res?.error || 'export_failed';
-      uiLog('error', 'export', 'full meta failed', err);
-      backupStatus.textContent = `${t('backupError')}: ${err}`;
+      uiLog('error', 'export', 'full meta failed', formatBackupErrorLog(res));
+      backupStatus.textContent = `${t('backupError')}: ${formatBackupError(res)}`;
       return;
     }
     const rawItems = res.backup.parkedItems || [];
-    uiLog('info', 'export', 'hydrating media', `items=${rawItems.length}`);
+    phase = 'hydrate';
+    uiLog('info', 'export', 'hydrate start', `phase=hydrate items=${rawItems.length}`);
     const estimatedMediaBytes = await estimateFullBackupMediaBytes(rawItems);
     if (estimatedMediaBytes > (Build.LIMITS?.MAX_ZIP_BYTES || 256 * 1024 * 1024)) {
-      throw new Error('backup_too_large:full_zip');
+      const limitBytes = Build.LIMITS?.MAX_ZIP_BYTES || 256 * 1024 * 1024;
+      const error = new Error('backup_too_large:full_zip');
+      error.code = 'backup_too_large:full_zip';
+      error.detail = `estimatedBytes=${estimatedMediaBytes} limitBytes=${limitBytes}`;
+      error.phase = 'preflight';
+      throw error;
     }
     let hydratedCount = 0;
     hydrated = await mapWithConcurrencyLocal(rawItems, 4, async (item) => {
@@ -2396,16 +2406,20 @@ exportFullBtn.addEventListener('click', async () => {
     if (Wallpaper?.hydrateForExport) {
       backup.settings = await Wallpaper.hydrateForExport(backup.settings);
     }
+    phase = 'build';
     const { blob, filename } = Build.buildFullZipBlob(backup, { auto: false });
+    phase = 'download';
     downloadBlob(blob, filename);
     hydrated = [];
     res.backup.parkedItems = [];
-    uiLog('info', 'export', 'full ok', `file=${filename} bytes=${blob.size}`);
+    uiLog('info', 'export', 'full ok', `phase=download file=${filename} bytes=${blob.size}`);
     backupStatus.textContent = t('backupExported');
   } catch (err) {
     console.warn(err);
-    uiLog('error', 'export', 'full exception', err?.message || err);
-    backupStatus.textContent = `${t('backupError')}: ${formatBackupError(err?.message || err)}`;
+    const error = err && typeof err === 'object' ? err : new Error(String(err));
+    if (!error.phase) error.phase = phase;
+    uiLog('error', 'export', 'full failed', formatBackupErrorLog(error));
+    backupStatus.textContent = `${t('backupError')}: ${formatBackupError(error)}`;
   } finally {
     hydrated = [];
   }
@@ -2511,8 +2525,8 @@ importBackupFile.addEventListener('change', async () => {
     openImportPickBox(mode, backup, prepared.warnings);
   } catch (err) {
     console.warn(err);
-    const errorText = formatBackupError(err?.message || err);
-    uiLog('error', 'import', 'parse failed', err?.message || err);
+    const errorText = formatBackupError(err);
+    uiLog('error', 'import', 'parse failed', formatBackupErrorLog(err));
     backupStatus.textContent = errorText;
   }
 });

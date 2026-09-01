@@ -56,6 +56,7 @@ function normalizeAutoBackup(raw) {
     folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
     lastSuccessAt: Number(o.lastSuccessAt) || 0,
     lastError: typeof o.lastError === 'string' ? o.lastError : '',
+    lastErrorDetail: typeof o.lastErrorDetail === 'string' ? o.lastErrorDetail.slice(0, 800) : '',
   };
 }
 
@@ -285,7 +286,7 @@ function normalizeSettings(raw) {
 async function patchSettings(partial) {
   const current = await getSettings();
   const patch = partial && typeof partial === 'object' ? partial : {};
-  // lastSuccessAt / lastError are owned by runAutoBackup. Ignore the legacy
+  // lastSuccessAt / lastError / lastErrorDetail are owned by runAutoBackup. Ignore the legacy
   // change-trigger fields so old settings pages cannot re-enable that path.
   let autoBackupPatch = patch.autoBackup;
   if (autoBackupPatch && typeof autoBackupPatch === 'object') {
@@ -293,6 +294,7 @@ async function patchSettings(partial) {
     delete autoBackupPatch.lastSuccessAt;
     delete autoBackupPatch.dirtyAt;
     delete autoBackupPatch.lastError;
+    delete autoBackupPatch.lastErrorDetail;
     delete autoBackupPatch.onChange;
   }
   const next = normalizeSettings({
@@ -412,41 +414,73 @@ async function runAutoBackup(opts = {}) {
     }
 
     if (!Build || typeof Build.buildLiteBlob !== 'function') {
-      await patchAutoBackup({ lastError: 'build_failed' });
-      return { ok: false, error: 'build_failed' };
+      const detail = 'backup builder unavailable';
+      await patchAutoBackup({ lastError: 'build_failed', lastErrorDetail: detail });
+      return { ok: false, error: 'build_failed', detail, phase: 'build' };
     }
 
     const mode = ab.mode === 'full' ? 'full' : 'lite';
+    appLogPush('info', 'autoBackup', 'start', `phase=export mode=${mode} force=${force} reason=${reason}`);
     // Auto full must hydrate in SW (no park page). Manual full export hydrates in park.
-    const exported = await exportBackup(mode, { hydrate: mode === 'full' });
+    const exported = await exportBackup(mode, {
+      hydrate: mode === 'full',
+      preflight: mode === 'full',
+    });
     if (!exported?.ok || !exported.backup) {
-      appLogPush('error', 'autoBackup', 'export_failed');
-      await patchAutoBackup({ lastError: 'export_failed' });
-      return { ok: false, error: 'export_failed' };
+      const error = exported?.error || 'export_failed';
+      const detail = exported?.detail || '';
+      appLogPush(
+        'error',
+        'autoBackup',
+        'export failed',
+        `phase=${exported?.phase || 'export'} code=${error}${detail ? ` ${detail}` : ''}`
+      );
+      await patchAutoBackup({ lastError: error, lastErrorDetail: detail });
+      return {
+        ok: false,
+        error,
+        detail,
+        phase: exported?.phase || 'export',
+        ...(exported?.estimatedBytes != null ? { estimatedBytes: exported.estimatedBytes } : {}),
+        ...(exported?.limitBytes != null ? { limitBytes: exported.limitBytes } : {}),
+      };
     }
 
     let built;
     try {
+      appLogPush('info', 'autoBackup', 'build start', `phase=build mode=${mode}`);
       built =
         mode === 'full'
           ? Build.buildFullZipBlob(exported.backup, { auto: true })
           : Build.buildLiteBlob(exported.backup, { auto: true });
+      appLogPush('info', 'autoBackup', 'build ok', `phase=build bytes=${built.blob?.size || 0}`);
     } catch (err) {
       console.warn('[TabWall] auto backup build failed:', err);
-      await patchAutoBackup({ lastError: 'build_failed' });
-      return { ok: false, error: 'build_failed' };
+      const error = err?.code || err?.message || 'build_failed';
+      const detail = err?.detail || err?.message || String(err);
+      appLogPush('error', 'autoBackup', 'build failed', `phase=build code=${error} ${detail}`);
+      await patchAutoBackup({ lastError: error, lastErrorDetail: detail });
+      return {
+        ok: false,
+        error,
+        detail,
+        phase: 'build',
+        ...(err?.estimatedBytes != null ? { estimatedBytes: err.estimatedBytes } : {}),
+        ...(err?.limitBytes != null ? { limitBytes: err.limitBytes } : {}),
+      };
     }
 
     const subfolder = sanitizeSubfolder(ab.subfolder);
     const relative = `${subfolder}/${built.filename}`;
     let downloaded;
     try {
+      appLogPush('info', 'autoBackup', 'download start', `phase=download file=${built.filename}`);
       downloaded = await downloadBlobAsFile(built.blob, relative);
     } catch (err) {
       const detail = String(err?.message || err);
-      appLogPush('error', 'autoBackup', 'download failed', detail);
-      await patchAutoBackup({ lastError: 'write_failed' });
-      return { ok: false, error: 'write_failed', detail };
+      appLogPush('error', 'autoBackup', 'download failed', `phase=download ${detail}`);
+      await patchAutoBackup({ lastError: 'write_failed', lastErrorDetail: detail });
+      return { ok: false, error: 'write_failed', detail, phase: 'download' };
     }
 
     // Always prefer path from this download (clears stale FS-access paths)
@@ -454,6 +488,7 @@ async function runAutoBackup(opts = {}) {
     await patchAutoBackup({
       lastSuccessAt: Date.now(),
       lastError: '',
+      lastErrorDetail: '',
       subfolder,
       folderPath,
     });
@@ -468,7 +503,7 @@ async function runAutoBackup(opts = {}) {
       'info',
       'autoBackup',
       'ok',
-      `file=${built.filename} path=${folderPath || '—'} mode=${mode}`
+      `phase=download file=${built.filename} path=${folderPath || '—'} mode=${mode}`
     );
 
     return {
@@ -478,9 +513,10 @@ async function runAutoBackup(opts = {}) {
       absoluteFile: downloaded.filename,
     };
   } catch (err) {
-    appLogPush('error', 'autoBackup', 'runAutoBackup failed', err?.message || err);
-    await patchAutoBackup({ lastError: 'write_failed' });
-    return { ok: false, error: 'write_failed' };
+    const detail = String(err?.detail || err?.message || err);
+    appLogPush('error', 'autoBackup', 'run failed', `phase=run ${detail}`);
+    await patchAutoBackup({ lastError: 'write_failed', lastErrorDetail: detail });
+    return { ok: false, error: 'write_failed', detail, phase: 'run' };
   } finally {
     autoBackupRunning = false;
   }
@@ -578,64 +614,263 @@ async function hydrateWallpaperSettings(settings) {
   return next;
 }
 
-/**
- * @param {'lite'|'full'} mode
- * @param {{ hydrate?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
- */
-async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
-  const [parkedItems, settingsData, tagCatalog, canvasLayout, pageAnnotations] = await Promise.all([
-    getParkedItems(),
-    chrome.storage.local.get(SETTINGS_KEY),
-    getTagCatalog(),
-    getCanvasLayout(),
-    self.TabWallPageAnnotate?.getPageAnnotationsList
-      ? self.TabWallPageAnnotate.getPageAnnotationsList()
-      : chrome.storage.local.get('pageAnnotations').then((data) => (
-        Array.isArray(data.pageAnnotations) ? data.pageAnnotations : []
-      )),
-  ]);
+async function preflightFullBackupMedia(items, settings, { tagCatalog, canvasLayout, pageAnnotations } = {}) {
+  const missing = [];
+  let mediaBytes = 0;
+  let mediaCount = 0;
+  const files = [];
+  const addMissing = (scope, itemId, field, extra = {}) => {
+    missing.push({ scope, itemId: String(itemId || ''), field, ...extra });
+  };
+  const sizeOf = (blob) => {
+    const size = Number(blob?.size);
+    return Number.isFinite(size) && size >= 0 ? size : 0;
+  };
+  const extensionForMime = (mime) => {
+    const value = String(mime || '').toLowerCase();
+    if (value.includes('png')) return 'png';
+    if (value.includes('webp')) return 'webp';
+    if (value.includes('svg')) return 'svg';
+    if (value.includes('gif')) return 'gif';
+    if (value.includes('avif')) return 'avif';
+    if (value.includes('jpeg') || value.includes('jpg')) return 'jpg';
+    return 'bin';
+  };
+  const addBlob = (blob, name) => {
+    if (!blob) return false;
+    const size = sizeOf(blob);
+    mediaBytes += size;
+    mediaCount++;
+    files.push({ name, data: { length: size } });
+    return true;
+  };
+  const read = async (getter) => {
+    try {
+      return await getter();
+    } catch {
+      return null;
+    }
+  };
+  const scanOwner = async (owner, scope, itemId, extra = {}) => {
+    const key = scope === 'group-member'
+      ? Media.mediaKeyMember(itemId, extra.memberId)
+      : Media.mediaKeyTab(itemId);
+    const row = await read(() => Media.get(key));
+    const prefix = scope === 'group-member'
+      ? `media/${itemId}_${extra.memberId}`
+      : `media/${itemId}`;
+    const hasThumb = addBlob(
+      row?.thumb,
+      `${prefix}_thumb.${extensionForMime(row?.thumb?.type)}`
+    );
+    const hasSnap = addBlob(
+      row?.snap,
+      `${prefix}_snap.${extensionForMime(row?.snap?.type)}`
+    );
+    if (owner?.hasThumb === true && !hasThumb) addMissing(scope, itemId, 'thumbnail', extra);
+    if (owner?.hasSnap === true && !hasSnap) addMissing(scope, itemId, 'snapshot', extra);
+  };
+  const scanAttachment = async (attachment, itemId, noteId = '') => {
+    const row = await read(() => Media.getAttachment(
+      Media.mediaKeyNoteAttachment(noteId || itemId, attachment?.id)
+    ));
+    const present = addBlob(
+      row,
+      `media/${noteId || itemId}_${attachment?.id}.${extensionForMime(row?.type)}`
+    );
+    if (attachment?.hasData === true && !present) {
+      addMissing('note-attachment', itemId, 'attachment', {
+        ...(noteId ? { noteId } : {}),
+        attachmentId: attachment?.id,
+      });
+    }
+  };
 
-  let items = parkedItems;
-  let media = 'none';
-  let settings = settingsData[SETTINGS_KEY] || {};
-  if (mode === 'full' && hydrate) {
-    items = await mapWithConcurrency(parkedItems, 4, hydrateItemMedia);
-    media = 'inline';
-    settings = await hydrateWallpaperSettings(settings);
-  } else if (mode === 'full') {
-    // Meta only — park hydrates from IDB to avoid huge extension messages
-    media = 'idb';
+  const scanItem = async (item) => {
+    if (item?.kind === 'group') {
+      await mapWithConcurrency(item.tabs || [], 4, (member) => (
+        scanOwner(member, 'group-member', item.id, { memberId: member.id })
+      ));
+      await mapWithConcurrency(item.notes || [], 4, (note) => (
+        mapWithConcurrency(note.attachments || [], 4, (attachment) => (
+          scanAttachment(attachment, item.id, note.id)
+        ))
+      ));
+      return;
+    }
+    if (item?.kind === 'note') {
+      await mapWithConcurrency(item.attachments || [], 4, (attachment) => (
+        scanAttachment(attachment, item.id)
+      ));
+      return;
+    }
+    await scanOwner(item, 'tab', item?.id);
+  };
+  await mapWithConcurrency(Array.isArray(items) ? items : [], 4, scanItem);
+
+  if (settings?.wallpaper?.enabled === true) {
+    const wallpaper = await read(() => Media.getAttachment(Media.mediaKeyWallpaper()));
+    if (!addBlob(
+      wallpaper,
+      `media/wallpaper.${String(wallpaper?.type || '').toLowerCase() === 'image/png' ? 'png' : 'webp'}`
+    )) addMissing('wallpaper', 'settings', 'wallpaper');
   }
-  if (self.TabWallWebhookCore?.withoutProfiles) {
-    settings = self.TabWallWebhookCore.withoutProfiles(settings);
+
+  if (missing.length) {
+    const detail = Build.formatMissingMediaDetail
+      ? Build.formatMissingMediaDetail(missing)
+      : `missing=${missing.length}`;
+    return { ok: false, error: 'missing_media', detail, missing, mediaBytes, mediaCount };
   }
-  if (settings && typeof settings === 'object') {
-    settings = { ...settings };
-    delete settings.ai;
-  }
 
-  const parkedTabs = items
-    .filter((i) => i.kind === 'tab')
-    .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
-
-  appLogPush('info', 'export', `exportBackup mode=${mode} hydrate=${hydrate}`, `items=${items.length}`);
-
-  return {
-    ok: true,
-    backup: {
+  let metadataBytes = 0;
+  try {
+    const metadata = {
       format: 'tabwall-backup',
       version: DATA_VERSION,
-      media,
-      appVersion: chrome.runtime.getManifest().version,
-      exportedAt: new Date().toISOString(),
-      parkedItems: items,
-      parkedTabs,
-      settings,
-      tagCatalog,
-      canvasLayout,
+      media: 'zip',
+      parkedItems: Array.isArray(items) ? items : [],
+      parkedTabs: (Array.isArray(items) ? items : [])
+        .filter((item) => item?.kind === 'tab')
+        .map(({ kind, ...rest }) => rest),
+      settings: settings || {},
+      tagCatalog: Array.isArray(tagCatalog) ? tagCatalog : [],
+      canvasLayout: canvasLayout || null,
       pageAnnotations: Array.isArray(pageAnnotations) ? pageAnnotations : [],
-    },
-  };
+    };
+    metadataBytes = new TextEncoder().encode(JSON.stringify(metadata)).length;
+  } catch {
+    metadataBytes = 0;
+  }
+  const limitBytes = Build?.LIMITS?.MAX_ZIP_BYTES || 256 * 1024 * 1024;
+  const estimatedBytes = typeof Build?.estimateZipBytes === 'function'
+    ? Build.estimateZipBytes(new Uint8Array(metadataBytes), files) + mediaCount * 128
+    : mediaBytes + metadataBytes + mediaCount * 512 + 98;
+  if (estimatedBytes > limitBytes) {
+    const detail = `estimatedBytes=${estimatedBytes} limitBytes=${limitBytes} mediaBytes=${mediaBytes}`;
+    return {
+      ok: false,
+      error: 'backup_too_large:full_zip',
+      detail,
+      phase: 'preflight',
+      estimatedBytes,
+      limitBytes,
+      mediaBytes,
+      mediaCount,
+    };
+  }
+  return { ok: true, estimatedBytes, mediaBytes, mediaCount };
+}
+
+/**
+ * @param {'lite'|'full'} mode
+ * @param {{ hydrate?: boolean, preflight?: boolean }} opts hydrate=true inlines media as data URLs (for SW-local full build only; never over message)
+ */
+async function exportBackup(mode = 'lite', { hydrate = false, preflight = false } = {}) {
+  let phase = 'export';
+  appLogPush('info', 'export', 'start', `phase=export mode=${mode} hydrate=${hydrate}`);
+  try {
+    const [parkedItems, settingsData, tagCatalog, canvasLayout, pageAnnotations] = await Promise.all([
+      getParkedItems(),
+      chrome.storage.local.get(SETTINGS_KEY),
+      getTagCatalog(),
+      getCanvasLayout(),
+      self.TabWallPageAnnotate?.getPageAnnotationsList
+        ? self.TabWallPageAnnotate.getPageAnnotationsList()
+        : chrome.storage.local.get('pageAnnotations').then((data) => (
+          Array.isArray(data.pageAnnotations) ? data.pageAnnotations : []
+        )),
+    ]);
+
+    let items = parkedItems;
+    let media = 'none';
+    let settings = settingsData[SETTINGS_KEY] || {};
+    if (self.TabWallWebhookCore?.withoutProfiles) {
+      settings = self.TabWallWebhookCore.withoutProfiles(settings);
+    }
+    if (settings && typeof settings === 'object') {
+      settings = { ...settings };
+      delete settings.ai;
+    }
+    if (mode === 'full' && preflight) {
+      phase = 'preflight';
+      const report = await preflightFullBackupMedia(parkedItems, settings, {
+        tagCatalog,
+        canvasLayout,
+        pageAnnotations,
+      });
+      if (!report.ok) {
+        appLogPush('error', 'export', 'preflight failed', `phase=preflight code=${report.error} ${report.detail || ''}`);
+        return {
+          ok: false,
+          error: report.error,
+          detail: report.detail || '',
+          phase: report.phase || 'preflight',
+          ...(report.estimatedBytes != null ? { estimatedBytes: report.estimatedBytes } : {}),
+          ...(report.limitBytes != null ? { limitBytes: report.limitBytes } : {}),
+        };
+      }
+      appLogPush(
+        'info',
+        'export',
+        'preflight ok',
+        `phase=preflight items=${parkedItems.length} mediaBytes=${report.mediaBytes} estimatedBytes=${report.estimatedBytes}`
+      );
+    }
+    if (mode === 'full' && hydrate) {
+      phase = 'hydrate';
+      appLogPush('info', 'export', 'hydrate start', `phase=hydrate items=${parkedItems.length}`);
+      items = await mapWithConcurrency(parkedItems, 4, hydrateItemMedia);
+      media = 'inline';
+      settings = await hydrateWallpaperSettings(settings);
+      const missing = Build?.findMissingMedia?.(items, settings) || [];
+      if (missing.length) {
+        const detail = Build.formatMissingMediaDetail
+          ? Build.formatMissingMediaDetail(missing)
+          : `missing=${missing.length}`;
+        appLogPush('error', 'export', 'hydrate failed', `phase=hydrate code=missing_media ${detail}`);
+        return { ok: false, error: 'missing_media', detail, phase: 'hydrate' };
+      }
+      appLogPush('info', 'export', 'hydrate ok', `phase=hydrate items=${items.length}`);
+    } else if (mode === 'full') {
+      // Meta only — park hydrates from IDB to avoid huge extension messages
+      media = 'idb';
+    }
+
+    const parkedTabs = items
+      .filter((i) => i.kind === 'tab')
+      .map(({ kind, hasThumb, hasSnap, ...rest }) => rest);
+
+    appLogPush(
+      'info',
+      'export',
+      'ready',
+      `phase=export items=${items.length} media=${media}`
+    );
+
+    return {
+      ok: true,
+      backup: {
+        format: 'tabwall-backup',
+        version: DATA_VERSION,
+        media,
+        appVersion: chrome.runtime.getManifest().version,
+        exportedAt: new Date().toISOString(),
+        parkedItems: items,
+        parkedTabs,
+        settings,
+        tagCatalog,
+        canvasLayout,
+        pageAnnotations: Array.isArray(pageAnnotations) ? pageAnnotations : [],
+      },
+    };
+  } catch (err) {
+    const error = err?.code || err?.message || 'export_failed';
+    const detail = err?.detail || err?.message || String(err);
+    const failedPhase = err?.phase || phase;
+    appLogPush('error', 'export', 'failed', `phase=${failedPhase} code=${error} ${detail}`);
+    return { ok: false, error, detail, phase: failedPhase };
+  }
 }
 
 /** Fresh UUIDs so append never collides with existing items / media keys. */

@@ -617,6 +617,77 @@
     return { items: clone, files, mediaMimes, totalBytes };
   }
 
+  function findMissingMedia(items, settings) {
+    const missing = [];
+    const add = (scope, itemId, field, extra = {}) => {
+      missing.push({ scope, itemId: String(itemId || ''), field, ...extra });
+    };
+    const checkOwner = (owner, scope, itemId, extra = {}) => {
+      if (owner?.hasThumb === true && !owner.thumbnail) add(scope, itemId, 'thumbnail', extra);
+      if (owner?.hasSnap === true && !owner.snapshot) add(scope, itemId, 'snapshot', extra);
+    };
+
+    for (const item of Array.isArray(items) ? items : []) {
+      if (item?.kind === 'group') {
+        for (const member of item.tabs || []) {
+          checkOwner(member, 'group-member', item.id, { memberId: member.id });
+        }
+        for (const note of item.notes || []) {
+          for (const attachment of note.attachments || []) {
+            if (attachment?.hasData === true && !attachment.data) {
+              add('note-attachment', item.id, 'attachment', {
+                noteId: note.id,
+                attachmentId: attachment.id,
+              });
+            }
+          }
+        }
+      } else if (item?.kind === 'note') {
+        for (const attachment of item.attachments || []) {
+          if (attachment?.hasData === true && !attachment.data) {
+            add('note-attachment', item.id, 'attachment', { attachmentId: attachment.id });
+          }
+        }
+      } else {
+        checkOwner(item, 'tab', item?.id);
+      }
+    }
+
+    if (settings?.wallpaper?.enabled === true) {
+      const data = settings.wallpaper.data;
+      const parsed = parseDataUrl(data);
+      if (!data || !parsed || !isImageDataUrl(data) || parsed.bytes.length > LIMITS.MAX_IMAGE_BYTES) {
+        add('wallpaper', 'settings', 'wallpaper');
+      }
+    }
+    return missing;
+  }
+
+  function formatMissingMediaDetail(missing, maxEntries = 5) {
+    const list = Array.isArray(missing) ? missing : [];
+    const describe = (entry) => {
+      if (entry.scope === 'note-attachment') {
+        const owner = entry.noteId ? ` note=${entry.noteId}` : '';
+        return `${entry.scope} item=${entry.itemId}${owner} attachment=${entry.attachmentId}`;
+      }
+      if (entry.scope === 'group-member') {
+        return `${entry.scope} group=${entry.itemId} member=${entry.memberId} field=${entry.field}`;
+      }
+      return `${entry.scope} item=${entry.itemId} field=${entry.field}`;
+    };
+    const shown = list.slice(0, Math.max(1, maxEntries)).map(describe).join(', ');
+    const suffix = list.length > maxEntries ? `, ... (+${list.length - maxEntries} more)` : '';
+    return `missing=${list.length} ${shown}${suffix}`;
+  }
+
+  function backupError(code, detail = '', extra = {}) {
+    const error = new Error(String(code || 'backup_failed'));
+    error.code = String(code || 'backup_failed');
+    if (detail) error.detail = String(detail).slice(0, 800);
+    Object.assign(error, extra);
+    return error;
+  }
+
   function collectWallpaperMedia(settings) {
     if (!settings || typeof settings !== 'object' || !settings.wallpaper || typeof settings.wallpaper !== 'object') {
       return { settings, file: null, mime: '' };
@@ -932,16 +1003,29 @@
     return next;
   }
 
+  function canonicalizeTabForExport(raw) {
+    const tab = raw && typeof raw === 'object' ? { ...raw } : raw;
+    if (!tab || typeof tab !== 'object') return tab;
+    const favicon = typeof tab.favIconUrl === 'string' ? tab.favIconUrl : '';
+    const valid = !favicon || (
+      validateString(favicon, LIMITS.MAX_FAVICON_LENGTH) &&
+      (isHttpUrl(favicon, LIMITS.MAX_FAVICON_LENGTH) || isImageDataUrl(favicon))
+    );
+    return valid ? { ...tab, favIconUrl: favicon } : { ...tab, favIconUrl: '' };
+  }
+
   function canonicalizeBackupForExport(backup) {
     const source = backup && typeof backup === 'object' ? backup : {};
     const items = (Array.isArray(source.parkedItems) ? source.parkedItems : []).map((item) => {
       if (item?.kind === 'group') {
         return {
           ...item,
+          tabs: (item.tabs || []).map(canonicalizeTabForExport),
           notes: (item.notes || []).map(canonicalizeNoteForExport),
         };
       }
-      return item?.kind === 'note' ? canonicalizeNoteForExport(item) : item;
+      if (item?.kind === 'note') return canonicalizeNoteForExport(item);
+      return item?.kind === 'tab' ? canonicalizeTabForExport(item) : item;
     });
     const settings = source.settings && typeof source.settings === 'object'
       ? withoutLocalOnlyProfiles(source.settings)
@@ -1012,13 +1096,19 @@
 
   function buildFullZipBlob(backup, { auto = false, partial = false } = {}) {
     const canonical = canonicalizeBackupForExport(backup);
+    const missing = findMissingMedia(canonical.parkedItems, canonical.settings);
+    if (missing.length) {
+      throw backupError('missing_media', formatMissingMediaDetail(missing), { phase: 'build', missing });
+    }
     const validation = validateBackup({
       ...canonical,
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'inline',
     }, { allowStoredOnlyUrls: true });
-    if (!validation.ok) throw new Error(validation.error);
+    if (!validation.ok) {
+      throw backupError(validation.error, validation.detail || '', { phase: 'validate' });
+    }
     const { items, files, mediaMimes } = collectMediaFiles(canonical.parkedItems || []);
     const wall = collectWallpaperMedia(canonical.settings);
     if (wall.file) {
@@ -1037,7 +1127,13 @@
     };
     const jsonBytes = new TextEncoder().encode(JSON.stringify(meta));
     const estimatedZipBytes = estimateZipBytes(jsonBytes, files);
-    if (estimatedZipBytes > LIMITS.MAX_ZIP_BYTES) throw new Error('backup_too_large:full_zip');
+    if (estimatedZipBytes > LIMITS.MAX_ZIP_BYTES) {
+      throw backupError(
+        'backup_too_large:full_zip',
+        `estimatedBytes=${estimatedZipBytes} limitBytes=${LIMITS.MAX_ZIP_BYTES}`,
+        { phase: 'size', estimatedBytes: estimatedZipBytes, limitBytes: LIMITS.MAX_ZIP_BYTES }
+      );
+    }
     const zip = zipStore([{ name: 'backup.json', data: jsonBytes }, ...files]);
     let prefix = auto ? 'tabwall-auto-full' : 'tabwall-backup-full';
     if (partial && !auto) prefix = 'tabwall-backup-full-partial';
@@ -1540,6 +1636,8 @@
     stamp,
     buildLiteBlob,
     estimateZipBytes,
+    findMissingMedia,
+    formatMissingMediaDetail,
     buildFullZipBlob,
   };
 })(typeof self !== 'undefined' ? self : this);

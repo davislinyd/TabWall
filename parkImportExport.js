@@ -38,14 +38,39 @@
       
   }
 
+  function backupErrorCode(error) {
+    if (typeof error === 'string') return error;
+    return error?.code || error?.error || error?.message || 'invalid_backup';
+  }
+
+  function backupErrorDetail(error) {
+    if (!error || typeof error !== 'object') return '';
+    return typeof error.detail === 'string' ? error.detail.slice(0, 800) : '';
+  }
+
+  function formatBackupErrorLog(error) {
+    const code = backupErrorCode(error);
+    const phase = error && typeof error === 'object' && error.phase ? `phase=${error.phase}` : '';
+    const detail = backupErrorDetail(error);
+    return [`code=${code}`, phase, detail].filter(Boolean).join(' ');
+  }
+
   function formatBackupError(error) {
     ensureBound('formatBackupError');
 
-    const code = typeof error === 'string' ? error : error?.error || 'invalid_backup';
-    if (code === 'backup_too_large:full_zip') return env.t('backupFullTooLarge');
-    if (code === 'attachment_quota_exceeded') return env.t('noteImageQuotaExceeded');
-    const detail = error && typeof error === 'object' && error.detail ? ` (${error.detail})` : '';
-    return env.t('backupInvalidDetail', { error: `${code}${detail}` });
+    const code = backupErrorCode(error);
+    const detail = backupErrorDetail(error);
+    let base = '';
+    if (code === 'backup_too_large:full_zip') base = env.t('backupFullTooLarge');
+    else if (code === 'missing_media') base = env.t('backupMissingMedia');
+    if (code === 'attachment_quota_exceeded') {
+      return `${env.t('noteImageQuotaExceeded')}${detail ? ` (${detail})` : ''}`;
+    }
+    else if (code === 'build_failed' || error?.phase === 'build') base = env.t('backupBuildFailed');
+    else if (!base) return env.t('backupInvalidDetail', {
+      error: `${code}${detail ? ` (${detail})` : ''}`,
+    });
+    return `${base}${detail ? ` (${detail})` : ''}`;
       
   }
 
@@ -95,7 +120,7 @@
       if (env.autoBackupStatusEl) {
         env.autoBackupStatusEl.textContent = env.autoBackupErrorText(err, res?.detail);
       }
-      return { ok: false, error: err };
+      return { ok: false, error: err, detail: res?.detail || '', phase: res?.phase || '' };
     } finally {
       env.autoBackupLocalRunning = false;
     }
@@ -269,27 +294,29 @@
     ensureBound('exportLiteBackup');
 
     if (env.backupStatus) env.backupStatus.textContent = env.t('backupExporting');
-    env.uiLog('info', 'export', 'lite start');
+    env.uiLog('info', 'export', 'lite start', 'phase=export');
     try {
       const res = await env.sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
       if (!res.ok || !res.backup) {
-        const err = res?.error || 'export_failed';
-        env.uiLog('error', 'export', 'lite failed', err);
-        if (env.backupStatus) env.backupStatus.textContent = `${env.t('backupError')}: ${err}`;
-        if (toast) env.showCopyToast(`${env.t('backupError')}: ${err}`);
-        return { ok: false, error: err };
+      const err = res?.error || 'export_failed';
+      env.uiLog('error', 'export', 'lite failed', formatBackupErrorLog(res));
+      const errorText = formatBackupError(res);
+      if (env.backupStatus) env.backupStatus.textContent = `${env.t('backupError')}: ${errorText}`;
+      if (toast) env.showCopyToast(`${env.t('backupError')}: ${errorText}`);
+      return { ok: false, error: err, detail: res?.detail || '', phase: res?.phase || '' };
       }
       const { blob, filename } = env.Build.buildLiteBlob(res.backup, { auto: false });
       downloadBlob(blob, filename);
-      env.uiLog('info', 'export', 'lite ok', `file=${filename} bytes=${blob.size}`);
+      env.uiLog('info', 'export', 'lite ok', `phase=download file=${filename} bytes=${blob.size}`);
       if (env.backupStatus) env.backupStatus.textContent = env.t('backupExported');
       if (toast) env.showCopyToast(env.t('backupExported'));
       return { ok: true, filename };
     } catch (err) {
-      env.uiLog('error', 'export', 'lite exception', err?.message || err);
-      if (env.backupStatus) env.backupStatus.textContent = `${env.t('backupError')}: ${err?.message || err}`;
-      if (toast) env.showCopyToast(`${env.t('backupError')}: ${err?.message || err}`);
-      return { ok: false, error: err?.message || err };
+      env.uiLog('error', 'export', 'lite exception', formatBackupErrorLog(err));
+      const errorText = formatBackupError(err);
+      if (env.backupStatus) env.backupStatus.textContent = `${env.t('backupError')}: ${errorText}`;
+      if (toast) env.showCopyToast(`${env.t('backupError')}: ${errorText}`);
+      return { ok: false, error: backupErrorCode(err), detail: backupErrorDetail(err), phase: err?.phase || 'build' };
     }
       
   }
@@ -687,7 +714,7 @@
         const errorText = formatBackupError(res);
         if (env.importPickStatus) env.importPickStatus.textContent = errorText;
         env.backupStatus.textContent = errorText;
-        env.uiLog('error', 'import', 'failed', `${res.error || 'invalid_backup'}${res.detail ? ` ${res.detail}` : ''}`);
+        env.uiLog('error', 'import', 'failed', formatBackupErrorLog(res));
         return;
       }
       closeImportPickBox();
@@ -710,8 +737,8 @@
         }
       }
       console.warn(err);
-      env.uiLog('error', 'import', 'exception', err?.message || err);
-      const errorText = formatBackupError(err?.message || err);
+      env.uiLog('error', 'import', 'exception', formatBackupErrorLog(err));
+      const errorText = formatBackupError(err);
       if (env.importPickStatus) env.importPickStatus.textContent = errorText;
       env.backupStatus.textContent = errorText;
     }
@@ -793,8 +820,10 @@
       window.alert(env.t('batchExportEmpty'));
       return;
     }
-    env.uiLog('info', 'export', `partial ${mode} start`, `n=${items.length}`);
+    env.uiLog('info', 'export', `partial ${mode} start`, `phase=export n=${items.length}`);
+    let phase = 'export';
     try {
+      phase = 'hydrate';
       const backup = await buildPartialBackupPayload(items, { withMedia: mode === 'full' });
       // Best-effort tag catalog from SW via lite export env.settings not needed
       const tagRes = await env.sendMessage({ type: 'EXPORT_BACKUP', mode: 'lite' });
@@ -804,16 +833,23 @@
       if (tagRes?.ok && tagRes.backup?.settings) {
         backup.settings = tagRes.backup.settings;
       }
+      if (mode === 'full' && env.Wallpaper?.hydrateForExport) {
+        backup.settings = await env.Wallpaper.hydrateForExport(backup.settings);
+      }
+      phase = 'build';
       const built =
         mode === 'full'
           ? env.Build.buildFullZipBlob(backup, { auto: false, partial: true })
           : env.Build.buildLiteBlob(backup, { auto: false, partial: true });
+      phase = 'download';
       downloadBlob(built.blob, built.filename);
-      env.uiLog('info', 'export', `partial ${mode} ok`, `file=${built.filename} n=${items.length}`);
+      env.uiLog('info', 'export', `partial ${mode} ok`, `phase=download file=${built.filename} n=${items.length}`);
     } catch (err) {
       console.warn(err);
-      env.uiLog('error', 'export', `partial ${mode} failed`, err?.message || err);
-      window.alert(`${env.t('backupError')}: ${err?.message || err}`);
+      const error = err && typeof err === 'object' ? err : new Error(String(err));
+      if (!error.phase) error.phase = phase;
+      env.uiLog('error', 'export', `partial ${mode} failed`, formatBackupErrorLog(error));
+      window.alert(`${env.t('backupError')}: ${formatBackupError(error)}`);
     }
       
   }
@@ -822,6 +858,7 @@
     bind,
     formatImportWarnings,
     formatBackupError,
+    formatBackupErrorLog,
     downloadBlob,
     runLocalAutoBackup,
     maybeCatchUpAutoBackup,

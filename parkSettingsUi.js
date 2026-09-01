@@ -235,6 +235,7 @@
       folderPath: typeof o.folderPath === 'string' ? o.folderPath : '',
       lastSuccessAt: Number(o.lastSuccessAt) || 0,
       lastError: typeof o.lastError === 'string' ? o.lastError : '',
+      lastErrorDetail: typeof o.lastErrorDetail === 'string' ? o.lastErrorDetail.slice(0, 800) : '',
     };
       
   }
@@ -300,7 +301,7 @@
       const merged = normalizeAutoBackup({ ...env.settings.autoBackup, ...patch.autoBackup });
       const allowed = {};
       for (const key of Object.keys(patch.autoBackup)) {
-        if (key === 'lastSuccessAt' || key === 'dirtyAt' || key === 'lastError') continue;
+        if (key === 'lastSuccessAt' || key === 'dirtyAt' || key === 'lastError' || key === 'lastErrorDetail') continue;
         if (Object.prototype.hasOwnProperty.call(merged, key)) allowed[key] = merged[key];
       }
       if (patch.autoBackup.subfolder != null) allowed.subfolder = merged.subfolder;
@@ -755,8 +756,16 @@
     let base = '';
     switch (code) {
       case 'export_failed':
-      case 'build_failed':
         base = env.t('autoBackupErrExport');
+        break;
+      case 'missing_media':
+        base = env.t('autoBackupErrMissingMedia');
+        break;
+      case 'backup_too_large:full_zip':
+        base = env.t('autoBackupErrTooLarge');
+        break;
+      case 'build_failed':
+        base = env.t('autoBackupErrBuild');
         break;
       case 'write_failed':
       case 'busy':
@@ -824,7 +833,7 @@
         parts.push(env.t('autoBackupLastOk', { time: env.formatSavedAt(ab.lastSuccessAt) }));
       }
       if (ab.lastError) {
-        const errText = autoBackupErrorText(ab.lastError);
+        const errText = autoBackupErrorText(ab.lastError, ab.lastErrorDetail);
         if (errText) parts.push(errText);
       }
       env.autoBackupStatusEl.textContent = parts.join(' · ');

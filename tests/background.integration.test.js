@@ -293,12 +293,16 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
     failSendMessage: false,
     failExecuteScript: false,
     failNotificationCreate: false,
+    mediaGetCalls: 0,
+    mediaGetAttachmentCalls: 0,
+    mediaBlobToDataUrlCalls: 0,
   };
 
   const mediaApi = {
     mediaKeyTab: (id) => `t:${id}`,
     mediaKeyMember: (groupId, memberId) => `g:${groupId}:${memberId}`,
     mediaKeyNoteAttachment: (noteId, attachmentId) => `n:${noteId}:${attachmentId}`,
+    mediaKeyWallpaper: () => 'w:background',
     mediaKeyPageInk: (id) => `ink:${id}`,
     async getInk(key) {
       return media.get(key)?.ink || [];
@@ -307,9 +311,11 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
       media.set(key, { ink: strokes || [] });
     },
     async get(key) {
+      runtime.mediaGetCalls++;
       return media.get(key) || { thumb: null, snap: null };
     },
     async getAttachment(key) {
+      runtime.mediaGetAttachmentCalls++;
       return media.get(key)?.attachment || null;
     },
     async put(key, value) {
@@ -373,7 +379,10 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
         return null;
       }
     },
-    async blobToDataUrl(value) { return value ? String(value) : ''; },
+    async blobToDataUrl(value) {
+      runtime.mediaBlobToDataUrlCalls++;
+      return value ? String(value) : '';
+    },
     keysForItem(item) {
       if (item.kind === 'group') {
         return [
@@ -524,9 +533,28 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
   return result;
 }
 
+function installDownloadStub(runtime) {
+  const state = runtime.runtime;
+  let nextId = 1;
+  runtime.chrome.downloads.download = (options, callback) => {
+    const id = nextId++;
+    state.downloadItems = [{
+      id,
+      filename: `/Downloads/${options.filename}`,
+      state: 'complete',
+    }];
+    callback?.(id);
+  };
+  runtime.chrome.downloads.search = (query, callback) => {
+    const items = state.downloadItems.filter((item) => query?.id == null || item.id === query.id);
+    if (callback) Promise.resolve().then(() => callback(items));
+    return Promise.resolve(items);
+  };
+}
+
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.61.0');
+  assert.equal(MANIFEST.version, '2.61.2');
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
@@ -3749,6 +3777,145 @@ test('auto-backup pruning only deletes exact folder and mode names', async () =>
     subfolder: 'TabWall-Backups',
   });
   assert.deepEqual(runtime.removedDownloads, [2]);
+});
+
+test('automatic full backup preflight rejects missing media before hydrate or download', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.parkedItems = [tab(ITEM_ID)];
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      mode: 'full',
+      scheduleHour: 0,
+      scheduleMinute: 0,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: 123,
+      lastError: '',
+      lastErrorDetail: '',
+    },
+  };
+
+  const result = await runtime.api.runAutoBackup({ force: true, reason: 'manual' });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'missing_media');
+  assert.equal(result.phase, 'preflight');
+  assert.match(result.detail, new RegExp(`missing=2.*${ITEM_ID}`));
+  assert.equal(runtime.runtime.mediaBlobToDataUrlCalls, 0);
+  assert.equal(runtime.runtime.downloadItems.length, 0);
+  assert.equal(runtime.store.settings.autoBackup.lastSuccessAt, 123);
+  assert.equal(runtime.store.settings.autoBackup.lastError, 'missing_media');
+  assert.equal(runtime.store.settings.autoBackup.lastErrorDetail, result.detail);
+});
+
+test('automatic full backup preflight rejects an oversized ZIP before hydrate or download', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.parkedItems = [{ ...tab(ITEM_ID), hasSnap: false }];
+  runtime.media.set(`t:${ITEM_ID}`, {
+    thumb: { size: runtime.Build.LIMITS.MAX_ZIP_BYTES, type: 'image/png' },
+    snap: null,
+  });
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      mode: 'full',
+      scheduleHour: 0,
+      scheduleMinute: 0,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: 456,
+      lastError: '',
+      lastErrorDetail: '',
+    },
+  };
+
+  const result = await runtime.api.runAutoBackup({ force: true, reason: 'manual' });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'backup_too_large:full_zip');
+  assert.equal(result.phase, 'preflight');
+  assert.equal(result.limitBytes, runtime.Build.LIMITS.MAX_ZIP_BYTES);
+  assert.ok(result.estimatedBytes > result.limitBytes);
+  assert.match(result.detail, new RegExp(`estimatedBytes=${result.estimatedBytes}`));
+  assert.match(result.detail, new RegExp(`limitBytes=${result.limitBytes}`));
+  assert.equal(runtime.runtime.mediaBlobToDataUrlCalls, 0);
+  assert.equal(runtime.runtime.downloadItems.length, 0);
+  assert.equal(runtime.store.settings.autoBackup.lastSuccessAt, 456);
+});
+
+test('automatic full backup build failures are logged and persisted with detail', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.parkedItems = [{ ...tab(ITEM_ID), hasThumb: false, hasSnap: false }];
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      mode: 'full',
+      scheduleHour: 0,
+      scheduleMinute: 0,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: 789,
+      lastError: '',
+      lastErrorDetail: '',
+    },
+  };
+  runtime.Build.buildFullZipBlob = () => {
+    const error = new Error('synthetic_zip_failure');
+    error.code = 'build_failed';
+    error.detail = 'zip writer unavailable';
+    throw error;
+  };
+
+  const result = await runtime.api.runAutoBackup({ force: true, reason: 'manual' });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'build_failed');
+  assert.equal(result.detail, 'zip writer unavailable');
+  assert.equal(result.phase, 'build');
+  assert.equal(runtime.store.settings.autoBackup.lastSuccessAt, 789);
+  assert.equal(runtime.store.settings.autoBackup.lastError, 'build_failed');
+  assert.equal(runtime.store.settings.autoBackup.lastErrorDetail, 'zip writer unavailable');
+  const logs = await dispatchMessage(runtime, { type: 'GET_LOGS' });
+  assert.ok(logs.logs.some((entry) => (
+    entry.level === 'error'
+      && entry.tag === 'autoBackup'
+      && entry.msg === 'build failed'
+      && entry.detail.includes('phase=build')
+      && entry.detail.includes('zip writer unavailable')
+  )));
+});
+
+test('automatic full backup success downloads a ZIP and clears the previous error detail', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  installDownloadStub(runtime);
+  runtime.store.parkedItems = [{ ...tab(ITEM_ID), hasThumb: false, hasSnap: false }];
+  runtime.store.settings = {
+    autoBackup: {
+      enabled: true,
+      mode: 'full',
+      scheduleHour: 0,
+      scheduleMinute: 0,
+      maxKeep: 5,
+      subfolder: 'TabWall-Backups',
+      folderPath: '',
+      lastSuccessAt: 1,
+      lastError: 'build_failed',
+      lastErrorDetail: 'old detail',
+    },
+  };
+
+  const result = await runtime.api.runAutoBackup({ force: true, reason: 'manual' });
+  assert.equal(result.ok, true);
+  assert.match(result.filename, /^tabwall-auto-full-.*\.zip$/);
+  assert.equal(runtime.runtime.downloadItems.length, 1);
+  assert.equal(runtime.store.settings.autoBackup.lastError, '');
+  assert.equal(runtime.store.settings.autoBackup.lastErrorDetail, '');
+  assert.ok(runtime.store.settings.autoBackup.lastSuccessAt > 1);
 });
 
 test('autoBackupShouldRun only permits due daily backups', async () => {

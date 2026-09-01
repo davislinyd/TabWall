@@ -150,13 +150,13 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Edit before saving:** Saving a single tab (Alt+S, Alt+Shift+S, the popup's tab-save buttons, or the overlay's quick-save button) shows a panel to edit the note/tags — pre-filled from automatic save metadata rules — before it actually saves; cancelling leaves the tab untouched. Group saves are unaffected. Toggle this in Settings ("Edit before saving").
 - Top-level tabs and groups can be pinned; the pinned-only filter does not change manual order or backup state.
 - Settings, Tags, edit, import and diagnostic panels use centered dialogs; changes save automatically.
-- **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local note images. Full export is refused when its estimated ZIP exceeds 256 MiB. Note attachments are capped at 96 MiB per note and 512 MiB across the extension. Existing attachments are not migrated automatically; the limits apply to new uploads and imports. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
+- **Backup export:** lite JSON keeps note text, tags, and attachment metadata without image binaries; a full ZIP includes local thumbnails, snapshots, note attachments, and the custom wallpaper. Full export is refused when required media is missing or its estimated ZIP exceeds 256 MiB; the error identifies only the affected item/note/attachment IDs and media type. Note attachments are capped at 96 MiB per note and 512 MiB across the extension. Existing attachments are not migrated automatically; the limits apply to new uploads and imports. Filenames use local time and the UTC offset, for example `2026-08-04T13-00-00+0800`.
 - **Multi-selection export:** export only selected cards as lite JSON or full ZIP.
 - **Restore modes:** replace or append. After selecting a backup, choose which tabs and groups to write; full ZIP previews show images, while lite previews show text and members.
 - **Manual add:** paste one URL per line. Wrap URLs between `#GROUP:Name` markers to create a group.
 - **Restore and keep:** restoring a tab, group, or group member opens or focuses the browser tab while keeping the TabWall card, notes, tags, thumbnails, and snapshots. Use Delete when the card should be removed.
 - **Group restore:** ask for confirmation before restoring a complete group; matching open tabs are reused and regrouped, while note members and stored-only URLs remain in the kept card.
-- **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Choose a daily local backup time from 00:00–23:30 in 30-minute steps; missed schedules are caught up when the Service Worker resumes or TabWall opens. Data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies.
+- **Automatic backup:** write under Chrome's configured download directory, in a configurable subfolder. Choose a daily local backup time from 00:00–23:30 in 30-minute steps; missed schedules are caught up when the Service Worker resumes or TabWall opens. Full backups preflight IndexedDB media before hydration, so missing media or a size limit failure does not create a partial ZIP or update the success time. The latest error detail is retained in settings and the diagnostic log until the next successful backup. Data changes are included in the next scheduled backup instead of triggering an early download. Keep 1–99 copies.
 - **Deduplication:** when an exact URL already exists, choose whether to keep both, replace the old item, or cancel. The toolbar can scan for duplicates.
 - **Diagnostic log:** inspect, copy, or clear export, import, and automatic-backup events from Settings.
 - **Desktop workbench:** the interface uses a fixed 1200px desktop layout. Narrow windows keep the full desktop geometry and expose horizontal scrolling; there is no mobile reflow or touch toolbar.
@@ -342,13 +342,13 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **儲存前編輯：** 儲存單一分頁時（Alt+S、Alt+Shift+S、popup 的分頁儲存按鈕，或 Overlay 內的快速儲存按鈕）會先跳出面板編輯 note／tag——預設值取自自動儲存規則，確認後才真正寫入；取消則分頁維持原狀不受影響。Group 儲存不受影響。可在設定「儲存前編輯」開關中關閉。
 - 頂層分頁與群組可固定；已固定篩選不改變手動排序，也不寫入備份的篩選狀態。
 - 設定、標籤、編輯、匯入與診斷面板使用居中 dialog；變更會自動儲存。
-- **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機 note 圖片，預估超過 256 MiB 時會拒絕並提示改用精簡備份或分批匯出。附件容量上限為單一 note 96 MiB、全 extension 512 MiB；既有附件不會自動遷移，新上傳與匯入才套用圖片限制。檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
+- **備份匯出：** 精簡 JSON 保留 note 文字、標籤與附件 metadata，不含圖片二進位；完整 ZIP 會包含本機縮圖、快照、note 附件與自訂背景。缺少應有媒體或預估超過 256 MiB 時會拒絕建立不完整 ZIP；錯誤只顯示受影響的 item／note／attachment ID、媒體類型與數量。附件容量上限為單一 note 96 MiB、全 extension 512 MiB；既有附件不會自動遷移，新上傳與匯入才套用圖片限制。檔名使用本機時間與 UTC 時差，例如 `2026-08-04T13-00-00+0800`。
 - **多選匯出：** 只匯出選取的卡片，可選精簡 JSON 或完整 ZIP。
 - **還原模式：** 支援覆蓋或附加；選取備份後可決定要寫入哪些分頁與群組，完整 ZIP 可預覽圖片，精簡備份可預覽文字與成員。
 - **手動新增：** 每行貼上一個網址；以 `#GROUP:Name` 標記包住網址即可建立群組。
 - **群組還原：** 還原完整群組前會要求確認；會重用相同 URL 的開啟分頁並重新分組，note 與不可直接還原的 URL 會保留在原 Group 卡片。
 - **還原並保留：** 還原分頁、Group 或 Group 成員會保留 TabWall 卡片、備註、標籤、縮圖與快照；要移除記錄請使用 Delete。
-- **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可選擇每日本機時間 00:00–23:30（每半小時）；錯過時段會在 Service Worker 恢復或開啟 TabWall 時補備。資料變更會在下一次排程納入，不會因每次寫入提前下載，並保留 1–99 份備份。
+- **自動備份：** 寫入 Chrome 設定的下載目錄下之指定子資料夾，可選擇每日本機時間 00:00–23:30（每半小時）；錯過時段會在 Service Worker 恢復或開啟 TabWall 時補備。完整備份會在 hydrate 前檢查 IndexedDB 媒體，缺少媒體或超過大小限制時不會產生不完整 ZIP，也不會更新成功時間；最近一次錯誤 detail 會保留在設定與診斷日誌，直到下一次成功備份清除。資料變更會在下一次排程納入，不會因每次寫入提前下載，並保留 1–99 份備份。
 - **重複項目處理：** 完整網址重複時，可選擇全部保留、取代舊項目或取消；工具列可掃描重複項目。
 - **診斷日誌：** 可在設定中查看、複製或清除匯出、匯入與自動備份事件。
 - **桌面工作台：** 固定 1200px 桌面幾何；窄視窗保留完整版面並使用水平捲動，不重新排版為手機工具列。

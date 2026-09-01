@@ -225,6 +225,127 @@ test('full ZIP includes wallpaper blob and rehydrates it', async () => {
   assert.match(hydrated.wallpaper.data, /^data:image\/webp;base64,/);
 });
 
+test('full ZIP refuses missing thumbnail, snapshot, attachment, or wallpaper media', () => {
+  const attachment = sampleNote().attachments[0];
+  const cases = [
+    {
+      name: 'thumbnail',
+      backup: sampleBackup([{ ...sampleItem(), thumbnail: '' }]),
+      token: 'field=thumbnail',
+    },
+    {
+      name: 'snapshot',
+      backup: sampleBackup([{ ...sampleItem(), snapshot: '' }]),
+      token: 'field=snapshot',
+    },
+    {
+      name: 'attachment',
+      backup: sampleBackup([{ ...sampleNote(), attachments: [{ ...attachment, data: '' }] }]),
+      token: `attachment=${ATTACHMENT_ID}`,
+    },
+    {
+      name: 'wallpaper',
+      backup: (() => {
+        const backup = sampleBackup([sampleItem({ image: false })]);
+        backup.settings = { wallpaper: { enabled: true, data: '' } };
+        return backup;
+      })(),
+      token: 'wallpaper',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.throws(
+      () => Build.buildFullZipBlob(entry.backup),
+      (error) => {
+        assert.equal(error.code, 'missing_media', entry.name);
+        assert.equal(error.phase, 'build', entry.name);
+        assert.match(error.detail, new RegExp(entry.token), entry.name);
+        assert.doesNotMatch(error.detail, /data:image|AQID|BAUG/, entry.name);
+        return true;
+      }
+    );
+  }
+});
+
+test('full ZIP missing-media details expose only safe identifiers and counts', () => {
+  const item = sampleItem();
+  item.thumbnail = '';
+  item.snapshot = '';
+  assert.throws(() => Build.buildFullZipBlob(sampleBackup([item])), (error) => {
+    assert.equal(error.code, 'missing_media');
+    assert.match(error.detail, new RegExp(`missing=2.*${ITEM_ID}`));
+    assert.doesNotMatch(error.detail, /data:image|base64|AQID|BAUG/);
+    return true;
+  });
+});
+
+test('full ZIP checks group-member thumbnail and snapshot flags', () => {
+  const group = {
+    kind: 'group',
+    id: ITEM_ID,
+    title: 'Group',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [{
+      id: MEMBER_ID,
+      url: 'https://example.com/member',
+      title: 'Member',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 0,
+      note: '',
+      tags: [],
+      hasThumb: true,
+      hasSnap: true,
+      thumbnail: '',
+      snapshot: '',
+    }],
+    notes: [],
+  };
+  assert.throws(() => Build.buildFullZipBlob(sampleBackup([group])), (error) => {
+    assert.equal(error.code, 'missing_media');
+    assert.match(error.detail, new RegExp(`group=${ITEM_ID} member=${MEMBER_ID}`));
+    assert.match(error.detail, /field=thumbnail/);
+    assert.match(error.detail, /field=snapshot/);
+    return true;
+  });
+});
+
+test('full ZIP omits invalid favicon URLs without blocking the export', async () => {
+  const group = {
+    kind: 'group',
+    id: SECOND_ID,
+    title: 'Group',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [{
+      ...sampleItem({ id: MEMBER_ID }),
+      indexInGroup: 0,
+      favIconUrl: 'chrome://favicon2/?page_url=https%3A%2F%2Fexample.com',
+    }],
+    notes: [],
+  };
+  const backup = sampleBackup([
+    { ...sampleItem(), favIconUrl: 'chrome://favicon2/?page_url=https%3A%2F%2Fexample.com' },
+    group,
+  ]);
+
+  const built = Build.buildFullZipBlob(backup);
+  const files = Build.unzipStore(new Uint8Array(await built.blob.arrayBuffer()));
+  const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
+  assert.equal(metadata.parkedItems[0].favIconUrl, '');
+  assert.equal(metadata.parkedItems[1].tabs[0].favIconUrl, '');
+  assert.equal(backup.parkedItems[0].favIconUrl.startsWith('chrome://'), true);
+  assert.equal(backup.parkedItems[1].tabs[0].favIconUrl.startsWith('chrome://'), true);
+});
+
 test('full ZIP export preserves stored-only file URLs and remains importable', async () => {
   const url = 'file:///Users/test/current.html';
   const backup = sampleBackup([sampleItem({ image: false })]);

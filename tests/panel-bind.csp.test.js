@@ -126,6 +126,7 @@ test('panel bind accessors return and mutate real values without eval', () => {
   assert.equal(ab.enabled, true);
   assert.equal(ab.scheduleHour, 9);
   assert.equal(ab.scheduleMinute, 30);
+  assert.equal(SettingsUi.normalizeAutoBackup({ lastErrorDetail: 'x'.repeat(801) }).lastErrorDetail.length, 800);
 
   // Mutation through env.settings setter path used by panel bodies.
   env.settings = { ...env.settings, locale: 'en' };
@@ -143,6 +144,31 @@ test('panel bind accessors return and mutate real values without eval', () => {
   // Calling before bind must throw (ensureBound)
   const fresh = loadPanels();
   assert.throws(() => fresh.SettingsUi.normalizeAutoBackup({}), /before bind/i);
+});
+
+test('backup panel errors preserve stable code, safe detail, and phase', () => {
+  const { ImportExport } = loadPanels();
+  ImportExport.bind({ t: (key) => key });
+  const missing = ImportExport.formatBackupError({
+    error: 'missing_media',
+    detail: 'missing=1 tab item=abc field=thumbnail',
+    phase: 'preflight',
+  });
+  assert.match(missing, /backupMissingMedia/);
+  assert.match(missing, /item=abc/);
+  assert.doesNotMatch(missing, /data:image|base64/);
+  const large = ImportExport.formatBackupError({
+    code: 'backup_too_large:full_zip',
+    detail: 'estimatedBytes=10 limitBytes=9',
+    phase: 'size',
+  });
+  assert.match(large, /backupFullTooLarge/);
+  assert.match(large, /estimatedBytes=10/);
+  assert.match(ImportExport.formatBackupErrorLog({
+    error: 'build_failed',
+    detail: 'zip writer unavailable',
+    phase: 'build',
+  }), /code=build_failed phase=build zip writer unavailable/);
 });
 
 

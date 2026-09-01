@@ -20,7 +20,7 @@ test('AI panel exposes provider, model, sources, and confirmation controls', () 
   assert.doesNotMatch(html, /id="aiTestConnectionBtn"/);
   assert.match(html, /ai-bridge-disabled/);
   assert.match(html, /data-settings-section="ai"/);
-  assert.equal(manifest.version, '2.61.0');
+  assert.equal(manifest.version, '2.61.2');
   assert.match(html, /id="aiQuota"/);
   assert.match(read('parkAiUi.js'), /dataset\.aiProviderField = 'bypassConfirmations'/);
   assert.ok(manifest.web_accessible_resources[0].resources.includes('parkAiUi.js'));

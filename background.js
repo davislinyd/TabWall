@@ -80,6 +80,7 @@ const DEFAULT_AUTO_BACKUP = {
   folderPath: '', // absolute dir after last successful backup
   lastSuccessAt: 0,
   lastError: '',
+  lastErrorDetail: '',
 };
 
 const AUTO_SAVE_METADATA_MAX_RULES = 50;
@@ -2417,6 +2418,7 @@ if (globalThis.__TABWALL_TEST__) {
     autoBackupShouldRun,
     runAutoBackup,
     normalizeAutoBackup,
+    preflightFullBackupMedia,
     autoBackupScheduledAtForDate,
     nextAutoBackupAt,
     getSettings,
