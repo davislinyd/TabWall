@@ -33,20 +33,74 @@ function loadAi() {
   return { Ai: sandbox.TabWallAi, sandbox };
 }
 
-test('AI settings stay on loopback and sanitize bridge tool allowlist', () => {
+test('AI settings normalize OpenAI-compatible providers and strip unsafe headers', () => {
   const { Ai } = loadAi();
   const normalized = Ai.normalizeAiSettings({
     enabled: true,
-    baseUrl: 'https://example.com/v1',
-    bridgeUrl: 'http://localhost:8787/',
+    activeProviderId: 'remote',
+    providers: [{
+      id: 'remote', name: 'Remote', baseUrl: 'https://example.com/v1/', model: 'gpt-test', bearerToken: 'secret',
+      headers: [{ name: 'X-API-Key', value: 'key' }, { name: 'Authorization', value: 'bad' }],
+    }, { id: 'bad', baseUrl: 'http://example.com/v1' }],
     timeoutMs: 999999,
-    allowedBridgeTools: ['read_mail', 'read_mail', '../bad', 'ok_tool'],
   });
   assert.equal(normalized.enabled, true);
-  assert.equal(normalized.baseUrl, 'http://127.0.0.1:8080/v1');
-  assert.equal(normalized.bridgeUrl, 'http://localhost:8787');
+  assert.equal(normalized.activeProviderId, 'remote');
+  assert.equal(normalized.providers.find((provider) => provider.id === 'remote').baseUrl, 'https://example.com/v1');
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized.providers.find((provider) => provider.id === 'remote').headers)), [{ name: 'X-API-Key', value: 'key' }]);
+  assert.equal(normalized.providers.some((provider) => provider.id === 'bad'), false);
+  assert.equal(normalized.providers.some((provider) => provider.id === 'local-llama-cpp'), true);
+  assert.equal(normalized.providers.find((provider) => provider.id === 'remote').bypassConfirmations, false);
   assert.equal(normalized.timeoutMs, 180000);
-  assert.deepEqual(Array.from(normalized.allowedBridgeTools), ['read_mail', 'ok_tool']);
+  const publicSettings = Ai.publicAiSettings(normalized);
+  assert.equal(JSON.stringify(publicSettings).includes('secret'), false);
+});
+
+test('confirmation bypass is scoped to its provider and covers reads and writes', () => {
+  const { Ai } = loadAi();
+  const localSession = { provider: { baseUrl: 'http://127.0.0.1:8080/v1' } };
+  const remoteSession = { provider: { baseUrl: 'https://example.com/v1' } };
+  const bypassSession = { provider: { baseUrl: 'https://example.com/v1', bypassConfirmations: true } };
+  assert.equal(Ai.toolNeedsConfirmation(localSession, 'list_open_tabs'), false);
+  assert.equal(Ai.toolNeedsConfirmation(localSession, 'create_note'), true);
+  assert.equal(Ai.toolNeedsConfirmation(remoteSession, 'list_open_tabs'), true);
+  assert.equal(Ai.toolNeedsConfirmation(remoteSession, 'create_note'), true);
+  assert.equal(Ai.toolNeedsConfirmation(bypassSession, 'list_open_tabs'), false);
+  assert.equal(Ai.toolNeedsConfirmation(bypassSession, 'create_note'), false);
+});
+
+test('provider headers add bearer auth without allowing system header overrides', () => {
+  const { Ai } = loadAi();
+  const provider = Ai.selectedProvider(Ai.normalizeAiSettings({ providers: [{
+    id: 'remote', baseUrl: 'https://example.com/v1', bearerToken: 'token',
+    headers: [{ name: 'X-Test', value: 'yes' }, { name: 'Content-Type', value: 'bad' }],
+  }] }), 'remote');
+  assert.deepEqual(JSON.parse(JSON.stringify(Ai.providerHeaders(provider, { Accept: 'application/json' }))), {
+    Accept: 'application/json', 'X-Test': 'yes', Authorization: 'Bearer token',
+  });
+});
+
+test('quota headers are public, accept successful or rate-limited responses, and ignore unauthorized responses', () => {
+  const { Ai } = loadAi();
+  const headers = {
+    'x-ratelimit-limit-requests': '100',
+    'x-ratelimit-remaining-requests': '95',
+    'x-ratelimit-reset-requests': '5d7h',
+    'x-ratelimit-limit-tokens': '1000000',
+    'x-ratelimit-remaining-tokens': '950000',
+    'x-ratelimit-reset-tokens': '5d7h',
+  };
+  const response = (status) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name) => headers[name] || null },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(Ai.parseQuotaHeaders(response(200)))), {
+    requests: { remaining: 95, limit: 100, reset: '5d7h' },
+    tokens: { remaining: 950000, limit: 1000000, reset: '5d7h' },
+  });
+  assert.equal(Ai.parseQuotaHeaders(response(401)), null);
+  assert.equal(Ai.parseQuotaHeaders(response(429)).requests.remaining, 95);
 });
 
 test('AI settings normalize context size with safe bounds', () => {
@@ -101,6 +155,43 @@ test('model tool schemas omit llama.cpp-incompatible maxLength constraints', asy
   assert.equal(requestBody.max_tokens, 768);
   assert.doesNotMatch(JSON.stringify(requestBody.tools), /maxLength/);
   assert.match(JSON.stringify(Ai.getBuiltinTools()), /maxLength/);
+});
+
+test('chat uses the selected OpenAI-compatible provider headers', async () => {
+  const { Ai, sandbox } = loadAi();
+  let requestUrl = '';
+  let requestHeaders = null;
+  sandbox.fetch = async (url, options) => {
+    requestUrl = url;
+    requestHeaders = options.headers;
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: (name) => ({
+        'content-type': 'application/json',
+        'x-ratelimit-limit-requests': '100',
+        'x-ratelimit-remaining-requests': '95',
+      })[name] || null },
+      body: null,
+      async text() { return JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }); },
+    };
+  };
+  const provider = Ai.selectedProvider(Ai.normalizeAiSettings({ providers: [{
+    id: 'remote', baseUrl: 'https://remote.example/v1', bearerToken: 'token', headers: [{ name: 'X-Client', value: 'TabWall' }],
+  }] }), 'remote');
+  const events = [];
+  await Ai.requestChat({
+    model: 'remote-model', messages: [{ role: 'user', content: 'hello' }], tools: [], toolsAvailable: false,
+    provider, aiSettings: { timeoutMs: 1000, contextSize: 8192 }, abortController: new AbortController(), port: { postMessage(message) { events.push(message); } },
+  });
+  assert.equal(requestUrl, 'https://remote.example/v1/chat/completions');
+  assert.equal(requestHeaders.Authorization, 'Bearer token');
+  assert.equal(requestHeaders['X-Client'], 'TabWall');
+  assert.deepEqual(JSON.parse(JSON.stringify(events.find((event) => event.type === 'AI_QUOTA')?.quota)), {
+    requests: { remaining: 95, limit: 100 },
+    tokens: null,
+  });
+  assert.equal(JSON.stringify(events).includes('Bearer '), false);
 });
 
 test('request budgeting trims large tool results while preserving the current turn', () => {

@@ -381,7 +381,7 @@ test('backup preserves valid top-level reminders and rejects nested reminder sco
   );
 });
 
-test('lite, full, and partial backups exclude webhook profiles', async () => {
+test('lite, full, and partial backups exclude local-only webhook and AI profiles', async () => {
   const backup = sampleBackup([sampleItem()]);
   backup.settings = {
     locale: 'zh',
@@ -392,19 +392,25 @@ test('lite, full, and partial backups exclude webhook profiles', async () => {
       headers: { Authorization: 'Bearer should-not-export' },
       body: '{{json}}',
     }],
+    ai: {
+      providers: [{ id: 'remote', bearerToken: 'should-not-export', headers: [{ name: 'X-Key', value: 'secret' }] }],
+    },
   };
 
   const lite = JSON.parse(await Build.buildLiteBlob(backup).blob.text());
   assert.equal(Object.prototype.hasOwnProperty.call(lite.settings, 'webhookProfiles'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(lite.settings, 'ai'), false);
   assert.equal(lite.settings.locale, 'zh');
 
   const partial = JSON.parse(await Build.buildLiteBlob(backup, { partial: true }).blob.text());
   assert.equal(Object.prototype.hasOwnProperty.call(partial.settings, 'webhookProfiles'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(partial.settings, 'ai'), false);
 
   const full = Build.buildFullZipBlob(backup, { partial: true });
   const files = Build.unzipStore(new Uint8Array(await full.blob.arrayBuffer()));
   const metadata = JSON.parse(new TextDecoder().decode(files['backup.json']));
   assert.equal(Object.prototype.hasOwnProperty.call(metadata.settings, 'webhookProfiles'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(metadata.settings, 'ai'), false);
 });
 
 test('backup preserves optional canvas layout and validates its bounds', async () => {

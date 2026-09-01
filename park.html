@@ -294,6 +294,8 @@
       </div>
       <div class="ai-toolbar">
         <span id="aiStatus" role="status" aria-live="polite" data-i18n="aiReady">就緒</span>
+        <select id="aiProviderSelect" class="ai-select" data-i18n-aria="aiProvider" aria-label="Provider"></select>
+        <select id="aiModelSelect" class="ai-select" data-i18n-aria="aiModel" aria-label="Model"></select>
         <span id="aiContextStatus" class="ai-context-status" data-i18n="aiContextReady">尚未建立 context</span>
         <button type="button" class="btn" id="aiStopBtn" data-i18n="aiStop">停止</button>
         <button type="button" class="btn" id="aiClearBtn" data-i18n="aiClear">清除</button>
@@ -301,10 +303,11 @@
       <div id="aiSources" class="ai-sources" hidden></div>
       <div id="aiMessages" class="ai-messages" role="log" aria-live="polite" aria-label="AI messages"></div>
       <div id="aiToolConfirm" class="ai-tool-confirm" hidden></div>
+      <div id="aiQuota" class="ai-quota" role="status" aria-live="polite" hidden></div>
       <div class="ai-composer">
         <textarea id="aiInput" class="settings-textarea" rows="3" data-i18n-placeholder="aiInputPh" placeholder="問問你的分頁…"></textarea>
         <div class="ai-composer-actions">
-          <span class="hint" data-i18n="aiPrivacyHint">模型在本機執行；外部 bridge 呼叫仍可能離開本機。</span>
+          <span class="hint" data-i18n="aiPrivacyHint">遠端 Provider 讀取 TabWall 資料前會要求確認。</span>
           <button type="button" class="btn primary" id="aiSendBtn" data-i18n="aiSend">送出</button>
         </div>
       </div>
@@ -411,35 +414,24 @@
           </div>
         </div>
         <div class="settings-block" data-settings-section="ai">
-          <h2 data-i18n="aiSettingsTitle">本機 AI</h2>
-          <p class="hint" data-i18n="aiSettingsHint">使用本機 llama.cpp。分頁內容只在你送出問題後按需讀取；寫入操作逐次確認。</p>
+          <h2 data-i18n="aiSettingsTitle">AI Providers</h2>
+          <p class="hint" data-i18n="aiSettingsHint">所有 Provider 使用 OpenAI-compatible API。遠端 Provider 讀取 TabWall 資料前會要求確認。</p>
           <div class="settings-row">
             <label class="inline">
               <input type="checkbox" id="settingsAiEnabled" />
-              <span data-i18n="aiEnable">啟用本機 AI Agent</span>
+              <span data-i18n="aiEnable">啟用 AI Agent</span>
             </label>
           </div>
           <div class="settings-row">
-            <label class="inline" for="settingsAiBaseUrl"><span data-i18n="aiEndpoint">llama.cpp endpoint</span><input id="settingsAiBaseUrl" class="settings-input" type="url" autocomplete="off" spellcheck="false" /></label>
-          </div>
-          <div class="settings-row">
-            <label class="inline" for="settingsAiModel"><span data-i18n="aiModel">Model（空白使用第一個）</span><input id="settingsAiModel" class="settings-input" type="text" autocomplete="off" spellcheck="false" /></label>
-          </div>
-          <div class="settings-row">
-            <label class="inline" for="settingsAiBridgeUrl"><span data-i18n="aiBridgeUrl">Local bridge URL</span><input id="settingsAiBridgeUrl" class="settings-input" type="url" autocomplete="off" spellcheck="false" /></label>
-          </div>
-          <div class="settings-row">
-            <label class="inline" for="settingsAiContextSize"><span data-i18n="aiContextSize">Context window（需與 llama-server -c 一致）</span><input id="settingsAiContextSize" class="settings-input" type="number" min="2048" max="131072" step="256" inputmode="numeric" autocomplete="off" spellcheck="false" /></label>
-          </div>
-          <div class="settings-row">
-            <label class="inline" for="aiBridgeToken"><span data-i18n="aiBridgeToken">Bridge session token</span><input id="aiBridgeToken" class="settings-input" type="password" autocomplete="new-password" data-1p-ignore="true" data-lpignore="true" data-bwignore="true" spellcheck="false" /></label>
-          </div>
-          <div class="settings-row">
-            <label for="settingsAiAllowedTools" class="settings-stack-label"><span data-i18n="aiAllowedTools">允許的 bridge tools（空白=全部）</span><textarea id="settingsAiAllowedTools" class="settings-textarea" rows="2" autocomplete="off" spellcheck="false"></textarea></label>
+            <div id="settingsAiProviders" class="ai-provider-list"></div>
           </div>
           <div class="settings-row" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:10px">
-            <button type="button" class="btn primary" id="aiTestConnectionBtn" data-i18n="aiTestConnection">測試連線</button>
+            <button type="button" class="btn" id="aiAddProviderBtn" data-i18n="aiAddProvider">新增 Provider</button>
             <span id="aiConnectionStatus" class="hint" role="status" aria-live="polite"></span>
+          </div>
+          <div class="settings-row ai-bridge-disabled" aria-disabled="true">
+            <label class="inline"><span data-i18n="aiBridgeUrl">Bridge</span><input class="settings-input" type="url" disabled value="http://127.0.0.1:8787" /></label>
+            <span class="hint" data-i18n="aiBridgeDisabled">Bridge 尚未實作</span>
           </div>
         </div>
         <div class="settings-block" data-settings-section="webhook">

@@ -25,6 +25,7 @@ function fakeDocument() {
     dataset: {},
     textContent: text,
     appendChild(child) {
+      child.parentNode = this;
       this.children.push(child);
       return child;
     },
@@ -33,6 +34,12 @@ function fakeDocument() {
     },
     replaceChildren(...children) {
       this.children = children.flatMap((child) => child?.tagName === '#fragment' ? child.children : [child]);
+      this.children.forEach((child) => { child.parentNode = this; });
+    },
+    remove() {
+      if (!this.parentNode) return;
+      this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+      this.parentNode = null;
     },
     addEventListener() {},
   });
@@ -130,6 +137,38 @@ test('streaming assistant messages render structured Markdown blocks', async () 
   await new Promise((resolve) => setTimeout(resolve, 0));
   const assistantBody = messages.children[0].children[1];
   assert.deepEqual(Array.from(tags(assistantBody)), ['div', 'h1', '#text', 'ul', 'li', '#text']);
+});
+
+test('tool rounds collapse intermediate assistant text into one activity row and quota resets cleanly', async () => {
+  const core = loadCore();
+  const doc = fakeDocument();
+  const messages = doc.createElement('div');
+  messages.scrollHeight = 0;
+  messages.scrollTop = 0;
+  messages.clientHeight = 0;
+  const quota = doc.createElement('div');
+  const ui = core.create({ document: doc, env: { aiMessages: messages, aiQuota: quota }, t: (key) => key });
+
+  ui.handlePortMessage({ type: 'AI_MESSAGE_START', messageId: 'tool-1' });
+  ui.handlePortMessage({ type: 'AI_DELTA', messageId: 'tool-1', text: 'I will inspect the page first.' });
+  ui.handlePortMessage({ type: 'AI_MESSAGE_END', messageId: 'tool-1', text: 'I will inspect the page first.', hasToolCalls: true });
+  ui.handlePortMessage({ type: 'AI_TOOL_RESULT', name: 'list_open_tabs', ok: true });
+  ui.handlePortMessage({ type: 'AI_TOOL_RESULT', name: 'read_page', ok: true });
+  ui.handlePortMessage({ type: 'AI_MESSAGE_START', messageId: 'final-1' });
+  ui.handlePortMessage({ type: 'AI_DELTA', messageId: 'final-1', text: 'Final answer' });
+  ui.handlePortMessage({ type: 'AI_MESSAGE_END', messageId: 'final-1', text: 'Final answer', hasToolCalls: false });
+  ui.handlePortMessage({ type: 'AI_QUOTA', quota: { requests: { remaining: 95, limit: 100 }, tokens: { remaining: 950000, limit: 1000000, reset: '5d' } } });
+
+  assert.equal(messages.children.length, 2);
+  assert.equal(messages.children[0].tagName, 'details');
+  assert.equal(messages.children[0].children[1].children.length, 2);
+  assert.equal(messages.children[1].className, 'ai-message ai-message-assistant');
+  assert.doesNotMatch(messages.children.flatMap((node) => [node.textContent, ...node.children.map((child) => child.textContent)]).join(' '), /inspect the page first/);
+  assert.match(quota.textContent, /95 \/ 100/);
+  assert.match(quota.textContent, /950K \/ 1M/);
+  ui.reset();
+  assert.equal(quota.hidden, true);
+  assert.equal(quota.textContent, '');
 });
 
 test('IME composing Enter is not treated as submit', () => {

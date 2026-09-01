@@ -9,12 +9,10 @@
 
   const DEFAULT_SETTINGS = {
     enabled: false,
-    baseUrl: 'http://127.0.0.1:8080/v1',
-    model: '',
-    bridgeUrl: 'http://127.0.0.1:8787',
+    activeProviderId: 'local-llama-cpp',
+    providers: [],
     timeoutMs: 120000,
     contextSize: 8192,
-    allowedBridgeTools: [],
   };
 
   function text(value, max = 2000) {
@@ -241,7 +239,9 @@
     let initialized = false;
     let busy = false;
     let currentAssistant = null;
+    let currentActivity = null;
     let pendingRequestId = '';
+    let currentSettings = null;
     const sourceKeys = new Set();
 
     function isNearMessageBottom() {
@@ -332,6 +332,79 @@
       const entry = appendMessage('tool', value);
       if (entry) entry.item.dataset.state = state;
       return entry;
+    }
+
+    function updateActivityLabel() {
+      if (!currentActivity?.summary) return;
+      currentActivity.summary.textContent = t('aiAgentActivity', { n: currentActivity.count });
+    }
+
+    function appendActivity(value, state = '') {
+      if (!env.aiMessages || !doc?.createElement) return null;
+      if (!currentActivity) {
+        const item = doc.createElement('details');
+        item.className = 'ai-agent-activity';
+        const summary = doc.createElement('summary');
+        const list = doc.createElement('ul');
+        item.append(summary, list);
+        env.aiMessages.appendChild(item);
+        currentActivity = { item, summary, list, count: 0 };
+      }
+      const entry = doc.createElement('li');
+      entry.textContent = text(value, 800);
+      if (state) entry.dataset.state = state;
+      currentActivity.list.appendChild(entry);
+      currentActivity.count += 1;
+      updateActivityLabel();
+      scrollMessages(true);
+      return entry;
+    }
+
+    function removeAssistantEntry(entry) {
+      if (!entry) return;
+      cancelMessageRender(entry);
+      entry.item?.remove?.();
+    }
+
+    function formatQuotaNumber(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '';
+      const compact = (divisor, suffix) => `${(number / divisor).toFixed(number % divisor ? 1 : 0).replace(/\.0$/, '')}${suffix}`;
+      if (Math.abs(number) >= 1000000) return compact(1000000, 'M');
+      if (Math.abs(number) >= 1000) return compact(1000, 'K');
+      return String(Math.round(number));
+    }
+
+    function clearQuota() {
+      if (!env.aiQuota) return;
+      env.aiQuota.hidden = true;
+      env.aiQuota.textContent = '';
+    }
+
+    function setQuota(raw) {
+      if (!env.aiQuota) return;
+      const quota = raw && typeof raw === 'object' ? raw : {};
+      const dimensions = [
+        [t('aiQuotaRequests'), quota.requests],
+        [t('aiQuotaTokens'), quota.tokens],
+      ];
+      const parts = [];
+      const resets = [];
+      for (const [label, dimension] of dimensions) {
+        if (!dimension || typeof dimension !== 'object') continue;
+        const remaining = formatQuotaNumber(dimension.remaining);
+        const limit = formatQuotaNumber(dimension.limit);
+        if (!remaining && !limit) continue;
+        parts.push(`${label} ${remaining}${remaining && limit ? ' / ' : ''}${limit}`);
+        if (dimension.reset && !resets.includes(dimension.reset)) resets.push(text(dimension.reset, 120));
+      }
+      if (!parts.length) {
+        clearQuota();
+        return;
+      }
+      if (resets.length) parts.push(`${t('aiQuotaReset')} ${resets.join(' · ')}`);
+      env.aiQuota.textContent = `${t('aiQuota')} · ${parts.join(' · ')}`;
+      env.aiQuota.hidden = false;
     }
 
     function clearConfirmation() {
@@ -470,35 +543,47 @@
       }
       if (message.type === 'AI_TOOLS_UNAVAILABLE') {
         setStatus(t('aiToolsUnavailable'), 'working');
-        appendEvent(`${t('aiToolsUnavailable')}: ${text(message.error || '', 500)}`, 'error');
+        appendActivity(`${t('aiToolsUnavailable')}: ${text(message.error || '', 500)}`, 'error');
         return;
       }
       if (message.type === 'AI_CONTEXT_TRIMMED') {
-        appendEvent(t('aiContextTrimmed'), 'done');
+        appendActivity(t('aiContextTrimmed'), 'done');
+        return;
+      }
+      if (message.type === 'AI_QUOTA') {
+        setQuota(message.quota);
         return;
       }
       if (message.type === 'AI_MESSAGE_START') {
-        currentAssistant = appendMessage('assistant', '');
-        if (currentAssistant) currentAssistant.messageId = text(message.messageId || '', 200);
+        currentAssistant = { messageId: text(message.messageId || '', 200), entry: null };
         return;
       }
       if (message.type === 'AI_DELTA') {
         if (!currentAssistant || currentAssistant.messageId !== message.messageId) {
-          currentAssistant = appendMessage('assistant', '');
-          if (currentAssistant) currentAssistant.messageId = text(message.messageId || '', 200);
+          currentAssistant = { messageId: text(message.messageId || '', 200), entry: null };
         }
-        if (currentAssistant) {
-          currentAssistant.source = `${currentAssistant.source}${text(message.text || '', MAX_MARKDOWN_LENGTH)}`
+        if (!currentAssistant.entry) {
+          currentAssistant.entry = appendMessage('assistant', '');
+        }
+        if (currentAssistant.entry) {
+          currentAssistant.entry.source = `${currentAssistant.entry.source}${text(message.text || '', MAX_MARKDOWN_LENGTH)}`
             .slice(0, MAX_MARKDOWN_LENGTH);
-          scheduleMessageRender(currentAssistant);
+          scheduleMessageRender(currentAssistant.entry);
         }
         return;
       }
       if (message.type === 'AI_MESSAGE_END') {
         if (currentAssistant && currentAssistant.messageId === message.messageId) {
           const finalText = text(message.text || '', MAX_MARKDOWN_LENGTH);
-          if (finalText && finalText !== currentAssistant.source) currentAssistant.source = finalText;
-          flushMessageRender(currentAssistant);
+          if (message.hasToolCalls === true) {
+            removeAssistantEntry(currentAssistant.entry);
+          } else if (finalText) {
+            if (!currentAssistant.entry) currentAssistant.entry = appendMessage('assistant', '');
+            if (finalText !== currentAssistant.entry.source) currentAssistant.entry.source = finalText;
+            flushMessageRender(currentAssistant.entry);
+          } else {
+            removeAssistantEntry(currentAssistant.entry);
+          }
         }
         currentAssistant = null;
         return;
@@ -511,7 +596,7 @@
       }
       if (message.type === 'AI_TOOL_RESULT') {
         const name = text(message.name || t('aiTool'), 200);
-        appendEvent(`${name}: ${message.ok === false ? t('aiToolFailed') : t('aiToolDone')}`, message.ok === false ? 'error' : 'done');
+        appendActivity(`${name}: ${message.ok === false ? t('aiToolFailed') : t('aiToolDone')}`, message.ok === false ? 'error' : 'done');
         return;
       }
       if (message.type === 'AI_DONE') {
@@ -541,7 +626,69 @@
         ...DEFAULT_SETTINGS,
         ...source,
         enabled: source.enabled === true,
+        providers: Array.isArray(source.providers) ? source.providers : [],
       };
+    }
+
+    function providerFor(settings, id = '') {
+      const providers = Array.isArray(settings?.providers) ? settings.providers : [];
+      return providers.find((provider) => provider?.id === id)
+        || providers.find((provider) => provider?.id === settings?.activeProviderId)
+        || providers[0]
+        || null;
+    }
+
+    function replaceOptions(select, options, selected) {
+      if (!select || !doc?.createElement) return;
+      const nodes = options.map(({ value, label }) => {
+        const option = doc.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        return option;
+      });
+      select.replaceChildren?.(...nodes);
+      if (options.some((option) => option.value === selected)) select.value = selected;
+      else if (options[0]) select.value = options[0].value;
+      select.disabled = options.length === 0;
+    }
+
+    function syncProviderSelectors(settings) {
+      currentSettings = normalizeSettings(settings);
+      const providers = currentSettings.providers.filter((provider) => provider?.id && provider?.name);
+      const selectedId = env.aiProviderSelect?.value || currentSettings.activeProviderId;
+      replaceOptions(env.aiProviderSelect, providers.map((provider) => ({
+        value: provider.id,
+        label: provider.name,
+      })), selectedId);
+      const provider = providerFor(currentSettings, env.aiProviderSelect?.value || selectedId);
+      const models = [...new Set([provider?.model, ...(provider?.models || [])].filter(Boolean))];
+      replaceOptions(env.aiModelSelect, models.map((model) => ({ value: model, label: model })), provider?.model || models[0] || '');
+      if (env.aiModelSelect && !models.length) {
+        const option = doc?.createElement?.('option');
+        if (option) {
+          option.value = '';
+          option.textContent = t('aiNoModels');
+          env.aiModelSelect.replaceChildren?.(option);
+        }
+        env.aiModelSelect.disabled = true;
+      }
+    }
+
+    async function refreshProviderSelectors() {
+      const settings = normalizeSettings(await Promise.resolve(options.getSettings?.()));
+      syncProviderSelectors(settings);
+      return settings;
+    }
+
+    async function saveSelection() {
+      const settings = currentSettings || await refreshProviderSelectors();
+      const providerId = text(env.aiProviderSelect?.value || settings.activeProviderId, 80);
+      const model = text(env.aiModelSelect?.value || '', 300);
+      if (typeof options.saveSelection === 'function') {
+        const updated = await Promise.resolve(options.saveSelection({ providerId, model }));
+        if (updated) syncProviderSelectors(updated);
+      }
+      reset();
     }
 
     async function sendPrompt(value = '') {
@@ -564,11 +711,14 @@
       appendMessage('user', prompt);
       if (env.aiInput) env.aiInput.value = '';
       busy = true;
+      currentActivity = null;
+      clearQuota();
       setStatus(t('aiStarting'), 'working');
       activePort.postMessage({
         type: 'AI_START',
         text: prompt,
-        bridgeToken: text(options.getBridgeToken?.() || env.aiBridgeToken?.value || '', 500).trim(),
+        providerId: text(env.aiProviderSelect?.value || settings.activeProviderId, 80).trim(),
+        model: text(env.aiModelSelect?.value || providerFor(settings)?.model || '', 300).trim(),
       });
       return true;
     }
@@ -576,6 +726,7 @@
     function open() {
       showUi();
       ensurePort();
+      refreshProviderSelectors().catch(() => {});
       if (env.aiInput) setTimeout(() => env.aiInput.focus(), 0);
     }
 
@@ -593,11 +744,13 @@
 
     function reset() {
       if (port) port.postMessage({ type: 'AI_RESET' });
-      cancelMessageRender(currentAssistant);
+      cancelMessageRender(currentAssistant?.entry);
       currentAssistant = null;
+      currentActivity = null;
       busy = false;
       clearConfirmation();
       clearSources();
+      clearQuota();
       env.aiMessages?.replaceChildren();
       if (env.aiContextStatus) env.aiContextStatus.textContent = t('aiContextReady');
       setStatus(t('aiReady'), '');
@@ -612,7 +765,7 @@
         // ignore
       }
       port = null;
-      cancelMessageRender(currentAssistant);
+      cancelMessageRender(currentAssistant?.entry);
       currentAssistant = null;
     }
 
@@ -622,6 +775,13 @@
       env.aiSendBtn?.addEventListener('click', () => { sendPrompt().catch(() => {}); });
       env.aiStopBtn?.addEventListener('click', stop);
       env.aiClearBtn?.addEventListener('click', reset);
+      env.aiProviderSelect?.addEventListener('change', () => {
+        const provider = providerFor(currentSettings || normalizeSettings({}), env.aiProviderSelect.value);
+        const models = [...new Set([provider?.model, ...(provider?.models || [])].filter(Boolean))];
+        replaceOptions(env.aiModelSelect, models.map((model) => ({ value: model, label: model })), provider?.model || '');
+        saveSelection().catch(() => {});
+      });
+      env.aiModelSelect?.addEventListener('change', () => { saveSelection().catch(() => {}); });
       if (options.handleInputKeydown !== false) {
         env.aiInput?.addEventListener('keydown', (event) => {
           event.stopPropagation();
@@ -642,6 +802,8 @@
       sendPrompt,
       stop,
       reset,
+      refreshProviderSelectors,
+      syncProviderSelectors,
       destroy,
       ensurePort,
       isBusy: () => busy,

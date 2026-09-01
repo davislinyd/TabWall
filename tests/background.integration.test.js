@@ -526,7 +526,7 @@ function quotaNoteForTest(id, attachmentCount = 4, size = 24 * 1024 * 1024) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.59.4');
+  assert.equal(MANIFEST.version, '2.61.0');
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
@@ -1385,24 +1385,27 @@ test('PATCH_SETTINGS preserves Canvas rail preferences', async () => {
   assert.equal(updated.settings.canvasRailCollapsed, true);
 });
 
-test('GET_AI_SETTINGS returns normalized AI settings without bridge token data', async () => {
+test('GET_AI_SETTINGS returns public provider settings without credentials', async () => {
   const runtime = createRuntime();
   await runtime.ready;
   runtime.store.settings = {
     ai: {
       enabled: true,
-      baseUrl: 'http://localhost:8000/v1/',
-      model: 'local-model',
-      bridgeUrl: 'https://remote.example/bridge',
+      activeProviderId: 'remote',
+      providers: [{
+        id: 'remote', name: 'Remote', baseUrl: 'https://remote.example/v1/', model: 'remote-model',
+        bearerToken: 'do-not-return', headers: [{ name: 'X-Key', value: 'also-secret' }], models: ['remote-model'],
+      }],
     },
   };
   const result = await dispatchMessage(runtime, { type: 'GET_AI_SETTINGS' });
   assert.equal(result.ok, true);
   assert.equal(result.ai.enabled, true);
-  assert.equal(result.ai.baseUrl, 'http://localhost:8000/v1');
-  assert.equal(result.ai.bridgeUrl, 'http://127.0.0.1:8787');
+  assert.equal(result.ai.activeProviderId, 'remote');
+  assert.equal(result.ai.providers.find((provider) => provider.id === 'remote').baseUrl, 'https://remote.example/v1');
   assert.equal(result.ai.contextSize, 8192);
-  assert.equal(Object.prototype.hasOwnProperty.call(result.ai, 'bridgeToken'), false);
+  assert.equal(JSON.stringify(result.ai).includes('do-not-return'), false);
+  assert.equal(JSON.stringify(result.ai).includes('also-secret'), false);
 });
 
 test('PATCH_SETTINGS persists a normalized AI context size', async () => {
@@ -1417,6 +1420,20 @@ test('PATCH_SETTINGS persists a normalized AI context size', async () => {
   const result = await dispatchMessage(runtime, { type: 'GET_AI_SETTINGS' });
   assert.equal(result.ai.contextSize, 16384);
 });
+test('AI_UPDATE_SELECTION persists the selected provider model without exposing secrets', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  await dispatchMessage(runtime, {
+    type: 'PATCH_SETTINGS',
+    partial: { ai: { enabled: true, providers: [{ id: 'remote', baseUrl: 'https://remote.example/v1', bearerToken: 'secret' }] } },
+  });
+  const result = await dispatchMessage(runtime, { type: 'AI_UPDATE_SELECTION', providerId: 'remote', model: 'remote-model' });
+  assert.equal(result.ok, true);
+  assert.equal(result.ai.activeProviderId, 'remote');
+  assert.equal(result.ai.providers.find((provider) => provider.id === 'remote').model, 'remote-model');
+  assert.equal(JSON.stringify(result.ai).includes('secret'), false);
+});
+
 
 function dispatchMessage(runtime, message, sender = {}) {
   const listener = runtime.chrome.runtime.onMessage.listeners[0];

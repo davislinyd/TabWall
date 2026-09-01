@@ -56,12 +56,19 @@ const DEFAULT_SETTINGS = {
   restoreGroupIn: 'currentWindow',
   ai: {
     enabled: false,
-    baseUrl: 'http://127.0.0.1:8080/v1',
-    model: '',
-    bridgeUrl: 'http://127.0.0.1:8787',
+    activeProviderId: 'local-llama-cpp',
+    providers: [{
+      id: 'local-llama-cpp',
+      name: 'Local llama.cpp',
+      baseUrl: 'http://127.0.0.1:8080/v1',
+      model: '',
+      bearerToken: '',
+      headers: [],
+      models: [],
+      bypassConfirmations: false,
+    }],
     timeoutMs: 120000,
     contextSize: 8192,
-    allowedBridgeTools: [],
   },
   viewMode: 'canvas',
   sortBy: 'newest',
@@ -291,19 +298,17 @@ const aiContextStatus = document.getElementById('aiContextStatus');
 const aiSources = document.getElementById('aiSources');
 const aiMessages = document.getElementById('aiMessages');
 const aiToolConfirm = document.getElementById('aiToolConfirm');
+const aiQuota = document.getElementById('aiQuota');
 const aiInput = document.getElementById('aiInput');
 const aiSendBtn = document.getElementById('aiSendBtn');
 const aiStopBtn = document.getElementById('aiStopBtn');
 const aiClearBtn = document.getElementById('aiClearBtn');
-const aiBridgeToken = document.getElementById('aiBridgeToken');
-const aiTestConnectionBtn = document.getElementById('aiTestConnectionBtn');
+const aiProviderSelect = document.getElementById('aiProviderSelect');
+const aiModelSelect = document.getElementById('aiModelSelect');
 const aiConnectionStatus = document.getElementById('aiConnectionStatus');
 const settingsAiEnabled = document.getElementById('settingsAiEnabled');
-const settingsAiBaseUrl = document.getElementById('settingsAiBaseUrl');
-const settingsAiModel = document.getElementById('settingsAiModel');
-const settingsAiBridgeUrl = document.getElementById('settingsAiBridgeUrl');
-const settingsAiContextSize = document.getElementById('settingsAiContextSize');
-const settingsAiAllowedTools = document.getElementById('settingsAiAllowedTools');
+const settingsAiProviders = document.getElementById('settingsAiProviders');
+const aiAddProviderBtn = document.getElementById('aiAddProviderBtn');
 const helpBtn = document.getElementById('helpBtn');
 const helpBox = document.getElementById('helpBox');
 const helpDrag = document.getElementById('helpDrag');
@@ -862,7 +867,8 @@ function bindPanelModules() {
     "helpBtn": () => helpBtn,
     "aiBox": () => aiBox,
     "aiBtn": () => aiBtn,
-    "aiBridgeToken": () => aiBridgeToken,
+    "aiProviderSelect": () => aiProviderSelect,
+    "aiModelSelect": () => aiModelSelect,
     "aiClearBtn": () => aiClearBtn,
     "aiCloseX": () => aiCloseX,
     "aiConnectionStatus": () => aiConnectionStatus,
@@ -870,11 +876,11 @@ function bindPanelModules() {
     "aiDrag": () => aiDrag,
     "aiInput": () => aiInput,
     "aiMessages": () => aiMessages,
+    "aiQuota": () => aiQuota,
     "aiSources": () => aiSources,
     "aiSendBtn": () => aiSendBtn,
     "aiStatus": () => aiStatus,
     "aiStopBtn": () => aiStopBtn,
-    "aiTestConnectionBtn": () => aiTestConnectionBtn,
     "aiToolConfirm": () => aiToolConfirm,
     "remindersBox": () => remindersBox,
     "remindersBtn": () => remindersBtn,
@@ -1023,12 +1029,9 @@ function bindPanelModules() {
     "settingsColsValue": () => settingsColsValue,
     "settingsDoneBtn": () => settingsDoneBtn,
     "settingsEl": () => settingsEl,
-    "settingsAiAllowedTools": () => settingsAiAllowedTools,
-    "settingsAiBaseUrl": () => settingsAiBaseUrl,
-    "settingsAiBridgeUrl": () => settingsAiBridgeUrl,
-    "settingsAiContextSize": () => settingsAiContextSize,
+    "settingsAiProviders": () => settingsAiProviders,
+    "aiAddProviderBtn": () => aiAddProviderBtn,
     "settingsAiEnabled": () => settingsAiEnabled,
-    "settingsAiModel": () => settingsAiModel,
     "settingsNav": () => settingsNav,
     "settingsNewTabOverride": () => settingsNewTabOverride,
     "settingsPreSaveEdit": () => settingsPreSaveEdit,
@@ -2056,6 +2059,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (tagsBox.classList.contains('open')) {
       closeTagsBox();
+      return;
+    }
+    if (remindersBox?.classList.contains('open')) {
+      closeRemindersBox();
       return;
     }
     if (settingsBox.classList.contains('open')) {

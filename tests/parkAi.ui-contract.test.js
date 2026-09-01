@@ -5,18 +5,24 @@ import test from 'node:test';
 const root = new URL('..', import.meta.url);
 const read = (name) => fs.readFileSync(new URL(name, root), 'utf8');
 
-test('AI panel exposes local endpoint, bridge, sources, and confirmation controls', () => {
+test('AI panel exposes provider, model, sources, and confirmation controls', () => {
   const html = read('park.html');
   const manifest = JSON.parse(read('manifest.json'));
   assert.match(html, /id="aiBox"/);
   assert.match(html, /id="aiSources"/);
-  assert.match(html, /id="settingsAiBaseUrl"/);
-  assert.match(html, /id="settingsAiBridgeUrl"/);
-  assert.match(html, /id="settingsAiContextSize"/);
-  assert.match(html, /id="aiBridgeToken"/);
-  assert.match(html, /id="aiBridgeToken"[^>]*autocomplete="new-password"/);
+  assert.match(html, /id="settingsAiProviders"/);
+  assert.match(html, /id="aiProviderSelect"/);
+  assert.match(html, /id="aiModelSelect"/);
+  assert.match(html, /id="aiAddProviderBtn"/);
+  assert.match(read('parkAiUi.js'), /function addProviderModelField/);
+  assert.match(read('parkAiUi.js'), /select\.dataset\.aiProviderField = 'model'/);
+  assert.doesNotMatch(html, /id="settingsAiContextSize"/);
+  assert.doesNotMatch(html, /id="aiTestConnectionBtn"/);
+  assert.match(html, /ai-bridge-disabled/);
   assert.match(html, /data-settings-section="ai"/);
-  assert.equal(manifest.version, '2.59.4');
+  assert.equal(manifest.version, '2.61.0');
+  assert.match(html, /id="aiQuota"/);
+  assert.match(read('parkAiUi.js'), /dataset\.aiProviderField = 'bypassConfirmations'/);
   assert.ok(manifest.web_accessible_resources[0].resources.includes('parkAiUi.js'));
   assert.deepEqual(manifest.content_scripts?.[0]?.js, ['parkSearchQuery.js', 'quickSearch.js', 'aiUiCore.js', 'aiPanel.js', 'content.js', 'pageAnnotate.js']);
 });
@@ -38,11 +44,15 @@ test('AI message classes and scrollbar surfaces match both panel implementations
   assert.match(external, /\.ai-message-text h1/);
   assert.match(external, /color-scheme: light/);
   assert.match(external, /\.ai-messages::-webkit-scrollbar-track/);
-  assert.match(external, /bridgeToken = null/);
+  assert.match(external, /aiProviderSelect: providerSelect/);
+  assert.match(external, /aiModelSelect: modelSelect/);
+  assert.match(external, /aiQuota: quota/);
   assert.match(external, /resize-height-handle/);
   assert.match(external, /DOUBLE_ESCAPE_WINDOW_MS = 500/);
   assert.match(external, /FAB_SIZE = 52 \* 0\.6/);
   assert.match(ui, /AI_CONTEXT_TRIMMED/);
+  assert.match(ui, /AI_QUOTA/);
+  assert.match(css, /\.ai-agent-activity/);
   assert.match(css, /\.ai-message-text h1/);
   assert.match(css, /scrollbar-color: var\(--border-strong\) var\(--panel\)/);
   assert.match(css, /\.ai-messages::-webkit-scrollbar-track/);
@@ -66,11 +76,12 @@ test('AI waiting state animates and search ai token opens the AI panel', () => {
   assert.match(css, /tabwall-ai-waiting-dots/);
 });
 
-test('AI runtime keeps bridge calls on registered tools and loopback URLs', () => {
+test('AI runtime keeps remote data reads confirmed unless that provider bypasses confirmations, and does not start bridge tools', () => {
   const runtime = read('bgAi.js');
-  assert.match(runtime, /GET.*tools|fetchBridgeJson\(session, 'tools'/s);
-  assert.match(runtime, /tools\/call/);
-  assert.match(runtime, /LOOPBACK_HOSTS/);
-  assert.match(runtime, /BUILTIN_TOOL_NAMES\.has\(rawName\)/);
+  assert.match(runtime, /!isLoopbackUrl\(session\.provider\?\.baseUrl\)/);
+  assert.match(runtime, /session\.provider\?\.bypassConfirmations === true/);
+  assert.doesNotMatch(runtime, /await loadBridgeTools\(session\)/);
+  assert.match(runtime, /providerHeaders\(provider/);
+  assert.match(read('parkI18n.js'), /aiLlmOk: '\{provider\}/);
   assert.doesNotMatch(runtime, /fetch\(args\.url/);
 });

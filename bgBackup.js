@@ -609,6 +609,10 @@ async function exportBackup(mode = 'lite', { hydrate = false } = {}) {
   if (self.TabWallWebhookCore?.withoutProfiles) {
     settings = self.TabWallWebhookCore.withoutProfiles(settings);
   }
+  if (settings && typeof settings === 'object') {
+    settings = { ...settings };
+    delete settings.ai;
+  }
 
   const parkedTabs = items
     .filter((i) => i.kind === 'tab')
@@ -1075,9 +1079,10 @@ async function importBackup(backup, { mode = 'replace', importId = '' } = {}) {
         const currentSettings = await getSettings();
         importedSettings = normalizeSettings({
           ...backup.settings,
-          // Webhook profiles never come from backup files; keep the local
-          // profiles even when replacing the rest of the settings.
+          // Provider credentials and webhook profiles are device-local and
+          // never come from backup files.
           webhookProfiles: currentSettings.webhookProfiles,
+          ai: currentSettings.ai,
         });
       }
       await setParkedItems(items, {

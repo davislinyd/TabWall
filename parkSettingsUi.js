@@ -21,19 +21,27 @@
 
   const DEFAULT_AI_SETTINGS = {
     enabled: false,
-    baseUrl: 'http://127.0.0.1:8080/v1',
-    model: '',
-    bridgeUrl: 'http://127.0.0.1:8787',
+    activeProviderId: 'local-llama-cpp',
+    providers: [{
+      id: 'local-llama-cpp',
+      name: 'Local llama.cpp',
+      baseUrl: 'http://127.0.0.1:8080/v1',
+      model: '',
+      bearerToken: '',
+      headers: [],
+      models: [],
+      bypassConfirmations: false,
+    }],
     timeoutMs: 120000,
     contextSize: 8192,
-    allowedBridgeTools: [],
   };
 
-  function normalizeAiUrl(value, fallback) {
+  function normalizeAiUrl(value, fallback = '') {
     try {
       const url = new URL(String(value || ''));
       const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-      if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '::1'].includes(host)) return fallback;
+      const loopback = url.protocol === 'http:' && ['127.0.0.1', 'localhost', '::1'].includes(host);
+      if (!(loopback || url.protocol === 'https:')) return fallback;
       url.username = '';
       url.password = '';
       url.search = '';
@@ -44,22 +52,54 @@
     }
   }
 
+  function normalizeAiHeader(raw) {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const name = String(source.name ?? '').replace(/[\u0000-\u001f]/g, '').trim();
+    const value = String(source.value ?? '').replace(/[\u0000-\u001f]/g, '').trim();
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) || !value) return null;
+    if (['accept', 'content-type', 'authorization'].includes(name.toLowerCase())) return null;
+    return { name, value: value.slice(0, 4000) };
+  }
+
+  function normalizeAiProvider(raw, fallbackId = '') {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const id = String(source.id || fallbackId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    if (!id) return null;
+    return {
+      id,
+      name: String(source.name ?? 'OpenAI-compatible').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120) || 'OpenAI-compatible',
+      baseUrl: normalizeAiUrl(source.baseUrl, ''),
+      model: String(source.model ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 300),
+      bearerToken: String(source.bearerToken ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 4000),
+      headers: Array.isArray(source.headers) ? source.headers.map(normalizeAiHeader).filter(Boolean).slice(0, 20) : [],
+      models: Array.isArray(source.models)
+        ? [...new Set(source.models.map((model) => String(model ?? '').replace(/[\u0000-\u001f]/g, '').trim()).filter(Boolean))].slice(0, 100)
+        : [],
+      bypassConfirmations: source.bypassConfirmations === true,
+    };
+  }
+
   function normalizeAiSettings(raw) {
     const source = raw && typeof raw === 'object' ? raw : {};
-    const allowed = Array.isArray(source.allowedBridgeTools)
-      ? [...new Set(source.allowedBridgeTools
-        .map((name) => String(name ?? '').replace(/[\u0000-\u001f]/g, '').trim())
-        .filter((name) => /^[A-Za-z0-9_-]{1,64}$/.test(name))
-      )].slice(0, 100)
-      : [];
+    const legacy = Array.isArray(source.providers) ? [] : [{
+      ...DEFAULT_AI_SETTINGS.providers[0], baseUrl: source.baseUrl || DEFAULT_AI_SETTINGS.providers[0].baseUrl, model: source.model || '',
+    }];
+    const providers = (Array.isArray(source.providers) ? source.providers : legacy)
+      .map((provider, index) => normalizeAiProvider(provider, index === 0 ? 'local-llama-cpp' : ''))
+      .filter((provider) => provider?.baseUrl)
+      .filter((provider, index, list) => list.findIndex((item) => item.id === provider.id) === index)
+      .slice(0, 20);
+    if (!providers.some((provider) => provider.id === 'local-llama-cpp')) {
+      providers.unshift(normalizeAiProvider(DEFAULT_AI_SETTINGS.providers[0]));
+    }
     return {
       enabled: source.enabled === true,
-      baseUrl: normalizeAiUrl(source.baseUrl, DEFAULT_AI_SETTINGS.baseUrl),
-      model: String(source.model ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 200).trim(),
-      bridgeUrl: normalizeAiUrl(source.bridgeUrl, DEFAULT_AI_SETTINGS.bridgeUrl),
+      activeProviderId: providers.some((provider) => provider.id === source.activeProviderId)
+        ? source.activeProviderId
+        : 'local-llama-cpp',
+      providers,
       timeoutMs: env.clampInt(source.timeoutMs, 10000, 180000, DEFAULT_AI_SETTINGS.timeoutMs),
       contextSize: env.clampInt(source.contextSize, 2048, 131072, DEFAULT_AI_SETTINGS.contextSize),
-      allowedBridgeTools: allowed,
     };
   }
 

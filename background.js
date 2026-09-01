@@ -278,6 +278,11 @@ chrome.tabs.onUpdated?.addListener?.((tabId, changeInfo, tab) => {
   return Promise.all([redirectPromise, refreshTabBadge(tab || tabId).catch(() => {})]);
 });
 
+chrome.tabGroups?.onRemoved?.addListener?.((group) => {
+  const groupId = typeof group === 'number' ? group : group?.id;
+  return clearRestoredGroupLink(groupId).catch(() => {});
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   const tasks = [];
@@ -1757,8 +1762,6 @@ async function saveActiveGroup(opts = {}) {
       await flashBadge('!');
       return { ok: false, error: 'group_get_failed' };
     }
-    const restoreGroupHint = await findRestoreGroupHint(tab.groupId);
-
     const members = await chrome.tabs.query({
       windowId: tab.windowId,
       groupId: tab.groupId,
@@ -1773,16 +1776,38 @@ async function saveActiveGroup(opts = {}) {
     const afterSaveGroup = normalizeAfterSaveMode(opts.afterSaveGroup, settings.afterSaveGroup);
     const captureMode = settings.saveGroupCapture || 'all';
     const originalActiveId = tab.id;
-    const groupId = crypto.randomUUID();
+    const restoredGroupLink = await findRestoredGroupLink(tab.groupId);
+    const list = await getParkedItems();
+    const linkedIndex = restoredGroupLink
+      ? list.findIndex((item) => item.id === restoredGroupLink.parkedGroupId && item.kind === 'group')
+      : -1;
+    const existingGroup = linkedIndex >= 0 ? list[linkedIndex] : null;
+    const updatedExisting = Boolean(existingGroup);
+    const restoreGroupHint = updatedExisting ? null : await findRestoreGroupHint(tab.groupId);
+    const groupId = existingGroup?.id || crypto.randomUUID();
+    const linkedMembers = new Map(
+      (restoredGroupLink?.members || []).map((member) => [member.tabId, member])
+    );
+    const existingMembers = new Map(
+      (existingGroup?.tabs || []).map((member) => [member.id, member])
+    );
+    const linkedMemberIds = new Set(
+      (restoredGroupLink?.members || []).map((member) => member.memberId)
+    );
+    const staleMediaKeys = new Set();
 
     await flashBadge('…', '#3b82f6', 60000);
 
     const groupTabs = [];
     for (let i = 0; i < members.length; i++) {
       const m = members[i];
+      const linkedMember = linkedMembers.get(m.id);
+      const existingMember = linkedMember?.url === normalizeUrlKey(m.url)
+        ? existingMembers.get(linkedMember.memberId) || null
+        : null;
       let hasThumb = false;
       let hasSnap = false;
-      const memberId = crypto.randomUUID();
+      const memberId = existingMember?.id || crypto.randomUUID();
       const shouldCapture =
         captureMode === 'all' ||
         (captureMode === 'activeOnly' && m.id === originalActiveId);
@@ -1807,8 +1832,14 @@ async function saveActiveGroup(opts = {}) {
         ? await self.TabWallPageAnnotate.getPageAnnotation(m.url)
         : null;
       const seed = self.TabWallPageAnnotate?.mergeLiveIntoSaveMeta
-        ? self.TabWallPageAnnotate.mergeLiveIntoSaveMeta(live, { note: '', tags: [] })
-        : { note: '', tags: [] };
+        ? self.TabWallPageAnnotate.mergeLiveIntoSaveMeta(live, {
+          note: existingMember?.note || '',
+          tags: existingMember?.tags || [],
+        })
+        : {
+          note: existingMember?.note || '',
+          tags: existingMember?.tags || [],
+        };
       const metadata = applyAutoSaveMetadata(
         {
           url: m.url || '',
@@ -1834,7 +1865,27 @@ async function saveActiveGroup(opts = {}) {
         tags: metadata.tags,
         hasThumb,
         hasSnap,
+        ...storedTitleLockFields(existingMember),
       });
+      if (existingMember && !hasThumb && !hasSnap) {
+        staleMediaKeys.add(Media.mediaKeyMember(groupId, memberId));
+      }
+    }
+
+    if (existingGroup) {
+      const virtualMembers = (existingGroup.tabs || [])
+        .filter((member) => !linkedMemberIds.has(member.id))
+        .map((member, index) => ({
+          ...member,
+          indexInGroup: groupTabs.length + index,
+        }));
+      groupTabs.push(...virtualMembers);
+      const nextMemberIds = new Set(groupTabs.map((member) => member.id));
+      for (const memberId of linkedMemberIds) {
+        if (!nextMemberIds.has(memberId)) {
+          staleMediaKeys.add(Media.mediaKeyMember(groupId, memberId));
+        }
+      }
     }
 
     try {
@@ -1843,27 +1894,45 @@ async function saveActiveGroup(opts = {}) {
       // ignore
     }
 
-    const groupItem = {
-      kind: 'group',
-      id: groupId,
-      title: meta.title || '',
-      color: meta.color || 'grey',
-      collapsed: Boolean(meta.collapsed),
-      note: restoreGroupHint?.note || '',
-      tags: Array.isArray(restoreGroupHint?.tags) ? restoreGroupHint.tags : [],
-      pinned: false,
-      savedAt: Date.now(),
-      tabs: groupTabs,
-    };
+    const groupItem = existingGroup
+      ? {
+        ...existingGroup,
+        title: meta.title || '',
+        color: meta.color || 'grey',
+        collapsed: Boolean(meta.collapsed),
+        savedAt: Date.now(),
+        tabs: groupTabs,
+      }
+      : {
+        kind: 'group',
+        id: groupId,
+        title: meta.title || '',
+        color: meta.color || 'grey',
+        collapsed: Boolean(meta.collapsed),
+        note: restoreGroupHint?.note || '',
+        tags: Array.isArray(restoreGroupHint?.tags) ? restoreGroupHint.tags : [],
+        pinned: false,
+        savedAt: Date.now(),
+        tabs: groupTabs,
+      };
 
-    const list = await getParkedItems();
-    list.unshift(groupItem);
+    if (linkedIndex >= 0) list[linkedIndex] = groupItem;
+    else list.unshift(groupItem);
     await setParkedItems(list);
     await mergeTagsIntoCatalog(groupTabs.flatMap((member) => member.tags || []));
     try {
       await consumeRestoreHint(restoreGroupHint?.id);
     } catch (err) {
       console.warn('[TabWall] group restore hint cleanup failed:', err);
+    }
+
+    if (staleMediaKeys.size) {
+      try {
+        await Media.removeMany([...staleMediaKeys]);
+        staleMediaKeys.forEach((key) => autoBackupMediaCache.delete(key));
+      } catch (err) {
+        console.warn('[TabWall] stale group media cleanup failed:', err);
+      }
     }
 
     if (afterSaveGroup === 'close') {
@@ -1873,10 +1942,17 @@ async function saveActiveGroup(opts = {}) {
       } catch (err) {
         console.warn('[TabWall] close group tabs failed:', err);
       }
+      await clearRestoredGroupLink(tab.groupId);
+    } else if (updatedExisting) {
+      await rememberRestoredGroupLink(
+        tab.groupId,
+        groupItem,
+        members.map((member, index) => ({ tab: member, member: groupTabs[index] }))
+      );
     }
 
     await flashBadge(String(Math.min(list.length, 99)), '#3b82f6', 1500);
-    return { ok: true, id: groupItem.id, tabCount: groupTabs.length };
+    return { ok: true, id: groupItem.id, tabCount: groupTabs.length, updatedExisting };
   } catch (err) {
     console.warn('[TabWall] saveActiveGroup failed:', err);
     await flashBadge('!');
@@ -1965,6 +2041,7 @@ const MUTATING_MESSAGE_TYPES = new Set([
   'CREATE_FROM_URL_TEXT',
   'AUTO_BACKUP_RUN',
   'PATCH_SETTINGS',
+  'AI_UPDATE_SELECTION',
   'BATCH_UPDATE_ITEMS',
   'BATCH_DELETE_ITEMS',
   'RESOLVE_SAVE_CONFLICT',
@@ -2215,10 +2292,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           : { ok: false, error: 'ai_unavailable' };
       case 'GET_AI_SETTINGS': {
         const settings = await getSettings();
+        const ai = self.TabWallAi?.publicAiSettings
+          ? self.TabWallAi.publicAiSettings(settings.ai)
+          : settings.ai || {};
+        return { ok: true, ai };
+      }
+      case 'AI_UPDATE_SELECTION': {
+        const settings = await getSettings();
         const ai = self.TabWallAi?.normalizeAiSettings
           ? self.TabWallAi.normalizeAiSettings(settings.ai)
           : settings.ai || {};
-        return { ok: true, ai };
+        const providerId = String(message.providerId || '');
+        const model = String(message.model || '').slice(0, 300);
+        const providers = Array.isArray(ai.providers)
+          ? ai.providers.map((provider) => provider.id === providerId ? { ...provider, model } : provider)
+          : [];
+        const result = await patchSettings({ ai: { ...ai, activeProviderId: providerId, providers } });
+        return {
+          ok: result?.ok === true,
+          ai: self.TabWallAi?.publicAiSettings
+            ? self.TabWallAi.publicAiSettings(result?.settings?.ai)
+            : result?.settings?.ai || {},
+        };
       }
       case 'OPEN_AI_PANEL_ACTIVE':
         return openAiPanelOnActiveTab();

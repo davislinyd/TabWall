@@ -106,7 +106,7 @@ test('layout keeps the default height and clamps small requested heights', () =>
   assert.equal(panel.normalizeLayout({ height: 1 }, { width: 1440, height: 900 }).height, 320);
 });
 
-test('external panel source uses the shared AI port and session-only bridge token', () => {
+test('external panel source uses the shared AI port and provider selectors', () => {
   const source = fs.readFileSync(new URL('../aiPanel.js', import.meta.url), 'utf8');
   const core = fs.readFileSync(new URL('../aiUiCore.js', import.meta.url), 'utf8');
   assert.match(source, /GET_AI_SETTINGS/);
@@ -115,12 +115,10 @@ test('external panel source uses the shared AI port and session-only bridge toke
   assert.doesNotMatch(source, /TOGGLE_PARK_ACTIVE/);
   assert.match(core, /isOptionLetterHotkey/);
   assert.match(core, /name: 'tabwall-ai'/);
-  assert.match(source, /type = 'password'/);
-  assert.match(source, /bridgeToken = null/);
-  assert.match(source, /aiBridgeTokenOptional/);
-  assert.match(source, /autocomplete = 'new-password'/);
-  assert.match(source, /bridgeRow\.hidden = true/);
-  assert.doesNotMatch(source, /chrome\.storage\.local\.set\(\{[^}]*bridge/i);
+  assert.match(source, /providerSelect/);
+  assert.match(source, /modelSelect/);
+  assert.match(source, /AI_UPDATE_SELECTION/);
+  assert.doesNotMatch(source, /bridgeToken = null/);
   assert.match(source, /className = 'ai-messages'/);
   assert.match(source, /className = 'ai-sources'/);
   assert.match(source, /handleInputKeydown: false/);

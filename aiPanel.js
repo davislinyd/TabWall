@@ -33,16 +33,21 @@
       aiExpand: '展開 AI',
       aiSend: '送出',
       aiInputPh: '問問你的分頁…',
-      aiPrivacyHint: '模型在本機執行；外部 bridge 呼叫仍可能離開本機。',
-      aiBridgeToken: 'Bridge session token（僅本次面板）',
-      aiBridgeTokenOptional: '輸入 bridge token（選填）',
-      aiBridgeTokenHide: '收合 bridge token',
+      aiPrivacyHint: '遠端 Provider 讀取 TabWall 資料前會要求確認。',
+      aiProvider: 'Provider',
+      aiModel: 'Model',
+      aiNoModels: '尚未取得 models',
       aiAssistant: 'AI',
       aiYou: '你',
       aiTool: '工具',
+      aiAgentActivity: ({ n }) => `Agent 活動（${n} 項）`,
+      aiQuota: 'Quota',
+      aiQuotaRequests: 'Requests',
+      aiQuotaTokens: 'Tokens',
+      aiQuotaReset: '重置',
       aiSourcesLabel: '來源分頁',
       aiConfirmTitle: 'Agent 想執行這個操作',
-      aiExternalDataConfirm: '這會把可能包含分頁內容的資料送到 bridge。',
+      aiExternalDataConfirm: '這會把 TabWall 資料送到遠端 Provider。',
       aiWriteConfirm: '這會修改 TabWall 資料。',
       aiReject: '拒絕',
       aiApprove: '允許一次',
@@ -57,7 +62,7 @@
       aiCancelled: '已停止',
       aiUnknownError: '未知錯誤',
       aiError: 'AI 錯誤',
-      aiEnableFirst: '請先在 TabWall 設定啟用本機 AI',
+      aiEnableFirst: '請先在 TabWall 設定啟用 AI Agent',
       aiStarting: '準備分析',
       aiStopping: '正在停止',
     },
@@ -75,16 +80,21 @@
       aiExpand: 'Open AI',
       aiSend: 'Send',
       aiInputPh: 'Ask about your tabs…',
-      aiPrivacyHint: 'The model runs locally; bridge calls may leave this device.',
-      aiBridgeToken: 'Bridge session token (this panel only)',
-      aiBridgeTokenOptional: 'Enter bridge token (optional)',
-      aiBridgeTokenHide: 'Hide bridge token',
+      aiPrivacyHint: 'Remote providers require confirmation before reading TabWall data.',
+      aiProvider: 'Provider',
+      aiModel: 'Model',
+      aiNoModels: 'No models fetched yet',
       aiAssistant: 'AI',
       aiYou: 'You',
       aiTool: 'Tool',
+      aiAgentActivity: ({ n }) => `Agent activity (${n})`,
+      aiQuota: 'Quota',
+      aiQuotaRequests: 'Requests',
+      aiQuotaTokens: 'Tokens',
+      aiQuotaReset: 'Reset',
       aiSourcesLabel: 'Sources',
       aiConfirmTitle: 'The agent wants to run this action',
-      aiExternalDataConfirm: 'This may send page content to the bridge.',
+      aiExternalDataConfirm: 'This will send TabWall data to the remote provider.',
       aiWriteConfirm: 'This will modify TabWall data.',
       aiReject: 'Reject',
       aiApprove: 'Allow once',
@@ -99,7 +109,7 @@
       aiCancelled: 'Stopped',
       aiUnknownError: 'Unknown error',
       aiError: 'AI error',
-      aiEnableFirst: 'Enable local AI in TabWall settings first',
+      aiEnableFirst: 'Enable the AI Agent in TabWall settings first',
       aiStarting: 'Preparing analysis',
       aiStopping: 'Stopping',
     },
@@ -248,7 +258,6 @@
     let layout = normalizeLayout();
     let saveTimer = null;
     let core = null;
-    let bridgeToken = null;
     let openGeneration = 0;
     let pointerAction = null;
     let suppressFabClick = false;
@@ -338,7 +347,8 @@
         .header:active { cursor: grabbing; }
         .header h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; line-height: 1.2; }
         .toolbar, .composer-actions, .ai-confirm-actions { display: flex; align-items: center; gap: 6px; }
-        .toolbar { min-height: 42px; padding: 7px 10px; border-bottom: 1px solid rgba(46, 43, 39, .12); font-size: 11px; }
+        .toolbar { min-height: 42px; padding: 7px 10px; border-bottom: 1px solid rgba(46, 43, 39, .12); font-size: 11px; flex-wrap: wrap; }
+        .select { max-width: 150px; min-width: 0; border: 1px solid rgba(46, 43, 39, .18); border-radius: 4px; padding: 4px 6px; background: transparent; color: inherit; font: inherit; font-size: 11px; }
         .status { min-width: 0; color: #2e2b27; font-weight: 650; }
         .status[data-state="working"] { color: #b85e43; }
         .status[data-state="working"]::after { content: "..."; display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; white-space: nowrap; animation: tabwall-external-ai-dots 1.2s steps(1, end) infinite; }
@@ -353,7 +363,7 @@
         .btn.primary { border-color: #c66f59; background: #c66f59; color: #fffaf1; }
         .icon-btn { width: 28px; height: 28px; padding: 0; font-size: 16px; line-height: 1; }
         .ai-sources { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 5px; padding: 7px 10px; border-bottom: 1px solid rgba(46, 43, 39, .12); background: rgba(46, 43, 39, .035); color: #777067; font-size: 10px; }
-        .ai-sources[hidden], .ai-tool-confirm[hidden] { display: none; }
+        .ai-sources[hidden], .ai-tool-confirm[hidden], .ai-quota[hidden] { display: none; }
         .ai-sources-label { font-weight: 700; }
         .ai-source { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ai-messages { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 10px; background: #f6f1e6; scrollbar-color: rgba(46, 43, 39, .28) #f6f1e6; scrollbar-width: thin; }
@@ -364,6 +374,10 @@
         .ai-message { max-width: 92%; margin: 0; padding: 10px 12px; border: 1px solid rgba(46, 43, 39, .12); border-radius: 8px; background: rgba(255, 255, 255, .42); }
         .ai-message-user { align-self: flex-end; border-color: rgba(198, 111, 89, .42); background: rgba(198, 111, 89, .14); }
         .ai-message-tool { align-self: stretch; color: #777067; background: rgba(46, 43, 39, .045); }
+        .ai-agent-activity { align-self: stretch; color: #777067; font-size: 11px; }
+        .ai-agent-activity summary { cursor: pointer; font-weight: 650; }
+        .ai-agent-activity ul { margin: 6px 0 0; padding-left: 18px; }
+        .ai-agent-activity li[data-state="error"] { color: #b42318; }
         .ai-message-label { margin-bottom: 5px; color: #777067; font-size: 10px; font-weight: 700; }
         .ai-message-text { min-width: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
         .ai-message-text p { margin: 0 0 10px; white-space: pre-wrap; }
@@ -380,6 +394,7 @@
         .ai-message-text pre code { padding: 0; background: transparent; white-space: pre; }
         .ai-message-text a { color: #a94f39; text-decoration: underline; text-underline-offset: 2px; }
         .ai-tool-confirm { flex: 0 0 auto; margin: 0 10px 8px; padding: 9px; border: 1px solid #c66f59; border-radius: 5px; background: rgba(198, 111, 89, .1); font-size: 12px; }
+        .ai-quota { flex: 0 0 auto; min-height: 30px; padding: 8px 10px; border-top: 1px solid rgba(46, 43, 39, .12); background: rgba(46, 43, 39, .035); color: #777067; font-size: 11px; line-height: 1.3; }
         .ai-confirm-name { margin-top: 5px; font-weight: 700; overflow-wrap: anywhere; }
         .ai-confirm-risk { margin-top: 4px; color: #777067; line-height: 1.4; }
         .ai-confirm-args { max-height: 150px; margin: 7px 0; overflow: auto; padding: 7px; background: rgba(255, 255, 255, .5); color: #2e2b27; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; scrollbar-color: rgba(46, 43, 39, .28) #f6f1e6; scrollbar-width: thin; }
@@ -426,14 +441,19 @@
       status.setAttribute('role', 'status');
       status.setAttribute('aria-live', 'polite');
       status.textContent = t('aiReady');
+      const providerSelect = global.document.createElement('select');
+      providerSelect.className = 'select';
+      providerSelect.setAttribute('aria-label', t('aiProvider'));
+      const modelSelect = global.document.createElement('select');
+      modelSelect.className = 'select';
+      modelSelect.setAttribute('aria-label', t('aiModel'));
       const contextStatus = global.document.createElement('span');
       contextStatus.className = 'context';
       contextStatus.id = 'tabwall-ai-context-status';
       contextStatus.textContent = t('aiContextReady');
       const stop = addButton(toolbar, t('aiStop'), 'btn', null);
       const clear = addButton(toolbar, t('aiClear'), 'btn', null);
-      toolbar.insertBefore(status, toolbar.firstChild);
-      toolbar.insertBefore(contextStatus, stop);
+      toolbar.append(status, providerSelect, modelSelect, contextStatus, stop, clear);
 
       const sources = global.document.createElement('div');
       sources.className = 'ai-sources';
@@ -448,6 +468,12 @@
       confirmation.className = 'ai-tool-confirm';
       confirmation.id = 'tabwall-ai-tool-confirm';
       confirmation.hidden = true;
+      const quota = global.document.createElement('div');
+      quota.className = 'ai-quota';
+      quota.id = 'tabwall-ai-quota';
+      quota.setAttribute('role', 'status');
+      quota.setAttribute('aria-live', 'polite');
+      quota.hidden = true;
 
       const composer = global.document.createElement('div');
       composer.className = 'composer';
@@ -462,37 +488,8 @@
       hint.className = 'hint';
       hint.textContent = t('aiPrivacyHint');
       const send = addButton(composerActions, t('aiSend'), 'btn primary', null);
-      const bridgeToggle = addButton(composer, t('aiBridgeTokenOptional'), 'btn bridge-toggle', null);
-      bridgeToggle.setAttribute('aria-expanded', 'false');
-      const bridgeRow = global.document.createElement('div');
-      bridgeRow.className = 'bridge-row';
-      bridgeRow.hidden = true;
-      bridgeRow.setAttribute('aria-hidden', 'true');
-      const bridgeLabel = global.document.createElement('span');
-      bridgeLabel.textContent = t('aiBridgeToken');
-      bridgeRow.appendChild(bridgeLabel);
-      bridgeToggle.addEventListener('click', () => {
-        if (!bridgeToken) {
-          bridgeToken = global.document.createElement('input');
-          bridgeToken.type = 'password';
-          bridgeToken.autocomplete = 'new-password';
-          bridgeToken.setAttribute('data-1p-ignore', 'true');
-          bridgeToken.setAttribute('data-lpignore', 'true');
-          bridgeToken.setAttribute('data-bwignore', 'true');
-          bridgeToken.spellcheck = false;
-          bridgeToken.setAttribute('aria-label', t('aiBridgeToken'));
-          bridgeRow.appendChild(bridgeToken);
-        }
-        const expanded = bridgeRow.hidden;
-        bridgeRow.hidden = !expanded;
-        bridgeRow.setAttribute('aria-hidden', expanded ? 'false' : 'true');
-        bridgeToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        bridgeToggle.textContent = expanded ? t('aiBridgeTokenHide') : t('aiBridgeTokenOptional');
-        if (expanded) bridgeToken.focus();
-        else bridgeToken.value = '';
-      });
       composerActions.append(hint);
-      composer.append(input, composerActions, bridgeToggle, bridgeRow);
+      composer.append(input, composerActions);
 
       resizeHandle = global.document.createElement('div');
       resizeHandle.className = 'resize-handle';
@@ -504,7 +501,7 @@
       heightResizeHandle.setAttribute('role', 'separator');
       heightResizeHandle.setAttribute('aria-orientation', 'horizontal');
       heightResizeHandle.setAttribute('aria-label', '調整 AI 面板高度');
-      panel.append(header, toolbar, sources, messages, confirmation, composer, resizeHandle, heightResizeHandle);
+      panel.append(header, toolbar, sources, messages, confirmation, quota, composer, resizeHandle, heightResizeHandle);
 
       fab = global.document.createElement('button');
       fab.type = 'button';
@@ -527,10 +524,10 @@
         aiSources: sources,
         aiMessages: messages,
         aiToolConfirm: confirmation,
+        aiQuota: quota,
         aiInput: input,
-        aiBridgeToken: {
-          get value() { return bridgeToken?.value || ''; },
-        },
+        aiProviderSelect: providerSelect,
+        aiModelSelect: modelSelect,
         aiSendBtn: send,
         aiStopBtn: stop,
         aiClearBtn: clear,
@@ -543,7 +540,10 @@
           const result = await sendRuntimeMessage({ type: 'GET_AI_SETTINGS' });
           return result?.ai || {};
         },
-        getBridgeToken: () => bridgeToken?.value || '',
+        saveSelection: async ({ providerId, model }) => {
+          const result = await sendRuntimeMessage({ type: 'AI_UPDATE_SELECTION', providerId, model });
+          return result?.ai || {};
+        },
         showUi: () => setExpanded(true, false),
         handleInputKeydown: false,
       }) || null;
@@ -644,7 +644,6 @@
       resizeHandle = null;
       heightResizeHandle = null;
       core = null;
-      bridgeToken = null;
       pointerAction = null;
       lastEscapeAt = 0;
     }

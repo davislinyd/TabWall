@@ -919,13 +919,16 @@
     return note;
   }
 
-  function withoutWebhookProfiles(settings) {
+  function withoutLocalOnlyProfiles(settings) {
     if (global.TabWallWebhookCore?.withoutProfiles) {
-      return global.TabWallWebhookCore.withoutProfiles(settings);
+      const next = global.TabWallWebhookCore.withoutProfiles(settings);
+      delete next.ai;
+      return next;
     }
     const source = settings && typeof settings === 'object' ? settings : {};
     const next = { ...source };
     delete next.webhookProfiles;
+    delete next.ai;
     return next;
   }
 
@@ -941,7 +944,7 @@
       return item?.kind === 'note' ? canonicalizeNoteForExport(item) : item;
     });
     const settings = source.settings && typeof source.settings === 'object'
-      ? withoutWebhookProfiles(source.settings)
+      ? withoutLocalOnlyProfiles(source.settings)
       : source.settings;
     return {
       ...source,
