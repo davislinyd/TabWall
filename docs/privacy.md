@@ -6,7 +6,7 @@ permalink: /privacy.html
 
 # Privacy Policy — TabWall
 
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-01
 **Product:** TabWall (Chrome / Chromium extension)  
 **Contact:** Use the [GitHub repository issues](https://github.com/davislinyd/TabWall/issues).
 
@@ -35,9 +35,11 @@ When you use TabWall, it may process:
 | Auto-backup preferences (subfolder name, schedule) | Control local automatic backups under your download directory | `chrome.storage.local` |
 | Latest GitHub release metadata (stable tag, version, Release URL, check time, and handled-release key) | Compare versions and show an in-app update link | `chrome.storage.local`; the request is sent to GitHub’s public API |
 | Webhook profile names, URLs, headers, bodies, and reminder profile IDs | Send the reminder context to endpoints you explicitly select | Profile data in `chrome.storage.local`; request data is sent only to the configured endpoint |
-| AI prompts, selected page context, tool schemas, and local model responses | Analyze tabs with a local `llama-server` when you enable the AI agent | Sent to the configured loopback endpoint; conversation and page bodies are not persisted by TabWall |
-| Optional bridge tool arguments and results | Call tools you explicitly allow through a local bridge | Bridge memory / the third-party service selected by that bridge; external disclosure requires confirmation when page content may be included |
-| Optional AI bridge token | Authenticate the current bridge session | In-memory panel session only; not stored in extension storage |
+| AI provider profiles, Bearer tokens, custom headers, selected models, and cached `/models` lists | Connect the Agent to OpenAI-compatible endpoints you configure | `chrome.storage.local` only; omitted from JSON, ZIP, and automatic backups |
+| AI prompts, selected page context, tool schemas, and model responses | Analyze tabs when you enable the AI agent | Sent to the configured OpenAI-compatible endpoint (loopback HTTP or HTTPS). Conversation and page bodies are not persisted by TabWall |
+| Optional rate-limit quota snapshot (Requests / Tokens / Reset) | Show the latest provider quota in the current AI panel | In-memory panel session only; taken from successful or `429` response headers; not stored |
+| Optional bridge tool arguments and results | Reserved UI for a local bridge that is not implemented yet | Not sent; Bridge health, tools, and token flows are disabled |
+| Optional AI bridge token | Reserved for a future bridge session | Not used; the Bridge block is disabled and does not store a token |
 | Temporary in-memory state | Unlocked card session IDs, conflict UI, drag/stack, open panels | Memory only (cleared when the service worker or page unloads) |
 
 The extension reads the **currently active tab** (and related group tabs when you park a Tab Group) to capture a screenshot and save metadata. It does this only when **you** trigger park / related actions or use a Chrome command assigned to TabWall.
@@ -57,7 +59,9 @@ The update check stores only the latest release metadata and local status. It do
 
 If you configure a Webhook profile, TabWall sends a fixed `POST` with the body and headers you entered to that profile’s HTTP(S) URL when a selected reminder fires or you press Test. The body can include reminder fields such as the title, URL, message, mode, time, and tags through the documented template variables. Requests omit cookies and use a 15-second timeout; the endpoint’s own retention and logging policy applies after delivery. Profile URLs, headers, and bodies stay local and are excluded from exported backups.
 
-If you configure the optional local bridge to call a third-party API, that bridge may send the arguments you approved to that service. TabWall does not accept arbitrary URLs, methods, or headers from the model; review the bridge registry and confirmation prompt before allowing a call.
+If you add a remote HTTPS AI provider, TabWall sends prompts and any approved tab context to that endpoint. Loopback endpoints stay on this device. Remote reads require confirmation unless that provider bypasses Agent confirmations; write tools still confirm unless bypass is enabled. TabWall does not call a billing or credit API; quota text comes only from OpenAI-compatible rate-limit headers.
+
+The Bridge settings block is visible but disabled. TabWall does not currently send bridge tool arguments, health checks, or a bridge token.
 
 ## Permissions (why they are needed)
 
@@ -71,7 +75,7 @@ If you configure the optional local bridge to call a third-party API, that bridg
 | `alarms` | Schedule optional automatic local backups, card reminders, and the daily GitHub release check |
 | `downloads` | Write optional automatic backups into a subfolder of your browser download directory; the absolute path is known after each download completes |
 
-The AI agent uses `http://127.0.0.1` / `http://localhost` endpoints only by default. The configured `contextSize` controls how much page and tool context is sent to the local model; large context is trimmed before a request. A bridge is optional and third-party API credentials are kept by the bridge rather than in TabWall.
+The default AI provider is local `llama.cpp` at `http://127.0.0.1:8080/v1`. Other providers must use loopback HTTP or HTTPS. Large page and tool context is trimmed before a request. Bearer tokens and custom headers stay in `chrome.storage.local` and are excluded from backups. The Bridge block is not implemented.
 
 The alarms permission schedules both optional automatic backups and card reminders. Reminder notifications are delivered by the browser on this device.
 It also schedules the daily public GitHub release check; the check uses release metadata only and does not read parked content.
@@ -104,7 +108,7 @@ For privacy questions about TabWall, contact the publisher through the [project�
 
 # 隱私權政策 — TabWall（中文摘要）
 
-**最後更新日期：** 2026-08-27
+**最後更新日期：** 2026-09-01
 
 TabWall 將分頁與 Tab Group 暫存為本機照片牆。  
 提醒的模式、下一次觸發時間、間隔與通知文字也只保存在您的瀏覽器本機，用來排程本機通知。
@@ -118,7 +122,7 @@ TabWall 會在安裝／瀏覽器啟動時，並於之後每 24 小時向公開 G
 若啟用**自動備份**，TabWall 會查詢 Chrome 的 Downloads history 以辨識自己建立的備份，並依您設定的保留數量刪除舊的 TabWall 備份；備份會寫入瀏覽器**下載目錄**下您指定的子資料夾，不會上傳。
 解除安裝或清除擴充功能資料後，依瀏覽器機制刪除本機資料（已寫出的備份檔仍留在下載目錄，需自行刪除）。
 
-若啟用本機 AI，提示、選取的分頁 context、工具 schema 與模型回覆會送到你設定的 loopback `llama-server`，對話與頁面正文不會由 TabWall 持久化。Bridge 是選用功能；若你允許把可能含有分頁內容的資料送往第三方 API，資料會由 bridge 依其設定處理，且寫入／外部資料揭露會要求確認。Bridge token 只存在目前面板記憶體，不寫入 extension storage。
+若啟用 AI，提示、選取的分頁 context、工具 schema 與模型回覆會送到你設定的 OpenAI-compatible endpoint。預設是本機 `llama.cpp`；遠端 HTTPS 讀取 TabWall 資料前會確認，除非該 Provider 啟用略過確認。Provider profiles、Bearer token 與自訂 headers 只存在 `chrome.storage.local`，不進入備份。對話、頁面正文與 quota 快照不會由 TabWall 持久化。Bridge 區塊可見但尚未實作，不會發送 health、tools 或 token。
 
 更新提示只在 TabWall Canvas rail 的版本 badge 顯示，不使用系統 Chrome notification，也不會自動下載、安裝或替換擴充功能。點擊 badge 開啟 GitHub Release 頁面成功後，該 release 會標記為已處理；下載、安裝與重新載入仍需手動完成。更新檢查狀態不會進入備份檔。
 

@@ -20,6 +20,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 
 - Metadata such as URLs, titles, notes, tags, live page annotations, and order is stored in `chrome.storage.local`.
 - Webhook profiles and each reminder's selected profile IDs are stored in `chrome.storage.local`; profile URLs, headers, and bodies are excluded from JSON, ZIP, and partial backups.
+- AI provider profiles, Bearer tokens, custom headers, and cached model lists are stored in `chrome.storage.local` and excluded from JSON, ZIP, and partial backups.
 - Thumbnails, full snapshots, Sticker Note attachments, page-drawing ink, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
@@ -29,21 +30,22 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 - [Reminder and Webhook sequence diagram (Archify)](docs/diagrams/webhook-reminder-sequence.html) follows reminder persistence, Chrome notification delivery, parallel profile POSTs, best-effort isolation, and draft-profile testing.
 - [Canvas / Sticker architecture diagram](docs/diagrams/canvas-sticker-flow.svg) maps page placement, the reverse source index, local storage, and the one-time initial viewport repair gate. The repair waits for card and viewport geometry, then leaves existing custom views untouched.
 
-### Local AI agent
+### AI agent
 
-TabWall can run a local OpenAI-compatible agent through `llama-server`; page data stays in the extension flow unless you explicitly enable a local bridge tool that sends data elsewhere. A typical server starts with a context window that matches TabWall:
+TabWall uses one OpenAI-compatible provider mechanism for local `llama.cpp` and third-party HTTPS services. The default profile is Local llama.cpp at `http://127.0.0.1:8080/v1`. A typical local server:
 
 ```bash
-llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8000
+llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8080
 ```
 
 In TabWall Settings → AI:
 
-- Enable local AI and use `http://127.0.0.1:8000/v1` as the endpoint.
-- Set `contextSize` to the same value as llama-server `-c` (default `8192`). TabWall trims large page and tool results before sending them and reserves output space; it does not change the server configuration.
-- The bridge is optional. It exposes only registered local tools, keeps third-party API keys in the bridge, and requires confirmation before writes or external data disclosure. The bridge token is session-only.
+- Enable the Agent and add named provider profiles. Endpoints must be loopback HTTP or HTTPS.
+- Each profile can store a default model, Bearer token, and custom headers. Test connection calls `/models` and caches the list for the panel dropdown.
+- Remote HTTPS providers confirm before reading TabWall data; write tools confirm each time unless that provider bypasses confirmations.
+- Provider profiles stay in `chrome.storage.local` and are excluded from backups. The Bridge block is visible but disabled.
 
-On a normal page, press `Option/Alt+A` to open the external AI panel without opening TabWall. Inside the TabWall overlay or standalone page, the same shortcut focuses the built-in AI. It prioritizes the current page, can search/read open and saved tab context, and shows sources and tool confirmations. The panel supports streaming Markdown replies, bottom-edge height resizing, and two non-IME `Escape` presses within 500ms to minimize while the agent continues running. Bind the `open-ai` browser command manually in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) if you need an explicit command for restricted pages.
+On a normal page, press `Option/Alt+A` to open the external AI panel without opening TabWall. Inside the TabWall overlay or standalone page, the same shortcut focuses the built-in AI. Both panels share provider and model selectors; switching either clears that panel’s conversation. The panel streams Markdown replies, folds tool activity into a collapsed Agent activity row, and can show rate-limit quota (Requests / Tokens / Reset) from successful or `429` responses. Resize from the bottom edge, and press non-IME `Escape` twice within 500ms to minimize while the agent continues. Bind the `open-ai` browser command manually in Edge at `edge://extensions/shortcuts` (Chrome: `chrome://extensions/shortcuts`) if you need an explicit command for restricted pages.
 
 ### Shortcuts
 
@@ -129,7 +131,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **Overlay favicon and logo:** While the TabWall overlay is open on a normal page, the browser tab temporarily shows the same three-panel TabWall logo used by the extension and the wall page. Closing the overlay or cleaning up after an extension reload restores the page’s original favicon; standalone restricted-page tabs use the TabWall icon normally.
 - **Live notes and drawing:** add notes and tags to a full URL without parking it. Unparked annotations appear as dashed cards on the wall. Parking unions tags and appends notes; ink stays on the page. The drawing layer is hidden until Option/Alt+D and does not change the page DOM or paint a page-sized background. The shortcut reveals one draggable pen icon (default: right side, vertically centered); a single click expands the tools into Pen mode, while holding the left button and moving drags the icon. The transparent canvas captures pointer input only while a drawing tool is active, and drawings follow the page when it scrolls. Tools include pen, straight line, highlighter, ellipse/circle (hold Shift for a true circle), rectangle, text, Sticker, and eraser; shape interiors remain transparent. Clicking Sticker then a page position opens an inline editor over the current page and places the saved Note there. Page Stickers support multiple cards, header drag, independent resize (160–640 × 120–560), title double-click collapse/expand, pencil-button or body double-click editing, reminder badges, and detaching only the current page placement. Visible Web cards lazy-mount the same isolated sandbox and unload when hidden; they cannot access extension APIs, network, popups, forms, or outer-page navigation. Text boxes accept multiline Markdown source and render headings, emphasis, code, lists, Markdown links, and plain `http(s)` URLs safely after editing. Ink is written to local IndexedDB immediately and retained across extension reloads. `chrome://` pages cannot host the layer.
 - **GitHub release update check:** On install and browser startup, then once every 24 hours, TabWall checks the public GitHub latest stable release metadata. The Canvas rail version badge shows `current → latest` when a newer release is found; clicking it opens the GitHub Release page, after which that release is no longer shown as pending. The user still downloads, installs, and reloads the extension manually. The request contains no parked URLs, notes, screenshots, or other saved tab data.
-- **Local AI agent:** connect the external panel to a loopback `llama-server` endpoint, analyze the current page or saved tab metadata, and optionally call allowlisted local bridge tools. Context is automatically budgeted to the configured `contextSize`; no cloud endpoint is used by default.
+- **AI agent:** connect named OpenAI-compatible providers (default Local llama.cpp on loopback, or remote HTTPS). Analyze the current page or saved tab metadata, confirm remote data access unless bypassed, and show session-only rate-limit quota. Bridge remains disabled.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable; the Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
 - Park and restore groups, with member notes and tags.
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
@@ -211,6 +213,7 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 ### 架構
 
 - 網址、標題、備註、標籤、未停車標註與排序等中繼資料儲存在 `chrome.storage.local`。
+- AI Provider profiles、Bearer token、自訂 headers 與快取的 model 清單也存在 `chrome.storage.local`，且不進入 JSON、ZIP 或 partial backup。
 - 縮圖、完整快照、Sticker Note 附件、頁面繪圖筆畫與可選的自訂背景以 `IndexedDB` 二進位資料儲存。背景的符合方式、模糊與濃度留在設定裡。
 - 開啟畫布時先載入中繼資料，縮圖再於節點中延遲載入。
 - 第一次啟動時，會將舊版的內嵌 `Base64` 媒體遷移至 `IndexedDB`。
@@ -220,21 +223,22 @@ TabWall 是一個 Manifest V3 Chromium 擴充功能，可將分頁與 Tab Group 
 - [提醒與 Webhook sequence 圖（Archify）](docs/diagrams/webhook-reminder-sequence.html) 追蹤提醒保存、Chrome notification、複數 profile 並行 POST、失敗隔離與草稿測試。
 - [Canvas／Sticker 架構圖](docs/diagrams/canvas-sticker-flow.svg) 展示頁面 placement、來源反向索引、本機儲存與初始視角修正閘門；修正會等卡片與 viewport 尺寸就緒後才執行，且不覆寫既有自訂視角。
 
-### 本機 AI agent
+### AI agent
 
-TabWall 可透過本機 `llama-server` 使用 OpenAI-compatible agent；除非你明確啟用會把資料送出的本機 bridge tool，分頁資料都留在 extension 的本機流程。啟動 server 時，請讓 context window 與 TabWall 設定一致：
+TabWall 以同一套 OpenAI-compatible Provider 機制連線本機 `llama.cpp` 與第三方 HTTPS 服務。預設 profile 是 Local llama.cpp，endpoint 為 `http://127.0.0.1:8080/v1`。本機 server 範例：
 
 ```bash
-llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8000
+llama-server -hf Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m --chat-template chatml -c 8192 --port 8080
 ```
 
 在 TabWall「設定 → AI」：
 
-- 啟用本機 AI，endpoint 使用 `http://127.0.0.1:8000/v1`。
-- `contextSize` 必須與 llama-server 的 `-c` 相同，預設為 `8192`。TabWall 會在送出前裁切過大的分頁與工具結果並保留輸出空間，但不會替你修改 server 設定。
-- Bridge 是選用功能，只提供已登記的本機工具；第三方 API key 只存於 bridge，寫入或外部資料揭露需要確認。Bridge token 只存在目前面板 session。
+- 啟用 Agent，並可新增多個命名 Provider。Endpoint 只接受 loopback HTTP 或 HTTPS。
+- 每個 profile 可保存預設 model、Bearer token 與自訂 headers。「測試連線」會呼叫 `/models` 並快取清單，供面板下拉選單使用。
+- 遠端 HTTPS Provider 讀取 TabWall 資料前會確認；寫入工具仍逐次確認，除非該 Provider 啟用略過確認。
+- Provider profiles 只存在 `chrome.storage.local`，不進入備份。Bridge 區塊可見但停用。
 
-在一般網頁按 `Option/Alt+A` 可直接開啟外部 AI 面板，不必先進入 TabWall。面板會優先分析目前分頁，也能搜尋／讀取開啟與已儲存的分頁 context，並顯示來源與工具確認。面板支援 streaming Markdown、底部高度拖曳，以及 500ms 內連按兩次非 IME `Escape` 最小化；agent 會繼續執行。若要在受限頁面使用 Chrome command，請到 `chrome://extensions/shortcuts` 手動綁定沒有預設鍵的 `open-ai`。
+在一般網頁按 `Option/Alt+A` 可直接開啟外部 AI 面板，不必先進入 TabWall。TabWall 內建面板與外部面板共用 Provider／model 選擇；切換會清除該面板對話。面板支援 streaming Markdown、將工具過程收合為 Agent 活動列，並可顯示 Provider 回傳的 rate-limit quota（Requests／Tokens／Reset）。底部可拖曳高度，500ms 內連按兩次非 IME `Escape` 可最小化；agent 會繼續執行。若要在受限頁面使用 Chrome command，請到 `chrome://extensions/shortcuts` 手動綁定沒有預設鍵的 `open-ai`。
 
 ### 快捷鍵
 
@@ -247,7 +251,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 | `Option/Alt+Shift+G` | 暫存目前 Tab Group（依「儲存後行為」設定） |
 | `Option/Alt+O` | 開關 TabWall 空間畫布 |
 | `Option/Alt+D` | 在一般網頁開關繪圖層（content script 快捷鍵） |
-| `Option/Alt+A` | 在一般網頁開啟本機 AI 面板（content script 快捷鍵） |
+| `Option/Alt+A` | 在一般網頁開啟 AI 面板（content script 快捷鍵） |
 | `/` | 聚焦搜尋框 |
 | Mac 使用 `⌥⌘S`／Windows 使用 `Alt+Win+S` | 開啟或關閉畫布設定 |
 | 一般搜尋 | `||` 表示或；空格與 `&&` 表示且 |
@@ -319,7 +323,7 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 - **浮層 favicon 與 logo：** 一般網頁開啟 TabWall 浮層期間，瀏覽器分頁會暫時顯示與 extension 及 TabWall 頁面相同的三條斜線 logo。關閉浮層或 extension 重新載入清理後，會恢復原網頁 favicon；受限頁面的獨立 TabWall 分頁則正常使用 TabWall icon。
 - **未停車標註、繪圖與頁面 Sticker：** 不必停車即可對完整 URL 寫備註與 tag；牆上以虛線「未停車」卡顯示。停車時 tag 聯集、備註接在後面；繪圖留在原頁。繪圖層平時完全隱藏，按 Option／Alt+D 顯示一個可拖曳的繪圖 icon（預設在畫面右側中段），canvas 保持透明且只在繪圖工具啟用時接收輸入，圖案會跟著頁面捲動；單擊展開工具列並進入筆模式，按住左鍵移動則拖曳 icon。工具列的 Sticker 按鈕可在頁面點擊位置建立便條，並直接開啟頁面內 editor overlay。頁面 Sticker 與 Canvas 共用同一筆頂層 Note，可同時存在多張；標題列可拖曳、右下角可調整 160–640 × 120–560、標題雙擊可收合／展開，鉛筆按鈕或 body 雙擊可編輯、提醒 badge 可開啟提醒，移除頁面 placement 不會刪除 Canvas Note。工具包含筆、直線、螢光筆、圓圈／橢圓（按住 Shift 為正圓）、方框、文字、Sticker 與橡皮擦，圖形內部保持透明。選取中的工具會高亮顯示。文字框支援多行 Markdown 原文並安全呈現；頁面 Web Sticker 只在可視範圍 lazy mount sandbox，離開可視範圍或關閉圖層就卸載；sandbox 不提供 extension API、網路、popup、form 或導覽外層頁面。筆畫與文字會立即寫入本機 IndexedDB，重新載入 extension 後仍保留。<code>chrome://</code> 不能畫。
 - **GitHub Release 更新檢查：** 安裝／瀏覽器啟動時立即檢查，之後每 24 小時檢查一次公開 GitHub latest stable release metadata。Canvas rail 的版本 badge 發現新版時顯示「目前版本 → 新版」；點擊會開啟 GitHub Release 頁面，成功開啟後該 release 不再重複提示。下載、安裝與重新載入仍由使用者手動完成；請求不會帶出已儲存的網址、備註、截圖或其他分頁資料。
-- **本機 AI agent：** 外部 AI 面板可連線 loopback `llama-server`，分析目前分頁或已儲存分頁 metadata，並選擇性呼叫 allowlist 內的本機 bridge tools。系統會依 `contextSize` 自動控管 context，預設不連線雲端 endpoint。
+- **AI agent：** 可連線多個 OpenAI-compatible Provider（預設本機 llama.cpp，或遠端 HTTPS）。可分析目前分頁或已儲存分頁 metadata；遠端讀取預設需確認，面板可顯示當次 session 的 rate-limit quota。Bridge 維持停用。
 - **自訂背景：** 設定 → 顯示可上傳靜態圖片（置中／符合寬度／符合高度／原始大小）。圖片會依 note 附件規則壓縮，再套可調模糊（0–32px，預設 16）與濃度（15–70%，預設 40），並加主題洗色以免干擾卡片；背景啟用時會隱藏 Canvas 定位點，移除後恢復。完整 ZIP 備份含背景圖；精簡 JSON 只保留背景設定。覆蓋還原會套用背景，附加匯入不會覆寫現有背景。不支援影片背景。
 - 暫存與還原群組，支援成員備註與標籤。
 - **卡片上鎖：** 可將分頁、群組、圖片卡、Sticker Note 或成員上鎖，以鎖頭遮罩隱藏縮圖與快照。解鎖狀態僅存在本次工作階段，重開分頁自動再鎖。支援 SHA-256 加鹽密碼保護或免密碼點擊解鎖；還原分頁不需解鎖。

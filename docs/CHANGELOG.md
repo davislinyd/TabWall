@@ -11,11 +11,32 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.61.0 — 2026-09-01
+
+- 將 llama.cpp 與第三方服務統一為 OpenAI-compatible Provider profiles；預設「Local llama.cpp」使用 `http://127.0.0.1:8080/v1`。
+- 設定頁可新增／編輯／刪除 Provider，並以 `/models` 測試連線與快取 models；可填 Bearer token 與自訂 headers。
+- TabWall 與外部網頁 AI 面板共用 Provider／model 選擇；切換會清除該面板對話。
+- 遠端 HTTPS endpoint 讀取 TabWall 資料前需確認；寫入工具仍逐次確認。Provider 可啟用略過確認。
+- AI 面板顯示 Provider 回傳的 rate-limit quota（Requests／Tokens／Reset）；Agent 過程改為預設收合的活動列。
+- Bridge 維持可見但停用，不執行 health、tools 或 token 流程。
+- Provider profiles 與憑證只存在 `chrome.storage.local`，不進入備份。
+- 更新 README、GitHub Pages 使用者手冊與隱私政策。
+
+## 2.59.4 — 2026-08-27
+
+- 修正 Sticker Note 上鎖後標題選項無法選取的問題。
+- 重新產生 `dist/TabWall-2.59.4.zip`。
+
 ## 2.59.2 — 2026-08-27
 
 - 統一 TabWall 頁面左上角 logo、extension icon、瀏覽器分頁 favicon 與 overlay 臨時 favicon，全部使用頁面三條斜線 logo 與深色 Workbench 米白色 `#eee8dc`。
 - Overlay 開啟期間會暫時替換原頁 favicon；透過快捷鍵、Escape、關閉按鈕、背景遮罩關閉，或 extension reload 清理後，恢復原頁 favicon。
 - 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.59.2.zip`。
+
+## 2.58.0 — 2026-08-27
+
+- 自動備份改為選擇每日本機時間 00:00–23:30（每 30 分鐘一格）；資料變更納入下一次排程，錯過時段會在 Service Worker 恢復或開啟 TabWall 時補備一次。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.58.0.zip`。
 
 ## 2.57.0 — 2026-08-27
 
