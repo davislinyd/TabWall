@@ -241,7 +241,7 @@ function canvasNodeHtml(item) {
   const groupColors = get('GROUP_COLORS', {}) || {};
   const groupColor = item.kind === 'group' ? (groupColors[item.color] || groupColors.grey || '#9ca3af') : '';
   const meta = item.kind === 'group'
-    ? t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })
+    ? `${t('groupTabs', { n: (item.tabs || []).length + (item.notes || []).length })} · ${t('savedAt', { time: formatSavedAt(item.savedAt) })}`
     : isNote
       ? `${t('noteKind')} · ${formatSavedAt(item.savedAt)} · ${t('noteCount', { n: (item.attachments || []).length })}`
       : isLive
@@ -249,6 +249,7 @@ function canvasNodeHtml(item) {
         : isImage
         ? `${t('imageKind')} · ${formatSavedAt(item.savedAt)}`
         : `${domainOf(item.url)} · ${formatSavedAt(item.savedAt)}`;
+  const sizeStyle = isNote ? `height:${position.h}px;` : '';
   const actionHtml = canvasNodeActionEntries(item)
     .map(({ action, label, icon }) => `<button type="button" class="canvas-node-action${action === 'delete' ? ' danger' : ''}" data-canvas-node-action="${action}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(icon)}</button>`)
     .join('');
@@ -262,7 +263,7 @@ function canvasNodeHtml(item) {
   return `
     <article class="canvas-node${item.kind === 'group' ? ' canvas-group' : ''}${isNote ? ' canvas-note' : ''}${isLive ? ' canvas-live' : ''}${isImage ? ' canvas-image' : ''}${selected ? ' selected' : ''}"
       data-id="${escapeAttr(item.id)}" data-kind="${escapeAttr(item.kind)}"${isImage ? ' data-card-source="image"' : ''} role="button" tabindex="0"
-      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;min-height:${position.h}px;z-index:${Math.round(position.z || 0)}${groupStyle}">
+      aria-selected="${selected ? 'true' : 'false'}" title="${escapeAttr(t('canvasNodeHint'))}" style="left:${position.x}px;top:${position.y}px;width:${position.w}px;${sizeStyle}min-height:${position.h}px;z-index:${Math.round(position.z || 0)}${groupStyle}">
       <div class="canvas-node-thumb" title="${escapeAttr(t('canvasNodeHint'))}">${canvasThumbHtml(item)}</div>
       <div class="canvas-node-copy">
         <div class="canvas-node-title">
@@ -550,11 +551,7 @@ function updateCanvasNodePositions(snapshot = canvasStoreSnapshot(), searchConte
   for (const [id, node] of canvasNodeElements) {
     const position = positions[id] ? canvasDisplayPosition(positions[id]) : null;
     if (!position) continue;
-    node.style.left = `${position.x}px`;
-    node.style.top = `${position.y}px`;
-    node.style.width = `${position.w}px`;
-    node.style.minHeight = `${position.h}px`;
-    node.style.zIndex = String(Math.round(position.z || 0));
+    setCanvasNodePosition(node, position);
   }
 }
 
@@ -789,11 +786,17 @@ function setCanvasNodePosition(node, position) {
   const left = `${position.x}px`;
   const top = `${position.y}px`;
   const width = `${position.w}px`;
+  const height = `${position.h}px`;
   const minHeight = `${position.h}px`;
   const zIndex = String(Math.round(position.z || 0));
   if (style.left !== left) style.left = left;
   if (style.top !== top) style.top = top;
   if (style.width !== width) style.width = width;
+  if (node.classList.contains('canvas-note')) {
+    if (style.height !== height) style.height = height;
+  } else if (style.height) {
+    style.removeProperty('height');
+  }
   if (style.minHeight !== minHeight) style.minHeight = minHeight;
   if (style.zIndex !== zIndex) style.zIndex = zIndex;
 }

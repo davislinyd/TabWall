@@ -11,6 +11,13 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.61.3 — 2026-09-04
+
+- Canvas 頂層 Sticker Note 的 Markdown 預覽改用卡片剩餘高度；放大或縮小卡片時顯示內容隨可用空間增減，超出內容會裁切，不顯示捲軸，也不會讓卡片自動增高。拖曳／鍵盤 resize、重繪與重新載入會保留實際 note 高度；Web 模式維持靜態摘要。
+- 同一瀏覽器工作階段內，還原後重新儲存 Group 會更新原本的 Group 卡並保留既有群組與相符成員 metadata；原卡已刪除時才建立新卡。
+- 完整 ZIP 備份遇到 Chrome 內部的無效 favicon URL 時會略過該 favicon，不再阻止匯出；自動完整備份也會在 hydrate／下載前檢查缺失媒體與容量並保留可診斷錯誤。
+- 更新 README 與 GitHub Pages 使用者手冊，重新產生 `dist/TabWall-2.61.3.zip`。
+
 ## 2.61.0 — 2026-09-01
 
 - 將 llama.cpp 與第三方服務統一為 OpenAI-compatible Provider profiles；預設「Local llama.cpp」使用 `http://127.0.0.1:8080/v1`。

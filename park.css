@@ -6620,7 +6620,19 @@ html[data-theme='dark'] .canvas-node.canvas-note {
 .canvas-note-cover svg { width: 30px; height: 30px; }
 .canvas-note-preview,
 .sticker-note-preview { color: inherit; line-height: 1.5; overflow-wrap: anywhere; }
-.canvas-note-preview { max-height: 74px; overflow: hidden; font-size: 12px; }
+.canvas-node.canvas-note .canvas-node-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-node.canvas-note .canvas-note-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+.canvas-note-preview { overflow: hidden; font-size: 12px; }
 .canvas-note-preview h1, .canvas-note-preview h2, .canvas-note-preview h3,
 .sticker-note-preview h1, .sticker-note-preview h2, .sticker-note-preview h3 { margin: 0 0 5px; line-height: 1.2; }
 .canvas-note-preview p, .sticker-note-preview p { margin: 0 0 6px; }

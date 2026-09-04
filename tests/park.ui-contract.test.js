@@ -156,6 +156,21 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.match(HTML_SOURCE, /body\.canvas-mode \.header-primary\s*\{[\s\S]*?background: transparent;/);
 });
 
+test('Canvas group cards show their saved time', () => {
+  const canvasNode = extractFnSource(CANVAS_RENDER_SOURCE, 'canvasNodeHtml');
+  assert.match(
+    canvasNode,
+    /item\.kind === 'group'[\s\S]*?groupTabs[\s\S]*?savedAt[\s\S]*?formatSavedAt\(item\.savedAt\)/
+  );
+});
+
+test('Group overview uses larger responsive member cards', () => {
+  assert.match(CSS_SOURCE, /\.lb-group-mosaic\s*\{[\s\S]*?width:\s*min\(1400px,\s*94vw\)/);
+  assert.match(CSS_SOURCE, /\.lb-group-mosaic\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;[\s\S]*?padding:\s*0;/);
+  assert.match(CSS_SOURCE, /\.lb-group-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(240px,\s*1fr\)\)/);
+  assert.match(CSS_SOURCE, /\.lb-group-cell\s*\{[\s\S]*?gap:\s*8px;[\s\S]*?padding:\s*10px;/);
+});
+
 test('view mode changes apply only after settings persistence succeeds', () => {
   const toggleStart = PARK_SOURCE.indexOf("viewModeBtn?.addEventListener('click'");
   assert.ok(toggleStart >= 0, 'view mode toggle present');
@@ -238,6 +253,14 @@ test('Card reminders expose the shared panel, editor, and card actions', () => {
   assert.match(CANVAS_RENDER_SOURCE, /action: 'reminder'/);
   assert.match(CANVAS_IX_SOURCE, /action === 'reminder'/);
   assert.match(CSS_SOURCE, /#remindersBox/);
+
+  const keydownStart = PARK_SOURCE.indexOf("document.addEventListener('keydown'");
+  const keydownEnd = PARK_SOURCE.indexOf("\nfunction sortTabs", keydownStart);
+  const keydownSource = PARK_SOURCE.slice(keydownStart, keydownEnd);
+  const reminderEscape = keydownSource.indexOf("if (remindersBox?.classList.contains('open'))");
+  assert.ok(reminderEscape >= 0, 'Escape must close the reminder panel');
+  assert.match(keydownSource.slice(reminderEscape), /closeRemindersBox\(\);\s*return;/);
+  assert.ok(reminderEscape < keydownSource.indexOf('requestHostClose();'), 'reminder Escape must not close TabWall');
 });
 
 test('Webhook profiles expose settings CRUD, reminder multi-select, and safe test wiring', () => {
@@ -484,6 +507,9 @@ test('Sticker Note exposes placement, single-document Web editing, attachments, 
 test('Top-level Sticker Notes expose isolated independent resize operations', () => {
   assert.match(CANVAS_RENDER_SOURCE, /if \(item\.kind === 'note' && node\)/);
   assert.match(CANVAS_RENDER_SOURCE, /handle\.dataset\.canvasResizeHandle = 'true'/);
+  assert.match(CANVAS_RENDER_SOURCE, /const sizeStyle = isNote \? `height:\$\{position\.h\}px;` : ''/);
+  assert.match(CANVAS_RENDER_SOURCE, /function setCanvasNodePosition\(node, position\)[\s\S]*?node\.classList\.contains\('canvas-note'\)[\s\S]*?style\.height = height/);
+  assert.match(CANVAS_RENDER_SOURCE, /function updateCanvasNodePositions\([\s\S]*?setCanvasNodePosition\(node, position\)/);
   assert.match(CANVAS_IX_SOURCE, /function wireCanvasResizeHandle\(/);
   assert.match(CANVAS_IX_SOURCE, /beginCanvasPointer\(event, 'resize', item\.id\)/);
   assert.match(CANVAS_IX_SOURCE, /env\.ensureCanvasStore\(\)\?\.commitResize\(item\.id/);
@@ -492,6 +518,9 @@ test('Top-level Sticker Notes expose isolated independent resize operations', ()
   assert.match(STORE_SOURCE, /w: finite\(current\.w \+ \(Number\(op\.dw\)/);
   assert.match(STORE_SOURCE, /h: finite\(current\.h \+ \(Number\(op\.dh\)/);
   assert.match(STORE_SOURCE, /function commitResize\(/);
+  assert.match(CSS_SOURCE, /\.canvas-node\.canvas-note \.canvas-node-copy\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?flex-direction:\s*column;[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*hidden;/);
+  assert.match(CSS_SOURCE, /\.canvas-node\.canvas-note \.canvas-note-preview\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?max-height:\s*none;/);
+  assert.doesNotMatch(CSS_SOURCE, /\.canvas-note-preview\s*\{\s*max-height:\s*74px/);
   assert.match(CSS_SOURCE, /\.canvas-resize-handle\s*\{/);
   assert.match(PARK_BEHAVIOR_FLAT, /CANVAS_NODE_DISPLAY_SCALE/);
 });

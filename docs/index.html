@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.61.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.61.3 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線 OpenAI-compatible AI Provider。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.61.0</span>
+      <span>使用者說明 · v2.61.3</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,7 +71,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.61.0</span><span lang="en">Version 2.61.0</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.61.3</span><span lang="en">Version 2.61.3</span></span>
           <span class="chip"><span lang="zh-Hant">OpenAI-compatible AI</span><span lang="en">OpenAI-compatible AI</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
@@ -304,8 +304,8 @@ https://wiki.example.com
       <section class="chapter" id="canvas">
         <h2 lang="zh-Hant">空間畫布</h2>
         <h2 lang="en">Spatial canvas</h2>
-        <p lang="zh-Hant">預設檢視是可平移、縮放的無限畫布。卡片預覽固定 16:10。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
-        <p lang="en">The default view is an infinite canvas you can pan and zoom. Card previews are 16:10. At 100% zoom cards look about 10% larger; stored positions stay compatible.</p>
+        <p lang="zh-Hant">預設檢視是可平移、縮放的無限畫布。一般卡片預覽固定 16:10；頂層 Sticker Note 會保留獨立儲存的寬高。Note 的 Markdown 預覽會填滿卡片剩餘高度，放大時顯示更多內容，超出部分裁切，不顯示捲軸也不會自動增高。100% 縮放時卡片視覺大約放大 10%，儲存的座標格式不變。</p>
+        <p lang="en">The default view is an infinite canvas you can pan and zoom. Regular card previews are 16:10; top-level Sticker Notes keep their independently saved width and height. A note’s Markdown preview fills the remaining card height, showing more when enlarged and clipping overflow without a scrollbar or automatic growth. At 100% zoom cards look about 10% larger; stored positions stay compatible.</p>
         <p lang="zh-Hant">畫布視角位置與縮放會在列表／畫布切換及重新開啟 TabWall 後保留；只有首次使用會自動置中。更新後若舊的預設視角旗標失效，會等卡片與 viewport 尺寸就緒後只修復一次；已有的自訂視角不會被覆寫。</p>
         <p lang="en">The canvas viewport and zoom persist when switching between list and canvas or reopening TabWall. Automatic centering runs only on first use; after an update, a stale default-view marker is repaired once the cards and viewport have measurable sizes. Existing custom views are preserved.</p>
         <figure class="diagram-card">
@@ -367,8 +367,8 @@ https://wiki.example.com
             <tr>
               <td lang="zh-Hant">拖曳頂層 Sticker Note 右下角 handle</td>
               <td lang="en">Drag a top-level Sticker Note resize handle</td>
-              <td lang="zh-Hant">個別調整 note 尺寸；寬度限制 160–640、高度限制 120–560，放開後只保存一次。</td>
-              <td lang="en">Resize that note independently; width is 160–640 and height is 120–560, with one save on release.</td>
+              <td lang="zh-Hant">個別調整 note 尺寸；寬度限制 160–640、高度限制 120–560，放開後只保存一次。Markdown 預覽會隨可用高度顯示更多或更少內容，超出部分裁切。</td>
+              <td lang="en">Resize that note independently; width is 160–640 and height is 120–560, with one save on release. Markdown previews show more or less content with the available height and clip overflow.</td>
             </tr>
             <tr>
               <td lang="zh-Hant">拖曳卡片</td>
@@ -439,8 +439,8 @@ https://wiki.example.com
         <p lang="en">Tab cards, groups, image cards, notes, and group members can be locked from the edit box. Locking hides thumbnails and full snapshots with a lock overlay so passersby cannot see page contents. Restoring tabs and editing notes still work without unlocking. Unlocking lasts only for the current tab session (re-locks upon closing). An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately.</p>
         <h3 lang="zh-Hant">群組卡片</h3>
         <h3 lang="en">Group cards</h3>
-        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原並保留單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；相同 URL 的開啟分頁會重用並重新分組，note 成員不會變成瀏覽器分頁且會保留在卡片中。群組卡有色條與淡色，方便和一般分頁區分。</p>
-        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore and keep one member or the whole group. Restore can target the current window or a new one; matching open tabs are reused and regrouped. Note members never become browser tabs and remain in the card. Group cards have a color bar and tint so they stand apart from tab cards.</p>
+        <p lang="zh-Hant">展開後是可操作的成員格，不是死馬賽克。可預覽、編輯、還原並保留單一成員或整個 Group。還原 Group 時可選目前視窗或新視窗；相同 URL 的開啟分頁會重用並重新分組，note 成員不會變成瀏覽器分頁且會保留在卡片中。在同一個瀏覽器工作階段重新儲存已還原的 Group，會更新原本的 Group 卡並保留既有群組與相符成員 metadata；若原卡已刪除，才會建立新卡。群組卡有色條與淡色，方便和一般分頁區分。</p>
+        <p lang="en">Expanding a group opens a live member grid, not a dead mosaic. Preview, edit, or restore and keep one member or the whole group. Restore can target the current window or a new one; matching open tabs are reused and regrouped. Note members never become browser tabs and remain in the card. Saving a restored Group again in the same browser session updates its original Group card and preserves existing group and matching member metadata; if the source card was deleted, a new card is created. Group cards have a color bar and tint so they stand apart from tab cards.</p>
         <h3 lang="zh-Hant">圖片卡</h3>
         <h3 lang="en">Image cards</h3>
         <p lang="zh-Hant">用「新增卡片」上傳、貼上或拖放本機圖片。支援 JPEG、PNG、WEBP、GIF、SVG、HEIC。會壓縮成縮圖與快照，以 contain 填滿節點。這不是分頁，點縮圖不會還原瀏覽器分頁。</p>
@@ -1049,8 +1049,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.61.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.61.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.61.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.61.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

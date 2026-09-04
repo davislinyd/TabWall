@@ -24,7 +24,7 @@ TabWall is a Manifest V3 Chromium extension that parks tabs and Tab Groups on a 
 - Thumbnails, full snapshots, Sticker Note attachments, page-drawing ink, and the optional custom wallpaper are stored as `IndexedDB` blobs. Wallpaper fit, blur, and strength stay in settings.
 - Opening the wall loads metadata first; thumbnails load lazily inside the wall frame.
 - The first launch migrates legacy inline `Base64` media into `IndexedDB`.
-- Canvas nodes use a fixed `16:10` preview ratio; positions and viewport are stored separately from item metadata.
+- Canvas previews use a fixed `16:10` ratio; top-level Sticker Notes preserve their saved size, and Markdown previews fill the remaining card height, clipping overflow without a scrollbar or automatic card growth.
 - [Interactive project architecture diagram (Archify)](docs/diagrams/tabwall-architecture.html) maps the MV3 entrypoints, service worker, domain modules, Chrome APIs, local persistence, sandbox, and optional localhost AI boundary.
 - [Interactive core workflow diagram (Archify)](docs/diagrams/tabwall-workflow.html) follows the main message loop from user action through local state and Canvas/list rendering, with the restore branch to Chrome APIs.
 - [Reminder and Webhook sequence diagram (Archify)](docs/diagrams/webhook-reminder-sequence.html) follows reminder persistence, Chrome notification delivery, parallel profile POSTs, best-effort isolation, and draft-profile testing.
@@ -97,7 +97,7 @@ After an extension reload or update, reopen or refresh existing tabs when a page
 | Right-click empty canvas | Custom menu: sort by date, realign cards, export lite backup, add Sticker Note |
 | Right-click a card | Same actions as the card toolbar (restore and keep, snapshot, edit, copy, pin, delete—by kind) |
 | Drag a node | Move it on the canvas; positions are saved automatically |
-| Drag a top-level Sticker Note resize handle | Resize that note independently; width is 160–640 and height is 120–560, with one save on release |
+| Drag a top-level Sticker Note resize handle | Resize that note independently; width is 160–640 and height is 120–560, with one save on release. Markdown previews reveal more or less content with the available height and clip overflow without scrolling |
 | Drag one node onto another | Stack the items into a group |
 | Select tool / drag on empty canvas | Select and move nodes, or move the canvas; wheel controls zoom |
 | Middle-mouse drag anywhere on the canvas | Pan the canvas without starting a selection; double-click resets the view |
@@ -133,7 +133,7 @@ List view remains available as a dense and accessible fallback; canvas layout is
 - **GitHub release update check:** On install and browser startup, then once every 24 hours, TabWall checks the public GitHub latest stable release metadata. The Canvas rail version badge shows `current → latest` when a newer release is found; clicking it opens the GitHub Release page, after which that release is no longer shown as pending. The user still downloads, installs, and reloads the extension manually. The request contains no parked URLs, notes, screenshots, or other saved tab data.
 - **AI agent:** connect named OpenAI-compatible providers (default Local llama.cpp on loopback, or remote HTTPS). Analyze the current page or saved tab metadata, confirm remote data access unless bypassed, and show session-only rate-limit quota. Bridge remains disabled.
 - **Custom background:** Settings → Display can upload a static image (center / fit-to-width / fit-to-height / original). The image is compressed like a note attachment, then shown with adjustable blur (0–32px, default 16) and strength (15–70%, default 40) plus a theme wash so cards stay readable; the Canvas positioning dots are hidden while the wallpaper is active and return when it is removed. Full ZIP backups include the image; lite JSON keeps only the settings. Replace restore applies the wallpaper; append import does not overwrite it. Video backgrounds are not supported.
-- Park and restore groups, with member notes and tags.
+- Park and restore groups, with member notes and tags. Saving a restored Group updates its original card and preserves its existing group and matched member metadata; if the source card is gone, a new card is created.
 - **Card lock:** lock any tab, group, image card, Sticker Note, or member to hide thumbnails and snapshots behind a lock overlay. Locking is local, and unlocking lasts only for the current tab session. An optional password uses salted SHA-256 hash; without a password, clicking the lock unlocks immediately. Restoring tabs does not require unlocking.
 - **Custom display titles:** assign a custom display title to cards in the edit box. The card prominently displays the custom title while retaining the original title as a subtitle. Plain search and Option+/ search match both display and original titles.
 - **Card reminders:** set one-time or interval reminders on top-level tabs, groups, image cards, and Sticker Notes. Reminders use browser notifications, are included in backups, and can be reviewed from the bell panel; blank notification text falls back to the card title.

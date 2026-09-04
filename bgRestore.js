@@ -9,10 +9,95 @@
 const PENDING_CONFLICT_KEY = 'pendingSaveConflict';
 const PENDING_TTL_MS = 10 * 60 * 1000;
 const RESTORE_HINTS_KEY = 'restoreSaveHints';
+const RESTORED_GROUP_LINKS_KEY = 'restoredGroupLinksV1';
 
 /** Exact URL key (full string including query/hash). */
 function normalizeUrlKey(url) {
   return typeof url === 'string' ? url : '';
+}
+
+function normalizeRestoredGroupLink(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const chromeGroupId = Number(raw.chromeGroupId);
+  const parkedGroupId = typeof raw.parkedGroupId === 'string' ? raw.parkedGroupId : '';
+  if (!Number.isInteger(chromeGroupId) || chromeGroupId < 0 || !parkedGroupId) return null;
+  const seenTabs = new Set();
+  const members = [];
+  for (const rawMember of Array.isArray(raw.members) ? raw.members : []) {
+    const tabId = Number(rawMember?.tabId);
+    const memberId = typeof rawMember?.memberId === 'string' ? rawMember.memberId : '';
+    if (!Number.isInteger(tabId) || tabId < 0 || !memberId || seenTabs.has(tabId)) continue;
+    seenTabs.add(tabId);
+    members.push({
+      tabId,
+      memberId,
+      url: normalizeUrlKey(rawMember.url),
+    });
+  }
+  return { chromeGroupId, parkedGroupId, members };
+}
+
+async function getRestoredGroupLinks() {
+  if (!chrome.storage.session) return [];
+  try {
+    const data = await chrome.storage.session.get(RESTORED_GROUP_LINKS_KEY);
+    return Array.isArray(data[RESTORED_GROUP_LINKS_KEY])
+      ? data[RESTORED_GROUP_LINKS_KEY].map(normalizeRestoredGroupLink).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function setRestoredGroupLinks(links) {
+  if (!chrome.storage.session) return false;
+  const cleaned = (Array.isArray(links) ? links : [])
+    .map(normalizeRestoredGroupLink)
+    .filter(Boolean);
+  try {
+    await chrome.storage.session.set({ [RESTORED_GROUP_LINKS_KEY]: cleaned });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function rememberRestoredGroupLink(chromeGroupId, item, entries) {
+  const link = normalizeRestoredGroupLink({
+    chromeGroupId,
+    parkedGroupId: item?.id,
+    members: (Array.isArray(entries) ? entries : []).map((entry) => ({
+      tabId: entry?.tab?.id,
+      memberId: entry?.member?.id,
+      url: entry?.tab?.url,
+    })),
+  });
+  if (!link) return false;
+  const links = await getRestoredGroupLinks();
+  return setRestoredGroupLinks([
+    ...links.filter((entry) => entry.chromeGroupId !== link.chromeGroupId),
+    link,
+  ]);
+}
+
+async function findRestoredGroupLink(chromeGroupId) {
+  const key = Number(chromeGroupId);
+  if (!Number.isInteger(key) || key < 0) return null;
+  const links = await getRestoredGroupLinks();
+  return links.find((link) => link.chromeGroupId === key) || null;
+}
+
+async function clearRestoredGroupLink(chromeGroupId) {
+  const key = Number(chromeGroupId);
+  if (!Number.isInteger(key) || key < 0) return false;
+  const links = await getRestoredGroupLinks();
+  return setRestoredGroupLinks(links.filter((link) => link.chromeGroupId !== key));
+}
+
+async function clearRestoredGroupLinksForParkedGroup(parkedGroupId) {
+  if (typeof parkedGroupId !== 'string' || !parkedGroupId) return false;
+  const links = await getRestoredGroupLinks();
+  return setRestoredGroupLinks(links.filter((link) => link.parkedGroupId !== parkedGroupId));
 }
 
 function tabMatchSummary(item) {
@@ -503,6 +588,7 @@ async function restoreGroup(id) {
     try {
       await updateRestoredGroup(existingGroupId, item);
       await focusOpenTab(resolved[0].tab);
+      await rememberRestoredGroupLink(existingGroupId, item, resolved);
       return restoreResult(list, item, {
         reused: resolved.length,
         skipped,
@@ -589,6 +675,7 @@ async function restoreGroup(id) {
       placeholderId = null;
     }
     await focusOpenTab(resolved[0].tab);
+    await rememberRestoredGroupLink(groupId, item, resolved);
     return restoreResult(list, item, {
       created: resolved.filter((entry) => entry.created).length,
       reused: resolved.filter((entry) => entry.reused).length,
@@ -633,6 +720,9 @@ async function deleteItem(id) {
   if (!item) return { ok: false, error: 'not_found' };
   const next = list.filter((t) => t.id !== id);
   await setParkedItems(next);
+  if (item.kind === 'group') {
+    await clearRestoredGroupLinksForParkedGroup(item.id);
+  }
   try {
     const removedKeys = Media.keysForItem(item);
     await Media.removeMany(removedKeys);

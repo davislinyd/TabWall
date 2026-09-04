@@ -216,6 +216,7 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
     },
     tabGroups: {
       TAB_GROUP_ID_NONE: -1,
+      onRemoved: event(),
       async get(id) {
         return runtime.groupMeta || {
           id,
@@ -554,7 +555,7 @@ function installDownloadStub(runtime) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.61.2');
+  assert.equal(MANIFEST.version, '2.61.3');
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
@@ -948,6 +949,7 @@ test('automatic save metadata applies independently to Group members', async () 
 
   const saved = await runtime.api.saveActiveGroup({ afterSaveGroup: 'keep' });
   assert.equal(saved.ok, true);
+  assert.equal(saved.updatedExisting, false);
   const group = (await runtime.api.getParkedItems())[0];
   assert.deepEqual([...group.tabs].map((member) => member.note), ['Documentation', 'Read later']);
   assert.deepEqual([...group.tabs].map((member) => [...member.tags]), [['work'], ['reading']]);
@@ -1448,6 +1450,7 @@ test('PATCH_SETTINGS persists a normalized AI context size', async () => {
   const result = await dispatchMessage(runtime, { type: 'GET_AI_SETTINGS' });
   assert.equal(result.ai.contextSize, 16384);
 });
+
 test('AI_UPDATE_SELECTION persists the selected provider model without exposing secrets', async () => {
   const runtime = createRuntime();
   await runtime.ready;
@@ -1461,7 +1464,6 @@ test('AI_UPDATE_SELECTION persists the selected provider model without exposing 
   assert.equal(result.ai.providers.find((provider) => provider.id === 'remote').model, 'remote-model');
   assert.equal(JSON.stringify(result.ai).includes('secret'), false);
 });
-
 
 function dispatchMessage(runtime, message, sender = {}) {
   const listener = runtime.chrome.runtime.onMessage.listeners[0];
@@ -3730,6 +3732,141 @@ test('restored group keeps group and member metadata', async () => {
   assert.equal(runtime.store.parkedItems[0].note, 'group note');
   assert.deepEqual([...runtime.store.parkedItems[0].tags], ['group-tag']);
   assert.equal(runtime.store.parkedItems[0].tabs.length, 1);
+});
+
+test('saving a restored group updates its original card and preserves TabWall metadata', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = { saveGroupCapture: 'none' };
+  const imageMemberId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Saved group',
+    color: 'blue',
+    collapsed: false,
+    note: 'keep group note',
+    tags: ['keep-group-tag'],
+    pinned: true,
+    savedAt: Date.now() - 1000,
+    tabs: [{
+      id: GROUP_HTTP_MEMBER_ID,
+      url: 'https://sync.example/keep',
+      title: 'Keep',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 0,
+      note: 'keep member note',
+      tags: ['keep-member-tag'],
+      hasThumb: true,
+      hasSnap: true,
+    }, {
+      id: GROUP_FILE_MEMBER_ID,
+      url: 'https://sync.example/remove',
+      title: 'Remove',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 1,
+      note: 'remove member note',
+      tags: ['remove-member-tag'],
+      hasThumb: true,
+      hasSnap: true,
+    }, {
+      id: imageMemberId,
+      url: '',
+      title: 'Canvas image',
+      favIconUrl: '',
+      pinned: false,
+      indexInGroup: 2,
+      note: 'keep image note',
+      tags: [],
+      hasThumb: true,
+      hasSnap: true,
+      cardSource: 'image',
+    }],
+    notes: [note('dddddddd-dddd-4ddd-8ddd-dddddddddddd', { attachment: false })],
+  }]);
+  runtime.media.set(`g:${GROUP_ID}:${GROUP_HTTP_MEMBER_ID}`, { thumb: 'keep' });
+  runtime.media.set(`g:${GROUP_ID}:${GROUP_FILE_MEMBER_ID}`, { thumb: 'remove' });
+  runtime.media.set(`g:${GROUP_ID}:${imageMemberId}`, { thumb: 'image' });
+
+  const restored = await runtime.api.restoreGroup(GROUP_ID);
+  assert.equal(restored.ok, true);
+  const [keptTab] = runtime.runtime.openTabs;
+  keptTab.title = 'Keep renamed in Chrome';
+  keptTab.index = 0;
+  const addedTab = {
+    id: 999,
+    windowId: keptTab.windowId,
+    groupId: 77,
+    index: 1,
+    url: 'https://sync.example/added',
+    title: 'Added in Chrome',
+    favIconUrl: '',
+    pinned: true,
+  };
+  runtime.runtime.openTabs = [keptTab, addedTab];
+  runtime.runtime.activeTabs = [keptTab];
+  runtime.runtime.groupMeta = {
+    id: 77,
+    title: 'Renamed group',
+    color: 'green',
+    collapsed: true,
+  };
+
+  const saved = await runtime.api.saveActiveGroup({ afterSaveGroup: 'keep' });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.updatedExisting, true);
+  assert.equal(saved.id, GROUP_ID);
+  assert.equal(runtime.store.parkedItems.length, 1);
+
+  const group = runtime.store.parkedItems[0];
+  assert.equal(group.title, 'Renamed group');
+  assert.equal(group.color, 'green');
+  assert.equal(group.collapsed, true);
+  assert.equal(group.note, 'keep group note');
+  assert.deepEqual([...group.tags], ['keep-group-tag']);
+  assert.equal(group.notes.length, 1);
+  assert.deepEqual([...group.tabs].map((member) => member.id), [GROUP_HTTP_MEMBER_ID, group.tabs[1].id, imageMemberId]);
+  assert.equal(group.tabs[0].title, 'Keep renamed in Chrome');
+  assert.equal(group.tabs[0].note, 'keep member note');
+  assert.deepEqual([...group.tabs[0].tags], ['keep-member-tag']);
+  assert.equal(group.tabs[1].url, 'https://sync.example/added');
+  assert.notEqual(group.tabs[1].id, GROUP_FILE_MEMBER_ID);
+  assert.equal(group.tabs[1].note, '');
+  assert.equal(group.tabs[2].note, 'keep image note');
+  assert.equal(group.tabs.some((member) => member.id === GROUP_FILE_MEMBER_ID), false);
+  assert.equal(runtime.media.has(`g:${GROUP_ID}:${GROUP_HTTP_MEMBER_ID}`), false);
+  assert.equal(runtime.media.has(`g:${GROUP_ID}:${GROUP_FILE_MEMBER_ID}`), false);
+  assert.equal(runtime.media.has(`g:${GROUP_ID}:${imageMemberId}`), true);
+  assert.deepEqual(runtime.removedTabs, []);
+});
+
+test('a restored-group link with a deleted source falls back to a new group', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.settings = { saveGroupCapture: 'none' };
+  await runtime.api.setParkedItems([{
+    kind: 'group',
+    id: GROUP_ID,
+    title: 'Source',
+    color: 'blue',
+    collapsed: false,
+    note: '',
+    tags: [],
+    savedAt: Date.now() - 1000,
+    tabs: [{ ...tab(GROUP_HTTP_MEMBER_ID, 'https://fallback.example/source'), indexInGroup: 0 }],
+  }]);
+  assert.equal((await runtime.api.restoreGroup(GROUP_ID)).ok, true);
+  const [liveTab] = runtime.runtime.openTabs;
+  runtime.runtime.activeTabs = [liveTab];
+  await runtime.api.setParkedItems([]);
+
+  const saved = await runtime.api.saveActiveGroup({ afterSaveGroup: 'keep' });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.updatedExisting, false);
+  assert.equal(runtime.store.parkedItems.length, 1);
+  assert.notEqual(runtime.store.parkedItems[0].id, GROUP_ID);
 });
 
 test('Stack storage failure rolls copied media back and preserves old keys', async () => {
