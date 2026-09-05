@@ -114,6 +114,8 @@ List view remains available as a dense and accessible fallback; canvas layout is
 
 ### Search
 
+- **Editor tag autocomplete:** The pre-save, regular/batch edit, and Canvas Sticker Note tag fields show up to eight case-insensitive matches from the existing catalog after one character. Results prioritize exact matches, then matches from the beginning, then other containing matches; each group is ranked by usage and locale. Type `*` by itself to browse every catalog tag in the scrollable list; use Arrow Up / Arrow Down to move and Enter to choose the highlighted suggestion; `*abc` remains an ordinary non-wildcard query. Tab and Enter without a highlighted suggestion still add a new tag manually, and the dropdown closes when the draft is cleared, Escape is pressed, the editor closes, or the user clicks outside it.
+
 - Plain search: `grafana zabbix` means AND; `grafana||zabbix` means OR.
 - Regular expressions: use the `.*` toolbar control or `re` / `regex` followed by Tab.
 - Field scope: use `tag`, `note`, `nn` / `noti`, `group`, or `domain` followed by Tab. Reminder mode matches reminder text, card titles, and URLs; domain mode matches hostnames on standalone tabs and group member tabs only (not Sticker Notes).
@@ -305,6 +307,8 @@ Chrome 快捷鍵預設值宣告於 `manifest.json`，並在 `chrome://extensions
 列表檢視仍保留作為大量資料與無障礙 fallback；畫布座標不會改變列表順序。若 Canvas layout 暫時無法讀取，已載入的 parked items 仍會在列表顯示並可繼續使用，恢復後可再切回畫布。
 
 ### 搜尋
+
+- 儲存前編輯、一般／批次編輯與 Canvas Sticker Note 的 tag 欄位，輸入至少一個字元即會從既有 catalog 顯示最多 8 筆不分大小寫的包含匹配；排序優先完全相同、再到從開頭匹配、最後是中間包含，同組內依使用次數與語系排序。單獨輸入 `*` 可在可捲動清單瀏覽所有 catalog tag，按 ↑／↓ 移動後按 Enter 選取目前建議，`*abc` 仍是一般查詢。未選取建議時，Enter／Tab 仍可手動新增不存在的 tag。清空、按 Esc、點擊外部或關閉 editor 會收起清單。
 
 - 一般搜尋：`grafana zabbix` 表示且；`grafana||zabbix` 表示或。
 - 正規表示式：使用工具列的 `.*` 控制項，或輸入 `re`／`regex` 後按 Tab。

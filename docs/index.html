@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TabWall 使用者說明</title>
-  <meta name="description" content="TabWall 2.61.3 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
+  <meta name="description" content="TabWall 2.64.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、編輯器 Tag 自動完成、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。" />
   <link rel="canonical" href="https://davislinyd.github.io/TabWall/" />
   <meta property="og:title" content="TabWall 使用者說明手冊" />
   <meta property="og:description" content="把分頁暫存成可搜尋的空間畫布，並可連線 OpenAI-compatible AI Provider。資料只留在本機。" />
@@ -23,7 +23,7 @@
         <path d="M24 8 31 5v21l-7 3z"></path>
       </svg>
       <b>TabWall</b>
-      <span>使用者說明 · v2.61.3</span>
+      <span>使用者說明 · v2.64.0</span>
     </a>
     <div class="top-actions">
       <input class="find" id="find" type="search" placeholder="搜尋手冊…" autocomplete="off" />
@@ -71,7 +71,7 @@
         <p class="lede" lang="zh-Hant">TabWall 是 Chromium（Chrome／Edge）擴充功能。它把目前分頁與 Chrome Tab Group 存成帶截圖的卡片，讓你清掉雜亂分頁卻不丟掉脈絡。資料只留在這台電腦的瀏覽器裡。</p>
         <p class="lede" lang="en">TabWall is a Chromium (Chrome / Edge) extension. It parks the current tab or Chrome Tab Group as screenshot cards so you can clear clutter without losing context. Data stays in this browser, on this device.</p>
         <div class="meta-row">
-          <span class="chip"><span lang="zh-Hant">版本 2.61.3</span><span lang="en">Version 2.61.3</span></span>
+          <span class="chip"><span lang="zh-Hant">版本 2.64.0</span><span lang="en">Version 2.64.0</span></span>
           <span class="chip"><span lang="zh-Hant">OpenAI-compatible AI</span><span lang="en">OpenAI-compatible AI</span></span>
           <span class="chip"><span lang="zh-Hant">無需帳號</span><span lang="en">No account</span></span>
           <span class="chip"><span lang="zh-Hant">不上傳到 TabWall 伺服器</span><span lang="en">No TabWall servers</span></span>
@@ -283,6 +283,8 @@ https://wiki.example.com
         <p lang="en">On by default. Parking a <strong>single tab</strong> (shortcuts, popup tab buttons, overlay quick-save) opens a panel for note/tags first. Confirm writes it; cancel leaves the tab untouched.</p>
         <p lang="zh-Hant">Group 儲存不受這項影響。可在設定關閉「儲存前先編輯 Note／Tag」。</p>
         <p lang="en">Group saves skip this panel. Turn it off in Settings → Edit before saving.</p>
+        <p lang="zh-Hant">儲存前編輯、一般／批次編輯與 Canvas Sticker Note 的 tag 欄位，輸入一個字元後會從既有 catalog 顯示最多 8 筆不分大小寫的包含匹配；排序優先完全相同、再到從開頭匹配、最後是中間包含，同組內依使用次數與語系排序。單獨輸入 <code>*</code> 可在可捲動清單瀏覽所有 catalog tag，按 ↑／↓ 移動後按 Enter 選取目前建議，<code>*abc</code> 仍是一般查詢。未選取建議時，Enter／Tab 仍可手動建立新 tag；清空、按 Esc、點擊外部或關閉 editor 會收起清單。</p>
+        <p lang="en">The pre-save, regular/batch edit, and Canvas Sticker Note tag fields show up to eight case-insensitive matches from the existing catalog after one character. Results prioritize exact matches, then matches from the beginning, then other containing matches; each group is ranked by usage and locale. Type <code>*</code> by itself to browse every catalog tag in the scrollable list, use Arrow Up / Arrow Down to move, and press Enter to choose the highlighted suggestion; <code>*abc</code> remains an ordinary non-wildcard query. Enter / Tab without a highlighted suggestion still creates a new tag manually, and clearing the draft, Escape, an outside click, or closing the editor hides the list.</p>
         <h3 lang="zh-Hant">自動 Note／Tag 規則</h3>
         <h3 lang="en">Automatic note / tag rules</h3>
         <p lang="zh-Hant">設定 → 儲存規則。依 hostname／FQDN 或 page title，用 match、contains、starts with、ends with、regex、not 判斷；每條規則可選 AND／OR。</p>
@@ -513,8 +515,8 @@ https://wiki.example.com
         <p lang="zh-Hant">Sticker Note 可只放在 Canvas，也可從一般頁面的 Option／Alt+D → Sticker 建立頁面 placement；同一頂層 Note 可出現在多個 URL，頁面位置與 Canvas layout 分開保存。Canvas 會列出該 Note 所在的來源網頁，點擊會在新分頁開啟；進入編輯器時也會顯示可點擊的來源清單。上鎖時來源資訊會隱藏。Stack 內 note 仍不能建立頁面 Sticker 或提醒，且永遠不會還原成瀏覽器分頁。</p>
         <p lang="en">A Sticker Note can live on the Canvas or be placed from a normal page through Option/Alt+D → Sticker. One top-level Note can appear on multiple URLs, with page placements independent from Canvas layout. Canvas lists the source pages and opens them in new tabs; the editor also shows a clickable source list. Locked Notes hide their source information. Stack notes cannot become page Stickers or use reminders, and are never restored as browser tabs.</p>
         <ul>
-          <li lang="zh-Hant">標題、標籤，以及 Markdown 或 Web（單一完整 HTML 文件）內容模式；兩種模式切換時不會清除另一邊內容。</li>
-          <li lang="en">Title, tags, and Markdown or Web (one complete HTML document) content modes; switching modes keeps the other mode’s content.</li>
+          <li lang="zh-Hant">標題、標籤，以及 Markdown 或 Web（單一完整 HTML 文件）內容模式；三個 TabWall editor 的 tag 欄位都支援既有 tag 包含匹配建議，單獨輸入 <code>*</code> 可瀏覽完整 catalog，按 ↑／↓ 移動後按 Enter 選取，點擊也可加入 chip；兩種模式切換時不會清除另一邊內容。</li>
+          <li lang="en">Title, tags, and Markdown or Web (one complete HTML document) content modes; all three TabWall editor tag fields offer existing-tag containing matches, and typing <code>*</code> by itself browses the full catalog. Use Arrow Up / Arrow Down and Enter, or click, to add a chip; switching modes keeps the other mode’s content.</li>
           <li lang="zh-Hant">Web 預覽使用單一完整 HTML 文件輸入框，可包含 <code>&lt;style&gt;</code> 與 <code>&lt;script&gt;</code>；只有按下「預覽／執行」才更新，編輯器關閉時卸載 iframe。</li>
           <li lang="en">Web preview uses one complete HTML document textarea, including <code>&lt;style&gt;</code> and <code>&lt;script&gt;</code>; it updates only after Preview/Run and unloads when the editor closes.</li>
           <li lang="zh-Hant">編輯器與可見的頁面 Sticker 使用沒有 extension API、網路、popup、form 或外層導覽權限的 <code>sandbox="allow-scripts"</code>；頁面 Web Sticker 只在可視範圍 lazy mount，離開可視範圍或關閉圖層就卸載。Canvas／列表卡片永不建立 iframe。</li>
@@ -707,6 +709,8 @@ https://wiki.example.com
         <h3>Tags</h3>
         <p lang="zh-Hant">標題列「Tags」開啟管理抽屜：搜尋、新增、重新命名、刪除。刪除 tag 會從所有已存項目移除該標籤。</p>
         <p lang="en">Header → Tags opens the manager: search, add, rename, delete. Deleting a tag removes it from every parked item.</p>
+        <p lang="zh-Hant">三個 TabWall editor 的 tag 欄位輸入至少一個字元會顯示最多 8 筆既有 tag 包含匹配建議；單獨輸入 <code>*</code> 可在可捲動清單瀏覽所有 catalog tag，按 ↑／↓ 移動後按 Enter 選取，點擊也可加入 chip；未選取建議時 Enter／Tab 仍可手動新增。</p>
+        <p lang="en">All three TabWall editor tag fields show up to eight existing-tag containing matches after one character; type <code>*</code> by itself to browse every catalog tag in the scrollable list, use Arrow Up / Arrow Down and Enter to choose, or click to add a chip. Enter / Tab without a highlighted suggestion still adds tags manually.</p>
         <h3 lang="zh-Hant">複選與批次</h3>
         <h3 lang="en">Multi-select and batch</h3>
         <p lang="zh-Hant">按「選擇」進入複選。勾選後可批次還原並保留卡片、附加 note／tags（不覆蓋既有內容）、刪除，或只匯出選取的卡片（精簡 JSON／完整 ZIP）。</p>
@@ -1049,8 +1053,8 @@ https://wiki.example.com
   </div>
 
   <footer class="site">
-        <p lang="zh-Hant">對應 TabWall <strong>2.61.3</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
-    <p lang="en">Matches TabWall <strong>2.61.3</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
+        <p lang="zh-Hant">對應 TabWall <strong>2.64.0</strong>。應用內說明按鈕是精簡版；本頁可離線開啟、列印。授權 MIT。</p>
+    <p lang="en">Matches TabWall <strong>2.64.0</strong>. In-app Help is the short version; this page can be opened offline or printed. MIT license.</p>
     <p>
       <a href="privacy.html"><span lang="zh-Hant">隱私權政策</span><span lang="en">Privacy policy</span></a> ·
       <a href="CHANGELOG.html"><span lang="zh-Hant">開發歷程</span><span lang="en">Changelog</span></a> ·

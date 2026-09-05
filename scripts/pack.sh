@@ -51,6 +51,7 @@ zip -r "$OUT_ZIP" \
   parkSettingsUi.js \
   parkSearchQuery.js \
   parkSearchUi.js \
+  parkTagSuggest.js \
   parkMediaUi.js \
   popup.html \
   popup.js \

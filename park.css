@@ -6783,6 +6783,44 @@ html[data-theme='dark'] .canvas-node.canvas-note {
 .auto-save-tag-chip button svg { width: 12px; height: 12px; }
 .auto-save-tag-input { flex: 1 1 160px; min-width: 160px; border: 0 !important; background: transparent !important; }
 
+/* Shared fixed dropdown for editor tag autocomplete. */
+.tag-suggest {
+  position: fixed;
+  z-index: 260;
+  display: grid;
+  gap: 2px;
+  max-width: calc(100vw - 16px);
+  max-height: min(46vh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  background: var(--panel-raised, var(--panel));
+  color: var(--text);
+  box-shadow: var(--edit-shadow, 0 12px 36px rgba(0, 0, 0, .24));
+}
+.tag-suggest[hidden] { display: none !important; }
+.tag-suggest-row {
+  width: 100%;
+  min-height: 30px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tag-suggest-row:hover,
+.tag-suggest-row:focus-visible,
+.tag-suggest-row[aria-selected="true"] {
+  outline: none;
+  background: var(--accent-soft, var(--row-hover));
+  color: var(--accent);
+}
+
 /* Tag-mode search autocomplete dropdown (#searchTagSuggest). */
 .search-suggest {
   position: absolute;

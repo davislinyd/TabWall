@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabWall",
-  "version": "2.61.3",
+  "version": "2.64.0",
   "description": "Arrange saved tabs and Tab Groups on a spatial canvas. Search, stack, restore—data stays on your device.",
   "permissions": [
     "storage",
@@ -63,6 +63,7 @@
         "quickSearch.js",
         "parkSearchQuery.js",
         "parkSearchUi.js",
+        "parkTagSuggest.js",
         "parkMediaUi.js",
         "parkCanvasGeometry.js",
         "parkCanvasRender.js",

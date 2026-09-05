@@ -104,6 +104,7 @@ const NoteMedia = self.TabWallNoteMedia;
 const Webhook = self.TabWallWebhookCore;
 const SearchQuery = self.TabWallSearchQuery;
 const SearchUi = self.TabWallSearchUi;
+const TagSuggest = self.TabWallTagSuggest;
 const Media = self.TabWallMediaDB;
 const MediaUi = self.TabWallMediaUi;
 const CanvasGeom = self.TabWallCanvasGeometry;
@@ -252,6 +253,7 @@ const stickerNoteCancel = document.getElementById('stickerNoteCancel');
 const stickerNoteCloseX = document.getElementById('stickerNoteCloseX');
 const stickerNoteChips = document.getElementById('stickerNoteChips');
 const stickerNoteTagDraft = document.getElementById('stickerNoteTagDraft');
+const stickerNoteTagSuggest = document.getElementById('stickerNoteTagSuggest');
 const stickerNotePageSources = document.getElementById('stickerNotePageSources');
 const stickerNotePageSourcesHint = document.getElementById('stickerNotePageSourcesHint');
 const stickerNotePageSourcesList = document.getElementById('stickerNotePageSourcesList');
@@ -333,6 +335,7 @@ const preSaveUrl = document.getElementById('preSaveUrl');
 const preSaveNote = document.getElementById('preSaveNote');
 const preSaveChips = document.getElementById('preSaveChips');
 const preSaveTagDraft = document.getElementById('preSaveTagDraft');
+const preSaveTagSuggest = document.getElementById('preSaveTagSuggest');
 const preSaveError = document.getElementById('preSaveError');
 const preSaveCancel = document.getElementById('preSaveCancel');
 const preSaveConfirm = document.getElementById('preSaveConfirm');
@@ -480,6 +483,7 @@ const editSub = document.getElementById('editSub');
 const editNote = document.getElementById('editNote');
 const editChips = document.getElementById('editChips');
 const editTagDraft = document.getElementById('editTagDraft');
+const editTagSuggest = document.getElementById('editTagSuggest');
 const editCancel = document.getElementById('editCancel');
 const editSave = document.getElementById('editSave');
 const editCloseX = document.getElementById('editCloseX');
@@ -785,6 +789,7 @@ function bindPanelModules() {
     "closeCanvasZoomMenu": () => closeCanvasZoomMenu,
     "closeImportPickBox": () => closeImportPickBox,
     "closeQuickMenus": () => closeQuickMenus,
+    "closeTagSuggest": () => closeTagSuggest,
     "closeRemindersBox": () => closeRemindersBox,
     "closeSettingsBox": () => closeSettingsBox,
     "closeStickerNoteEditor": () => closeStickerNoteEditor,
@@ -839,6 +844,7 @@ function bindPanelModules() {
     "editOriginalTitle": () => editOriginalTitle,
     "editSub": () => editSub,
     "editTagDraft": () => editTagDraft,
+    "editTagSuggest": () => editTagSuggest,
     "ensureCanvasStore": () => ensureCanvasStore,
     "escapeAttr": () => escapeAttr,
     "escapeHtml": () => escapeHtml,
@@ -903,6 +909,7 @@ function bindPanelModules() {
     "initDedupeUi": () => initDedupeUi,
     "initAiUi": () => initAiUi,
     "initQuickCaptureUi": () => initQuickCaptureUi,
+    "invalidateTagSuggest": () => invalidateTagSuggest,
     "isCanvasContextMenuOpen": () => isCanvasContextMenuOpen,
     "isCanvasSearchPreviewActive": () => isCanvasSearchPreviewActive,
     "isImageCard": () => isImageCard,
@@ -981,6 +988,7 @@ function bindPanelModules() {
     "preSaveModal": () => preSaveModal,
     "preSaveNote": () => preSaveNote,
     "preSaveTagDraft": () => preSaveTagDraft,
+    "preSaveTagSuggest": () => preSaveTagSuggest,
     "preSaveTitle": () => preSaveTitle,
     "preSaveUrl": () => preSaveUrl,
     "pruneAttachmentUrlCache": () => pruneAttachmentUrlCache,
@@ -1064,6 +1072,7 @@ function bindPanelModules() {
     "stickerNotePreview": () => stickerNotePreview,
     "stickerNoteSave": () => stickerNoteSave,
     "stickerNoteTagDraft": () => stickerNoteTagDraft,
+    "stickerNoteTagSuggest": () => stickerNoteTagSuggest,
     "stickerNotePageSources": () => stickerNotePageSources,
     "stickerNotePageSourcesHint": () => stickerNotePageSourcesHint,
     "stickerNotePageSourcesList": () => stickerNotePageSourcesList,
@@ -1213,6 +1222,30 @@ function bindPanelModules() {
   AiUi?.bind?.(env);
 }
 bindPanelModules();
+TagSuggest?.bind?.({
+  sendMessage: (payload) => sendMessage(payload),
+  getLocale: () => settings.locale === 'en' ? 'en' : 'zh-Hant',
+});
+TagSuggest?.init?.([
+  {
+    input: preSaveTagDraft,
+    list: preSaveTagSuggest,
+    getSelected: () => preSaveTagList,
+    commit: () => commitPreSaveTagDraft(),
+  },
+  {
+    input: editTagDraft,
+    list: editTagSuggest,
+    getSelected: () => editTagList,
+    commit: () => commitTagDraft(),
+  },
+  {
+    input: stickerNoteTagDraft,
+    list: stickerNoteTagSuggest,
+    getSelected: () => stickerNoteTagList,
+    commit: () => commitStickerNoteTagDraft(),
+  },
+]);
 ReminderUi?.init?.();
 
 // Search match/compile lives in parkSearchQuery.js (bind getters to page state).
@@ -1266,6 +1299,15 @@ async function resetSearchModesToDefault() {
 function markTagSuggestIndexDirty() {
   SearchUi.markTagSuggestIndexDirty();
 }
+
+function closeTagSuggest() {
+  TagSuggest?.closeAll?.();
+}
+
+function invalidateTagSuggest() {
+  TagSuggest?.invalidate?.();
+}
+
 const domainOf = SearchQuery.domainOf;
 const parseRegexInput = SearchQuery.parseRegexInput;
 const compileSearchQuery = SearchQuery.compileSearchQuery;

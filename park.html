@@ -876,10 +876,11 @@
           </label>
           <div class="edit-field">
             <span data-i18n="tags">Tags</span>
-            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 ↑↓ 移動、Enter 選取建議；Tab 新增</span>
             <div class="tag-input" id="preSaveTagInput">
               <div class="chips" id="preSaveChips"></div>
-              <input id="preSaveTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" />
+              <input id="preSaveTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" aria-autocomplete="list" aria-controls="preSaveTagSuggest" aria-expanded="false" />
+              <div id="preSaveTagSuggest" class="tag-suggest" hidden role="listbox" data-i18n-aria="tagSuggestTitle" aria-label="Tag 建議"></div>
             </div>
           </div>
         </div>
@@ -1049,10 +1050,11 @@
         </label>
         <div class="edit-field">
           <span data-i18n="tags">Tags</span>
-          <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+          <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 ↑↓ 移動、Enter 選取建議；Tab 新增</span>
           <div class="tag-input" id="tagInput">
             <div class="chips" id="editChips"></div>
-            <input id="editTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" />
+            <input id="editTagDraft" type="text" data-i18n-placeholder="tagPh" data-i18n-aria="tags" placeholder="tag" autocomplete="off" aria-autocomplete="list" aria-controls="editTagSuggest" aria-expanded="false" />
+            <div id="editTagSuggest" class="tag-suggest" hidden role="listbox" data-i18n-aria="tagSuggestTitle" aria-label="Tag 建議"></div>
           </div>
         </div>
         <div class="edit-actions">
@@ -1116,10 +1118,11 @@
           </div>
           <div class="edit-field">
             <span data-i18n="tags">Tags</span>
-            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 Tab 新增</span>
+            <span class="hint" style="font-size:11px;color:var(--muted);font-weight:400" data-i18n="tagsHint">輸入後按 ↑↓ 移動、Enter 選取建議；Tab 新增</span>
             <div class="tag-input" id="stickerNoteTagInput">
               <div class="chips" id="stickerNoteChips"></div>
-              <input id="stickerNoteTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" />
+              <input id="stickerNoteTagDraft" type="text" data-i18n-placeholder="tagPh" placeholder="tag" autocomplete="off" aria-autocomplete="list" aria-controls="stickerNoteTagSuggest" aria-expanded="false" />
+              <div id="stickerNoteTagSuggest" class="tag-suggest" hidden role="listbox" data-i18n-aria="tagSuggestTitle" aria-label="Tag 建議"></div>
             </div>
           </div>
           <div id="stickerNotePageSources" class="sticker-note-page-sources" hidden>
@@ -1191,6 +1194,7 @@
     <script src="parkCanvasChrome.js"></script>
     <script src="parkListUi.js"></script>
     <script src="parkWorkspaceUi.js"></script>
+    <script src="parkTagSuggest.js"></script>
     <script src="parkReminderUi.js"></script>
     <script src="parkAppHelpers.js"></script>
     <script src="parkHistory.js"></script>

@@ -504,6 +504,7 @@
     ensureBound('closeStickerNoteEditor');
 
     if (!env.stickerNoteBox) return;
+    env.closeTagSuggest?.();
     const pageContext = env.stickerNoteContext?.pageUrl
       ? { ...env.stickerNoteContext }
       : null;
@@ -579,6 +580,7 @@
             patch: note,
           });
       if (!res?.ok) throw new Error(res?.error || 'note_save_failed');
+      env.invalidateTagSuggest?.();
       await env.loadList();
       if (pageContext) {
         env.postToParent?.({

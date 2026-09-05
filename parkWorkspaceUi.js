@@ -734,6 +734,7 @@
           const res = await env.sendMessage({ type: 'RENAME_TAG', from: item.name, to: name });
           if (res.ok) {
             env.tagStats = res.tags || [];
+            env.invalidateTagSuggest?.();
             renderTagManager();
             await loadList();
           }
@@ -744,6 +745,7 @@
           const res = await env.sendMessage({ type: 'DELETE_TAG', name: item.name });
           if (res.ok) {
             env.tagStats = res.tags || [];
+            env.invalidateTagSuggest?.();
             renderTagManager();
             await loadList();
           }
@@ -760,6 +762,7 @@
       const res = await env.sendMessage({ type: 'GET_TAGS' });
       env.tagStats = res.ok && Array.isArray(res.tags) ? res.tags : [];
       env.markTagSuggestIndexDirty();
+      env.invalidateTagSuggest?.();
       renderTagManager();
 
   }
@@ -773,6 +776,7 @@
       if (res.ok) {
         env.tagAddInput.value = '';
         env.tagStats = res.tags || [];
+        env.invalidateTagSuggest?.();
         renderTagManager();
       }
 
@@ -1021,6 +1025,7 @@
 
   async function loadList() {
     ensureBound('loadList');
+    env.closeTagSuggest?.();
 
     const previousItems = env.allTabs;
     const previousCanvasSessionFallback = env.canvasSessionFallback;
@@ -1071,6 +1076,7 @@
       const nextItems = liveItems.length ? [...liveItems, ...parkedItems] : parkedItems;
       if (!Array.isArray(nextItems)) throw new Error('invalid_normalized_items');
       env.markTagSuggestIndexDirty();
+      env.invalidateTagSuggest?.();
       env.pruneAttachmentUrlCache(nextItems);
       env.allTabs = nextItems;
       if (env.loadStatusEl) env.loadStatusEl.textContent = '';
@@ -1225,6 +1231,7 @@
     ensureBound('closePreSaveModal');
 
       if (!env.preSaveModal) return;
+      env.closeTagSuggest?.();
       env.preSaveModal.classList.remove('open');
       env.preSaveModal.setAttribute('aria-hidden', 'true');
       env.preSaveContext = null;
@@ -1329,6 +1336,7 @@
       env.preSaveTagDraft.value = '';
       renderPreSaveChips();
       env.sendMessage({ type: 'ADD_TAG', name: raw }).then(() => {
+        env.invalidateTagSuggest?.();
         if (env.tagsBox.classList.contains('open')) refreshTagManager();
       });
       return true;
@@ -1413,6 +1421,7 @@
       renderEditChips();
       // ensure catalog knows this tag
       env.sendMessage({ type: 'ADD_TAG', name: raw }).then(() => {
+        env.invalidateTagSuggest?.();
         if (env.tagsBox.classList.contains('open')) refreshTagManager();
       });
       return true;
@@ -1473,6 +1482,7 @@
   function closeEditBox() {
     ensureBound('closeEditBox');
 
+      env.closeTagSuggest?.();
       env.editingId = null;
       env.editContext = null;
       env.editTagList = [];

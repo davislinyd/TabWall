@@ -7,9 +7,9 @@
   var COPY = {
     zh: {
       title: "TabWall 使用者說明",
-      description: "TabWall 2.61.3 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。",
+      description: "TabWall 2.64.0 使用者說明：儲存分頁與 Tab Group、可設定的新分頁、GitHub Release 更新檢查、overlay favicon 與一致的 TabWall logo、未停車標註、頁面繪圖與 Sticker、空間畫布、OpenAI-compatible AI Providers、單一 HTML Sticker Note 與獨立縮放、來源網頁、編輯器 Tag 自動完成、卡片提醒、Webhook profiles、卡片上鎖、自訂標題、圖片卡、自訂背景、搜尋、備份與隱私。",
       skip: "跳到本文",
-      brand: "使用者說明 · v2.61.3",
+      brand: "使用者說明 · v2.64.0",
       find: "搜尋手冊…",
       empty: "手冊中沒有符合的段落。試試「繪圖」「標註」「AI」「提醒」「Webhook」「上鎖」「備份」「硬碟」「搜尋」或「快捷鍵」。",
       toc: "目錄",
@@ -19,9 +19,9 @@
     },
     en: {
       title: "TabWall User Guide",
-      description: "TabWall 2.61.3 user guide: park tabs and Tab Groups, configurable New Tab, GitHub Release update checks, a temporary overlay favicon and consistent TabWall logo, live page notes, drawing and page Stickers, spatial canvas, OpenAI-compatible AI providers, single-document HTML Sticker Notes with independent resizing, source pages, card reminders, Webhook profiles, card lock, display titles, image cards, custom background, search, backup, and privacy.",
+      description: "TabWall 2.64.0 user guide: park tabs and Tab Groups, configurable New Tab, GitHub Release update checks, a temporary overlay favicon and consistent TabWall logo, live page notes, drawing and page Stickers, spatial canvas, OpenAI-compatible AI providers, single-document HTML Sticker Notes with independent resizing, source pages, editor tag autocomplete, card reminders, Webhook profiles, card lock, display titles, image cards, custom background, search, backup, and privacy.",
       skip: "Skip to content",
-      brand: "User guide · v2.61.3",
+      brand: "User guide · v2.64.0",
       find: "Search the guide…",
       empty: "No matching section. Try “draw”, “annotate”, “AI”, “reminder”, “webhook”, “lock”, “backup”, “disk”, “search”, or “shortcut”.",
       toc: "Contents",

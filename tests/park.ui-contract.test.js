@@ -20,6 +20,7 @@ const REMINDER_BG_SOURCE = fs.readFileSync(new URL('../bgReminders.js', import.m
 const SETTINGS_UI_SOURCE = fs.readFileSync(new URL('../parkSettingsUi.js', import.meta.url), 'utf8');
 const IMPORT_EXPORT_SOURCE = fs.readFileSync(new URL('../parkImportExport.js', import.meta.url), 'utf8');
 const STICKER_UI_SOURCE = fs.readFileSync(new URL('../parkStickerUi.js', import.meta.url), 'utf8');
+const TAG_SUGGEST_SOURCE = fs.readFileSync(new URL('../parkTagSuggest.js', import.meta.url), 'utf8');
 const HTML_MARKUP = fs.readFileSync(new URL('../park.html', import.meta.url), 'utf8');
 const CSS_SOURCE = fs.readFileSync(new URL('../park.css', import.meta.url), 'utf8');
 const SANDBOX_HTML_SOURCE = fs.readFileSync(new URL('../noteCodeSandbox.html', import.meta.url), 'utf8');
@@ -1125,6 +1126,47 @@ test('Canvas zoom controls expose a hover slider and accessible fit menu', () =>
   assert.match(PARK_BEHAVIOR_FLAT, /function closeCanvasZoomMenu\(/);
   assert.match(PARK_BEHAVIOR_FLAT, /function applyCanvasZoomAction\(action\)/);
   assert.match(PARK_BEHAVIOR_FLAT, /document\.addEventListener\('pointerdown', \(event\) => \{[\s\S]*?closeCanvasZoomMenu\(\);/);
+});
+
+test('Editor tag fields share the fixed tag autocomplete contract', () => {
+  const fields = [
+    ['preSaveTagDraft', 'preSaveTagSuggest'],
+    ['editTagDraft', 'editTagSuggest'],
+    ['stickerNoteTagDraft', 'stickerNoteTagSuggest'],
+  ];
+  for (const [inputId, listId] of fields) {
+    const input = HTML_MARKUP.match(new RegExp(`<input id="${inputId}"[^>]*>`))?.[0] || '';
+    assert.match(input, /aria-autocomplete="list"/);
+    assert.match(input, new RegExp(`aria-controls="${listId}"`));
+    assert.match(input, /aria-expanded="false"/);
+    assert.match(HTML_MARKUP, new RegExp(`id="${listId}"[^>]*class="tag-suggest"[^>]*role="listbox"`));
+  }
+  assert.match(HTML_MARKUP, /<script src="parkTagSuggest\.js"><\/script>/);
+  assert.match(PARK_SOURCE, /const TagSuggest = self\.TabWallTagSuggest/);
+  assert.match(PARK_SOURCE, /TagSuggest\?\.init\?\.\(\[[\s\S]*?getSelected: \(\) => preSaveTagList[\s\S]*?commit: \(\) => commitPreSaveTagDraft\(\)[\s\S]*?getSelected: \(\) => editTagList[\s\S]*?getSelected: \(\) => stickerNoteTagList/);
+  assert.match(WORKSPACE_UI_SOURCE, /env\.closeTagSuggest\?\./);
+  assert.match(WORKSPACE_UI_SOURCE, /env\.invalidateTagSuggest\?\./);
+  assert.match(STICKER_UI_SOURCE, /env\.closeTagSuggest\?\./);
+  assert.match(STICKER_UI_SOURCE, /env\.invalidateTagSuggest\?\./);
+  assert.match(TAG_SUGGEST_SOURCE, /type: 'GET_TAGS'/);
+  assert.match(TAG_SUGGEST_SOURCE, /includes\(needle\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /startsWith\(needle\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /const wildcard = needle === '\*'/);
+  assert.match(TAG_SUGGEST_SOURCE, /return wildcard \? suggestions : suggestions\.slice\(0, max\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /slice\(0, max\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /event\.key === 'ArrowDown'/);
+  assert.match(TAG_SUGGEST_SOURCE, /event\.key === 'ArrowUp'/);
+  assert.match(TAG_SUGGEST_SOURCE, /aria-activedescendant/);
+  assert.match(TAG_SUGGEST_SOURCE, /event\.stopImmediatePropagation\(\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /document\.body\.appendChild\(field\.list\)/);
+  assert.match(TAG_SUGGEST_SOURCE, /event\.key === 'Escape'/);
+  assert.match(TAG_SUGGEST_SOURCE, /handleDocumentPointerdown/);
+  assert.match(CSS_SOURCE, /\.tag-suggest\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?max-width:\s*calc\(100vw - 16px\);[\s\S]*?max-height:\s*min\(46vh, 320px\);/);
+  assert.match(CSS_SOURCE, /\.tag-suggest-row:hover,[\s\S]*?\.tag-suggest-row:focus-visible,[\s\S]*?\.tag-suggest-row\[aria-selected="true"\]/);
+  assert.match(I18N_SOURCE, /tagSuggestTitle: '可使用的 Tag 建議'/);
+  assert.match(I18N_SOURCE, /tagSuggestTitle: 'Available tag suggestions'/);
+  const manifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  assert.ok(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes('parkTagSuggest.js')));
 });
 
 test('Canvas fit actions use visible card bounds and preserve the viewport schema', () => {

@@ -11,6 +11,28 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.64.0 — 2026-09-05
+
+- 三個 TabWall editor 的 Tag autocomplete 改支援不分大小寫的包含匹配；輸入 `sse` 可找到 `asset`。建議依完全相同、從開頭匹配、中間包含排序，再依使用次數與語系排序，仍最多顯示 8 筆。
+- 更新 README 與 GitHub Pages 使用者手冊，產生 `dist/TabWall-2.64.0.zip` clean ZIP（不提交產物）。
+
+## 2.63.1 — 2026-09-05
+
+- Tag autocomplete 的建議清單支援 ↑／↓ 鍵移動並以 Enter 選取目前建議；焦點留在輸入框，點擊加入 chip 與未選取建議時的 Enter／Tab 手動新增行為維持不變。
+- 更新 README 與 GitHub Pages 使用者手冊，產生 `dist/TabWall-2.63.1.zip` clean ZIP（不提交產物）。
+
+## 2.63.0 — 2026-09-05
+
+- Tag autocomplete 支援在三個 TabWall editor 的輸入框單獨輸入 `*`，以可捲動清單瀏覽完整 tag catalog；仍排除已加入的 tag，並依使用次數與語系排序，包含 count 為 0 的 catalog-only tag。
+- `*abc` 維持一般前綴查詢與最多 8 筆上限；點擊建議、Escape、外部點擊、Enter／Tab 手動新增及 GET_TAGS 失敗的既有行為不變。
+- 更新 README 與 GitHub Pages 使用者手冊，產生 `dist/TabWall-2.63.0.zip` clean ZIP（不提交產物）。
+
+## 2.62.0 — 2026-09-05
+
+- 在儲存前編輯、一般／批次編輯與 Canvas Sticker Note 共用 tag autocomplete；輸入至少一個字元後，從既有 tag catalog 顯示最多 8 筆不分大小寫的前綴建議，依使用次數與語系排序，點擊即可加入 chip。
+- 保留手動輸入新 tag 的 Enter／Tab 行為；支援 Escape、點擊外部與關閉 editor 收起清單，GET_TAGS 失敗不會阻塞手動輸入。
+- 更新 README 與 GitHub Pages 使用者手冊，產生 `dist/TabWall-2.62.0.zip` clean ZIP（不提交產物）。
+
 ## 2.61.3 — 2026-09-04
 
 - Canvas 頂層 Sticker Note 的 Markdown 預覽改用卡片剩餘高度；放大或縮小卡片時顯示內容隨可用空間增減，超出內容會裁切，不顯示捲軸，也不會讓卡片自動增高。拖曳／鍵盤 resize、重繪與重新載入會保留實際 note 高度；Web 模式維持靜態摘要。
