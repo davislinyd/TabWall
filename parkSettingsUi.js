@@ -762,6 +762,7 @@
         base = env.t('autoBackupErrMissingMedia');
         break;
       case 'backup_too_large:full_zip':
+      case 'backup_too_large':
         base = env.t('autoBackupErrTooLarge');
         break;
       case 'build_failed':

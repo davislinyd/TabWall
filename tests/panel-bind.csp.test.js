@@ -127,6 +127,7 @@ test('panel bind accessors return and mutate real values without eval', () => {
   assert.equal(ab.scheduleHour, 9);
   assert.equal(ab.scheduleMinute, 30);
   assert.equal(SettingsUi.normalizeAutoBackup({ lastErrorDetail: 'x'.repeat(801) }).lastErrorDetail.length, 800);
+  assert.equal(SettingsUi.autoBackupErrorText('backup_too_large'), 'autoBackupErrTooLarge');
 
   // Mutation through env.settings setter path used by panel bodies.
   env.settings = { ...env.settings, locale: 'en' };

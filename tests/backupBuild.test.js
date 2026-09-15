@@ -783,6 +783,22 @@ test('note and global attachment quotas reject oversized metadata', () => {
   assert.equal(Build.validateBackup(sampleBackup(notes)).error, 'attachment_quota_exceeded');
 });
 
+test('full ZIP does not count inline media against the metadata JSON limit', () => {
+  const body = 'A'.repeat(4 * Math.ceil((19 * 1024 * 1024) / 3));
+  const items = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    '33333333-3333-4333-8333-333333333333',
+    '44444444-4444-4444-8444-444444444444',
+  ].map((id) => ({
+    ...sampleItem({ id, image: false }),
+    hasThumb: true,
+    thumbnail: `data:image/png;base64,${body}`,
+  }));
+  const built = Build.buildFullZipBlob(sampleBackup(items));
+  assert.ok(built.blob.size < Build.LIMITS.MAX_ZIP_BYTES);
+});
+
 test('full ZIP preflight includes metadata and ZIP overhead', () => {
   const files = [{ name: 'media/large.webp', data: { length: Build.LIMITS.MAX_ZIP_BYTES } }];
   assert.ok(Build.estimateZipBytes(new Uint8Array([1]), files) > Build.LIMITS.MAX_ZIP_BYTES);

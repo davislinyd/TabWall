@@ -11,6 +11,11 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.64.2 — 2026-09-15
+
+- 完整 ZIP 備份先驗證 inline payload 形狀，抽出 media 後再檢查 metadata 與 ZIP 大小，避免 Base64 膨脹誤觸發 `backup_too_large`。
+- 自動備份錯誤文案將 `backup_too_large` 視為超過大小限制。
+
 ## 2.64.0 — 2026-09-05
 
 - 三個 TabWall editor 的 Tag autocomplete 改支援不分大小寫的包含匹配；輸入 `sse` 可找到 `asset`。建議依完全相同、從開頭匹配、中間包含排序，再依使用次數與語系排序，仍最多顯示 8 筆。

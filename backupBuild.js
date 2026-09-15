@@ -1105,7 +1105,12 @@
       format: FORMAT,
       version: FORMAT_VERSION,
       media: 'inline',
-    }, { allowStoredOnlyUrls: true });
+    }, {
+      allowStoredOnlyUrls: true,
+      // Inline media is moved to ZIP entries below; do not count its Base64
+      // expansion against the metadata limit before it is extracted.
+      maxJsonBytes: Number.POSITIVE_INFINITY,
+    });
     if (!validation.ok) {
       throw backupError(validation.error, validation.detail || '', { phase: 'validate' });
     }
@@ -1125,6 +1130,10 @@
       parkedItems: items,
       parkedTabs: items.filter((i) => i.kind === 'tab').map(({ kind, ...r }) => r),
     };
+    const metadataValidation = validateBackup(meta, { allowStoredOnlyUrls: true });
+    if (!metadataValidation.ok) {
+      throw backupError(metadataValidation.error, metadataValidation.detail || '', { phase: 'validate' });
+    }
     const jsonBytes = new TextEncoder().encode(JSON.stringify(meta));
     const estimatedZipBytes = estimateZipBytes(jsonBytes, files);
     if (estimatedZipBytes > LIMITS.MAX_ZIP_BYTES) {
@@ -1474,7 +1483,9 @@
           ? backup.parkedTabs.map((item) => ({ ...item, kind: 'tab' }))
           : null;
       if (!items || items.length > LIMITS.MAX_ITEMS) return validationError('invalid_items');
-      if (JSON.stringify(backup).length > maxJsonBytes) return validationError('backup_too_large');
+      if (Number.isFinite(maxJsonBytes) && JSON.stringify(backup).length > maxJsonBytes) {
+        return validationError('backup_too_large');
+      }
 
       const ids = new Set();
       const attachmentIds = new Set();
