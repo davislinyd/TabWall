@@ -96,6 +96,7 @@ test('Spatial Canvas exposes isolated controls and complete node actions', () =>
   assert.doesNotMatch(HTML_SOURCE, /value="oldest"|value="title-desc"|value="manual"|canvasArrangeCircle/);
   assert.match(HTML_SOURCE, /id="canvasLinkBtn"[^>]*data-canvas-tool="link"/);
   assert.match(HTML_SOURCE, /id="lbGroupMosaic" class="lb-group-mosaic"/);
+  assert.match(HTML_SOURCE, /class="lb-file-name" id="lbFileName"/);
   assert.match(HTML_SOURCE, /id="lbBack"[^>]*data-i18n="backToGroup"/);
   assert.match(HTML_SOURCE, /id="lbManageMembers"[^>]*data-i18n="openMembersManage"/);
   assert.match(HTML_SOURCE, /\.lb-group-grid\s*\{/);
@@ -577,6 +578,18 @@ test('restore actions keep TabWall cards and use one lightbox path', () => {
   assert.doesNotMatch(extractFnSource(WORKSPACE_UI_SOURCE, 'restoreItem'), /allTabs = allTabs\.filter/);
   assert.match(PARK_SOURCE, /const res = await restoreMember\(expandedMeta\.groupId, expandedId\)/);
   assert.match(PARK_SOURCE, /await restoreItem\(expandedId\)/);
+});
+
+test('lightbox shows the actual screenshot filename and extension', () => {
+  assert.match(CSS_SOURCE, /\.lb-toolbar \.lb-file-name\s*\{[\s\S]*?font:\s*11px\/1\.35.*?ui-monospace/);
+  assert.match(MEDIA_UI_SOURCE, /const mediaMimeCache = new Map\(\)/);
+  assert.match(MEDIA_UI_SOURCE, /function getCachedMediaMime\(key, kind\)/);
+  assert.match(PARK_SOURCE, /const getCachedMediaMime = MediaUi\.getCachedMediaMime/);
+  assert.match(PARK_SOURCE, /"lbFileName": \(\) => lbFileName/);
+  const lightboxEntry = extractFnSource(WORKSPACE_UI_SOURCE, 'showLightboxEntry');
+  assert.match(lightboxEntry, /setLightboxFileName\(entry, 'thumb'/);
+  assert.match(lightboxEntry, /setLightboxFileName\(entry, 'snap'/);
+  assert.match(WORKSPACE_UI_SOURCE, /\? `media\/\$\{base\}_\$\{kind\}\.\$\{extension\}`/);
 });
 
 test('Chrome shortcut settings expose the tab-or-group keep command', () => {

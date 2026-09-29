@@ -356,6 +356,30 @@
     if (env.lbCounter) env.lbCounter.textContent = counterText;
   }
 
+  function extensionFromMediaMime(mime) {
+    const value = String(mime || '').toLowerCase();
+    if (value === 'image/webp') return 'webp';
+    if (value === 'image/jpeg' || value === 'image/jpg') return 'jpg';
+    if (value === 'image/png') return 'png';
+    return '';
+  }
+
+  function lightboxMediaFileName(entry, kind, mime) {
+    const extension = extensionFromMediaMime(mime);
+    if (!extension || !entry?.restore || (kind !== 'thumb' && kind !== 'snap')) return '';
+    const base = entry.restore.type === 'member'
+      ? `${entry.restore.groupId}_${entry.restore.memberId}`
+      : entry.restore.id;
+    return base ? `media/${base}_${kind}.${extension}` : '';
+  }
+
+  function setLightboxFileName(entry, kind, mime) {
+    if (!env.lbFileName) return;
+    const name = lightboxMediaFileName(entry, kind, mime);
+    env.lbFileName.textContent = name;
+    env.lbFileName.hidden = !name;
+  }
+
   function renderGroupOverviewGrid(group) {
     ensureBound('renderGroupOverviewGrid');
     const members = collectGroupMembers(group);
@@ -449,6 +473,7 @@
           : null;
       env.lightboxNav = { list, index };
       env.lbTitle.textContent = entry.title;
+      setLightboxFileName(entry, '', '');
       if (entry.originalTitle) {
         env.lbUrl.textContent = entry.originalTitle + (entry.url ? ` · ${entry.url}` : '');
       } else {
@@ -494,13 +519,17 @@
       let shownSnap = false;
       if (entry.mediaKey && env.snapCache.has(entry.mediaKey)) {
         env.lbImage.src = env.snapCache.get(entry.mediaKey);
+        setLightboxFileName(entry, 'snap', env.getCachedMediaMime?.(entry.mediaKey, 'snap'));
         env.lbSnapHint.hidden = true;
         shownSnap = true;
       } else {
         // show thumb first
         if (entry.mediaKey && entry.hasThumb) {
           const thumbUrl = await env.fetchMediaUrl(entry.mediaKey, 'thumb');
-          if (thumbUrl && env.lightboxNav?.index === index) env.lbImage.src = thumbUrl;
+          if (thumbUrl && env.lightboxNav?.index === index) {
+            env.lbImage.src = thumbUrl;
+            setLightboxFileName(entry, 'thumb', env.getCachedMediaMime?.(entry.mediaKey, 'thumb'));
+          }
         } else {
           env.lbImage.removeAttribute('src');
         }
@@ -510,6 +539,7 @@
           if (snapUrl && env.lightboxNav?.index === index) {
             env.cacheSnap(entry.mediaKey, snapUrl);
             env.lbImage.src = snapUrl;
+            setLightboxFileName(entry, 'snap', env.getCachedMediaMime?.(entry.mediaKey, 'snap'));
             env.lbSnapHint.hidden = true;
             shownSnap = true;
           }
@@ -614,6 +644,7 @@
       });
       env.lbImage.removeAttribute('src');
       env.lbImage.hidden = true;
+      setLightboxFileName(null, '', '');
       env.lbSnapHint.hidden = true;
       renderGroupOverviewGrid(group);
       bindGroupOverviewClicks(group.id);
@@ -643,6 +674,7 @@
       env.lightbox.setAttribute('aria-hidden', 'true');
       env.lbImage.hidden = false;
       env.lbImage.removeAttribute('src');
+      setLightboxFileName(null, '', '');
       if (env.lbGroupMosaic) {
         env.lbGroupMosaic.hidden = true;
         env.lbGroupMosaic.replaceChildren();

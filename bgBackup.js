@@ -614,6 +614,31 @@ async function hydrateWallpaperSettings(settings) {
   return next;
 }
 
+async function sanitizeMissingWallpaperForBackup(settings) {
+  const next = settings && typeof settings === 'object' ? { ...settings } : {};
+  const wallpaper = normalizeWallpaper(next.wallpaper);
+  next.wallpaper = { ...wallpaper };
+  if (!wallpaper.enabled || !Media?.getAttachment || !Media?.mediaKeyWallpaper) return next;
+  try {
+    const blob = await Media.getAttachment(Media.mediaKeyWallpaper());
+    if (blob) return next;
+  } catch {
+    // Keep the wallpaper enabled if IndexedDB cannot be read; preflight will
+    // surface that storage failure instead of silently omitting user media.
+    return next;
+  }
+  next.wallpaper = {
+    ...wallpaper,
+    enabled: false,
+    mime: '',
+    width: 0,
+    height: 0,
+    updatedAt: 0,
+  };
+  appLogPush('warn', 'export', 'wallpaper unavailable', 'phase=preflight omitted orphaned wallpaper');
+  return next;
+}
+
 async function preflightFullBackupMedia(items, settings, { tagCatalog, canvasLayout, pageAnnotations } = {}) {
   const missing = [];
   let mediaBytes = 0;
@@ -792,6 +817,7 @@ async function exportBackup(mode = 'lite', { hydrate = false, preflight = false 
       settings = { ...settings };
       delete settings.ai;
     }
+    if (mode === 'full') settings = await sanitizeMissingWallpaperForBackup(settings);
     if (mode === 'full' && preflight) {
       phase = 'preflight';
       const report = await preflightFullBackupMedia(parkedItems, settings, {
@@ -1617,6 +1643,16 @@ async function batchDeleteItems(ids) {
 
 // ─── Image compression → Blob ──────────────────────────────────────
 
+async function canvasToWebpOrJpeg(canvas, quality) {
+  try {
+    const webp = await canvas.convertToBlob({ type: 'image/webp', quality });
+    if (webp && String(webp.type || '').toLowerCase() === 'image/webp') return webp;
+  } catch {
+    // Fall through to the broadly supported JPEG encoder.
+  }
+  return canvas.convertToBlob({ type: 'image/jpeg', quality });
+}
+
 async function compressToBlob(dataUrl, opts = {}) {
   const maxWidth = opts.maxWidth ?? null;
   const quality = opts.quality ?? 0.5;
@@ -1637,7 +1673,7 @@ async function compressToBlob(dataUrl, opts = {}) {
   }
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  return canvas.convertToBlob({ type: 'image/jpeg', quality });
+  return canvasToWebpOrJpeg(canvas, quality);
 }
 
 async function compressDataUrlToBlobs(dataUrl, { tiny = false } = {}) {
@@ -1658,7 +1694,7 @@ async function compressDataUrlToBlobs(dataUrl, { tiny = false } = {}) {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
       ctx.drawImage(bitmap, 0, 0, width, height);
-      return canvas.convertToBlob({ type: 'image/jpeg', quality });
+      return canvasToWebpOrJpeg(canvas, quality);
     };
     const [thumbBlob, snapBlob] = await Promise.all([
       toBlob(tiny ? TINY : THUMB),

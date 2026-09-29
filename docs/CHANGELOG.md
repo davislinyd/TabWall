@@ -11,6 +11,11 @@ permalink: /CHANGELOG.html
 
 分享安裝請用 `./scripts/pack.sh` 產出的 clean zip（`dist/TabWall-<version>.zip`），勿整包 git 目錄。
 
+## 2.65.1 — 2026-09-29
+
+- 分頁與卡片截圖優先以 WebP 儲存，無法編碼時退回 JPEG；預覽顯示完整媒體檔名與副檔名。
+- 完整備份遇到啟用但媒體已遺失的背景圖時，略過該背景而不中止備份。
+
 ## 2.64.2 — 2026-09-15
 
 - 完整 ZIP 備份先驗證 inline payload 形狀，抽出 media 後再檢查 metadata 與 ZIP 大小，避免 Base64 膨脹誤觸發 `backup_too_large`。

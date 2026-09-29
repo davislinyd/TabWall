@@ -285,6 +285,9 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
     tabMessages: [],
     fetchCalls: [],
     fetchImpl: null,
+    canvasConvertCalls: [],
+    convertToBlobImpl: null,
+    imageBitmap: { width: 1, height: 1 },
     parkTabs: [],
     currentTab: null,
     downloadItems: [],
@@ -438,11 +441,19 @@ function createRuntime({ manifestVersion = '2.13.0' } = {}) {
       getContext() {
         return { clearRect() {}, drawImage() {} };
       }
-      async convertToBlob({ type = 'image/webp' } = {}) {
+      async convertToBlob({ type = 'image/webp', quality } = {}) {
+        runtime.canvasConvertCalls.push({ width: this.width, height: this.height, type, quality });
+        if (runtime.convertToBlobImpl) {
+          return runtime.convertToBlobImpl({ width: this.width, height: this.height, type, quality });
+        }
         return new Blob([new Uint8Array([1, 2, 3])], { type });
       }
     },
-    createImageBitmap: async () => ({ width: 1, height: 1, close() {} }),
+    createImageBitmap: async () => ({
+      width: runtime.imageBitmap.width,
+      height: runtime.imageBitmap.height,
+      close() {},
+    }),
     __TABWALL_TEST__: true,
     importScripts(...names) {
       for (const name of names) {
@@ -555,7 +566,7 @@ function installDownloadStub(runtime) {
 
 test('New Tab takeover is configurable through the dynamic background route', async () => {
   assert.equal(MANIFEST.chrome_url_overrides, undefined);
-  assert.equal(MANIFEST.version, '2.64.2');
+  assert.equal(MANIFEST.version, '2.65.1');
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('icons/icon16.png')));
   assert.match(BACKGROUND_SOURCE, /webhookCore\.js/);
   assert.ok(MANIFEST.web_accessible_resources?.some((entry) => entry.resources?.includes('webhookCore.js')));
@@ -594,6 +605,53 @@ test('New Tab takeover is configurable through the dynamic background route', as
     status: 'complete',
   }, newTab);
   assert.equal(runtime.runtime.updatedTabs.filter(({ id }) => id === newTab.id).length, 1);
+});
+
+test('tab screenshots use WebP with the existing dimensions and quality settings', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.imageBitmap = { width: 960, height: 480 };
+  runtime.runtime.fetchImpl = async () => ({
+    blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+  });
+
+  const regular = await runtime.api.compressDataUrlToBlobs('data:image/png;base64,AQID');
+  const tiny = await runtime.api.compressDataUrlToBlobs('data:image/png;base64,AQID', { tiny: true });
+
+  assert.equal(regular.thumbBlob.type, 'image/webp');
+  assert.equal(regular.snapBlob.type, 'image/webp');
+  assert.equal(tiny.thumbBlob.type, 'image/webp');
+  assert.equal(tiny.snapBlob.type, 'image/webp');
+  assert.deepEqual(runtime.runtime.canvasConvertCalls, [
+    { width: 480, height: 240, type: 'image/webp', quality: 0.6 },
+    { width: 960, height: 480, type: 'image/webp', quality: 0.85 },
+    { width: 180, height: 90, type: 'image/webp', quality: 0.4 },
+    { width: 960, height: 480, type: 'image/webp', quality: 0.85 },
+  ]);
+});
+
+test('tab screenshots fall back to JPEG when WebP encoding fails or returns another MIME', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.runtime.fetchImpl = async () => ({
+    blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+  });
+  runtime.runtime.convertToBlobImpl = async ({ type }) => {
+    if (type === 'image/webp') throw new Error('webp_unavailable');
+    return new Blob([new Uint8Array([1, 2, 3])], { type });
+  };
+
+  let result = await runtime.api.compressDataUrlToBlobs('data:image/png;base64,AQID');
+  assert.equal(result.thumbBlob.type, 'image/jpeg');
+  assert.equal(result.snapBlob.type, 'image/jpeg');
+
+  runtime.runtime.convertToBlobImpl = async ({ type }) => new Blob(
+    [new Uint8Array([1, 2, 3])],
+    { type: type === 'image/webp' ? 'image/png' : type }
+  );
+  result = await runtime.api.compressDataUrlToBlobs('data:image/png;base64,AQID');
+  assert.equal(result.thumbBlob.type, 'image/jpeg');
+  assert.equal(result.snapBlob.type, 'image/jpeg');
 });
 
 test('New Tab takeover waits for a late URL and respects disabled/incognito boundaries', async () => {
@@ -3945,6 +4003,31 @@ test('automatic full backup preflight rejects missing media before hydrate or do
   assert.equal(runtime.store.settings.autoBackup.lastSuccessAt, 123);
   assert.equal(runtime.store.settings.autoBackup.lastError, 'missing_media');
   assert.equal(runtime.store.settings.autoBackup.lastErrorDetail, result.detail);
+});
+
+test('full backup omits an enabled wallpaper whose IndexedDB blob is missing', async () => {
+  const runtime = createRuntime();
+  await runtime.ready;
+  runtime.store.parkedItems = [{ ...tab(ITEM_ID), hasThumb: false, hasSnap: false }];
+  runtime.store.settings = {
+    wallpaper: {
+      enabled: true,
+      fit: 'fitWidth',
+      opacity: 40,
+      blurPx: 16,
+      mime: 'image/webp',
+      width: 1920,
+      height: 1080,
+      updatedAt: 123,
+    },
+  };
+
+  const result = await runtime.api.exportBackup('full', { hydrate: true, preflight: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.backup.settings.wallpaper.enabled, false);
+  assert.equal(result.backup.settings.wallpaper.mime, '');
+  assert.ok(runtime.Build.buildFullZipBlob(result.backup).blob.size > 0);
+  assert.equal(runtime.store.settings.wallpaper.enabled, true);
 });
 
 test('automatic full backup preflight rejects an oversized ZIP before hydrate or download', async () => {

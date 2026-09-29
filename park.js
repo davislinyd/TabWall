@@ -465,6 +465,7 @@ const lightbox = document.getElementById('lightbox');
 const lbImage = document.getElementById('lbImage');
 const lbTitle = document.getElementById('lbTitle');
 const lbUrl = document.getElementById('lbUrl');
+const lbFileName = document.getElementById('lbFileName');
 const lbSnapHint = document.getElementById('lbSnapHint');
 const lbRestore = document.getElementById('lbRestore');
 const lbClose = document.getElementById('lbClose');
@@ -574,6 +575,7 @@ MediaUi.bind({
 const snapCache = MediaUi.snapCache;
 const cacheSnap = MediaUi.cacheSnap;
 const fetchMediaUrl = MediaUi.fetchMediaUrl;
+const getCachedMediaMime = MediaUi.getCachedMediaMime;
 const wireCanvasMedia = MediaUi.wireCanvasMedia;
 const observeThumb = MediaUi.observeThumb;
 const disconnectThumbObserver = MediaUi.disconnectThumbObserver;
@@ -862,6 +864,7 @@ function bindPanelModules() {
     "formatSavedAt": () => formatSavedAt,
     "getCanvasSearchContext": () => getCanvasSearchContext,
     "getCanvasVisibleTabs": () => getCanvasVisibleTabs,
+    "getCachedMediaMime": () => getCachedMediaMime,
     "getGroupSearchMatch": () => getGroupSearchMatch,
     "getVisibleTabs": () => getVisibleTabs,
     "gridEl": () => gridEl,
@@ -921,6 +924,7 @@ function bindPanelModules() {
     "itemTitle": () => itemTitle,
     "lbBack": () => lbBack,
     "lbCounter": () => lbCounter,
+    "lbFileName": () => lbFileName,
     "lbGroupMosaic": () => lbGroupMosaic,
     "lbImage": () => lbImage,
     "lbLockOverlay": () => lbLockOverlay,

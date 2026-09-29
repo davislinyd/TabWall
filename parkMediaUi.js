@@ -23,6 +23,8 @@
   const ATTACHMENT_URL_CACHE_MAX = 8;
   /** @type {Map<string, Promise<string>>} */
   const mediaFetches = new Map();
+  /** @type {Map<string, string>} */
+  const mediaMimeCache = new Map();
   /** @type {Set<string>} */
   const canvasPendingMediaUrls = new Set();
 
@@ -67,6 +69,20 @@
 
   function mediaFetchKey(key, kind) {
     return `${kind}:${key}`;
+  }
+
+  function cacheMediaMime(key, kind, mime) {
+    if (kind === 'attachment') return;
+    const value = String(mime || '').toLowerCase();
+    if (value) mediaMimeCache.set(mediaFetchKey(key, kind), value);
+  }
+
+  function getCachedMediaMime(key, kind) {
+    return mediaMimeCache.get(mediaFetchKey(key, kind)) || '';
+  }
+
+  function mimeFromDataUrl(url) {
+    return /^data:([^;,]+)/i.exec(String(url || ''))?.[1]?.toLowerCase() || '';
   }
 
   function isMediaUrlInUse(url) {
@@ -114,6 +130,7 @@
       if (first == null) break;
       revokeObjectUrl(snapCache.get(first));
       snapCache.delete(first);
+      mediaMimeCache.delete(mediaFetchKey(first, 'snap'));
     }
   }
 
@@ -133,6 +150,7 @@
       if (first == null) break;
       revokeObjectUrl(thumbUrlCache.get(first));
       thumbUrlCache.delete(first);
+      mediaMimeCache.delete(mediaFetchKey(first, 'thumb'));
     }
     return url;
   }
@@ -183,6 +201,7 @@
       if (!mediaDb) {
         const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
         const url = res.ok ? res.dataUrl || '' : '';
+        cacheMediaMime(key, kind, mimeFromDataUrl(url));
         if (kind === 'thumb' && url) cacheThumbUrl(key, url);
         if (kind === 'snap' && url) cacheSnap(key, url);
         if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
@@ -194,6 +213,7 @@
           : await mediaDb.getPart(key, kind === 'snap' ? 'snap' : 'thumb');
         if (!blob) return '';
         const url = trackObjectUrl(URL.createObjectURL(blob));
+        cacheMediaMime(key, kind, blob.type);
         if (kind === 'thumb') cacheThumbUrl(key, url);
         if (kind === 'snap') cacheSnap(key, url);
         if (kind === 'attachment') cacheAttachmentUrl(key, url);
@@ -201,6 +221,7 @@
       } catch {
         const res = await sendMessage({ type: 'GET_MEDIA', key, kind });
         const url = res.ok ? res.dataUrl || '' : '';
+        cacheMediaMime(key, kind, mimeFromDataUrl(url));
         if (kind === 'thumb' && url) cacheThumbUrl(key, url);
         if (kind === 'snap' && url) cacheSnap(key, url);
         if (kind === 'attachment' && url) cacheAttachmentUrl(key, url);
@@ -296,6 +317,7 @@
       : kind === 'attachment' ? attachmentUrlCache : thumbUrlCache;
     if (cache.get(key) !== url) return;
     cache.delete(key);
+    mediaMimeCache.delete(mediaFetchKey(key, kind));
     revokeObjectUrl(url);
   }
 
@@ -576,6 +598,7 @@
     snapCache,
     cacheSnap,
     fetchMediaUrl,
+    getCachedMediaMime,
     disconnectThumbObserver,
     wireCanvasMedia,
     observeThumb,

@@ -290,7 +290,7 @@
     return global.createImageBitmap(source);
   }
 
-  async function rasterBitmapToBlob(bitmap, { maxWidth = 0, maxLongEdge = 0, type, quality }) {
+  async function rasterBitmapToBlob(bitmap, { maxWidth = 0, maxLongEdge = 0, quality }) {
     let width = finiteDimension(bitmap.width);
     let height = finiteDimension(bitmap.height);
     if (!width || !height) throw error('note_image_invalid_dimensions');
@@ -309,7 +309,7 @@
     if (!ctx) throw error('note_image_canvas_unavailable');
     ctx.clearRect?.(0, 0, width, height);
     ctx.drawImage(bitmap, 0, 0, width, height);
-    const blob = await canvasToBlob(canvas, type, quality);
+    const blob = await canvasToWebpOrJpeg(canvas, quality);
     try {
       canvas.width = 0;
       canvas.height = 0;
@@ -318,6 +318,16 @@
     }
     if (!blob) throw error('note_image_encode_failed');
     return blob;
+  }
+
+  async function canvasToWebpOrJpeg(canvas, quality) {
+    try {
+      const webp = await canvasToBlob(canvas, 'image/webp', quality);
+      if (webp && String(webp.type || '').toLowerCase() === 'image/webp') return webp;
+    } catch {
+      // Fall through to the broadly supported JPEG encoder.
+    }
+    return canvasToBlob(canvas, 'image/jpeg', quality);
   }
 
   function canvasToBlob(canvas, type, quality) {
@@ -428,12 +438,10 @@
       const [thumbBlob, snapBlob] = await Promise.all([
         rasterBitmapToBlob(bitmap, {
           maxWidth: LIMITS.CARD_THUMB_WIDTH,
-          type: 'image/jpeg',
           quality: LIMITS.CARD_THUMB_QUALITY,
         }),
         rasterBitmapToBlob(bitmap, {
           maxLongEdge: LIMITS.CARD_SNAP_LONG_EDGE,
-          type: 'image/jpeg',
           quality: LIMITS.CARD_SNAP_QUALITY,
         }),
       ]);

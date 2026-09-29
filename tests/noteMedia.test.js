@@ -5,7 +5,8 @@ import vm from 'node:vm';
 
 const SOURCE = fs.readFileSync(new URL('../noteMedia.js', import.meta.url), 'utf8');
 
-function loadNoteMedia(dimensions = { width: 8000, height: 4000 }) {
+function loadNoteMedia(dimensions = { width: 8000, height: 4000 }, options = {}) {
+  const canvasConvertCalls = [];
   const sandbox = {
     Blob,
     console,
@@ -23,14 +24,18 @@ function loadNoteMedia(dimensions = { width: 8000, height: 4000 }) {
         return { clearRect() {}, drawImage() {} };
       }
 
-      async convertToBlob({ type = 'image/webp' } = {}) {
+      async convertToBlob({ type = 'image/webp', quality } = {}) {
+        canvasConvertCalls.push({ width: this.width, height: this.height, type, quality });
+        if (typeof options.convertToBlob === 'function') {
+          return options.convertToBlob({ width: this.width, height: this.height, type, quality });
+        }
         return new Blob([new Uint8Array([1, 2, 3])], { type });
       }
     },
   };
   sandbox.self = sandbox;
   vm.runInNewContext(SOURCE, sandbox, { filename: 'noteMedia.js' });
-  return sandbox.TabWallNoteMedia;
+  return { ...sandbox.TabWallNoteMedia, __canvasConvertCalls: canvasConvertCalls };
 }
 
 test('fitDimensions enforces the 4096px edge and 16MP pixel caps', () => {
@@ -98,6 +103,48 @@ test('normalizeCardMedia rejects disallowed types and builds thumb plus snap', a
   assert.equal(result.kind, 'gif');
   assert.ok(result.thumbBlob?.size > 0);
   assert.ok(result.snapBlob?.size > 0);
+  assert.equal(result.thumbBlob.type, 'image/webp');
+  assert.equal(result.snapBlob.type, 'image/webp');
+  assert.ok(media.__canvasConvertCalls.some((call) => (
+    call.width === 480 && call.height === 240 && call.type === 'image/webp' && call.quality === 0.6
+  )));
+  assert.ok(media.__canvasConvertCalls.some((call) => (
+    call.width === 1920 && call.height === 960 && call.type === 'image/webp' && call.quality === 0.85
+  )));
+});
+
+test('normalizeCardMedia falls back to JPEG when WebP encoding fails or returns another MIME', async () => {
+  let webpMode = 'mismatch';
+  const media = loadNoteMedia({ width: 1000, height: 500 }, {
+    convertToBlob({ type }) {
+      if (type === 'image/webp' && webpMode === 'throw') throw new Error('webp_unavailable');
+      return new Blob([new Uint8Array([1, 2, 3])], {
+        type: type === 'image/webp' ? 'image/png' : type,
+      });
+    },
+  });
+  const result = await media.normalizeCardMedia(
+    new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+    { name: 'shot.png' }
+  );
+  assert.equal(result.thumbBlob.type, 'image/jpeg');
+  assert.equal(result.snapBlob.type, 'image/jpeg');
+  assert.ok(media.__canvasConvertCalls.some((call) => (
+    call.width === 480 && call.height === 240 && call.type === 'image/jpeg' && call.quality === 0.6
+  )));
+  assert.ok(media.__canvasConvertCalls.some((call) => (
+    call.width === 1000 && call.height === 500 && call.type === 'image/jpeg' && call.quality === 0.85
+  )));
+
+  media.__canvasConvertCalls.length = 0;
+  webpMode = 'throw';
+  const failed = await media.normalizeCardMedia(
+    new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+    { name: 'failed.png' }
+  );
+  assert.equal(failed.thumbBlob.type, 'image/jpeg');
+  assert.equal(failed.snapBlob.type, 'image/jpeg');
+  assert.ok(media.__canvasConvertCalls.some((call) => call.type === 'image/jpeg'));
 });
 
 test('normalizeBlob uses the injected HEIC decoder and rejects a huge SVG viewBox', async () => {
